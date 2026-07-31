@@ -1,0 +1,54 @@
+# 🧩 모아(MOA) — 사내 협업툴
+
+채팅·문서·등급별 게시판·사내 AI를 **회사 서버 안에서 동작하는 하나의 앱**(Windows·Android·iOS)으로 통합한다.
+슬랙 + 노션 + 등급 게시판 + 로컬 LLM을 **온프레미스**로.
+
+> 약 15명 규모 · 온프레미스 · 데이터·AI 추론이 사내망 밖으로 나가지 않음.
+
+## 🎯 개요
+
+- **목표** — 흩어진 업무 대화·문서·공지를 사내 서버 하나로 일원화하고, 사내 위키를 근거로 답하는 로컬 AI를 붙인다. (외부 SaaS 구독·데이터 유출 경로 제거)
+- **핵심 모듈** — 문서(실시간 공동편집) · 채팅(채널·DM) · 등급별 게시판 · ⌘K 통합검색 · AI 어시스턴트(위키 RAG) · 문서 인라인 AI
+- **범위 In** — 근태 관리, 문서 공동편집, 채팅, 게시판 3등급 열람통제, RAG AI + 권한필터, Win/Android/iOS 앱
+- **범위 Out (v1)** — 전자결재/워크플로, 화상회의, 이메일 대체, 외부 게스트·앱스토어 공개 배포
+
+## 🧱 스택
+
+| 영역 | 기술 |
+| --- | --- |
+| **FE** | React 19 · Vite · Tailwind v4 · TipTap + Yjs |
+| **BE** | FastAPI · PostgreSQL 16 + pgvector · Redis · MinIO |
+| **AI** | Mac mini M4 · Ollama(8B Q4) · bge-m3 |
+| **앱** | Tauri 2(Win) · Capacitor 8(And/iOS) |
+
+## 📁 모노레포 구조
+
+```
+moa/
+├─ backend/    FastAPI · 인증(JWT) · RAG · 실시간(WS/Yjs)
+├─ frontend/   React 19 프로토타입 → API 연동
+├─ apps/       Tauri(Win) · Capacitor(Android/iOS) 패키징
+├─ infra/      배포·온프레미스 설정(Postgres/Redis/MinIO/Ollama)
+└─ docs/       PRD·요구사항·ERD·API·화면정의·WBS·테스트·아키텍처
+```
+
+## 🗺 로드맵 (8주 · 2026-08-03 ~ 09-25)
+
+- **M1 — 코어 (3주)** · 인증, 문서 CRUD, TipTap+Yjs 실시간 공동편집, 댓글
+- **M2 — 커뮤니케이션 (2주)** · 채팅 채널·DM, 알림, 홈 대시보드, ⌘K 통합검색
+- **M3 — AI (2주)** · 로컬 LLM 연동, 위키 RAG(권한필터), 어시스턴트·인라인 AI·템플릿
+- **M4 — 마감 (2주)** · 등급별 게시판, 앱 패키징(Win/Android/iOS), 파일럿 → 전사 오픈
+
+## ✅ 성공 기준
+
+- [ ] 2인 동시편집 시 1초 이내 변경·커서 반영 (충돌 0)
+- [ ] ⌘K가 문서·채팅 통합 검색, 권한 밖 문서 미노출
+- [ ] AI 답변 사실문장에 각주, 권한 밖 문서는 근거 자동 제외
+- [ ] 임원 게시판 글 member에서 제목 마스킹 + 본문 API 403
+- [ ] 모든 데이터·AI 추론 사내망 유지 — 외부 API 호출 0건
+- [ ] Windows/.msi · Android/APK · iOS/TestFlight 사내 설치 가능
+
+## 📚 프로젝트 문서
+
+기획·설계 문서는 [Notion 프로젝트 허브](https://app.notion.com/p/3aaa47166046815a8b8bfc07c8eeeb98)에서 관리한다.
+(01 PRD → 02 요구사항정의서 → 03 ERD·DB → 04 API 명세 → 05 화면정의서 → 06 WBS → 07 테스트계획 → 08 사업계획 → 09 기안서 · ARCHITECTURE)
