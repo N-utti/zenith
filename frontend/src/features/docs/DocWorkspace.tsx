@@ -8,6 +8,7 @@ import { WifiOff } from 'lucide-react'
 import { Avatar } from '@/components/ui/Avatar'
 import { Spinner } from '@/components/ui/Spinner'
 import { useCurrentUser } from '@/features/auth/AuthContext'
+import { cn } from '@/lib/cn'
 import { formatRelative } from '@/lib/datetime'
 import { useTouchDoc } from './api'
 import { CommentPanel } from './CommentPanel'
@@ -33,7 +34,8 @@ function PresenceBar({ session }: { session: CollabSession }) {
     )
   }
 
-  if (users.length === 0) {
+  // 혼자일 때 "1명 편집 중"은 알려 주는 게 없다. 그때는 연결 상태를 띄운다.
+  if (users.length < 2) {
     return <p className="text-subtle text-xs">실시간 연결됨</p>
   }
 
@@ -43,8 +45,12 @@ function PresenceBar({ session }: { session: CollabSession }) {
         {users.slice(0, 4).map((user) => (
           <span
             key={user.clientId}
-            title={user.name}
-            className="border-surface grid size-6 place-items-center rounded-full border-2 text-[10px] font-semibold text-white"
+            title={user.isSelf ? `${user.name} (나)` : user.name}
+            className={cn(
+              'border-surface grid size-6 place-items-center rounded-full border-2 text-[10px] font-semibold text-white',
+              // 어느 색이 내 커서인지 대조할 수 있게 본인을 표시한다.
+              user.isSelf && 'ring-accent/50 ring-2',
+            )}
             style={{ backgroundColor: user.color }}
           >
             {user.name.slice(1, 2) || user.name.slice(0, 1)}

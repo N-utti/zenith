@@ -9,6 +9,7 @@ export interface CollabUser {
   name: string
   color: string
   clientId: number
+  isSelf: boolean
 }
 
 /**
@@ -78,16 +79,27 @@ export function useCollabStatus(provider: WebsocketProvider): CollabStatus {
   return status
 }
 
-/** 지금 이 문서를 함께 보고 있는 사람들. 본인은 제외한다. */
+/**
+ * 지금 이 문서를 함께 보고 있는 사람들. **본인을 포함한다.**
+ *
+ * "N명 편집 중"에서 본인을 빼면 두 명이 붙어 있을 때 "1명"이 되어, 그 1명이
+ * 나인지 상대인지 읽히지 않는다. 본인 아바타를 세워 두면 내 커서 색이
+ * 무엇인지도 함께 알 수 있다.
+ */
 export function usePresence(provider: WebsocketProvider): CollabUser[] {
   const read = () =>
     [...provider.awareness.getStates().entries()]
-      .filter(([clientId]) => clientId !== provider.doc.clientID)
-      .map(([clientId, state]) => ({
-        clientId,
-        name: String((state as { user?: CollabUser }).user?.name ?? '알 수 없음'),
-        color: String((state as { user?: CollabUser }).user?.color ?? '#888'),
-      }))
+      .map(([clientId, state]) => {
+        const user = (state as { user?: { name?: string; color?: string } }).user
+        return {
+          clientId,
+          name: String(user?.name ?? '알 수 없음'),
+          color: String(user?.color ?? '#888'),
+          isSelf: clientId === provider.doc.clientID,
+        }
+      })
+      // 본인을 맨 앞에 세운다.
+      .sort((a, b) => Number(b.isSelf) - Number(a.isSelf))
 
   const [users, setUsers] = useState<CollabUser[]>(read)
 
