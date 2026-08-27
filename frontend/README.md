@@ -50,9 +50,11 @@ src/
 │  ├─ ui/         Button · Avatar · Badge · Spinner · PageHeader · PlaceholderPanel
 │  └─ CommandPalette.tsx   ⌘K 팔레트 (현재는 화면 이동만)
 ├─ features/
-│  └─ auth/       AuthProvider · AuthContext · RequireAuth · LoginPage
-├─ lib/           api(fetch 래퍼) · token · queryClient · theme · cn
-├─ mocks/         MSW 핸들러 · 목 사용자
+│  ├─ attendance/ 근태 위젯 · 근태 API/타입
+│  ├─ auth/       AuthProvider · AuthContext · RequireAuth · LoginPage
+│  └─ home/       홈 대시보드 카드 (공지 · 최근문서 · 안읽은채팅 · 팀 경보)
+├─ lib/           api(fetch 래퍼) · token · queryClient · theme · datetime · cn
+├─ mocks/         MSW 핸들러 · 목 사용자 · 대시보드 목 데이터
 ├─ pages/         화면별 컴포넌트
 ├─ styles/        index.css — 디자인 토큰
 └─ types/         Role · User 등 공용 타입
@@ -73,7 +75,24 @@ Pretendard가 필요하면 self-host 후 `--font-sans` 스택 맨 앞에 넣는�
 **메뉴는 `src/app/navigation.ts` 한 곳에서 정의한다.** 사이드바와 ⌘K 팔레트가 같은 배열을 읽는다.
 `minRole`로 메뉴를 숨길 수 있지만 이는 UI 편의일 뿐이고, 실제 차단은 서버 권한 검사가 한다.
 
-## 아직 비어 있는 것
+**날짜·시간 표기는 `lib/datetime.ts`를 쓴다.** 근태에서 "기록 없음"을 0분으로 접지 않는 것이
+설계서 L4의 핵심이라, 화면 문구도 "미기록 / 미확정"으로 통일한다.
 
-각 화면은 껍데기이며, 무엇이 들어올 자리인지 화면 안에 적어 뒀다.
-문서(M1) · 채팅(M2) · 홈 대시보드(M2) · AI(M3) · 게시판(M4) · 근태(일정 미확정).
+## 구현 상태
+
+| 화면 | 상태 |
+| --- | --- |
+| 홈 대시보드 | 목 API 연동 완료 — 근태 위젯(출퇴근 버튼·주 52h)·공지·최근문서·안읽은채팅·팀 경보(lead+) |
+| 문서 · 채팅 · 게시판 · AI · 근태 | 껍데기. 화면 안에 무엇이 들어올 자리인지 적어 뒀다 |
+
+홈 대시보드가 쓰는 목 엔드포인트 — 백엔드는 같은 스키마로 응답하면 된다.
+
+```
+GET  /api/attendance/summary       { today, week, pendingCorrections }
+POST /api/attendance/check-in      → summary
+POST /api/attendance/check-out     → summary
+GET  /api/attendance/team-alerts   lead 미만 403
+GET  /api/announcements?limit=     권한 밖 등급 글은 목록에서 제외
+GET  /api/documents/recent?limit=
+GET  /api/chat/unread
+```

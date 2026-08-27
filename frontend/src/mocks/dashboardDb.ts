@@ -1,0 +1,265 @@
+import type {
+  AttendanceSummary,
+  AttendanceToday,
+  TeamAlert,
+  WeekSummary,
+} from '@/features/attendance/types'
+import type { Announcement, RecentDoc, UnreadChannel } from '@/features/home/types'
+import type { User } from '@/types'
+
+// ── 시각 헬퍼 ────────────────────────────────────────────────
+// 목 데이터는 "오늘"에 붙어 있어야 화면이 자연스럽다. 고정 날짜를 쓰지 않는다.
+
+function ymd(date: Date): string {
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${date.getFullYear()}-${month}-${day}`
+}
+
+function todayAt(hour: number, minute: number): string {
+  const date = new Date()
+  date.setHours(hour, minute, 0, 0)
+  return date.toISOString()
+}
+
+function minutesAgo(minutes: number): string {
+  return new Date(Date.now() - minutes * 60_000).toISOString()
+}
+
+function daysAgoDate(days: number): string {
+  const date = new Date()
+  date.setDate(date.getDate() - days)
+  return ymd(date)
+}
+
+/** 이번 주 월요일. 일요일(0)은 지난 월요일로 접는다. */
+function weekStart(): string {
+  const date = new Date()
+  const offset = (date.getDay() + 6) % 7
+  date.setDate(date.getDate() - offset)
+  return ymd(date)
+}
+
+const WEEK_LIMIT_MINUTES = 52 * 60
+
+// ── 근태 상태 (가변) ─────────────────────────────────────────
+// 출근·퇴근 버튼이 실제로 상태를 바꿔야 위젯을 제대로 확인할 수 있다.
+
+interface UserAttendance {
+  today: AttendanceToday
+  week: WeekSummary
+  pendingCorrections: AttendanceSummary['pendingCorrections']
+}
+
+function week(regular: number, overtime: number, unconfirmed = 0): WeekSummary {
+  return {
+    weekStart: weekStart(),
+    regularMinutes: regular,
+    overtimeMinutes: overtime,
+    limitMinutes: WEEK_LIMIT_MINUTES,
+    unconfirmedDays: unconfirmed,
+  }
+}
+
+const attendance: Record<string, UserAttendance> = {
+  // 지문으로 출근했고 아직 퇴근 전. 어제 퇴근 버튼을 안 눌러 보정 대상이 하나 있다.
+  'u-1': {
+    today: {
+      date: ymd(new Date()),
+      checkInAt: todayAt(9, 12),
+      checkInSource: 'device',
+      checkOutAt: null,
+      status: 'working',
+    },
+    week: week(1930, 0, 1),
+    pendingCorrections: [{ date: daysAgoDate(1), reason: 'missing_checkout' }],
+  },
+  // 동반 입장으로 지문이 누락돼 앱 버튼이 출근 원천이 된 경우 (설계서 L2).
+  'u-2': {
+    today: {
+      date: ymd(new Date()),
+      checkInAt: todayAt(8, 47),
+      checkInSource: 'app',
+      checkOutAt: null,
+      status: 'working',
+    },
+    week: week(2400, 320),
+    pendingCorrections: [],
+  },
+  'u-3': {
+    today: {
+      date: ymd(new Date()),
+      checkInAt: null,
+      checkInSource: null,
+      checkOutAt: null,
+      status: 'not_checked_in',
+    },
+    week: week(1560, 0),
+    pendingCorrections: [],
+  },
+}
+
+export function getAttendance(userId: string): AttendanceSummary {
+  const state = attendance[userId] ?? attendance['u-1']
+  return { today: state.today, week: state.week, pendingCorrections: state.pendingCorrections }
+}
+
+export function punchIn(userId: string): AttendanceSummary {
+  const state = attendance[userId]
+  if (state && !state.today.checkInAt) {
+    state.today = {
+      ...state.today,
+      checkInAt: new Date().toISOString(),
+      checkInSource: 'app',
+      status: 'working',
+    }
+  }
+  return getAttendance(userId)
+}
+
+export function punchOut(userId: string): AttendanceSummary {
+  const state = attendance[userId]
+  if (state?.today.checkInAt && !state.today.checkOutAt) {
+    const now = new Date()
+    const worked = Math.floor(
+      (now.getTime() - new Date(state.today.checkInAt).getTime()) / 60_000,
+    )
+    state.today = { ...state.today, checkOutAt: now.toISOString(), status: 'done' }
+    // 소정 8시간을 넘는 분은 연장으로 넘긴다 (실제 판정은 서버 §5가 한다).
+    const regular = Math.min(worked, 480)
+    state.week = {
+      ...state.week,
+      regularMinutes: state.week.regularMinutes + regular,
+      overtimeMinutes: state.week.overtimeMinutes + (worked - regular),
+    }
+  }
+  return getAttendance(userId)
+}
+
+// ── 팀 52시간 경보 ───────────────────────────────────────────
+
+const TEAM_ALERTS: Record<string, TeamAlert[]> = {
+  'team-product': [
+    { userId: 'u-8', name: '한지우', avatarHue: 95, weekMinutes: 3180, level: 'over' },
+    { userId: 'u-9', name: '이정민', avatarHue: 200, weekMinutes: 3005, level: 'warning' },
+  ],
+  'team-management': [
+    { userId: 'u-7', name: '오세라', avatarHue: 330, weekMinutes: 2890, level: 'warning' },
+  ],
+}
+
+/** lead는 소속 팀만, exec는 전사를 본다 (설계서 §3). */
+export function getTeamAlerts(user: User): TeamAlert[] {
+  if (user.role === 'exec') return Object.values(TEAM_ALERTS).flat()
+  return TEAM_ALERTS[user.team.id] ?? []
+}
+
+// ── 콘텐츠 ───────────────────────────────────────────────────
+
+export const ANNOUNCEMENTS: Announcement[] = [
+  {
+    id: 'a-1',
+    title: '2026년 하반기 정기 워크숍 안내',
+    boardLevel: 'member',
+    authorName: '경영지원팀',
+    createdAt: minutesAgo(190),
+    pinned: true,
+  },
+  {
+    id: 'a-2',
+    title: 'MOA 사내 협업툴 파일럿 참여자 모집',
+    boardLevel: 'member',
+    authorName: '박동현',
+    createdAt: minutesAgo(1180),
+    pinned: false,
+  },
+  {
+    id: 'a-3',
+    title: '3분기 인사평가 일정 및 평가자 배정',
+    boardLevel: 'lead',
+    authorName: '경영지원팀',
+    createdAt: minutesAgo(2400),
+    pinned: false,
+  },
+  {
+    id: 'a-4',
+    title: '추석 연휴 근무 일정 · 대체휴무 안내',
+    boardLevel: 'member',
+    authorName: '경영지원팀',
+    createdAt: minutesAgo(3300),
+    pinned: false,
+  },
+  {
+    id: 'a-5',
+    title: '4분기 예산안 검토 회의 자료',
+    boardLevel: 'exec',
+    authorName: '최재호',
+    createdAt: minutesAgo(4100),
+    pinned: false,
+  },
+]
+
+export const RECENT_DOCS: RecentDoc[] = [
+  {
+    id: 'd-1',
+    title: '2026 하반기 제품 로드맵',
+    updatedAt: minutesAgo(12),
+    editorName: '박동현',
+    editorHue: 155,
+  },
+  {
+    id: 'd-2',
+    title: '근태 모듈 설계서 v0.2 리뷰 노트',
+    updatedAt: minutesAgo(95),
+    editorName: '김수진',
+    editorHue: 275,
+  },
+  {
+    id: 'd-3',
+    title: '주간 개발 회의록 (8월 4주차)',
+    updatedAt: minutesAgo(300),
+    editorName: '이정민',
+    editorHue: 200,
+  },
+  {
+    id: 'd-4',
+    title: 'RAG 권한 필터 설계 메모',
+    updatedAt: minutesAgo(1500),
+    editorName: '한지우',
+    editorHue: 95,
+  },
+  {
+    id: 'd-5',
+    title: '출입 단말 연동 규격 조사',
+    updatedAt: minutesAgo(2900),
+    editorName: '김수진',
+    editorHue: 275,
+  },
+]
+
+export const UNREAD_CHANNELS: UnreadChannel[] = [
+  {
+    id: 'c-1',
+    name: '개발',
+    kind: 'channel',
+    unread: 12,
+    lastMessage: 'Yjs 커서 동기화 이슈 재현됐습니다. 스크린샷 올릴게요',
+    lastAt: minutesAgo(4),
+  },
+  {
+    id: 'c-2',
+    name: '박동현',
+    kind: 'dm',
+    unread: 3,
+    lastMessage: '내일 스탠드업 30분 당길 수 있을까요?',
+    lastAt: minutesAgo(38),
+  },
+  {
+    id: 'c-3',
+    name: '공지',
+    kind: 'channel',
+    unread: 1,
+    lastMessage: '워크숍 참석 여부 회신 부탁드립니다',
+    lastAt: minutesAgo(175),
+  },
+]
