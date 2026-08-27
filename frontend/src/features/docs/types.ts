@@ -16,6 +16,18 @@ export interface DocComment {
   createdAt: string
 }
 
+export interface DocVersion {
+  id: string
+  createdAt: string
+  authorId: string
+  authorName: string
+  authorHue: number
+  /** Yjs 스냅샷(base64). 내용 사본이 아니라 시점 표식이다. */
+  snapshot: string
+  /** 되돌리기처럼 이유가 분명한 버전에만 붙는다. 붙으면 병합되지 않는다. */
+  label?: string
+}
+
 export interface DocDetail extends DocSummary {
   /**
    * 이 문서를 처음 여는 탭에서만 쓰는 초안.

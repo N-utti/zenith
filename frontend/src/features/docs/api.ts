@@ -1,11 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
-import type { DocComment, DocDetail, DocSummary } from './types'
+import type { DocComment, DocDetail, DocSummary, DocVersion } from './types'
 
 export const docKeys = {
   list: (query: string) => ['documents', 'list', query] as const,
   detail: (docId: string) => ['documents', docId] as const,
   comments: (docId: string) => ['documents', docId, 'comments'] as const,
+  versions: (docId: string) => ['documents', docId, 'versions'] as const,
   recent: ['documents', 'recent', { limit: 5 }] as const,
 }
 
@@ -49,6 +50,27 @@ export function useTouchDoc(docId: string) {
       qc.setQueryData(docKeys.detail(docId), doc)
       void qc.invalidateQueries({ queryKey: ['documents', 'list'] })
       void qc.invalidateQueries({ queryKey: docKeys.recent })
+    },
+  })
+}
+
+export function useVersions(docId: string) {
+  return useQuery({
+    queryKey: docKeys.versions(docId),
+    queryFn: () => api<{ items: DocVersion[] }>(`/documents/${docId}/versions`),
+  })
+}
+
+export function useSaveVersion(docId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { snapshot: string; label?: string }) =>
+      api<DocVersion>(`/documents/${docId}/versions`, {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: docKeys.versions(docId) })
     },
   })
 }

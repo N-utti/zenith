@@ -37,7 +37,10 @@ export function useCollabSession(docId: string): CollabSession | null {
   const [session, setSession] = useState<CollabSession | null>(null)
 
   useEffect(() => {
-    const doc = new Y.Doc()
+    // gc: false — 삭제된 내용을 수거하지 않는다. 수거해 버리면 과거 스냅샷을
+    // 복원할 수 없어 버전 기록·되돌리기가 성립하지 않는다. 대신 문서가 계속
+    // 커지므로, 릴레이(scripts/collab-server.js)도 같은 설정이어야 한다.
+    const doc = new Y.Doc({ gc: false })
     const provider = new WebsocketProvider(relayUrl(), docId, doc)
     const persistence = new IndexeddbPersistence(`moa.doc.${docId}`, doc)
 

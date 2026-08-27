@@ -1,4 +1,4 @@
-import type { DocComment, DocSummary } from '@/features/docs/types'
+import type { DocComment, DocSummary, DocVersion } from '@/features/docs/types'
 import type { User } from '@/types'
 
 function minutesAgo(minutes: number): string {
@@ -157,6 +157,57 @@ export function touchDoc(id: string, user: User, title?: string): DocSummary | u
   doc.editorName = user.name
   doc.editorHue = user.avatarHue
   return doc
+}
+
+// ── 버전 기록 ────────────────────────────────────────────────
+
+const versions: Record<string, DocVersion[]> = {}
+
+/**
+ * 같은 사람이 이어서 편집하는 동안 생기는 스냅샷을 하나로 접는 시간.
+ * 접지 않으면 타이핑을 멈출 때마다 버전이 쌓여 기록을 읽을 수 없게 된다.
+ */
+const COALESCE_MS = 3 * 60_000
+
+/** 최신순. */
+export function listVersions(docId: string): DocVersion[] {
+  return [...(versions[docId] ?? [])].reverse()
+}
+
+export function addVersion(
+  docId: string,
+  user: User,
+  snapshot: string,
+  label?: string,
+): DocVersion {
+  const history = (versions[docId] ??= [])
+  const latest = history.at(-1)
+
+  const version: DocVersion = {
+    id: `v-${nextId++}`,
+    createdAt: new Date().toISOString(),
+    authorId: user.id,
+    authorName: user.name,
+    authorHue: user.avatarHue,
+    snapshot,
+    label,
+  }
+
+  // 같은 사람이 방금 남긴 무명 버전이면 새로 쌓지 않고 갱신한다.
+  const coalescable =
+    latest !== undefined &&
+    !label &&
+    !latest.label &&
+    latest.authorId === user.id &&
+    Date.now() - new Date(latest.createdAt).getTime() < COALESCE_MS
+
+  if (coalescable) {
+    history[history.length - 1] = { ...version, id: latest.id }
+    return history[history.length - 1]
+  }
+
+  history.push(version)
+  return version
 }
 
 export function listComments(docId: string): DocComment[] {

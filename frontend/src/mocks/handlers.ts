@@ -14,11 +14,13 @@ import {
 } from './dashboardDb'
 import {
   addComment,
+  addVersion,
   createDoc,
   DOC_SEEDS,
   findDoc,
   listComments,
   listDocs,
+  listVersions,
   touchDoc,
 } from './docsDb'
 
@@ -141,6 +143,23 @@ export const handlers = [
     const { title } = (await request.json()) as { title?: string }
     const doc = touchDoc(String(params.docId), user, title)
     return doc ? HttpResponse.json(doc) : notFound()
+  }),
+
+  http.get('/api/documents/:docId/versions', ({ request, params }) => {
+    if (!authenticate(request)) return unauthorized()
+    return HttpResponse.json({ items: listVersions(String(params.docId)) })
+  }),
+
+  http.post('/api/documents/:docId/versions', async ({ request, params }) => {
+    const user = authenticate(request)
+    if (!user) return unauthorized()
+    const { snapshot, label } = (await request.json()) as { snapshot: string; label?: string }
+    if (!snapshot) {
+      return HttpResponse.json({ detail: '스냅샷이 없습니다.' }, { status: 400 })
+    }
+    return HttpResponse.json(addVersion(String(params.docId), user, snapshot, label), {
+      status: 201,
+    })
   }),
 
   http.get('/api/documents/:docId/comments', ({ request, params }) => {

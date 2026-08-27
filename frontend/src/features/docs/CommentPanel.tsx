@@ -20,14 +20,7 @@ export function CommentPanel({ docId }: { docId: string }) {
   }
 
   return (
-    <aside className="border-line bg-surface flex min-h-0 w-full flex-col border-t lg:w-80 lg:border-t-0 lg:border-l">
-      <h2 className="text-fg border-line border-b px-4 py-3 text-sm font-semibold">
-        댓글
-        {data && data.items.length > 0 && (
-          <span className="text-subtle ml-1.5 font-normal">{data.items.length}</span>
-        )}
-      </h2>
-
+    <>
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
         {isPending && <Spinner />}
         {data?.items.length === 0 && (
@@ -72,6 +65,6 @@ export function CommentPanel({ docId }: { docId: string }) {
           </Button>
         </div>
       </form>
-    </aside>
+    </>
   )
 }

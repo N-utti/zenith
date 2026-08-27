@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { EditorContent, useEditor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
@@ -10,12 +10,15 @@ import { Spinner } from '@/components/ui/Spinner'
 import { useCurrentUser } from '@/features/auth/AuthContext'
 import { cn } from '@/lib/cn'
 import { formatRelative } from '@/lib/datetime'
-import { useTouchDoc } from './api'
+import { useSaveVersion, useTouchDoc } from './api'
 import { CommentPanel } from './CommentPanel'
 import { EditorToolbar } from './EditorToolbar'
+import { VersionPanel } from './VersionPanel'
+import { VersionPreview } from './VersionPreview'
 import { hueToColor, useCollabStatus, useCollabTitle, usePresence } from './collabState'
+import { readSnapshot, takeSnapshot, type RestoredContent } from './versioning'
 import { useCollabSession, type CollabSession } from './useCollabSession'
-import type { DocDetail } from './types'
+import type { DocDetail, DocVersion } from './types'
 
 /** 함께 보고 있는 사람들의 커서 색과 같은 색 아바타를 헤더에 세운다. */
 function PresenceBar({ session }: { session: CollabSession }) {
@@ -62,11 +65,59 @@ function PresenceBar({ session }: { session: CollabSession }) {
   )
 }
 
+/** 댓글과 버전 기록이 같은 자리를 나눠 쓴다. */
+function DocSidebar({
+  tab,
+  onTabChange,
+  children,
+}: {
+  tab: SidebarTab
+  onTabChange: (tab: SidebarTab) => void
+  children: ReactNode
+}) {
+  const TABS: { key: SidebarTab; label: string }[] = [
+    { key: 'comments', label: '댓글' },
+    { key: 'versions', label: '버전 기록' },
+  ]
+
+  return (
+    <aside className="border-line bg-surface flex min-h-0 w-full flex-col border-t lg:w-80 lg:border-t-0 lg:border-l">
+      <div className="border-line flex border-b">
+        {TABS.map(({ key, label }) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => onTabChange(key)}
+            className={cn(
+              '-mb-px cursor-pointer border-b-2 px-4 py-3 text-sm font-medium transition-colors',
+              tab === key
+                ? 'border-accent text-fg'
+                : 'text-muted hover:text-fg border-transparent',
+            )}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {children}
+    </aside>
+  )
+}
+
+type SidebarTab = 'comments' | 'versions'
+
 function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail }) {
   const user = useCurrentUser()
   const { doc, provider } = session
   const { title, setTitle } = useCollabTitle(doc, meta.title)
   const { mutate: touchDoc } = useTouchDoc(meta.id)
+  const { mutate: saveVersion, isPending: savingVersion } = useSaveVersion(meta.id)
+
+  const [tab, setTab] = useState<SidebarTab>('comments')
+  const [preview, setPreview] = useState<{ version: DocVersion; content: RestoredContent } | null>(
+    null,
+  )
+  const [previewError, setPreviewError] = useState<string | null>(null)
 
   const editor = useEditor({
     extensions: [
@@ -98,62 +149,124 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
     if (metaMap.get('title') === undefined) metaMap.set('title', meta.title)
   }, [doc, meta.title])
 
-  // 편집이 멎으면 목록·검색이 볼 사본(제목·수정시각)을 갱신한다.
+  // 편집이 멎으면 목록·검색이 볼 사본(제목·수정시각)을 갱신하고 버전을 남긴다.
+  // 버전은 서버가 합쳐 준다 — 같은 사람이 이어서 편집하는 동안은 하나로 접힌다.
   useEffect(() => {
-    let timer: number | undefined
+    let metaTimer: number | undefined
+    let versionTimer: number | undefined
+
     const onUpdate = (_update: Uint8Array, origin: unknown) => {
-      // 다른 탭에서 넘어온 변경은 그 탭이 이미 반영한다.
+      // 다른 탭·다른 사람에게서 온 변경은 그쪽에서 이미 반영한다.
       if (origin === provider) return
-      window.clearTimeout(timer)
-      timer = window.setTimeout(() => {
+
+      window.clearTimeout(metaTimer)
+      metaTimer = window.setTimeout(() => {
         touchDoc(doc.getMap<string>('meta').get('title'))
       }, 1500)
+
+      window.clearTimeout(versionTimer)
+      versionTimer = window.setTimeout(() => {
+        saveVersion({ snapshot: takeSnapshot(doc) })
+      }, 5000)
     }
+
     doc.on('update', onUpdate)
     return () => {
-      window.clearTimeout(timer)
+      window.clearTimeout(metaTimer)
+      window.clearTimeout(versionTimer)
       doc.off('update', onUpdate)
     }
-  }, [doc, provider, touchDoc])
+  }, [doc, provider, touchDoc, saveVersion])
+
+  const openPreview = (version: DocVersion | null) => {
+    setPreviewError(null)
+    if (!version) return setPreview(null)
+    try {
+      setPreview({ version, content: readSnapshot(doc, version.snapshot) })
+    } catch {
+      // 이 기능이 붙기 전에 만들어진 문서는 삭제 이력이 이미 수거돼 복원할 수 없다.
+      setPreview(null)
+      setPreviewError('이 버전은 복원할 수 없습니다. 기록 보존 설정 이전에 만들어진 문서입니다.')
+    }
+  }
+
+  const restore = () => {
+    if (!editor || !preview) return
+    // 되감기가 아니라 새 편집이다. 그래야 접속 중인 다른 사람과도 같은
+    // 결과로 수렴하고, 되돌리기 자체를 Ctrl+Z로 취소할 수 있다.
+    editor.commands.setContent(preview.content.json)
+    if (preview.content.title !== undefined) {
+      doc.getMap<string>('meta').set('title', preview.content.title)
+    }
+    saveVersion({ snapshot: takeSnapshot(doc), label: '되돌림' })
+    setPreview(null)
+  }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-      <div className="flex min-h-0 flex-1 flex-col">
-        {editor && <EditorToolbar editor={editor} />}
+      {preview ? (
+        <VersionPreview
+          version={preview.version}
+          content={preview.content}
+          onRestore={restore}
+          onClose={() => setPreview(null)}
+          restoring={savingVersion}
+        />
+      ) : (
+        <div className="flex min-h-0 flex-1 flex-col">
+          {editor && <EditorToolbar editor={editor} />}
 
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-3xl px-6 py-8">
-            <div className="mb-1 flex items-center justify-between gap-4">
-              <p className="text-subtle text-xs">
-                <Avatar
-                  name={meta.editorName}
-                  hue={meta.editorHue}
-                  size="sm"
-                  className="mr-1.5 align-middle"
-                />
-                {meta.editorName} · {formatRelative(meta.updatedAt)} 수정
-              </p>
-              {session && <PresenceBar session={session} />}
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <div className="mx-auto max-w-3xl px-6 py-8">
+              <div className="mb-1 flex items-center justify-between gap-4">
+                <p className="text-subtle text-xs">
+                  <Avatar
+                    name={meta.editorName}
+                    hue={meta.editorHue}
+                    size="sm"
+                    className="mr-1.5 align-middle"
+                  />
+                  {meta.editorName} · {formatRelative(meta.updatedAt)} 수정
+                </p>
+                <PresenceBar session={session} />
+              </div>
+
+              <input
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="제목 없는 문서"
+                aria-label="문서 제목"
+                className="text-fg placeholder:text-subtle w-full bg-transparent py-2 text-3xl font-bold tracking-tight outline-none"
+              />
+
+              {editor ? (
+                <EditorContent editor={editor} className="mt-4" />
+              ) : (
+                <Spinner className="mt-6" />
+              )}
             </div>
-
-            <input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="제목 없는 문서"
-              aria-label="문서 제목"
-              className="text-fg placeholder:text-subtle w-full bg-transparent py-2 text-3xl font-bold tracking-tight outline-none"
-            />
-
-            {editor ? (
-              <EditorContent editor={editor} className="mt-4" />
-            ) : (
-              <Spinner className="mt-6" />
-            )}
           </div>
         </div>
-      </div>
+      )}
 
-      <CommentPanel docId={meta.id} />
+      <DocSidebar tab={tab} onTabChange={setTab}>
+        {tab === 'comments' ? (
+          <CommentPanel docId={meta.id} />
+        ) : (
+          <>
+            {previewError && (
+              <p role="alert" className="text-danger bg-danger/10 m-2 rounded-lg px-3 py-2 text-xs">
+                {previewError}
+              </p>
+            )}
+            <VersionPanel
+              docId={meta.id}
+              selectedId={preview?.version.id ?? null}
+              onSelect={openPreview}
+            />
+          </>
+        )}
+      </DocSidebar>
     </div>
   )
 }
