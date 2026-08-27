@@ -5,8 +5,16 @@ export const worker = setupWorker(...handlers)
 
 export async function startMockWorker() {
   await worker.start({
-    // 핸들러가 없는 요청(에셋 등)은 그대로 네트워크로 보낸다.
-    onUnhandledRequest: 'bypass',
+    onUnhandledRequest(request, print) {
+      // /api/* 가 MSW를 지나치면 vite 프록시가 없는 백엔드로 보내 조용히 죽는다.
+      // 원인이 dev 서버 로그의 ECONNREFUSED로만 남아 화면에서는 추적이 안 되므로,
+      // 핸들러 누락은 콘솔에서 바로 보이게 한다.
+      if (new URL(request.url).pathname.startsWith('/api/')) {
+        print.error()
+        return
+      }
+      // 그 밖의 요청(에셋 등)은 원래대로 네트워크로 통과시킨다.
+    },
     quiet: true,
   })
 }
