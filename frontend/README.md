@@ -9,11 +9,13 @@ MOA 웹 프론트엔드. React 19 · Vite · TypeScript · Tailwind v4.
 ```bash
 npm install
 npm run dev        # http://localhost:5173
+npm run collab     # 다른 터미널 — 문서 공동편집 릴레이
 ```
 
 | 스크립트 | 설명 |
 | --- | --- |
 | `npm run dev` | 개발 서버 (MSW 켜짐) |
+| `npm run collab` | 문서 공동편집 릴레이. 다른 브라우저·다른 PC와 동기화하려면 필요하다 |
 | `npm run build` | 타입체크 + 프로덕션 빌드 (`dist/`) |
 | `npm run typecheck` | 타입만 검사 |
 | `npm run lint` | ESLint |
@@ -119,18 +121,41 @@ POST  /api/documents/:id/comments
 지금 동기화 경로는 이렇다.
 
 ```
-Y.Doc ──┬─ IndexeddbPersistence   브라우저에 영속
-        └─ BroadcastProvider      같은 브라우저의 탭 사이 (BroadcastChannel)
+Y.Doc ──┬─ WebSocket 릴레이        다른 사람 · 다른 브라우저 · 다른 PC
+        ├─ BroadcastChannel       같은 브라우저의 다른 탭 (y-websocket 내장)
+        └─ IndexeddbPersistence   오프라인 영속
 ```
 
-`BroadcastProvider`는 y-websocket과 **같은 프로토콜**(sync + awareness)과 같은
-인터페이스(`awareness`, `destroy()`)를 쓴다. 백엔드 WS가 생기면
-`useCollabSession.ts`에서 provider 한 줄만 바꾸면 된다.
+### 실행 — 터미널 두 개가 필요하다
+
+```bash
+npm run dev      # 앱
+npm run collab   # 공동편집 릴레이 (ws://localhost:1234)
+```
+
+**릴레이를 안 켜면 다른 브라우저·다른 PC와 동기화되지 않는다.** 같은 브라우저의
+탭끼리는 BroadcastChannel로 붙으므로 릴레이 없이도 되는 것처럼 보이는데, 이게 착시다.
+그래서 에디터 헤더에 연결 상태를 항상 띄운다 — 릴레이가 없으면
+**"오프라인 편집 중 — 이 브라우저에만 저장됩니다"** 가 뜬다. 편집 자체는 계속되고
+IndexedDB에 남는다.
 
 ### 공동편집 확인하는 법
 
-같은 문서를 **탭 두 개**로 열면 된다. 한쪽에서 타이핑하면 다른 쪽에 즉시 반영되고,
-상대 커서와 이름표, 헤더의 "N명 편집 중"이 나타난다.
+릴레이를 켠 상태에서 같은 문서를 **서로 다른 브라우저**(또는 다른 PC)로 열면 된다.
+한쪽에서 타이핑하면 다른 쪽에 즉시 반영되고, 상대 커서와 이름표, 헤더의
+"N명 편집 중"이 나타난다.
+
+### 백엔드가 구현해야 할 것
+
+`scripts/collab-server.js`가 그 명세다. y-websocket 프로토콜(바이너리, 첫 varuint가
+메시지 종류 — `0` sync, `1` awareness)이고, 경로 마지막 세그먼트가 문서 ID다.
+서버는 문서마다 Y.Doc을 들고 받은 업데이트를 적용·중계한다.
+
+이 개발 릴레이는 메모리에만 보관한다. **실제 백엔드는 Y.Doc 상태를 영속화해야 한다** —
+설계상 문서 본문의 원천이 그 상태다.
+
+앱은 릴레이 포트에 직접 붙지 않는다. 항상 같은 오리진의 `/collab` 으로 붙고 vite가
+넘긴다(`vite.config.ts`). 운영에서는 프록시 대상만 실제 백엔드로 바꾸면 앱 코드는 그대로다.
 
 `seedHtml`은 Y.Doc이 비어 있을 때만 한 번 심는 초안이다. 실제 서버에서는 보관 중인
 Yjs 초기 상태가 그 자리를 대신하므로 이 필드는 사라진다.

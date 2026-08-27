@@ -1,6 +1,8 @@
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import type * as Y from 'yjs'
-import type { BroadcastProvider } from './BroadcastProvider'
+import type { WebsocketProvider } from 'y-websocket'
+
+export type CollabStatus = 'connecting' | 'connected' | 'disconnected'
 
 /** awareness에 실어 보내는 참여자 정보. CollaborationCaret이 그대로 받아 쓴다. */
 export interface CollabUser {
@@ -56,8 +58,28 @@ export function useCollabTitle(doc: Y.Doc, fallback: string) {
   }
 }
 
+/**
+ * 릴레이 연결 상태.
+ *
+ * 화면에 드러내는 게 중요하다. 릴레이가 죽어 있으면 편집은 되는데 남에게
+ * 전달만 안 되므로, 표시가 없으면 "공동편집이 원래 안 되는" 것처럼 보인다.
+ */
+export function useCollabStatus(provider: WebsocketProvider): CollabStatus {
+  const [status, setStatus] = useState<CollabStatus>(() =>
+    provider.wsconnected ? 'connected' : 'connecting',
+  )
+
+  useEffect(() => {
+    const onStatus = (event: { status: CollabStatus }) => setStatus(event.status)
+    provider.on('status', onStatus)
+    return () => provider.off('status', onStatus)
+  }, [provider])
+
+  return status
+}
+
 /** 지금 이 문서를 함께 보고 있는 사람들. 본인은 제외한다. */
-export function usePresence(provider: BroadcastProvider): CollabUser[] {
+export function usePresence(provider: WebsocketProvider): CollabUser[] {
   const read = () =>
     [...provider.awareness.getStates().entries()]
       .filter(([clientId]) => clientId !== provider.doc.clientID)

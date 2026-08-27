@@ -4,6 +4,7 @@ import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import Collaboration from '@tiptap/extension-collaboration'
 import CollaborationCaret from '@tiptap/extension-collaboration-caret'
+import { WifiOff } from 'lucide-react'
 import { Avatar } from '@/components/ui/Avatar'
 import { Spinner } from '@/components/ui/Spinner'
 import { useCurrentUser } from '@/features/auth/AuthContext'
@@ -11,14 +12,30 @@ import { formatRelative } from '@/lib/datetime'
 import { useTouchDoc } from './api'
 import { CommentPanel } from './CommentPanel'
 import { EditorToolbar } from './EditorToolbar'
-import { hueToColor, useCollabTitle, usePresence } from './collabState'
+import { hueToColor, useCollabStatus, useCollabTitle, usePresence } from './collabState'
 import { useCollabSession, type CollabSession } from './useCollabSession'
 import type { DocDetail } from './types'
 
 /** 함께 보고 있는 사람들의 커서 색과 같은 색 아바타를 헤더에 세운다. */
 function PresenceBar({ session }: { session: CollabSession }) {
   const users = usePresence(session.provider)
-  if (users.length === 0) return null
+  const status = useCollabStatus(session.provider)
+
+  if (status !== 'connected') {
+    return (
+      <p
+        title="npm run collab 로 실시간 릴레이를 켜면 다른 사람과 함께 편집할 수 있습니다."
+        className="text-warning flex items-center gap-1.5 text-xs"
+      >
+        <WifiOff className="size-3.5" />
+        오프라인 편집 중 — 이 브라우저에만 저장됩니다
+      </p>
+    )
+  }
+
+  if (users.length === 0) {
+    return <p className="text-subtle text-xs">실시간 연결됨</p>
+  }
 
   return (
     <div className="flex items-center gap-1.5">
