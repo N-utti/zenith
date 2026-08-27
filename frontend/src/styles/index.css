@@ -1,0 +1,118 @@
+@import 'tailwindcss';
+
+/* 다크모드는 미디어쿼리가 아니라 <html class="dark"> 로 제어한다 (사용자 토글 필요). */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ── 1) 원시 토큰 ────────────────────────────────────────────────
+   브랜드 팔레트와 타이포. 외부 폰트 CDN은 쓰지 않는다(사내망 원칙: 외부 호출 0건).
+   Pretendard를 쓰려면 self-host 후 아래 스택 맨 앞에 넣는다. */
+@theme {
+  --font-sans:
+    'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo',
+    'Segoe UI', 'Malgun Gothic', 'Noto Sans KR', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'D2Coding', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --color-brand-50: oklch(0.97 0.014 275);
+  --color-brand-100: oklch(0.94 0.03 275);
+  --color-brand-200: oklch(0.89 0.055 275);
+  --color-brand-300: oklch(0.82 0.09 275);
+  --color-brand-400: oklch(0.72 0.14 275);
+  --color-brand-500: oklch(0.62 0.18 275);
+  --color-brand-600: oklch(0.55 0.19 275);
+  --color-brand-700: oklch(0.47 0.17 275);
+  --color-brand-800: oklch(0.39 0.14 275);
+  --color-brand-900: oklch(0.32 0.11 275);
+  --color-brand-950: oklch(0.22 0.08 275);
+
+  --radius-card: 0.75rem;
+}
+
+/* ── 2) 시맨틱 토큰 ──────────────────────────────────────────────
+   컴포넌트는 brand-600 같은 원시 토큰이 아니라 여기의 의미 토큰만 쓴다.
+   (bg-surface, text-muted, border-line …) */
+@theme inline {
+  --color-canvas: var(--moa-canvas);
+  --color-surface: var(--moa-surface);
+  --color-surface-hover: var(--moa-surface-hover);
+  --color-sunken: var(--moa-sunken);
+  --color-line: var(--moa-line);
+  --color-line-strong: var(--moa-line-strong);
+
+  --color-fg: var(--moa-fg);
+  --color-muted: var(--moa-muted);
+  --color-subtle: var(--moa-subtle);
+
+  --color-accent: var(--moa-accent);
+  --color-accent-hover: var(--moa-accent-hover);
+  --color-on-accent: var(--moa-on-accent);
+  --color-accent-soft: var(--moa-accent-soft);
+
+  --color-success: var(--moa-success);
+  --color-warning: var(--moa-warning);
+  --color-danger: var(--moa-danger);
+}
+
+:root {
+  --moa-canvas: oklch(0.985 0.002 275);
+  --moa-surface: oklch(1 0 0);
+  --moa-surface-hover: oklch(0.965 0.004 275);
+  --moa-sunken: oklch(0.955 0.005 275);
+  --moa-line: oklch(0.915 0.005 275);
+  --moa-line-strong: oklch(0.84 0.008 275);
+
+  --moa-fg: oklch(0.22 0.015 275);
+  --moa-muted: oklch(0.5 0.015 275);
+  --moa-subtle: oklch(0.63 0.012 275);
+
+  --moa-accent: oklch(0.55 0.19 275);
+  --moa-accent-hover: oklch(0.49 0.19 275);
+  --moa-on-accent: oklch(0.99 0 0);
+  --moa-accent-soft: oklch(0.95 0.03 275);
+
+  --moa-success: oklch(0.58 0.14 155);
+  --moa-warning: oklch(0.71 0.15 75);
+  --moa-danger: oklch(0.57 0.2 25);
+}
+
+.dark {
+  --moa-canvas: oklch(0.18 0.008 275);
+  --moa-surface: oklch(0.22 0.01 275);
+  --moa-surface-hover: oklch(0.26 0.012 275);
+  --moa-sunken: oklch(0.15 0.008 275);
+  --moa-line: oklch(0.3 0.012 275);
+  --moa-line-strong: oklch(0.4 0.015 275);
+
+  --moa-fg: oklch(0.95 0.005 275);
+  --moa-muted: oklch(0.71 0.012 275);
+  --moa-subtle: oklch(0.58 0.012 275);
+
+  --moa-accent: oklch(0.68 0.16 275);
+  --moa-accent-hover: oklch(0.74 0.15 275);
+  --moa-on-accent: oklch(0.17 0.02 275);
+  --moa-accent-soft: oklch(0.3 0.06 275);
+
+  --moa-success: oklch(0.7 0.14 155);
+  --moa-warning: oklch(0.79 0.14 75);
+  --moa-danger: oklch(0.68 0.18 25);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-line);
+  }
+
+  body {
+    @apply bg-canvas text-fg font-sans antialiased;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  :focus-visible {
+    @apply outline-accent outline-2 outline-offset-2;
+  }
+
+  /* 스크롤바를 앱 톤에 맞춘다 (Windows 데스크톱 앱에서 특히 티가 난다). */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-line-strong) transparent;
+  }
+}

@@ -35,3 +35,7 @@ data/
 models/
 minio-data/
 *.gguf
+
+# 에이전트 로컬 상태
+.gstack/
+.omc/
