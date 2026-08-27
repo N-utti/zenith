@@ -29,6 +29,8 @@ export function AppRoutes() {
       <Route element={<RequireAuth />}>
         {/* 에디터는 화면을 꽉 채우고 영역별로 따로 스크롤한다. */}
         <Route element={<AppLayout bleed />}>
+          <Route path="chat" element={<ChatPage />} />
+          <Route path="chat/:channelId" element={<ChatPage />} />
           <Route
             path="docs/:docId"
             element={
@@ -48,7 +50,6 @@ export function AppRoutes() {
         <Route element={<AppLayout />}>
           <Route index element={<HomePage />} />
           <Route path="docs" element={<DocsPage />} />
-          <Route path="chat" element={<ChatPage />} />
           <Route path="board" element={<BoardPage />} />
           <Route path="attendance" element={<AttendancePage />} />
           <Route path="ai" element={<AiPage />} />

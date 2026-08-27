@@ -4,7 +4,7 @@ import type {
   TeamAlert,
   WeekSummary,
 } from '@/features/attendance/types'
-import type { Announcement, UnreadChannel } from '@/features/home/types'
+import type { Announcement } from '@/features/home/types'
 import type { User } from '@/types'
 
 // ── 시각 헬퍼 ────────────────────────────────────────────────
@@ -247,32 +247,5 @@ export const ANNOUNCEMENTS: Announcement[] = [
     authorName: '최재호',
     createdAt: minutesAgo(4100),
     pinned: false,
-  },
-]
-
-export const UNREAD_CHANNELS: UnreadChannel[] = [
-  {
-    id: 'c-1',
-    name: '개발',
-    kind: 'channel',
-    unread: 12,
-    lastMessage: 'Yjs 커서 동기화 이슈 재현됐습니다. 스크린샷 올릴게요',
-    lastAt: minutesAgo(4),
-  },
-  {
-    id: 'c-2',
-    name: '박동현',
-    kind: 'dm',
-    unread: 3,
-    lastMessage: '내일 스탠드업 30분 당길 수 있을까요?',
-    lastAt: minutesAgo(38),
-  },
-  {
-    id: 'c-3',
-    name: '공지',
-    kind: 'channel',
-    unread: 1,
-    lastMessage: '워크숍 참석 여부 회신 부탁드립니다',
-    lastAt: minutesAgo(175),
   },
 ]
