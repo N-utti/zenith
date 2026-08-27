@@ -20,6 +20,16 @@ export interface AttendanceToday {
   checkInSource: CheckInSource | null
   checkOutAt: string | null
   status: DayStatus
+  /**
+   * 퇴근 취소가 가능한 마감 시각. 유예를 넘겼거나 취소할 게 없으면 null.
+   *
+   * 유예 안의 취소는 오조작 "정정"이라 승인이 필요 없다. 아직 팀 집계나
+   * 52시간 경보가 이 기록을 참조하기 전이기 때문이다. 유예를 넘기면
+   * 보정 신청 + 팀장 승인 경로로 간다 (설계서 §5.2).
+   *
+   * 유예 길이는 서버가 정한다 — 취업규칙에 따라 바뀔 수 있는 정책값이다.
+   */
+  undoCheckOutUntil: string | null
 }
 
 export interface WeekSummary {

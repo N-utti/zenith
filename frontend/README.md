@@ -78,6 +78,10 @@ Pretendard가 필요하면 self-host 후 `--font-sans` 스택 맨 앞에 넣는�
 **날짜·시간 표기는 `lib/datetime.ts`를 쓴다.** 근태에서 "기록 없음"을 0분으로 접지 않는 것이
 설계서 L4의 핵심이라, 화면 문구도 "미기록 / 미확정"으로 통일한다.
 
+**근태 기록은 지우지 않는다.** ① 수집 계층이 무손실이어야 규칙 변경 시 재계산(replay)이
+가능하다(설계서 §1.2). 퇴근 취소도 삭제가 아니라 취소 이벤트를 덧붙이고 판정 계층이 이를
+무시하는 방식이다. 유예(5분) 안의 취소는 승인 없이 정정되고, 넘기면 보정 신청 + 팀장 승인으로 간다.
+
 ## 구현 상태
 
 | 화면 | 상태 |
@@ -88,10 +92,11 @@ Pretendard가 필요하면 self-host 후 `--font-sans` 스택 맨 앞에 넣는�
 홈 대시보드가 쓰는 목 엔드포인트 — 백엔드는 같은 스키마로 응답하면 된다.
 
 ```
-GET  /api/attendance/summary       { today, week, pendingCorrections }
-POST /api/attendance/check-in      → summary
-POST /api/attendance/check-out     → summary
-GET  /api/attendance/team-alerts   lead 미만 403
+GET  /api/attendance/summary          { today, week, pendingCorrections }
+POST /api/attendance/check-in         → summary
+POST /api/attendance/check-out        → summary
+POST /api/attendance/check-out/undo   유예(5분) 경과 시 409 → 보정 경로 안내
+GET  /api/attendance/team-alerts      lead 미만 403
 GET  /api/announcements?limit=     권한 밖 등급 글은 목록에서 제외
 GET  /api/documents/recent?limit=
 GET  /api/chat/unread

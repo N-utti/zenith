@@ -42,6 +42,12 @@ function weekStart(): string {
 
 const WEEK_LIMIT_MINUTES = 52 * 60
 
+/**
+ * 퇴근 취소 유예. 이 안에서는 승인 없이 정정되고, 넘기면 보정 신청으로 간다.
+ * 실제로는 취업규칙에 맞춰 서버 설정(work_policies)에서 읽어야 할 값이다.
+ */
+const UNDO_GRACE_MINUTES = 5
+
 // ── 근태 상태 (가변) ─────────────────────────────────────────
 // 출근·퇴근 버튼이 실제로 상태를 바꿔야 위젯을 제대로 확인할 수 있다.
 
@@ -49,6 +55,8 @@ interface UserAttendance {
   today: AttendanceToday
   week: WeekSummary
   pendingCorrections: AttendanceSummary['pendingCorrections']
+  /** 되돌리기용. 퇴근을 언제 기록했고 주간 누적에 몇 분을 더했는지. */
+  lastCheckOut?: { recordedAt: number; regular: number; overtime: number }
 }
 
 function week(regular: number, overtime: number, unconfirmed = 0): WeekSummary {
@@ -70,6 +78,7 @@ const attendance: Record<string, UserAttendance> = {
       checkInSource: 'device',
       checkOutAt: null,
       status: 'working',
+      undoCheckOutUntil: null,
     },
     week: week(1930, 0, 1),
     pendingCorrections: [{ date: daysAgoDate(1), reason: 'missing_checkout' }],
@@ -82,6 +91,7 @@ const attendance: Record<string, UserAttendance> = {
       checkInSource: 'app',
       checkOutAt: null,
       status: 'working',
+      undoCheckOutUntil: null,
     },
     week: week(2400, 320),
     pendingCorrections: [],
@@ -93,15 +103,27 @@ const attendance: Record<string, UserAttendance> = {
       checkInSource: null,
       checkOutAt: null,
       status: 'not_checked_in',
+      undoCheckOutUntil: null,
     },
     week: week(1560, 0),
     pendingCorrections: [],
   },
 }
 
+/** 유예가 살아 있으면 마감 시각을, 지났으면 null을 준다. */
+function undoDeadline(state: UserAttendance): string | null {
+  if (!state.lastCheckOut) return null
+  const until = state.lastCheckOut.recordedAt + UNDO_GRACE_MINUTES * 60_000
+  return until > Date.now() ? new Date(until).toISOString() : null
+}
+
 export function getAttendance(userId: string): AttendanceSummary {
   const state = attendance[userId] ?? attendance['u-1']
-  return { today: state.today, week: state.week, pendingCorrections: state.pendingCorrections }
+  return {
+    today: { ...state.today, undoCheckOutUntil: undoDeadline(state) },
+    week: state.week,
+    pendingCorrections: state.pendingCorrections,
+  }
 }
 
 export function punchIn(userId: string): AttendanceSummary {
@@ -127,12 +149,41 @@ export function punchOut(userId: string): AttendanceSummary {
     state.today = { ...state.today, checkOutAt: now.toISOString(), status: 'done' }
     // 소정 8시간을 넘는 분은 연장으로 넘긴다 (실제 판정은 서버 §5가 한다).
     const regular = Math.min(worked, 480)
+    const overtime = worked - regular
     state.week = {
       ...state.week,
       regularMinutes: state.week.regularMinutes + regular,
-      overtimeMinutes: state.week.overtimeMinutes + (worked - regular),
+      overtimeMinutes: state.week.overtimeMinutes + overtime,
     }
+    state.lastCheckOut = { recordedAt: now.getTime(), regular, overtime }
   }
+  return getAttendance(userId)
+}
+
+export class UndoExpiredError extends Error {}
+
+/**
+ * 퇴근 취소. 유예 안에서만 허용한다.
+ *
+ * 실제 서버는 att_raw_events에서 행을 지우지 않는다 — 무손실 적재가
+ * 재계산(replay)의 전제이기 때문이다. 취소 이벤트를 덧붙이고 판정 계층이
+ * 이를 무시하는 방식이 된다. 목에서는 그 결과 상태만 재현한다.
+ */
+export function undoCheckOut(userId: string): AttendanceSummary {
+  const state = attendance[userId]
+  if (!state?.lastCheckOut || undoDeadline(state) === null) {
+    throw new UndoExpiredError()
+  }
+
+  const { regular, overtime } = state.lastCheckOut
+  state.week = {
+    ...state.week,
+    regularMinutes: state.week.regularMinutes - regular,
+    overtimeMinutes: state.week.overtimeMinutes - overtime,
+  }
+  state.today = { ...state.today, checkOutAt: null, status: 'working' }
+  delete state.lastCheckOut
+
   return getAttendance(userId)
 }
 

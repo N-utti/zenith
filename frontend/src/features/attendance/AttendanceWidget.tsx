@@ -1,14 +1,15 @@
 import { Link } from 'react-router'
-import { AlertTriangle, LogIn, LogOut } from 'lucide-react'
+import { AlertTriangle, LogIn, LogOut, Undo2 } from 'lucide-react'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { Spinner } from '@/components/ui/Spinner'
+import { ApiError } from '@/lib/api'
 import { cn } from '@/lib/cn'
 import { formatDay, formatMinutes, formatTime } from '@/lib/datetime'
 import { useMinuteClock } from '@/lib/useNow'
-import { useAttendanceSummary, usePunch } from './api'
+import { useAttendanceSummary, usePunch, useUndoCheckOut } from './api'
 import type { AttendanceSummary, CheckInSource, WeekSummary } from './types'
 
 /** 출근 기록이 어디서 왔는지. 아이콘은 이 크기에서 뭉개지므로 글자로 밝힌다. */
@@ -71,6 +72,46 @@ function WeekBar({ week }: { week: WeekSummary }) {
           <span className="text-warning"> · 미확정 {week.unconfirmedDays}일</span>
         )}
       </p>
+    </div>
+  )
+}
+
+/**
+ * 퇴근 직후에만 뜨는 되돌리기 줄. 유예가 지나면 사라지고 보정 경로만 남는다.
+ *
+ * 시계가 분 단위라 남은 시간을 내림한다. 마지막 1분 미만 구간에서는 줄이
+ * 먼저 사라지는데, 죽은 버튼을 보여주는 것보다 낫다. 경계에서 눌리더라도
+ * 서버가 409로 막고 보정을 안내하므로 잘못된 상태는 만들어지지 않는다.
+ */
+function UndoCheckOutBar({ until, nowMinutes }: { until: string; nowMinutes: number }) {
+  const undo = useUndoCheckOut()
+  const remaining = Math.floor((new Date(until).getTime() - nowMinutes * 60_000) / 60_000)
+
+  if (remaining <= 0) return null
+
+  return (
+    <div className="border-accent/30 bg-accent-soft mx-5 mt-3 rounded-lg border px-3 py-2">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <p className="text-fg flex-1 text-sm">
+          퇴근으로 기록했습니다.
+          <span className="text-muted"> 잘못 눌렀다면 {remaining}분 안에 취소하세요.</span>
+        </p>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => undo.mutate()}
+          disabled={undo.isPending}
+        >
+          {undo.isPending ? <Spinner /> : <Undo2 className="size-4" />}
+          퇴근 취소
+        </Button>
+      </div>
+
+      {undo.isError && (
+        <p role="alert" className="text-danger mt-1.5 text-xs">
+          {undo.error instanceof ApiError ? undo.error.message : '취소하지 못했습니다.'}
+        </p>
+      )}
     </div>
   )
 }
@@ -171,6 +212,10 @@ export function AttendanceWidget() {
         </div>
         <PunchButton summary={summary} />
       </div>
+
+      {today.undoCheckOutUntil && (
+        <UndoCheckOutBar until={today.undoCheckOutUntil} nowMinutes={nowMinutes} />
+      )}
 
       <div className="grid grid-cols-2 gap-4 px-5 py-4 sm:grid-cols-[auto_auto_1fr] sm:gap-8">
         <Stat label="출근">

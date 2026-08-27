@@ -26,6 +26,21 @@ export function usePunch(kind: 'check-in' | 'check-out') {
   })
 }
 
+/**
+ * 퇴근 취소. 유예를 넘겼으면 서버가 409와 함께 보정 경로를 안내한다.
+ * 기록을 지우는 게 아니라 취소 이벤트를 덧붙이는 것이므로 원본은 남는다.
+ */
+export function useUndoCheckOut() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => api<AttendanceSummary>('/attendance/check-out/undo', { method: 'POST' }),
+    onSuccess: (summary) => {
+      qc.setQueryData(attendanceKeys.summary, summary)
+      void qc.invalidateQueries({ queryKey: attendanceKeys.teamAlerts })
+    },
+  })
+}
+
 export function useTeamAlerts(enabled: boolean) {
   return useQuery({
     queryKey: attendanceKeys.teamAlerts,

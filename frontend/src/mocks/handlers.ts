@@ -9,6 +9,8 @@ import {
   punchIn,
   punchOut,
   RECENT_DOCS,
+  undoCheckOut,
+  UndoExpiredError,
   UNREAD_CHANNELS,
 } from './dashboardDb'
 
@@ -54,6 +56,23 @@ export const handlers = [
   http.post('/api/attendance/check-in', authed((user) => HttpResponse.json(punchIn(user.id)))),
 
   http.post('/api/attendance/check-out', authed((user) => HttpResponse.json(punchOut(user.id)))),
+
+  http.post(
+    '/api/attendance/check-out/undo',
+    authed((user) => {
+      try {
+        return HttpResponse.json(undoCheckOut(user.id))
+      } catch (error) {
+        if (error instanceof UndoExpiredError) {
+          return HttpResponse.json(
+            { detail: '취소 가능 시간이 지났습니다. 근태 화면에서 보정을 신청하세요.' },
+            { status: 409 },
+          )
+        }
+        throw error
+      }
+    }),
+  ),
 
   http.get(
     '/api/attendance/team-alerts',
