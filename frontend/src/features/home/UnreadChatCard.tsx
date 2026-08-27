@@ -3,24 +3,27 @@ import { AtSign, Hash } from 'lucide-react'
 import { Card, CardEmpty, CardHeader } from '@/components/ui/Card'
 import { SkeletonRows } from '@/components/ui/Skeleton'
 import { formatRelative } from '@/lib/datetime'
-import { useUnreadChat } from './api'
+import { useChannels } from '@/features/chat/api'
 
 export function UnreadChatCard() {
-  const { data, isPending, isError } = useUnreadChat()
+  const { data, isPending, isError } = useChannels()
+
+  const unreadChannels = data?.items.filter((channel) => channel.unread > 0) ?? []
+  const total = unreadChannels.reduce((sum, channel) => sum + channel.unread, 0)
 
   return (
     <Card>
-      <CardHeader title="안 읽은 채팅" count={data?.total} to="/chat" />
+      <CardHeader title="안 읽은 채팅" count={total} to="/chat" />
 
       {isPending && <SkeletonRows />}
       {isError && <CardEmpty>채팅을 불러오지 못했습니다.</CardEmpty>}
 
       {data &&
-        (data.channels.length === 0 ? (
+        (unreadChannels.length === 0 ? (
           <CardEmpty>모두 읽었습니다.</CardEmpty>
         ) : (
           <ul className="px-2 pb-2">
-            {data.channels.map((channel) => (
+            {unreadChannels.map((channel) => (
               <li key={channel.id}>
                 <Link
                   to={`/chat/${channel.id}`}
@@ -39,7 +42,11 @@ export function UnreadChatCard() {
                     <span className="bg-accent text-on-accent rounded-full px-1.5 py-0.5 text-[11px] font-semibold tabular-nums">
                       {channel.unread}
                     </span>
-                    <span className="text-subtle text-[11px]">{formatRelative(channel.lastAt)}</span>
+                    {channel.lastAt && (
+                      <span className="text-subtle text-[11px]">
+                        {formatRelative(channel.lastAt)}
+                      </span>
+                    )}
                   </div>
                 </Link>
               </li>

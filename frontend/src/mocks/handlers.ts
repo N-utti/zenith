@@ -1,4 +1,4 @@
-import { http, HttpResponse } from 'msw'
+import { http, HttpResponse, passthrough } from 'msw'
 import { ROLE_RANK, type User } from '@/types'
 import { DEMO_PASSWORD } from './accounts'
 import { MOCK_USERS, tokenFor, userFromToken } from './db'
@@ -10,7 +10,6 @@ import {
   punchOut,
   undoCheckOut,
   UndoExpiredError,
-  UNREAD_CHANNELS,
 } from './dashboardDb'
 import {
   addComment,
@@ -42,6 +41,11 @@ function authed(resolve: (user: User, request: Request) => Response) {
 }
 
 export const handlers = [
+  // 채팅은 MSW가 흉내 내지 않는다. 브라우저마다 따로 도는 목으로는 메시지가
+  // 공유되지 않기 때문이다. vite가 개발 서버(`npm run server`)로 넘기도록
+  // 그대로 통과시킨다.
+  http.all('/api/chat/*', () => passthrough()),
+
   // ── 인증 ──────────────────────────────────────────────────
   http.post('/api/auth/login', async ({ request }) => {
     const { email, password } = (await request.json()) as { email: string; password: string }
@@ -176,14 +180,4 @@ export const handlers = [
     }
     return HttpResponse.json(addComment(String(params.docId), user, body.trim()), { status: 201 })
   }),
-
-  http.get(
-    '/api/chat/unread',
-    authed(() =>
-      HttpResponse.json({
-        total: UNREAD_CHANNELS.reduce((sum, channel) => sum + channel.unread, 0),
-        channels: UNREAD_CHANNELS,
-      }),
-    ),
-  ),
 ]

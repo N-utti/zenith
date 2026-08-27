@@ -1,29 +1,18 @@
 /**
- * 문서 공동편집용 개발 릴레이.
- *
- * 백엔드 WebSocket 엔드포인트가 생기기 전까지 그 자리를 대신한다.
- * MSW가 REST를 대신하는 것과 같은 역할이다.
- *
- *   npm run collab      # ws://localhost:1234
- *
- * 앱은 이 포트에 직접 붙지 않는다. 항상 같은 오리진의 /collab 으로 붙고
- * vite가 여기로 넘긴다 (vite.config.ts). 운영에서는 프록시 대상만 실제
- * 백엔드로 바꾸면 앱 코드는 그대로다.
+ * 문서 공동편집 릴레이. dev-server.js가 /collab/<문서ID> 업그레이드를 여기로 넘긴다.
  *
  * ── 백엔드가 구현해야 할 프로토콜 ──────────────────────────────
  * y-websocket과 동일하다. 바이너리 프레임이고 첫 varuint가 메시지 종류다.
  *
- *   0 = sync       y-protocols/sync    문서 상태 동기화 (step1/step2/update)
+ *   0 = sync       y-protocols/sync       문서 상태 동기화 (step1/step2/update)
  *   1 = awareness  y-protocols/awareness  커서·참여자 정보
  *
- * 접속 경로의 마지막 세그먼트가 문서 ID다. 서버는 문서마다 Y.Doc을 하나
- * 들고 있으면서, 받은 업데이트를 자기 문서에 적용하고 같은 방의 나머지
- * 연결에 그대로 중계한다.
+ * 서버는 문서마다 Y.Doc을 하나 들고 있으면서, 받은 업데이트를 자기 문서에
+ * 적용하고 같은 방의 나머지 연결에 그대로 중계한다.
  *
  * 이 릴레이는 메모리에만 보관한다. 실제 백엔드는 여기서 Y.Doc 상태를
  * 주기적으로 영속화해야 한다 (설계상 문서 본문의 원천이 이 상태다).
  */
-import { WebSocketServer } from 'ws'
 import * as Y from 'yjs'
 import * as syncProtocol from 'y-protocols/sync'
 import * as awarenessProtocol from 'y-protocols/awareness'
@@ -32,8 +21,6 @@ import * as decoding from 'lib0/decoding'
 
 const MESSAGE_SYNC = 0
 const MESSAGE_AWARENESS = 1
-
-const PORT = Number(process.env.PORT ?? 1234)
 
 /** @type {Map<string, {doc: Y.Doc, awareness: awarenessProtocol.Awareness, conns: Map<import('ws').WebSocket, Set<number>>}>} */
 const rooms = new Map()
@@ -101,30 +88,9 @@ function getRoom(name) {
   return room
 }
 
-const wss = new WebSocketServer({ port: PORT })
-
-// 바인딩은 비동기다. 실패를 잡지 않으면 "실행 중"만 찍히고 아무 요청도
-// 받지 못하는 유령 프로세스가 된다 (포트를 이미 다른 릴레이가 물고 있을 때).
-wss.on('error', (error) => {
-  if (error.code === 'EADDRINUSE') {
-    console.error(
-      `[collab] 포트 ${PORT}가 이미 사용 중입니다. 기존 릴레이를 끄거나 PORT=… 로 바꾸세요.`,
-    )
-  } else {
-    console.error('[collab] 서버 오류:', error)
-  }
-  process.exit(1)
-})
-
-wss.on('listening', () => {
-  console.log(`[collab] 개발 릴레이 실행 중 — ws://localhost:${PORT}`)
-})
-
-wss.on('connection', (conn, request) => {
+export function handleCollabConnection(conn, name) {
   conn.binaryType = 'arraybuffer'
 
-  const path = new URL(request.url ?? '/', 'http://localhost').pathname
-  const name = decodeURIComponent(path.slice(1)) || 'default'
   const room = getRoom(name)
   room.conns.set(conn, new Set())
   console.log(`[collab] ${name} 접속 (${room.conns.size}명)`)
@@ -183,4 +149,4 @@ wss.on('connection', (conn, request) => {
     )
     send(conn, encoder)
   }
-})
+}

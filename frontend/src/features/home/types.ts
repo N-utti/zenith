@@ -9,17 +9,3 @@ export interface Announcement {
   createdAt: string
   pinned: boolean
 }
-
-export interface UnreadChannel {
-  id: string
-  name: string
-  kind: 'channel' | 'dm'
-  unread: number
-  lastMessage: string
-  lastAt: string
-}
-
-export interface UnreadSummary {
-  total: number
-  channels: UnreadChannel[]
-}

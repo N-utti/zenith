@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "collab": "node scripts/collab-server.js",
+    "server": "node scripts/dev-server.js",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "lint": "eslint .",
