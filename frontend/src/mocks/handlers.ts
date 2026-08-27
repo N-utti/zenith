@@ -8,11 +8,19 @@ import {
   getTeamAlerts,
   punchIn,
   punchOut,
-  RECENT_DOCS,
   undoCheckOut,
   UndoExpiredError,
   UNREAD_CHANNELS,
 } from './dashboardDb'
+import {
+  addComment,
+  createDoc,
+  DOC_SEEDS,
+  findDoc,
+  listComments,
+  listDocs,
+  touchDoc,
+} from './docsDb'
 
 function authenticate(request: Request): User | undefined {
   const header = request.headers.get('Authorization')
@@ -21,6 +29,7 @@ function authenticate(request: Request): User | undefined {
 
 const unauthorized = () => HttpResponse.json({ detail: '인증이 필요합니다.' }, { status: 401 })
 const forbidden = () => HttpResponse.json({ detail: '권한이 없습니다.' }, { status: 403 })
+const notFound = () => HttpResponse.json({ detail: '문서를 찾을 수 없습니다.' }, { status: 404 })
 
 /** 인증이 필요한 핸들러의 공통 껍데기. */
 function authed(resolve: (user: User, request: Request) => Response) {
@@ -103,9 +112,51 @@ export const handlers = [
     '/api/documents/recent',
     authed((_user, request) => {
       const limit = Number(new URL(request.url).searchParams.get('limit') ?? 5)
-      return HttpResponse.json({ items: RECENT_DOCS.slice(0, limit) })
+      return HttpResponse.json({ items: listDocs('').slice(0, limit) })
     }),
   ),
+
+  // ── 문서 ──────────────────────────────────────────────────
+  http.get(
+    '/api/documents',
+    authed((_user, request) => {
+      const query = new URL(request.url).searchParams.get('q') ?? ''
+      return HttpResponse.json({ items: listDocs(query) })
+    }),
+  ),
+
+  http.post('/api/documents', authed((user) => HttpResponse.json(createDoc(user), { status: 201 }))),
+
+  http.get('/api/documents/:docId', ({ request, params }) => {
+    if (!authenticate(request)) return unauthorized()
+    const doc = findDoc(String(params.docId))
+    if (!doc) return notFound()
+    // 실제 서버라면 보관 중인 Yjs 초기 상태를 줄 자리다.
+    return HttpResponse.json({ ...doc, seedHtml: DOC_SEEDS[doc.id] })
+  }),
+
+  http.patch('/api/documents/:docId', async ({ request, params }) => {
+    const user = authenticate(request)
+    if (!user) return unauthorized()
+    const { title } = (await request.json()) as { title?: string }
+    const doc = touchDoc(String(params.docId), user, title)
+    return doc ? HttpResponse.json(doc) : notFound()
+  }),
+
+  http.get('/api/documents/:docId/comments', ({ request, params }) => {
+    if (!authenticate(request)) return unauthorized()
+    return HttpResponse.json({ items: listComments(String(params.docId)) })
+  }),
+
+  http.post('/api/documents/:docId/comments', async ({ request, params }) => {
+    const user = authenticate(request)
+    if (!user) return unauthorized()
+    const { body } = (await request.json()) as { body: string }
+    if (!body.trim()) {
+      return HttpResponse.json({ detail: '내용을 입력하세요.' }, { status: 400 })
+    }
+    return HttpResponse.json(addComment(String(params.docId), user, body.trim()), { status: 201 })
+  }),
 
   http.get(
     '/api/chat/unread',

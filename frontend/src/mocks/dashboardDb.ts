@@ -4,7 +4,7 @@ import type {
   TeamAlert,
   WeekSummary,
 } from '@/features/attendance/types'
-import type { Announcement, RecentDoc, UnreadChannel } from '@/features/home/types'
+import type { Announcement, UnreadChannel } from '@/features/home/types'
 import type { User } from '@/types'
 
 // ── 시각 헬퍼 ────────────────────────────────────────────────
@@ -247,44 +247,6 @@ export const ANNOUNCEMENTS: Announcement[] = [
     authorName: '최재호',
     createdAt: minutesAgo(4100),
     pinned: false,
-  },
-]
-
-export const RECENT_DOCS: RecentDoc[] = [
-  {
-    id: 'd-1',
-    title: '2026 하반기 제품 로드맵',
-    updatedAt: minutesAgo(12),
-    editorName: '박동현',
-    editorHue: 155,
-  },
-  {
-    id: 'd-2',
-    title: '근태 모듈 설계서 v0.2 리뷰 노트',
-    updatedAt: minutesAgo(95),
-    editorName: '김수진',
-    editorHue: 275,
-  },
-  {
-    id: 'd-3',
-    title: '주간 개발 회의록 (8월 4주차)',
-    updatedAt: minutesAgo(300),
-    editorName: '이정민',
-    editorHue: 200,
-  },
-  {
-    id: 'd-4',
-    title: 'RAG 권한 필터 설계 메모',
-    updatedAt: minutesAgo(1500),
-    editorName: '한지우',
-    editorHue: 95,
-  },
-  {
-    id: 'd-5',
-    title: '출입 단말 연동 규격 조사',
-    updatedAt: minutesAgo(2900),
-    editorName: '김수진',
-    editorHue: 275,
   },
 ]
 

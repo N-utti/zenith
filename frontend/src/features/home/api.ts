@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { api } from '@/lib/api'
-import type { Announcement, RecentDoc, UnreadSummary } from './types'
+import type { DocSummary } from '@/features/docs/types'
+import type { Announcement, UnreadSummary } from './types'
 
 export function useAnnouncements() {
   return useQuery({
@@ -12,7 +13,7 @@ export function useAnnouncements() {
 export function useRecentDocs() {
   return useQuery({
     queryKey: ['documents', 'recent', { limit: 5 }],
-    queryFn: () => api<{ items: RecentDoc[] }>('/documents/recent?limit=5'),
+    queryFn: () => api<{ items: DocSummary[] }>('/documents/recent?limit=5'),
   })
 }
 

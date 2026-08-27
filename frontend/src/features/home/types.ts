@@ -10,14 +10,6 @@ export interface Announcement {
   pinned: boolean
 }
 
-export interface RecentDoc {
-  id: string
-  title: string
-  updatedAt: string
-  editorName: string
-  editorHue: number
-}
-
 export interface UnreadChannel {
   id: string
   name: string
