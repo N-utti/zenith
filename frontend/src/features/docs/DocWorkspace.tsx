@@ -1,23 +1,24 @@
-import { useEffect, useState, type ReactNode } from 'react'
-import { EditorContent, useEditor } from '@tiptap/react'
-import StarterKit from '@tiptap/starter-kit'
-import Placeholder from '@tiptap/extension-placeholder'
-import Collaboration from '@tiptap/extension-collaboration'
-import CollaborationCaret from '@tiptap/extension-collaboration-caret'
-import { WifiOff } from 'lucide-react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { EditorContent, useEditor, type Editor } from '@tiptap/react'
+import DragHandle from '@tiptap/extension-drag-handle-react'
+import { GripVertical, WifiOff, X } from 'lucide-react'
 import { Avatar } from '@/components/ui/Avatar'
 import { Spinner } from '@/components/ui/Spinner'
 import { useCurrentUser } from '@/features/auth/AuthContext'
 import { cn } from '@/lib/cn'
 import { formatRelative } from '@/lib/datetime'
+import { useDragAutoScroll } from '@/lib/useDragAutoScroll'
 import { useSaveVersion, useTouchDoc } from './api'
 import { CommentPanel } from './CommentPanel'
+import { EditorBubbleMenu } from './EditorBubbleMenu'
+import { buildDocExtensions } from './editorExtensions'
 import { EditorToolbar } from './EditorToolbar'
 import { VersionPanel } from './VersionPanel'
 import { VersionPreview } from './VersionPreview'
 import { hueToColor, useCollabStatus, useCollabTitle, usePresence } from './collabState'
 import { readSnapshot, takeSnapshot, type RestoredContent } from './versioning'
 import { useCollabSession, type CollabSession } from './useCollabSession'
+import { useImageUpload } from './useImageUpload'
 import type { DocDetail, DocVersion } from './types'
 
 /** 함께 보고 있는 사람들의 커서 색과 같은 색 아바타를 헤더에 세운다. */
@@ -106,6 +107,35 @@ function DocSidebar({
 
 type SidebarTab = 'comments' | 'versions'
 
+/** 문단 왼쪽에 뜨는 손잡이. 끌어서 블록을 옮기고, 누르면 그 블록을 통째로 고른다. */
+function BlockDragHandle({ editor }: { editor: Editor }) {
+  const posRef = useRef(-1)
+
+  return (
+    <DragHandle
+      editor={editor}
+      nested
+      onNodeChange={({ pos }) => {
+        posRef.current = pos
+      }}
+      className="pr-1"
+    >
+      <button
+        type="button"
+        title="드래그해서 옮기기 · 클릭해서 블록 선택"
+        aria-label="블록 손잡이"
+        className="text-subtle hover:bg-surface-hover hover:text-muted grid size-6 cursor-grab place-items-center rounded active:cursor-grabbing"
+        onClick={() => {
+          if (posRef.current < 0) return
+          editor.chain().focus().setNodeSelection(posRef.current).run()
+        }}
+      >
+        <GripVertical className="size-4" />
+      </button>
+    </DragHandle>
+  )
+}
+
 function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail }) {
   const user = useCurrentUser()
   const { doc, provider } = session
@@ -120,17 +150,11 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
   const [previewError, setPreviewError] = useState<string | null>(null)
 
   const editor = useEditor({
-    extensions: [
-      // undoRedo는 꺼야 한다. Yjs UndoManager가 대신하며, 그래야 되돌리기가
-      // 남의 편집까지 지우지 않고 내 변경만 되돌린다.
-      StarterKit.configure({ undoRedo: false }),
-      Placeholder.configure({ placeholder: '내용을 입력하세요…' }),
-      Collaboration.configure({ document: doc }),
-      CollaborationCaret.configure({
-        provider,
-        user: { name: user.name, color: hueToColor(user.avatarHue) },
-      }),
-    ],
+    extensions: buildDocExtensions({
+      doc,
+      provider,
+      user: { name: user.name, color: hueToColor(user.avatarHue) },
+    }),
     editorProps: {
       attributes: { class: 'moa-editor outline-none' },
     },
@@ -142,6 +166,12 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
       }
     },
   })
+
+  const { uploading, error: imageError, clearError } = useImageUpload(editor)
+
+  // 사진을 끌어 옮길 때 화면 끝에 닿으면 본문이 그 방향으로 굴러야 한다.
+  const scrollRef = useRef<HTMLDivElement>(null)
+  useDragAutoScroll(scrollRef)
 
   // 제목의 원천도 Y.Doc이다. 비어 있으면 서버 사본으로 한 번 채운다.
   useEffect(() => {
@@ -214,9 +244,26 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
         />
       ) : (
         <div className="flex min-h-0 flex-1 flex-col">
-          {editor && <EditorToolbar editor={editor} />}
+          {editor && <EditorToolbar editor={editor} uploadingImage={uploading} />}
 
-          <div className="min-h-0 flex-1 overflow-y-auto">
+          {imageError && (
+            <p
+              role="alert"
+              className="text-danger bg-danger/10 flex items-center gap-2 px-4 py-2 text-xs"
+            >
+              <span className="flex-1">{imageError}</span>
+              <button
+                type="button"
+                aria-label="알림 닫기"
+                onClick={clearError}
+                className="cursor-pointer rounded p-0.5 hover:bg-black/5"
+              >
+                <X className="size-3.5" />
+              </button>
+            </p>
+          )}
+
+          <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
             <div className="mx-auto max-w-3xl px-6 py-8">
               <div className="mb-1 flex items-center justify-between gap-4">
                 <p className="text-subtle text-xs">
@@ -240,7 +287,11 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
               />
 
               {editor ? (
-                <EditorContent editor={editor} className="mt-4" />
+                <>
+                  <EditorBubbleMenu editor={editor} />
+                  <BlockDragHandle editor={editor} />
+                  <EditorContent editor={editor} className="mt-4" />
+                </>
               ) : (
                 <Spinner className="mt-6" />
               )}

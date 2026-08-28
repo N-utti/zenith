@@ -1,91 +1,59 @@
 import type { Editor } from '@tiptap/react'
-import { useEditorState } from '@tiptap/react'
 import {
   Bold,
   Code,
-  Heading2,
-  Heading3,
+  ImagePlus,
   Italic,
   List,
   ListOrdered,
+  ListTodo,
+  LoaderCircle,
+  Minus,
   Quote,
   Redo2,
+  RemoveFormatting,
+  SquareCode,
   Strikethrough,
+  Underline,
   Undo2,
 } from 'lucide-react'
-import type { LucideIcon } from 'lucide-react'
-import { cn } from '@/lib/cn'
+import { BLOCK_BY_KEY } from './editorBlocks'
+import { AlignMenu, BlockMenu, ColorMenu, LinkMenu, ToolButton, ToolDivider } from './editorControls'
+import { useFormatState } from './editorFormats'
 
-function ToolButton({
-  icon: Icon,
-  label,
-  active,
-  disabled,
-  onClick,
+export function EditorToolbar({
+  editor,
+  uploadingImage,
 }: {
-  icon: LucideIcon
-  label: string
-  active?: boolean
-  disabled?: boolean
-  onClick: () => void
+  editor: Editor
+  uploadingImage: boolean
 }) {
-  return (
-    <button
-      type="button"
-      title={label}
-      aria-label={label}
-      aria-pressed={active}
-      disabled={disabled}
-      // 에디터가 포커스를 잃으면 선택 영역이 사라져 서식이 엉뚱한 곳에 걸린다.
-      onMouseDown={(e) => e.preventDefault()}
-      onClick={onClick}
-      className={cn(
-        'grid size-8 cursor-pointer place-items-center rounded-md transition-colors',
-        'disabled:pointer-events-none disabled:opacity-40',
-        active ? 'bg-accent-soft text-accent' : 'text-muted hover:bg-surface-hover hover:text-fg',
-      )}
-    >
-      <Icon className="size-4" />
-    </button>
-  )
-}
-
-function Divider() {
-  return <span className="bg-line mx-1 h-5 w-px" />
-}
-
-export function EditorToolbar({ editor }: { editor: Editor }) {
-  // 에디터 상태는 React 밖에서 바뀐다. 이 훅이 없으면 버튼 활성 표시가 멈춘다.
-  const state = useEditorState({
-    editor,
-    selector: ({ editor: e }) => ({
-      bold: e.isActive('bold'),
-      italic: e.isActive('italic'),
-      strike: e.isActive('strike'),
-      code: e.isActive('code'),
-      h2: e.isActive('heading', { level: 2 }),
-      h3: e.isActive('heading', { level: 3 }),
-      bulletList: e.isActive('bulletList'),
-      orderedList: e.isActive('orderedList'),
-      blockquote: e.isActive('blockquote'),
-      canUndo: e.can().undo(),
-      canRedo: e.can().redo(),
-    }),
-  })
+  const state = useFormatState(editor)
+  const run = (key: string) => () => BLOCK_BY_KEY[key].run(editor)
 
   return (
-    <div className="border-line bg-surface/90 sticky top-14 z-10 flex flex-wrap items-center gap-0.5 border-b px-2 py-1.5 backdrop-blur">
+    <div className="border-line bg-surface/90 sticky top-14 z-20 flex flex-wrap items-center gap-0.5 border-b px-2 py-1.5 backdrop-blur">
+      <BlockMenu editor={editor} blockKey={state.blockKey} />
+
+      <ToolDivider />
+
       <ToolButton
         icon={Bold}
-        label="굵게"
+        label="굵게 (Ctrl+B)"
         active={state.bold}
         onClick={() => editor.chain().focus().toggleBold().run()}
       />
       <ToolButton
         icon={Italic}
-        label="기울임"
+        label="기울임 (Ctrl+I)"
         active={state.italic}
         onClick={() => editor.chain().focus().toggleItalic().run()}
+      />
+      <ToolButton
+        icon={Underline}
+        label="밑줄 (Ctrl+U)"
+        active={state.underline}
+        onClick={() => editor.chain().focus().toggleUnderline().run()}
       />
       <ToolButton
         icon={Strikethrough}
@@ -99,44 +67,63 @@ export function EditorToolbar({ editor }: { editor: Editor }) {
         active={state.code}
         onClick={() => editor.chain().focus().toggleCode().run()}
       />
+      <ColorMenu editor={editor} color={state.color} highlight={state.highlight} />
 
-      <Divider />
+      <ToolDivider />
 
-      <ToolButton
-        icon={Heading2}
-        label="제목 2"
-        active={state.h2}
-        onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-      />
-      <ToolButton
-        icon={Heading3}
-        label="제목 3"
-        active={state.h3}
-        onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
-      />
+      <AlignMenu editor={editor} align={state.align} />
 
-      <Divider />
+      <ToolDivider />
 
       <ToolButton
         icon={List}
         label="글머리 목록"
-        active={state.bulletList}
-        onClick={() => editor.chain().focus().toggleBulletList().run()}
+        active={state.blockKey === 'bulletList'}
+        onClick={run('bulletList')}
       />
       <ToolButton
         icon={ListOrdered}
         label="번호 목록"
-        active={state.orderedList}
-        onClick={() => editor.chain().focus().toggleOrderedList().run()}
+        active={state.blockKey === 'orderedList'}
+        onClick={run('orderedList')}
       />
+      <ToolButton
+        icon={ListTodo}
+        label="할 일 목록"
+        active={state.blockKey === 'taskList'}
+        onClick={run('taskList')}
+      />
+
+      <ToolDivider />
+
       <ToolButton
         icon={Quote}
         label="인용"
-        active={state.blockquote}
-        onClick={() => editor.chain().focus().toggleBlockquote().run()}
+        active={state.blockKey === 'blockquote'}
+        onClick={run('blockquote')}
+      />
+      <ToolButton
+        icon={SquareCode}
+        label="코드 블록"
+        active={state.blockKey === 'codeBlock'}
+        onClick={run('codeBlock')}
+      />
+      <ToolButton icon={Minus} label="구분선" onClick={run('horizontalRule')} />
+      <ToolButton
+        icon={uploadingImage ? LoaderCircle : ImagePlus}
+        label={uploadingImage ? '사진 올리는 중…' : '사진'}
+        disabled={uploadingImage}
+        spinning={uploadingImage}
+        onClick={run('image')}
+      />
+      <LinkMenu editor={editor} href={state.link} />
+      <ToolButton
+        icon={RemoveFormatting}
+        label="서식 지우기"
+        onClick={() => editor.chain().focus().unsetAllMarks().run()}
       />
 
-      <Divider />
+      <ToolDivider />
 
       {/* 되돌리기는 Yjs UndoManager가 담당한다 — 남의 편집은 건드리지 않고 내 것만 되돌린다. */}
       <ToolButton
