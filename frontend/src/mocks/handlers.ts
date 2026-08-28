@@ -22,11 +22,15 @@ import {
   listVersions,
   touchDoc,
 } from './docsDb'
+import { readFile, saveFile } from './filesDb'
 
 function authenticate(request: Request): User | undefined {
   const header = request.headers.get('Authorization')
   return userFromToken(header?.replace(/^Bearer\s+/i, '') ?? null)
 }
+
+/** 사내망 파일 업로드 상한. 실제 서버(FastAPI)도 같은 값을 강제해야 한다. */
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 
 const unauthorized = () => HttpResponse.json({ detail: '인증이 필요합니다.' }, { status: 401 })
 const forbidden = () => HttpResponse.json({ detail: '권한이 없습니다.' }, { status: 403 })
@@ -163,6 +167,38 @@ export const handlers = [
     }
     return HttpResponse.json(addVersion(String(params.docId), user, snapshot, label), {
       status: 201,
+    })
+  }),
+
+  // ── 첨부 파일 ─────────────────────────────────────────────
+  http.post('/api/files', async ({ request }) => {
+    if (!authenticate(request)) return unauthorized()
+
+    const file = (await request.formData()).get('file')
+    if (!(file instanceof File)) {
+      return HttpResponse.json({ detail: '파일이 없습니다.' }, { status: 400 })
+    }
+    if (!file.type.startsWith('image/')) {
+      return HttpResponse.json({ detail: '이미지 파일만 올릴 수 있습니다.' }, { status: 415 })
+    }
+    if (file.size > MAX_UPLOAD_BYTES) {
+      return HttpResponse.json({ detail: '10MB 이하 파일만 올릴 수 있습니다.' }, { status: 413 })
+    }
+
+    const stored = await saveFile(file)
+    return HttpResponse.json(
+      { id: stored.id, url: `/api/files/${stored.id}`, name: stored.name, size: stored.size },
+      { status: 201 },
+    )
+  }),
+
+  // <img src> 요청에는 Authorization 헤더가 붙지 않는다. 실제 서버는 서명 URL이나
+  // 세션 쿠키로 막을 자리고, 목은 인증을 보지 않는다.
+  http.get('/api/files/:fileId', async ({ params }) => {
+    const stored = await readFile(String(params.fileId))
+    if (!stored) return HttpResponse.json({ detail: '파일을 찾을 수 없습니다.' }, { status: 404 })
+    return new HttpResponse(stored.blob, {
+      headers: { 'Content-Type': stored.type, 'Content-Length': String(stored.size) },
     })
   }),
 

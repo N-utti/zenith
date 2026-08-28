@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
-import type { DocComment, DocDetail, DocSummary, DocVersion } from './types'
+import type { DocComment, DocDetail, DocSummary, DocVersion, UploadedFile } from './types'
 
 export const docKeys = {
   list: (query: string) => ['documents', 'list', query] as const,
@@ -73,6 +73,16 @@ export function useSaveVersion(docId: string) {
       void qc.invalidateQueries({ queryKey: docKeys.versions(docId) })
     },
   })
+}
+
+/**
+ * 파일을 올리고 접근 URL을 받는다. 캐시할 것이 없어 react-query를 거치지 않는다.
+ * 본문(Y.Doc)에는 바이너리가 아니라 여기서 받은 url만 들어간다.
+ */
+export function uploadFile(file: File) {
+  const form = new FormData()
+  form.append('file', file)
+  return api<UploadedFile>('/files', { method: 'POST', body: form })
 }
 
 export function useComments(docId: string) {

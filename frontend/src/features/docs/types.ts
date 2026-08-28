@@ -7,6 +7,14 @@ export interface DocSummary {
   editorHue: number
 }
 
+/** 업로드 결과. 문서에는 바이너리가 아니라 이 url만 들어간다. */
+export interface UploadedFile {
+  id: string
+  url: string
+  name: string
+  size: number
+}
+
 export interface DocComment {
   id: string
   authorId: string
