@@ -52,13 +52,12 @@ src/
 │  ├─ ui/         Button · Avatar · Badge · Spinner · PageHeader · PlaceholderPanel
 │  └─ CommandPalette.tsx   ⌘K 팔레트 (현재는 화면 이동만)
 ├─ features/
-│  ├─ attendance/ 근태 위젯 · 근태 API/타입
 │  ├─ auth/       AuthProvider · AuthContext · RequireAuth · LoginPage
 │  ├─ chat/       채널 목록 · 메시지 · 입력창 · 실시간 소켓
 │  ├─ docs/       TipTap 에디터 · Yjs 협업 세션 · 댓글 · 버전 기록
-│  └─ home/       홈 대시보드 카드 (공지 · 최근문서 · 안읽은채팅 · 팀 경보)
+│  └─ home/       홈 대시보드 카드 (공지 · 최근문서 · 안읽은채팅)
 ├─ lib/           api(fetch 래퍼) · token · queryClient · theme · datetime · cn
-├─ mocks/         MSW 핸들러 · 목 사용자 · 대시보드 목 데이터
+├─ mocks/         MSW 핸들러 · 목 사용자 · 공지·문서 목 데이터
 ├─ pages/         화면별 컴포넌트
 ├─ styles/        index.css — 디자인 토큰
 └─ types/         Role · User 등 공용 타입
@@ -84,30 +83,36 @@ Pretendard가 필요하면 self-host 후 `--font-sans` 스택 맨 앞에 넣는�
 **메뉴는 `src/app/navigation.ts` 한 곳에서 정의한다.** 사이드바와 ⌘K 팔레트가 같은 배열을 읽는다.
 `minRole`로 메뉴를 숨길 수 있지만 이는 UI 편의일 뿐이고, 실제 차단은 서버 권한 검사가 한다.
 
-**날짜·시간 표기는 `lib/datetime.ts`를 쓴다.** 근태에서 "기록 없음"을 0분으로 접지 않는 것이
-설계서 L4의 핵심이라, 화면 문구도 "미기록 / 미확정"으로 통일한다.
-
-**근태 기록은 지우지 않는다.** ① 수집 계층이 무손실이어야 규칙 변경 시 재계산(replay)이
-가능하다(설계서 §1.2). 퇴근 취소도 삭제가 아니라 취소 이벤트를 덧붙이고 판정 계층이 이를
-무시하는 방식이다. 유예(5분) 안의 취소는 승인 없이 정정되고, 넘기면 보정 신청 + 팀장 승인으로 간다.
+**날짜·시간 표기는 `lib/datetime.ts`를 쓴다.** 표기 규칙을 한 곳에 모아 목록·에디터·리포트가
+같은 형식을 쓰게 한다.
 
 ## 구현 상태
 
 | 화면 | 상태 |
 | --- | --- |
-| 홈 대시보드 | 근태 위젯(출퇴근·주 52h)·공지·최근문서·안읽은채팅·팀 경보(lead+) |
+| 홈 대시보드 | 공지·최근문서·안읽은채팅 |
 | 문서 | 목록·검색·생성, TipTap 에디터, Yjs 실시간 공동편집, 댓글, 버전 기록·되돌리기 |
 | 채팅 | 채널·DM, 실시간 송수신, 안읽음, 타이핑 표시 |
 | 게시판 · AI · 근태 상세 | 껍데기. 화면 안에 무엇이 들어올 자리인지 적어 뒀다 |
 
-목 엔드포인트 — 백엔드는 같은 스키마로 응답하면 된다.
+### 출퇴근 기록 구현은 삭제됐다
+
+[근태 모듈 설계서 v0.3](../docs/10-근태-모듈-설계서.md)에서 **출퇴근 시각을 기록하지 않기로**
+결정했다(출입문 단말 미연동, 앱 출퇴근 버튼 없음, 전 직원 주 5일 09~18시 고정 근무 전제).
+근태는 휴가·연차와 예외 근무(재택·외근·출장·연장) 신청·승인만 다루는 모듈이 된다.
+
+v0.2 전제로 만들어진 구현을 전부 걷어냈다 — `features/attendance/`(출퇴근 위젯 · API · 타입),
+팀 주 52시간 경보 카드(`TeamAlertsCard`), `lib/useNow.ts`, MSW 근태 핸들러와 목 데이터.
+근태 화면(`/attendance`)은 v0.3 기준 자리표시자로 남아 있고, 사이드바 메뉴도 그대로다.
+
+되살릴 일이 있다면 삭제 직전 커밋(`c4ed480`)에 있다. 다만 경보 카드는 근무시간 실측에 기대는
+화면이라 그대로 복구하면 안 된다 — 설계서 §5.3의 **승인된 연장근로 신고분 집계**로 다시
+만들어야 하고, 화면에 "신고 기준" 라벨을 병기해야 한다(실측처럼 보이면 안 된다).
+
+목 엔드포인트 — 백엔드는 같은 스키마로 응답하면 된다. 근태 API는 설계서 §9로 재정의됐고
+아직 목이 없다.
 
 ```
-GET   /api/attendance/summary          { today, week, pendingCorrections }
-POST  /api/attendance/check-in         → summary
-POST  /api/attendance/check-out        → summary
-POST  /api/attendance/check-out/undo   유예(5분) 경과 시 409 → 보정 경로 안내
-GET   /api/attendance/team-alerts      lead 미만 403
 GET   /api/announcements?limit=        권한 밖 등급 글은 목록에서 제외
 
 GET   /api/documents?q=                목록·검색
