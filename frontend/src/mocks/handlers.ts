@@ -2,15 +2,7 @@ import { http, HttpResponse, passthrough } from 'msw'
 import { ROLE_RANK, type User } from '@/types'
 import { DEMO_PASSWORD } from './accounts'
 import { MOCK_USERS, tokenFor, userFromToken } from './db'
-import {
-  ANNOUNCEMENTS,
-  getAttendance,
-  getTeamAlerts,
-  punchIn,
-  punchOut,
-  undoCheckOut,
-  UndoExpiredError,
-} from './dashboardDb'
+import { ANNOUNCEMENTS } from './dashboardDb'
 import {
   addComment,
   addVersion,
@@ -33,7 +25,6 @@ function authenticate(request: Request): User | undefined {
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 
 const unauthorized = () => HttpResponse.json({ detail: '인증이 필요합니다.' }, { status: 401 })
-const forbidden = () => HttpResponse.json({ detail: '권한이 없습니다.' }, { status: 403 })
 const notFound = () => HttpResponse.json({ detail: '문서를 찾을 수 없습니다.' }, { status: 404 })
 
 /** 인증이 필요한 핸들러의 공통 껍데기. */
@@ -68,39 +59,6 @@ export const handlers = [
   http.get('/api/auth/me', authed((user) => HttpResponse.json(user))),
 
   http.post('/api/auth/logout', () => new HttpResponse(null, { status: 204 })),
-
-  // ── 근태 ──────────────────────────────────────────────────
-  http.get('/api/attendance/summary', authed((user) => HttpResponse.json(getAttendance(user.id)))),
-
-  http.post('/api/attendance/check-in', authed((user) => HttpResponse.json(punchIn(user.id)))),
-
-  http.post('/api/attendance/check-out', authed((user) => HttpResponse.json(punchOut(user.id)))),
-
-  http.post(
-    '/api/attendance/check-out/undo',
-    authed((user) => {
-      try {
-        return HttpResponse.json(undoCheckOut(user.id))
-      } catch (error) {
-        if (error instanceof UndoExpiredError) {
-          return HttpResponse.json(
-            { detail: '취소 가능 시간이 지났습니다. 근태 화면에서 보정을 신청하세요.' },
-            { status: 409 },
-          )
-        }
-        throw error
-      }
-    }),
-  ),
-
-  http.get(
-    '/api/attendance/team-alerts',
-    authed((user) => {
-      // 설계서 NFR-ATT-02 — member는 타인 근태를 볼 수 없다.
-      if (ROLE_RANK[user.role] < ROLE_RANK.lead) return forbidden()
-      return HttpResponse.json({ alerts: getTeamAlerts(user) })
-    }),
-  ),
 
   // ── 홈 카드 ───────────────────────────────────────────────
   http.get(

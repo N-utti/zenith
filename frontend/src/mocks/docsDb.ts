@@ -21,7 +21,7 @@ export const DOCS: DocSummary[] = [
   },
   {
     id: 'd-2',
-    title: '근태 모듈 설계서 v0.2 리뷰 노트',
+    title: '근태 모듈 설계서 v0.3 리뷰 노트',
     updatedAt: minutesAgo(95),
     editorName: '김수진',
     editorHue: 275,
@@ -42,7 +42,7 @@ export const DOCS: DocSummary[] = [
   },
   {
     id: 'd-5',
-    title: '출입 단말 연동 규격 조사',
+    title: '휴가·연차 정책 확인 메모',
     updatedAt: minutesAgo(2900),
     editorName: '김수진',
     editorHue: 275,
@@ -61,17 +61,17 @@ export const DOC_SEEDS: Record<string, string> = {
       <li><strong>M3 AI</strong> — 로컬 LLM, 위키 RAG, 인라인 AI</li>
       <li><strong>M4 마감</strong> — 등급별 게시판, 앱 패키징, 파일럿</li>
     </ul>
-    <blockquote><p>근태는 아직 로드맵에 자리가 없다. 순개발량 약 22일 추정.</p></blockquote>
+    <blockquote><p>근태는 아직 로드맵에 자리가 없다. 순개발량 약 14일 추정.</p></blockquote>
   `,
   'd-2': `
-    <p>설계서 v0.2에서 바뀐 전제를 정리한다.</p>
-    <h2>출입 단말이 입장 전용이다</h2>
-    <p>지문을 찍어야 문이 열리므로 들어올 때만 찍고, 나갈 때는 버튼으로 연다. <strong>퇴근 기록이 물리적으로 존재하지 않는다.</strong></p>
-    <p>그래서 퇴근은 앱 버튼이 유일한 원천이 되고, 출근은 지문과 앱 중 <code>더 이른 쪽</code>을 택한다.</p>
+    <p>설계서 v0.3에서 바뀐 전제를 정리한다.</p>
+    <h2>출퇴근 시각을 기록하지 않는다</h2>
+    <p>출입 단말을 연동하지 않고 앱 출퇴근 버튼도 두지 않는다. 전 직원이 <strong>주 5일 09~18시 고정 근무</strong>이므로 평일의 기본 상태는 "정상 근무 8시간"이라는 상수다.</p>
+    <p>그래서 근태가 기록하는 것은 예외뿐이다 — 휴가·재택·외근·출장·연장근로를 신청하고 팀장이 승인한다.</p>
     <h2>확인이 필요한 것</h2>
     <ol>
-      <li>단말 제조사·연동 규격 (DB 폴링 / REST / CSV 중 무엇인지)</li>
-      <li>휴게 공제 기준이 취업규칙과 맞는지</li>
+      <li>실근로시간을 기록하지 않으면 주 52시간을 명목값으로만 볼 수 있음 — 노무사 확인 필요</li>
+      <li>취업규칙상 시업·종업 시각이 09~18시와 맞는지</li>
       <li>팀 개념이 없어 lead의 조회 범위를 정할 수 없음 — teams 테이블 선행 필요</li>
     </ol>
   `,
@@ -93,13 +93,13 @@ export const DOC_SEEDS: Record<string, string> = {
     <p>검색 후 필터링은 top-k가 권한 밖 문서로 채워지면 답변 품질이 무너진다.</p>
   `,
   'd-5': `
-    <p>제조사 미확인 상태라 세 경로를 모두 수용하는 어댑터로 설계한다.</p>
+    <p>연차 산정을 붙이기 전에 인사 확인이 필요한 항목들.</p>
     <ul>
-      <li>DB 직접 폴링 — 읽기 전용 계정</li>
-      <li>REST API — 제조사 제공 시</li>
-      <li>CSV 임포트 — 최후 수단, 수동</li>
+      <li>부여 기준 — 입사일 기준인가, 회계연도(1/1) 일괄인가</li>
+      <li>반차 운영 단위 — 오전/오후 반차만인가, 시간 단위도 쓰는가</li>
+      <li>결근 확정 절차 — 누가 언제 입력하는가 (출근율·연차에 직결)</li>
     </ul>
-    <p>어느 경로든 <code>att_raw_events</code>에 멱등하게 적재한다.</p>
+    <p>부여 기준이 정해져야 <code>leave_balances.grant_basis</code>의 기본값을 잡을 수 있다.</p>
   `,
 }
 

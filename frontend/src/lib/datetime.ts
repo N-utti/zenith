@@ -1,19 +1,10 @@
-/** 09:12 (24시간제). 근태 기록은 오전/오후 표기보다 24시간제가 오독이 적다. */
+/** 09:12 (24시간제). 기록 시각은 오전/오후 표기보다 24시간제가 오독이 적다. */
 export function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString('ko-KR', {
     hour: '2-digit',
     minute: '2-digit',
     hour12: false,
   })
-}
-
-/** 490 → "8시간 10분", 45 → "45분" */
-export function formatMinutes(total: number): string {
-  const hours = Math.floor(total / 60)
-  const minutes = total % 60
-  if (hours === 0) return `${minutes}분`
-  if (minutes === 0) return `${hours}시간`
-  return `${hours}시간 ${minutes}분`
 }
 
 function startOfDay(date: Date): number {
