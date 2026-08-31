@@ -4,6 +4,7 @@ import { FileText, Plus, Search } from 'lucide-react'
 import { Avatar } from '@/components/ui/Avatar'
 import { Button } from '@/components/ui/Button'
 import { Card, CardEmpty } from '@/components/ui/Card'
+import { Input } from '@/components/ui/Input'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { SkeletonRows } from '@/components/ui/Skeleton'
 import { Spinner } from '@/components/ui/Spinner'
@@ -39,18 +40,15 @@ export function DocsPage() {
         }
       />
 
-      <label className="mb-4 flex items-center gap-2">
-        <span className="sr-only">문서 검색</span>
-        <div className="border-line bg-surface focus-within:border-accent flex h-10 w-full max-w-md items-center gap-2 rounded-lg border px-3">
-          <Search className="text-subtle size-4 shrink-0" />
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="제목으로 검색"
-            className="text-fg placeholder:text-subtle h-full flex-1 bg-transparent text-sm outline-none"
-          />
-        </div>
-      </label>
+      <Input
+        type="search"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        aria-label="문서 검색"
+        placeholder="제목으로 검색"
+        icon={<Search className="size-4" />}
+        className="mb-4 max-w-md"
+      />
 
       <Card>
         {isPending && <SkeletonRows rows={5} />}

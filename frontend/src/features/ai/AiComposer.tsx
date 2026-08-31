@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { FileText, Plus, SendHorizontal } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Dropdown } from '@/components/ui/Dropdown'
+import { Textarea } from '@/components/ui/Textarea'
 import type { AiMeta } from './types'
 
 export function AiComposer({
@@ -62,18 +63,16 @@ export function AiComposer({
         </div>
 
         <div className="border-line bg-surface focus-within:border-line-strong rounded-xl border p-3 transition-colors">
-          <textarea
+          {/* 바깥 박스가 이미 테두리를 갖고 있어, 여기서는 껍데기를 벗기고 글자만 둔다. */}
+          <Textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault()
-                send()
-              }
-            }}
+            submitOnEnter
+            onSubmitEnter={send}
             rows={2}
+            aria-label="AI에게 물어보기"
             placeholder="위키에 물어보거나, 템플릿으로 문서를 작성하세요"
-            className="text-fg placeholder:text-subtle w-full resize-none bg-transparent text-[13.5px] outline-none"
+            className="resize-none border-0 bg-transparent p-0 text-[13.5px] focus:border-0"
           />
 
           <div className="mt-2.5 flex flex-wrap items-center gap-2">

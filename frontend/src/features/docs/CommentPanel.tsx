@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { Avatar } from '@/components/ui/Avatar'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
+import { Textarea } from '@/components/ui/Textarea'
 import { formatRelative } from '@/lib/datetime'
 import { useCurrentUser } from '@/features/auth/AuthContext'
 import { useAddComment, useComments } from './api'
@@ -12,11 +13,15 @@ export function CommentPanel({ docId }: { docId: string }) {
   const addComment = useAddComment(docId)
   const [body, setBody] = useState('')
 
+  const send = () => {
+    const text = body.trim()
+    if (!text || addComment.isPending) return
+    addComment.mutate(text, { onSuccess: () => setBody('') })
+  }
+
   const submit = (e: FormEvent) => {
     e.preventDefault()
-    const text = body.trim()
-    if (!text) return
-    addComment.mutate(text, { onSuccess: () => setBody('') })
+    send()
   }
 
   return (
@@ -47,16 +52,16 @@ export function CommentPanel({ docId }: { docId: string }) {
       <form onSubmit={submit} className="border-line border-t p-3">
         <div className="flex gap-2.5">
           <Avatar name={user.name} hue={user.avatarHue} size="sm" />
-          <textarea
+          {/* 줄바꿈은 Shift+Enter. 댓글은 짧게 여러 번 쓰는 쪽이 많다. */}
+          <Textarea
             value={body}
             onChange={(e) => setBody(e.target.value)}
-            onKeyDown={(e) => {
-              // 줄바꿈은 Shift+Enter. 댓글은 짧게 여러 번 쓰는 쪽이 많다.
-              if (e.key === 'Enter' && !e.shiftKey) submit(e)
-            }}
+            submitOnEnter
+            onSubmitEnter={send}
             rows={2}
+            aria-label="댓글"
             placeholder="댓글 남기기…  (Enter 등록 · Shift+Enter 줄바꿈)"
-            className="border-line bg-canvas text-fg placeholder:text-subtle focus:border-accent min-h-16 flex-1 resize-y rounded-lg border px-2.5 py-2 text-sm outline-none"
+            className="min-h-16 flex-1"
           />
         </div>
         <div className="mt-2 flex justify-end">
