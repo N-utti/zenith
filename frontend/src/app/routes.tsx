@@ -32,6 +32,8 @@ export function AppRoutes() {
         <Route element={<AppLayout bleed />}>
           <Route path="chat" element={<ChatPage />} />
           <Route path="chat/:channelId" element={<ChatPage />} />
+          {/* AI도 좌패널·대화·근거 3분할이라 영역별로 따로 스크롤한다. */}
+          <Route path="ai" element={<AiPage />} />
           <Route
             path="docs/:docId"
             element={
@@ -54,7 +56,6 @@ export function AppRoutes() {
           <Route path="board" element={<BoardPage />} />
           <Route path="attendance" element={<AttendancePage />} />
           <Route path="notifications" element={<NotificationsPage />} />
-          <Route path="ai" element={<AiPage />} />
           <Route path="settings" element={<SettingsPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Route>

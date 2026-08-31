@@ -1,7 +1,16 @@
-import { http, HttpResponse, passthrough } from 'msw'
+import { delay, http, HttpResponse, passthrough } from 'msw'
 import { ROLE_RANK, type User } from '@/types'
 import { DEMO_PASSWORD } from './accounts'
 import { MOCK_USERS, tokenFor, userFromToken } from './db'
+import {
+  AI_MODELS,
+  AI_TEMPLATES,
+  ask,
+  KNOWLEDGE_SOURCES,
+  listConversation,
+  RECENT_QUESTIONS,
+  resetConversation,
+} from './aiDb'
 import { ANNOUNCEMENTS, MENTIONS, TODAY_TASKS } from './dashboardDb'
 import {
   addComment,
@@ -88,6 +97,42 @@ export const handlers = [
   ),
 
   http.get('/api/tasks/today', authed(() => HttpResponse.json({ items: TODAY_TASKS }))),
+
+  // ── AI 어시스턴트 ─────────────────────────────────────────
+  http.get(
+    '/api/ai/meta',
+    authed((user) =>
+      HttpResponse.json({
+        models: AI_MODELS,
+        // 권한 밖 지식 소스는 목록에 남기되 고를 수 없다. 어떤 소스가 있는지는
+        // 알아도 되지만, 그 안의 문장은 근거에서 아예 빠진다.
+        sources: KNOWLEDGE_SOURCES.map((source) => ({
+          ...source,
+          allowed: !source.minRole || ROLE_RANK[user.role] >= ROLE_RANK[source.minRole],
+        })),
+        templates: AI_TEMPLATES,
+        recent: RECENT_QUESTIONS,
+      }),
+    ),
+  ),
+
+  http.get('/api/ai/conversation', authed((user) => HttpResponse.json({ items: listConversation(user) }))),
+
+  http.post('/api/ai/messages', async ({ request }) => {
+    const user = authenticate(request)
+    if (!user) return unauthorized()
+
+    const { prompt } = (await request.json()) as { prompt: string }
+    if (!prompt?.trim()) {
+      return HttpResponse.json({ detail: '질문을 입력해 주세요.' }, { status: 400 })
+    }
+
+    // 로컬 LLM은 즉답하지 않는다. 생성 중 상태가 실제로 보이도록 지연을 준다.
+    await delay(900)
+    return HttpResponse.json({ items: ask(user, prompt.trim()) })
+  }),
+
+  http.delete('/api/ai/conversation', authed((user) => HttpResponse.json({ items: resetConversation(user) }))),
 
   http.patch('/api/tasks/:taskId', async ({ request, params }) => {
     if (!authenticate(request)) return unauthorized()
