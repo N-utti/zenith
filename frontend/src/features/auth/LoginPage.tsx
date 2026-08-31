@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
+import { ZenithMark } from '@/components/ui/ZenithMark'
 import { ApiError } from '@/lib/api'
 import { DEMO_ACCOUNTS, MSW_ENABLED } from '@/mocks/accounts'
 import { useAuth } from './AuthContext'
@@ -37,9 +38,7 @@ export function LoginPage() {
     <div className="bg-canvas grid h-full place-items-center px-4">
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
-          <span className="bg-accent text-on-accent mx-auto mb-3 grid size-11 place-items-center rounded-xl text-lg font-bold">
-            Z
-          </span>
+          <ZenithMark className="mx-auto mb-3 size-11" />
           <h1 className="text-fg text-xl font-semibold tracking-tight">제니스에 로그인</h1>
           <p className="text-muted mt-1 text-sm">사내 계정으로 로그인하세요.</p>
         </div>

@@ -12,17 +12,17 @@
     'Segoe UI', 'Malgun Gothic', 'Noto Sans KR', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', 'D2Coding', ui-monospace, SFMono-Regular, Menlo, monospace;
 
-  --color-brand-50: oklch(0.97 0.014 275);
-  --color-brand-100: oklch(0.94 0.03 275);
-  --color-brand-200: oklch(0.89 0.055 275);
-  --color-brand-300: oklch(0.82 0.09 275);
-  --color-brand-400: oklch(0.72 0.14 275);
-  --color-brand-500: oklch(0.62 0.18 275);
-  --color-brand-600: oklch(0.55 0.19 275);
-  --color-brand-700: oklch(0.47 0.17 275);
-  --color-brand-800: oklch(0.39 0.14 275);
-  --color-brand-900: oklch(0.32 0.11 275);
-  --color-brand-950: oklch(0.22 0.08 275);
+  --color-brand-50: oklch(0.97 0.014 265);
+  --color-brand-100: oklch(0.94 0.03 265);
+  --color-brand-200: oklch(0.89 0.055 265);
+  --color-brand-300: oklch(0.82 0.09 265);
+  --color-brand-400: oklch(0.72 0.14 265);
+  --color-brand-500: oklch(0.62 0.18 265);
+  --color-brand-600: oklch(0.55 0.19 265);
+  --color-brand-700: oklch(0.47 0.17 265);
+  --color-brand-800: oklch(0.39 0.14 265);
+  --color-brand-900: oklch(0.32 0.11 265);
+  --color-brand-950: oklch(0.22 0.08 265);
 
   --radius-card: 0.75rem;
 }
@@ -53,21 +53,21 @@
 }
 
 :root {
-  --zenith-canvas: oklch(0.985 0.002 275);
+  --zenith-canvas: oklch(0.985 0.002 265);
   --zenith-surface: oklch(1 0 0);
-  --zenith-surface-hover: oklch(0.965 0.004 275);
-  --zenith-sunken: oklch(0.955 0.005 275);
-  --zenith-line: oklch(0.915 0.005 275);
-  --zenith-line-strong: oklch(0.84 0.008 275);
+  --zenith-surface-hover: oklch(0.965 0.004 265);
+  --zenith-sunken: oklch(0.955 0.005 265);
+  --zenith-line: oklch(0.915 0.005 265);
+  --zenith-line-strong: oklch(0.84 0.008 265);
 
-  --zenith-fg: oklch(0.22 0.015 275);
-  --zenith-muted: oklch(0.5 0.015 275);
-  --zenith-subtle: oklch(0.63 0.012 275);
+  --zenith-fg: oklch(0.22 0.015 265);
+  --zenith-muted: oklch(0.5 0.015 265);
+  --zenith-subtle: oklch(0.63 0.012 265);
 
-  --zenith-accent: oklch(0.55 0.19 275);
-  --zenith-accent-hover: oklch(0.49 0.19 275);
+  --zenith-accent: oklch(0.55 0.19 265);
+  --zenith-accent-hover: oklch(0.49 0.19 265);
   --zenith-on-accent: oklch(0.99 0 0);
-  --zenith-accent-soft: oklch(0.95 0.03 275);
+  --zenith-accent-soft: oklch(0.95 0.03 265);
 
   --zenith-success: oklch(0.58 0.14 155);
   --zenith-warning: oklch(0.71 0.15 75);
@@ -75,21 +75,21 @@
 }
 
 .dark {
-  --zenith-canvas: oklch(0.18 0.008 275);
-  --zenith-surface: oklch(0.22 0.01 275);
-  --zenith-surface-hover: oklch(0.26 0.012 275);
-  --zenith-sunken: oklch(0.15 0.008 275);
-  --zenith-line: oklch(0.3 0.012 275);
-  --zenith-line-strong: oklch(0.4 0.015 275);
+  --zenith-canvas: oklch(0.18 0.008 265);
+  --zenith-surface: oklch(0.22 0.01 265);
+  --zenith-surface-hover: oklch(0.26 0.012 265);
+  --zenith-sunken: oklch(0.15 0.008 265);
+  --zenith-line: oklch(0.3 0.012 265);
+  --zenith-line-strong: oklch(0.4 0.015 265);
 
-  --zenith-fg: oklch(0.95 0.005 275);
-  --zenith-muted: oklch(0.71 0.012 275);
-  --zenith-subtle: oklch(0.58 0.012 275);
+  --zenith-fg: oklch(0.95 0.005 265);
+  --zenith-muted: oklch(0.71 0.012 265);
+  --zenith-subtle: oklch(0.58 0.012 265);
 
-  --zenith-accent: oklch(0.68 0.16 275);
-  --zenith-accent-hover: oklch(0.74 0.15 275);
-  --zenith-on-accent: oklch(0.17 0.02 275);
-  --zenith-accent-soft: oklch(0.3 0.06 275);
+  --zenith-accent: oklch(0.68 0.16 265);
+  --zenith-accent-hover: oklch(0.74 0.15 265);
+  --zenith-on-accent: oklch(0.17 0.02 265);
+  --zenith-accent-soft: oklch(0.3 0.06 265);
 
   --zenith-success: oklch(0.7 0.14 155);
   --zenith-warning: oklch(0.79 0.14 75);
@@ -175,7 +175,7 @@
   /* 형광펜은 언제나 옅은 색이다. 다크 모드에서 흰 글자가 얹히면 읽을 수 없으므로
      글자색을 짙게 고정한다. */
   .zenith-editor mark {
-    @apply rounded-sm px-0.5 text-[oklch(0.22_0.015_275)];
+    @apply rounded-sm px-0.5 text-[oklch(0.22_0.015_265)];
   }
 
   /* 할 일 목록 (TaskList) */
