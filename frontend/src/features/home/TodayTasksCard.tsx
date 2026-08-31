@@ -1,6 +1,6 @@
-import { Check } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { Card, CardEmpty } from '@/components/ui/Card'
+import { Checkbox } from '@/components/ui/Checkbox'
 import { SkeletonRows } from '@/components/ui/Skeleton'
 import { HomeSection } from './HomeSection'
 import { useTodayTasks, useToggleTask } from './api'
@@ -21,32 +21,16 @@ export function TodayTasksCard() {
           ) : (
             <ul className="p-1.5">
               {data.items.map((task) => (
-                <li key={task.id}>
-                  <button
-                    type="button"
-                    aria-pressed={task.done}
-                    onClick={() => toggle.mutate({ id: task.id, done: !task.done })}
-                    className="hover:bg-surface-hover flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-3 py-2 text-left transition-colors"
-                  >
-                    <span
-                      className={cn(
-                        'grid size-4 shrink-0 place-items-center rounded border transition-colors',
-                        task.done
-                          ? 'bg-accent border-accent text-on-accent'
-                          : 'border-line-strong',
-                      )}
-                    >
-                      {task.done && <Check className="size-3" strokeWidth={3} />}
-                    </span>
-                    <span
-                      className={cn(
-                        'min-w-0 flex-1 truncate text-[13px]',
-                        task.done ? 'text-subtle line-through' : 'text-fg',
-                      )}
-                    >
-                      {task.title}
-                    </span>
-                  </button>
+                <li key={task.id} className="hover:bg-surface-hover rounded-lg px-3 py-2">
+                  <Checkbox
+                    checked={task.done}
+                    onChange={(e) => toggle.mutate({ id: task.id, done: e.target.checked })}
+                    label={
+                      <span className={cn(task.done && 'text-subtle line-through')}>
+                        {task.title}
+                      </span>
+                    }
+                  />
                 </li>
               ))}
             </ul>

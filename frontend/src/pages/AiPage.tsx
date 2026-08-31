@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
+import { Modal } from '@/components/ui/Modal'
 import { Spinner } from '@/components/ui/Spinner'
 import { AiComposer } from '@/features/ai/AiComposer'
 import { AiHistoryPanel } from '@/features/ai/AiHistoryPanel'
@@ -24,6 +25,7 @@ export function AiPage() {
   const ask = useAsk()
   const reset = useResetConversation()
   const [seed, setSeed] = useState<string | null>(null)
+  const [confirmReset, setConfirmReset] = useState(false)
 
   const messages = data?.items ?? []
 
@@ -40,8 +42,7 @@ export function AiPage() {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => reset.mutate()}
-              disabled={reset.isPending}
+              onClick={() => setConfirmReset(true)}
               aria-label="대화 지우기"
               className="ml-2 shrink-0 px-2"
               title="대화 지우기"
@@ -83,6 +84,36 @@ export function AiPage() {
       </div>
 
       <SourcesPanel messages={messages} />
+
+      {/* 되돌릴 수 없는 동작이라 확인을 받는다. §4.2가 지목한 Modal의 첫 소비처다. */}
+      <Modal
+        open={confirmReset}
+        onClose={() => setConfirmReset(false)}
+        title="대화를 지울까요?"
+        description="주고받은 질문과 답변이 모두 사라집니다. 되돌릴 수 없습니다."
+        size="sm"
+        footer={
+          <>
+            <Button variant="secondary" size="sm" onClick={() => setConfirmReset(false)}>
+              취소
+            </Button>
+            <Button
+              variant="danger"
+              size="sm"
+              disabled={reset.isPending}
+              onClick={() =>
+                reset.mutate(undefined, { onSuccess: () => setConfirmReset(false) })
+              }
+            >
+              지우기
+            </Button>
+          </>
+        }
+      >
+        <p className="text-muted text-sm">
+          지식 소스와 최근 질문 목록은 그대로 남습니다.
+        </p>
+      </Modal>
     </div>
   )
 }

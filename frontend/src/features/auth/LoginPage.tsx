@@ -1,6 +1,8 @@
 import { useState, type FormEvent } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router'
 import { Button } from '@/components/ui/Button'
+import { Field } from '@/components/ui/Field'
+import { Input } from '@/components/ui/Input'
 import { Spinner } from '@/components/ui/Spinner'
 import { ZenithMark } from '@/components/ui/ZenithMark'
 import { ApiError } from '@/lib/api'
@@ -47,36 +49,33 @@ export function LoginPage() {
           onSubmit={submit}
           className="border-line bg-surface space-y-4 rounded-xl border p-6 shadow-sm"
         >
-          <label className="block">
-            <span className="text-fg mb-1.5 block text-sm font-medium">이메일</span>
-            <input
-              type="email"
-              required
-              autoComplete="username"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="name@company.co.kr"
-              className="border-line bg-canvas text-fg placeholder:text-subtle focus:border-accent h-10 w-full rounded-lg border px-3 text-sm outline-none"
-            />
-          </label>
+          <Field label="이메일" required>
+            {(slot) => (
+              <Input
+                {...slot}
+                type="email"
+                required
+                autoComplete="username"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="name@company.co.kr"
+              />
+            )}
+          </Field>
 
-          <label className="block">
-            <span className="text-fg mb-1.5 block text-sm font-medium">비밀번호</span>
-            <input
-              type="password"
-              required
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="border-line bg-canvas text-fg focus:border-accent h-10 w-full rounded-lg border px-3 text-sm outline-none"
-            />
-          </label>
-
-          {error && (
-            <p role="alert" className="text-danger bg-danger/10 rounded-lg px-3 py-2 text-sm">
-              {error}
-            </p>
-          )}
+          {/* 비밀번호 오류는 어느 칸이 틀렸는지 알려 주지 않는다. 폼 전체 에러로 둔다. */}
+          <Field label="비밀번호" required error={error}>
+            {(slot) => (
+              <Input
+                {...slot}
+                type="password"
+                required
+                autoComplete="current-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            )}
+          </Field>
 
           <Button type="submit" disabled={pending} className="w-full">
             {pending ? <Spinner className="border-t-on-accent" /> : '로그인'}
