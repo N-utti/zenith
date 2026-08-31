@@ -7,6 +7,7 @@ import { RequireAuth } from '@/features/auth/RequireAuth'
 import { AiPage } from '@/pages/AiPage'
 import { AttendancePage } from '@/pages/AttendancePage'
 import { BoardPage } from '@/pages/BoardPage'
+import { BoardPostPage } from '@/pages/BoardPostPage'
 import { ChatPage } from '@/pages/ChatPage'
 import { DocsPage } from '@/pages/DocsPage'
 import { HomePage } from '@/pages/HomePage'
@@ -54,6 +55,8 @@ export function AppRoutes() {
           <Route index element={<HomePage />} />
           <Route path="docs" element={<DocsPage />} />
           <Route path="board" element={<BoardPage />} />
+          <Route path="board/:boardId" element={<BoardPage />} />
+          <Route path="board/:boardId/:postId" element={<BoardPostPage />} />
           <Route path="attendance" element={<AttendancePage />} />
           <Route path="notifications" element={<NotificationsPage />} />
           <Route path="settings" element={<SettingsPage />} />
