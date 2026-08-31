@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
 import { Spinner } from '@/components/ui/Spinner'
 import { Textarea } from '@/components/ui/Textarea'
+import { useToast } from '@/components/ui/ToastContext'
 import { ApiError } from '@/lib/api'
 import { useCreatePost } from './api'
 import type { Board } from './types'
@@ -19,6 +20,7 @@ export function PostComposer({
   onClose: () => void
 }) {
   const create = useCreatePost(board.id)
+  const toast = useToast()
   const [title, setTitle] = useState('')
   const [body, setBody] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -35,7 +37,12 @@ export function PostComposer({
     create.mutate(
       { title, body },
       {
-        onSuccess: close,
+        // 모달이 닫히면 목록이 한 줄 늘 뿐이라, 알리지 않으면 올라갔는지 알 수 없다.
+        onSuccess: () => {
+          close()
+          toast.success('글을 올렸습니다.')
+        },
+        // 실패는 토스트가 아니라 입력 옆에 낸다 — 고칠 곳이 이 폼 안에 있다.
         onError: (err) =>
           setError(err instanceof ApiError ? err.message : '글을 올리지 못했습니다.'),
       },
