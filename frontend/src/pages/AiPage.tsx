@@ -3,6 +3,7 @@ import { RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { Spinner } from '@/components/ui/Spinner'
+import { useToast } from '@/components/ui/ToastContext'
 import { AiComposer } from '@/features/ai/AiComposer'
 import { AiHistoryPanel } from '@/features/ai/AiHistoryPanel'
 import { Conversation } from '@/features/ai/Conversation'
@@ -24,6 +25,7 @@ export function AiPage() {
   const { data, isPending, isError } = useConversation()
   const ask = useAsk()
   const reset = useResetConversation()
+  const toast = useToast()
   const [seed, setSeed] = useState<string | null>(null)
   const [confirmReset, setConfirmReset] = useState(false)
 
@@ -102,7 +104,13 @@ export function AiPage() {
               size="sm"
               disabled={reset.isPending}
               onClick={() =>
-                reset.mutate(undefined, { onSuccess: () => setConfirmReset(false) })
+                reset.mutate(undefined, {
+                  onSuccess: () => {
+                    setConfirmReset(false)
+                    toast.success('대화를 지웠습니다.')
+                  },
+                  onError: () => toast.error('대화를 지우지 못했습니다.'),
+                })
               }
             >
               지우기

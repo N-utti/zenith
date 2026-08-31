@@ -50,6 +50,7 @@
   --color-success: var(--zenith-success);
   --color-warning: var(--zenith-warning);
   --color-danger: var(--zenith-danger);
+  --color-info: var(--zenith-info);
 }
 
 :root {
@@ -72,6 +73,10 @@
   --zenith-success: oklch(0.58 0.14 155);
   --zenith-warning: oklch(0.71 0.15 75);
   --zenith-danger: oklch(0.57 0.2 25);
+  /* 재택·외근·출장 (10 근태 설계서 §10 상태 색 규약의 "청록").
+     accent(265)와 success(155) 사이 200에 두어 셋이 서로 구분된다.
+     "회사 밖에서 일하는 중"이지 경고가 아니므로 warning 계열을 쓰지 않는다. */
+  --zenith-info: oklch(0.58 0.11 200);
 }
 
 .dark {
@@ -94,6 +99,7 @@
   --zenith-success: oklch(0.7 0.14 155);
   --zenith-warning: oklch(0.79 0.14 75);
   --zenith-danger: oklch(0.68 0.18 25);
+  --zenith-info: oklch(0.72 0.1 200);
 }
 
 @layer base {
