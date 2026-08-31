@@ -37,6 +37,7 @@
 | [03 · ERD·DB 설계서](https://app.notion.com/p/3aaa471660468142a4a1cbf2e44466b3) | 테이블·관계·인덱스 | 스키마 바꾸기 전 |
 | [04 · API 명세서](https://app.notion.com/p/3aaa4716604681a6bba4e0367463e8eb) | 엔드포인트·인증·에러 규약 | **프론트·백엔드가 어긋날 때 여기가 심판** |
 | [05 · 화면정의서](https://app.notion.com/p/3aaa4716604681999b0af595d1864555) | SCR ID·화면 요소·모바일 대응 | 화면 만들기 전 |
+| [12 · UI 청사진](https://app.notion.com/p/3cda4716604681c08e56e5b558250fcc) | 디자인 토큰·셸 골격·컴포넌트 인벤토리·상태 규약 | 컴포넌트 만들기 전. **시각·구조 사양은 05가 아니라 여기가 정본** |
 | [ARCHITECTURE](https://app.notion.com/p/3aaa471660468173baf8e1dd19d77ede) | 배포 구성·경계·온프레미스 제약 | 인프라·통신 경로 건드릴 때 |
 
 > ⚠️ **04를 먼저 읽어라.** 인증 규약은 `JWT (HttpOnly 쿠키 access 15분 / refresh 14일)`,
