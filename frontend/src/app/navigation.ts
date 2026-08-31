@@ -34,24 +34,6 @@ export const TOP_NAV: NavItem[] = [
 
 export const SECONDARY_NAV: NavItem[] = [{ to: '/settings', label: '설정', icon: Settings }]
 
-/**
- * 등급별 게시판. 지금은 모두 /board 한 화면으로 가고 등급은 뱃지로만 보인다.
- * M4에서 게시판이 실제로 갈라지면 `to`만 바꾸면 된다.
- */
-export interface BoardEntry {
-  id: string
-  label: string
-  /** 이 등급 이상만 열람. 미만이면 흐리게 보이고 진입할 수 없다. */
-  minRole: Role
-  badge: string
-}
-
-export const BOARDS: BoardEntry[] = [
-  { id: 'all', label: '전체 공지', minRole: 'member', badge: '전체' },
-  { id: 'lead', label: '팀장 회의록', minRole: 'lead', badge: '팀장↑' },
-  { id: 'exec', label: '경영 보고', minRole: 'exec', badge: '임원' },
-]
-
 /** 모바일 하단 탭바. 와이어프레임 3a의 5개 탭. */
 export const MOBILE_TABS: NavItem[] = [
   { to: '/', label: '홈', icon: House, end: true },

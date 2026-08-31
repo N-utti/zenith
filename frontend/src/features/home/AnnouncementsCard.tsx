@@ -1,11 +1,11 @@
-import { Link } from 'react-router'
 import { Pin } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { Card, CardEmpty } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
+import { MaskedRow } from '@/components/ui/MaskedRow'
 import { SkeletonRows } from '@/components/ui/Skeleton'
 import { formatRelative } from '@/lib/datetime'
-import { ROLE_LABEL } from '@/types'
+import { useBoards } from '@/features/board/api'
 import { HomeSection } from './HomeSection'
 import { useAnnouncements } from './api'
 
@@ -13,6 +13,8 @@ const ROW = 'block px-4 py-3.5'
 
 export function AnnouncementsCard() {
   const { data, isPending, isError } = useAnnouncements()
+  const { data: boards } = useBoards()
+  const badgeOf = (boardId: string) => boards?.items.find((b) => b.id === boardId)?.badge ?? ''
 
   return (
     <HomeSection title="공지 게시판" to="/board">
@@ -42,9 +44,7 @@ export function AnnouncementsCard() {
                       >
                         {item.title}
                       </span>
-                      <Badge className="ml-auto shrink-0">
-                        {item.boardLevel === 'member' ? '전체' : `${ROLE_LABEL[item.boardLevel]}↑`}
-                      </Badge>
+                      <Badge className="ml-auto shrink-0">{badgeOf(item.boardId)}</Badge>
                     </p>
                     <p className="text-subtle mt-1 text-[11px]">
                       {item.masked
@@ -57,21 +57,13 @@ export function AnnouncementsCard() {
                 // 권한 밖 글은 자리만 남기고 링크를 걸지 않는다 — 본문은 서버가 403으로 막는다.
                 return (
                   <li key={item.id}>
-                    {item.masked ? (
-                      <div
-                        aria-disabled
-                        className={cn(ROW, divider, 'cursor-not-allowed opacity-55')}
-                      >
-                        {inner}
-                      </div>
-                    ) : (
-                      <Link
-                        to={`/board/${item.id}`}
-                        className={cn(ROW, divider, 'hover:bg-surface-hover transition-colors')}
-                      >
-                        {inner}
-                      </Link>
-                    )}
+                    <MaskedRow
+                      masked={item.masked}
+                      to={item.masked ? undefined : `/board/${item.boardId}/${item.id}`}
+                      className={cn(ROW, divider)}
+                    >
+                      {inner}
+                    </MaskedRow>
                   </li>
                 )
               })}

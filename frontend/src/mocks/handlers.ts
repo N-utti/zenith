@@ -12,7 +12,16 @@ import {
   RECENT_QUESTIONS,
   resetConversation,
 } from './aiDb'
-import { ANNOUNCEMENTS, MENTIONS, TODAY_TASKS } from './dashboardDb'
+import {
+  BOARD_DEFS,
+  canRead,
+  createPost,
+  findPost,
+  listBoards,
+  listPosts,
+  toDetail,
+} from './boardDb'
+import { MENTIONS, TODAY_TASKS } from './dashboardDb'
 import {
   addComment,
   addVersion,
@@ -70,21 +79,68 @@ export const handlers = [
 
   http.post('/api/auth/logout', () => new HttpResponse(null, { status: 204 })),
 
+  // ── 게시판 ────────────────────────────────────────────────
+  http.get('/api/boards', authed((user) => HttpResponse.json({ items: listBoards(user) }))),
+
+  http.get(
+    '/api/boards/:boardId/posts',
+    authed((user, request) => {
+      const boardId = new URL(request.url).pathname.split('/')[3]
+      if (!BOARD_DEFS.some((board) => board.id === boardId)) return notFound()
+      // 권한 밖 게시판이어도 목록 자체는 준다 — 행이 전부 마스킹돼 나갈 뿐이다.
+      return HttpResponse.json({ items: listPosts(user, boardId) })
+    }),
+  ),
+
+  http.get('/api/posts/:postId', ({ request, params }) => {
+    const user = authenticate(request)
+    if (!user) return unauthorized()
+
+    const post = findPost(String(params.postId))
+    if (!post) return notFound()
+
+    // 성공 기준: 목록은 마스킹, **본문은 403**. 제목조차 내려주지 않는다.
+    if (!canRead(user, post.minRole)) {
+      return HttpResponse.json(
+        { detail: '열람 권한이 없습니다.', requiredRole: post.minRole },
+        { status: 403 },
+      )
+    }
+
+    return HttpResponse.json(toDetail(post))
+  }),
+
+  http.post('/api/boards/:boardId/posts', async ({ request, params }) => {
+    const user = authenticate(request)
+    if (!user) return unauthorized()
+
+    const boardId = String(params.boardId)
+    const board = BOARD_DEFS.find((b) => b.id === boardId)
+    if (!board) return notFound()
+
+    // 05 FR-BRD-02 — 열람할 수 있는 게시판에만 글을 쓸 수 있다.
+    if (!canRead(user, board.minRole)) {
+      return HttpResponse.json({ detail: '이 게시판에 글을 쓸 수 없습니다.' }, { status: 403 })
+    }
+
+    const { title, body } = (await request.json()) as { title: string; body: string }
+    if (!title?.trim() || !body?.trim()) {
+      return HttpResponse.json({ detail: '제목과 내용을 입력해 주세요.' }, { status: 400 })
+    }
+
+    return HttpResponse.json(
+      createPost(user, boardId, { title: title.trim(), body: body.trim() }),
+      { status: 201 },
+    )
+  }),
+
   // ── 홈 카드 ───────────────────────────────────────────────
+  // 공지는 게시판의 일부다. 별도 데이터를 두면 두 벌이 되어 어긋난다.
   http.get(
     '/api/announcements',
     authed((user, request) => {
       const limit = Number(new URL(request.url).searchParams.get('limit') ?? 4)
-      // 권한 밖 글은 목록에서 지우지 않고 제목만 가린다 (PRD 성공 기준: 제목 마스킹 + 본문 403).
-      const items = ANNOUNCEMENTS.map((item) =>
-        ROLE_RANK[user.role] >= ROLE_RANK[item.boardLevel]
-          ? item
-          : { ...item, title: '＿'.repeat(6), authorName: '＿＿＿', masked: true },
-      )
-      const sorted = [...items].sort(
-        (a, b) => Number(b.pinned) - Number(a.pinned) || b.createdAt.localeCompare(a.createdAt),
-      )
-      return HttpResponse.json({ items: sorted.slice(0, limit) })
+      return HttpResponse.json({ items: listPosts(user).slice(0, limit) })
     }),
   ),
 

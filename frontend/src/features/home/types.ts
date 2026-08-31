@@ -1,19 +1,7 @@
-import type { Role } from '@/types'
-
-export interface Announcement {
-  id: string
-  title: string
-  /** 게시판 등급. */
-  boardLevel: Role
-  authorName: string
-  createdAt: string
-  pinned: boolean
-  /**
-   * 열람 권한 밖의 글. 목록에서 지우지 않고 제목을 가린 채 남긴다 —
-   * PRD 성공 기준이 "제목 마스킹 + 본문 API 403"이지 "목록에서 제외"가 아니다.
-   */
-  masked?: boolean
-}
+/**
+ * 홈 공지 카드는 `features/board`의 `BoardPost`를 그대로 쓴다.
+ * 공지는 게시판의 일부이지 별도 개념이 아니라서, 타입을 따로 두면 두 벌이 된다.
+ */
 
 /** 나를 부른 곳. 문서 댓글이면 문서로, 채널 메시지면 채널로 간다. */
 export type MentionSource =

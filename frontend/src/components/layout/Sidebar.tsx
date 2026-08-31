@@ -1,12 +1,12 @@
 import type { ReactNode } from 'react'
-import { NavLink } from 'react-router'
+import { NavLink, useLocation } from 'react-router'
 import { X } from 'lucide-react'
 import { cn } from '@/lib/cn'
-import { BOARDS, SECONDARY_NAV, TOP_NAV, type NavItem } from '@/app/navigation'
-import { useCurrentUser } from '@/features/auth/AuthContext'
+import { SECONDARY_NAV, TOP_NAV, type NavItem } from '@/app/navigation'
+import { useBoards } from '@/features/board/api'
 import { useChannels } from '@/features/chat/api'
-import { ROLE_RANK } from '@/types'
 import { Button } from '@/components/ui/Button'
+import { MaskedRow } from '@/components/ui/MaskedRow'
 import { DocTree } from './DocTree'
 
 const ROW = 'flex items-center gap-2 rounded-md px-2.5 py-1.5 text-[13.5px] transition-colors'
@@ -66,44 +66,29 @@ function ChannelSection({ onNavigate }: { onNavigate?: () => void }) {
 }
 
 function BoardSection({ onNavigate }: { onNavigate?: () => void }) {
-  const user = useCurrentUser()
+  // 게시판 정의와 열람 권한은 서버가 준다. 프론트가 등급을 계산하지 않는다.
+  const { data } = useBoards()
+  const location = useLocation()
 
   return (
     <>
       <SectionLabel>게시판</SectionLabel>
-      {BOARDS.map((board) => {
-        const allowed = ROLE_RANK[user.role] >= ROLE_RANK[board.minRole]
-        const badge = (
-          <span className="bg-sunken text-subtle ml-auto shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold">
-            {board.badge}
-          </span>
-        )
-
-        // 권한 밖 게시판은 목록에서 지우지 않고 흐리게 남긴다 — 존재는 보이되 들어갈 수 없다.
-        if (!allowed) {
-          return (
-            <div
-              key={board.id}
-              aria-disabled
-              title="열람 권한이 없습니다"
-              className={cn(ROW, 'text-subtle cursor-not-allowed opacity-55')}
-            >
-              <span className="truncate">{board.label}</span>
-              {badge}
-            </div>
-          )
-        }
+      {(data?.items ?? []).map((board) => {
+        const active = location.pathname.startsWith(`/board/${board.id}`)
 
         return (
-          <NavLink
+          <MaskedRow
             key={board.id}
-            to="/board"
-            onClick={onNavigate}
-            className={({ isActive }) => cn(ROW, isActive ? ROW_ACTIVE : ROW_IDLE)}
+            masked={!board.allowed}
+            to={board.allowed ? `/board/${board.id}` : undefined}
+            onNavigate={onNavigate}
+            className={cn(ROW, board.allowed && (active ? ROW_ACTIVE : ROW_IDLE))}
           >
-            <span className="truncate">{board.label}</span>
-            {badge}
-          </NavLink>
+            <span className="truncate">{board.name}</span>
+            <span className="bg-sunken text-subtle ml-auto shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold">
+              {board.badge}
+            </span>
+          </MaskedRow>
         )
       })}
     </>

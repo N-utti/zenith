@@ -23,7 +23,8 @@ export function Badge({
   return (
     <span
       className={cn(
-        'inline-flex items-center rounded-md px-1.5 py-0.5 text-[11px] font-medium',
+        // 배지는 짧은 라벨만 담는다. 좁은 칸에서 "임/원"처럼 쪼개지면 읽을 수 없다.
+        'inline-flex items-center rounded-md px-1.5 py-0.5 text-[11px] font-medium whitespace-nowrap',
         TONES[tone],
         className,
       )}

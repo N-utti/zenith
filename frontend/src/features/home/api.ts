@@ -1,12 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import type { DocSummary } from '@/features/docs/types'
-import type { Announcement, Mention, TodayTask } from './types'
+import type { BoardPost } from '@/features/board/types'
+import type { Mention, TodayTask } from './types'
 
 export function useAnnouncements() {
   return useQuery({
     queryKey: ['announcements', { limit: 4 }],
-    queryFn: () => api<{ items: Announcement[] }>('/announcements?limit=4'),
+    queryFn: () => api<{ items: BoardPost[] }>('/announcements?limit=4'),
   })
 }
 
