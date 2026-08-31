@@ -18,7 +18,7 @@ export const ANNOUNCEMENTS: Announcement[] = [
   },
   {
     id: 'a-2',
-    title: 'MOA 사내 협업툴 파일럿 참여자 모집',
+    title: 'Zenith 사내 협업툴 파일럿 참여자 모집',
     boardLevel: 'member',
     authorName: '박동현',
     createdAt: minutesAgo(1180),

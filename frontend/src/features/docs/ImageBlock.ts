@@ -16,7 +16,7 @@ declare module '@tiptap/core' {
  * 업로드는 에디터를 만든 뒤에야 준비되는데 확장은 만들 때 굳는다. 확장이나
  * 에디터에 콜백을 심는 대신 에디터 DOM에 이벤트를 쏘고, useImageUpload가 받는다.
  */
-export const PICK_IMAGE_EVENT = 'moa:pick-image'
+export const PICK_IMAGE_EVENT = 'zenith:pick-image'
 
 /** figure 안의 img에서 값을 읽는다. 바깥에서 붙여넣은 맨 <img> 도 같은 함수로 처리된다. */
 function fromImg(element: HTMLElement, name: string): string | null {

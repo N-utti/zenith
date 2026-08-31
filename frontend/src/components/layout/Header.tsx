@@ -33,7 +33,7 @@ export function Header({
       </Button>
 
       <Link to="/" className="flex shrink-0 items-center gap-1.5">
-        <span className="text-fg text-[14.5px] font-bold tracking-tight">모아</span>
+        <span className="text-fg text-[14.5px] font-bold tracking-tight">제니스</span>
         <span className="text-subtle hidden items-center gap-0.5 text-[14.5px] sm:flex">
           · {ORG_NAME}
           <ChevronDown className="size-3.5" />

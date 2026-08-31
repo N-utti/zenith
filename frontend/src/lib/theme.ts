@@ -2,7 +2,7 @@ import { useSyncExternalStore } from 'react'
 
 export type Theme = 'light' | 'dark'
 
-const KEY = 'moa.theme'
+const KEY = 'zenith.theme'
 const listeners = new Set<() => void>()
 
 function read(): Theme {

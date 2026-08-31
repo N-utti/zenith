@@ -42,7 +42,7 @@ export function useCollabSession(docId: string): CollabSession | null {
     // 커지므로, 릴레이(scripts/collab-server.js)도 같은 설정이어야 한다.
     const doc = new Y.Doc({ gc: false })
     const provider = new WebsocketProvider(relayUrl(), docId, doc)
-    const persistence = new IndexeddbPersistence(`moa.doc.${docId}`, doc)
+    const persistence = new IndexeddbPersistence(`zenith.doc.${docId}`, doc)
 
     // StrictMode의 두 번째 마운트에서 이미 정리된 세션을 넘기지 않도록 막는다.
     let cancelled = false

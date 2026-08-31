@@ -17,7 +17,7 @@ import type { LucideIcon } from 'lucide-react'
 import { PICK_IMAGE_EVENT } from './ImageBlock'
 
 /** 인라인 AI 팝오버를 여는 신호. 사진 고르기와 같은 방식으로 편집기 DOM에 쏜다. */
-export const OPEN_INLINE_AI_EVENT = 'moa:open-inline-ai'
+export const OPEN_INLINE_AI_EVENT = 'zenith:open-inline-ai'
 
 /** 블록 종류 하나. 툴바 드롭다운·슬래시 메뉴·버블 메뉴가 이 목록 하나를 공유한다. */
 export type EditorBlock = {

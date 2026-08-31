@@ -6,7 +6,7 @@ import { useRecentDocs } from './api'
 
 /** 본문 미리보기가 아직 없어 표지 자리를 줄무늬로 채운다. */
 const THUMBNAIL =
-  'repeating-linear-gradient(45deg, var(--moa-sunken), var(--moa-sunken) 8px, var(--moa-surface-hover) 8px, var(--moa-surface-hover) 16px)'
+  'repeating-linear-gradient(45deg, var(--zenith-sunken), var(--zenith-sunken) 8px, var(--zenith-surface-hover) 8px, var(--zenith-surface-hover) 16px)'
 
 export function ContinueWorkCard() {
   const { data, isPending, isError } = useRecentDocs()

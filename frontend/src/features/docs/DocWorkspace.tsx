@@ -158,7 +158,7 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
       user: { name: user.name, color: hueToColor(user.avatarHue) },
     }),
     editorProps: {
-      attributes: { class: 'moa-editor outline-none' },
+      attributes: { class: 'zenith-editor outline-none' },
     },
     onCreate: ({ editor: created }) => {
       // 서버가 Yjs 초기 상태를 주기 전까지의 임시 경로. 문서를 처음 여는

@@ -1,4 +1,4 @@
-# 🧩 모아(MOA) — 사내 협업툴
+# 🧩 제니스(Zenith) — 사내 협업툴
 
 채팅·문서·등급별 게시판·사내 AI를 **회사 서버 안에서 동작하는 하나의 앱**(Windows·Android·iOS)으로 통합한다.
 슬랙 + 노션 + 등급 게시판 + 로컬 LLM을 **온프레미스**로.
@@ -24,7 +24,7 @@
 ## 📁 모노레포 구조
 
 ```
-moa/
+zenith/
 ├─ backend/    FastAPI · 인증(JWT) · RAG · 실시간(WS/Yjs)
 ├─ frontend/   React 19 프로토타입 → API 연동
 ├─ apps/       Tauri(Win) · Capacitor(Android/iOS) 패키징

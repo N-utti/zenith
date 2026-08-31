@@ -3,7 +3,7 @@
 > **정본(canonical)은 Notion이다.** 이 디렉터리에는 문서 사본을 두지 않는다.
 > 아래는 링크와 "언제 이걸 열어야 하는지"만 담은 인덱스다.
 
-**[🧩 모아(MOA) 프로젝트 허브](https://app.notion.com/p/3aaa47166046815a8b8bfc07c8eeeb98)** ← 여기서 시작
+**[🧩 제니스(Zenith) 프로젝트 허브](https://app.notion.com/p/3aaa47166046815a8b8bfc07c8eeeb98)** ← 여기서 시작
 
 ---
 

@@ -38,9 +38,9 @@ export function LoginPage() {
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
           <span className="bg-accent text-on-accent mx-auto mb-3 grid size-11 place-items-center rounded-xl text-lg font-bold">
-            M
+            Z
           </span>
-          <h1 className="text-fg text-xl font-semibold tracking-tight">모아에 로그인</h1>
+          <h1 className="text-fg text-xl font-semibold tracking-tight">제니스에 로그인</h1>
           <p className="text-muted mt-1 text-sm">사내 계정으로 로그인하세요.</p>
         </div>
 
@@ -87,7 +87,7 @@ export function LoginPage() {
         {MSW_ENABLED && (
           <div className="border-line bg-surface mt-4 rounded-xl border p-4">
             <p className="text-subtle mb-2 text-xs font-semibold">
-              목(mock) 계정 — 비밀번호 <code className="font-mono">moa1234</code>
+              목(mock) 계정 — 비밀번호 <code className="font-mono">zenith1234</code>
             </p>
             <div className="space-y-1">
               {DEMO_ACCOUNTS.map((account) => (
@@ -96,7 +96,7 @@ export function LoginPage() {
                   type="button"
                   onClick={() => {
                     setEmail(account.email)
-                    setPassword('moa1234')
+                    setPassword('zenith1234')
                   }}
                   className="text-muted hover:bg-surface-hover hover:text-fg flex w-full cursor-pointer items-center justify-between rounded-lg px-2.5 py-1.5 text-sm"
                 >

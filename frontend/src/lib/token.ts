@@ -1,4 +1,4 @@
-const KEY = 'moa.token'
+const KEY = 'zenith.token'
 
 export function getToken(): string | null {
   return localStorage.getItem(KEY)

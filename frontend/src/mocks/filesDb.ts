@@ -6,7 +6,7 @@
  * 문서 속 이미지가 전부 깨지기 때문이다. 대신 이 브라우저 안에서만 보인다.
  */
 
-const DB_NAME = 'moa.files'
+const DB_NAME = 'zenith.files'
 const DB_VERSION = 1
 const STORE = 'blobs'
 
