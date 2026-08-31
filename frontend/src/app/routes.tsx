@@ -11,6 +11,7 @@ import { ChatPage } from '@/pages/ChatPage'
 import { DocsPage } from '@/pages/DocsPage'
 import { HomePage } from '@/pages/HomePage'
 import { NotFoundPage } from '@/pages/NotFoundPage'
+import { NotificationsPage } from '@/pages/NotificationsPage'
 import { SettingsPage } from '@/pages/SettingsPage'
 
 /**
@@ -52,6 +53,7 @@ export function AppRoutes() {
           <Route path="docs" element={<DocsPage />} />
           <Route path="board" element={<BoardPage />} />
           <Route path="attendance" element={<AttendancePage />} />
+          <Route path="notifications" element={<NotificationsPage />} />
           <Route path="ai" element={<AiPage />} />
           <Route path="settings" element={<SettingsPage />} />
           <Route path="*" element={<NotFoundPage />} />

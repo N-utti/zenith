@@ -13,11 +13,20 @@ function minutesAgo(minutes: number): string {
  */
 export const DOCS: DocSummary[] = [
   {
+    id: 'd-0',
+    title: '회사 위키',
+    updatedAt: minutesAgo(40),
+    editorName: '박동현',
+    editorHue: 155,
+    parentId: null,
+  },
+  {
     id: 'd-1',
     title: '2026 하반기 제품 로드맵',
     updatedAt: minutesAgo(12),
     editorName: '박동현',
     editorHue: 155,
+    parentId: 'd-0',
   },
   {
     id: 'd-2',
@@ -25,6 +34,7 @@ export const DOCS: DocSummary[] = [
     updatedAt: minutesAgo(95),
     editorName: '김수진',
     editorHue: 275,
+    parentId: null,
   },
   {
     id: 'd-3',
@@ -32,6 +42,7 @@ export const DOCS: DocSummary[] = [
     updatedAt: minutesAgo(300),
     editorName: '이정민',
     editorHue: 200,
+    parentId: null,
   },
   {
     id: 'd-4',
@@ -39,6 +50,7 @@ export const DOCS: DocSummary[] = [
     updatedAt: minutesAgo(1500),
     editorName: '한지우',
     editorHue: 95,
+    parentId: 'd-0',
   },
   {
     id: 'd-5',
@@ -46,6 +58,7 @@ export const DOCS: DocSummary[] = [
     updatedAt: minutesAgo(2900),
     editorName: '김수진',
     editorHue: 275,
+    parentId: 'd-2',
   },
 ]
 
@@ -143,6 +156,7 @@ export function createDoc(user: User): DocSummary {
     updatedAt: new Date().toISOString(),
     editorName: user.name,
     editorHue: user.avatarHue,
+    parentId: null,
   }
   DOCS.unshift(doc)
   return doc
