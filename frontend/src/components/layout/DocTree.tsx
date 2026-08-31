@@ -3,38 +3,7 @@ import { NavLink, useParams } from 'react-router'
 import { ChevronDown, ChevronRight, FileText } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { useDocs } from '@/features/docs/api'
-import type { DocSummary } from '@/features/docs/types'
-
-interface TreeNode {
-  doc: DocSummary
-  children: TreeNode[]
-}
-
-/** 평평한 목록을 parentId로 접어 트리로 만든다. 고아 문서는 최상위로 올린다. */
-function buildTree(docs: DocSummary[]): TreeNode[] {
-  const nodes = new Map<string, TreeNode>(docs.map((doc) => [doc.id, { doc, children: [] }]))
-  const roots: TreeNode[] = []
-
-  for (const node of nodes.values()) {
-    const parent = node.doc.parentId ? nodes.get(node.doc.parentId) : undefined
-    if (parent) parent.children.push(node)
-    else roots.push(node)
-  }
-  return roots
-}
-
-/** 열려 있는 문서까지의 조상 id — 그 경로는 처음부터 펼쳐 둔다. */
-function ancestorsOf(docId: string | undefined, docs: DocSummary[]): string[] {
-  if (!docId) return []
-  const byId = new Map(docs.map((doc) => [doc.id, doc]))
-  const path: string[] = []
-  let current = byId.get(docId)?.parentId ?? null
-  while (current) {
-    path.push(current)
-    current = byId.get(current)?.parentId ?? null
-  }
-  return path
-}
+import { ancestorsOf, buildTree, type TreeNode } from '@/features/docs/tree'
 
 function TreeRow({
   node,

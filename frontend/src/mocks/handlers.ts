@@ -6,6 +6,7 @@ import {
   AI_MODELS,
   AI_TEMPLATES,
   ask,
+  inlineDraft,
   KNOWLEDGE_SOURCES,
   listConversation,
   RECENT_QUESTIONS,
@@ -133,6 +134,17 @@ export const handlers = [
   }),
 
   http.delete('/api/ai/conversation', authed((user) => HttpResponse.json({ items: resetConversation(user) }))),
+
+  http.post('/api/ai/inline', async ({ request }) => {
+    if (!authenticate(request)) return unauthorized()
+    const { action, prompt, docText } = (await request.json()) as {
+      action: string
+      prompt: string
+      docText: string
+    }
+    await delay(700)
+    return HttpResponse.json({ draft: inlineDraft(action, prompt ?? '', docText ?? '') })
+  }),
 
   http.patch('/api/tasks/:taskId', async ({ request, params }) => {
     if (!authenticate(request)) return unauthorized()
