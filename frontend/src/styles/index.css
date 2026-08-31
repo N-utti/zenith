@@ -12,17 +12,17 @@
     'Segoe UI', 'Malgun Gothic', 'Noto Sans KR', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', 'D2Coding', ui-monospace, SFMono-Regular, Menlo, monospace;
 
-  --color-brand-50: oklch(0.97 0.014 275);
-  --color-brand-100: oklch(0.94 0.03 275);
-  --color-brand-200: oklch(0.89 0.055 275);
-  --color-brand-300: oklch(0.82 0.09 275);
-  --color-brand-400: oklch(0.72 0.14 275);
-  --color-brand-500: oklch(0.62 0.18 275);
-  --color-brand-600: oklch(0.55 0.19 275);
-  --color-brand-700: oklch(0.47 0.17 275);
-  --color-brand-800: oklch(0.39 0.14 275);
-  --color-brand-900: oklch(0.32 0.11 275);
-  --color-brand-950: oklch(0.22 0.08 275);
+  --color-brand-50: oklch(0.97 0.014 265);
+  --color-brand-100: oklch(0.94 0.03 265);
+  --color-brand-200: oklch(0.89 0.055 265);
+  --color-brand-300: oklch(0.82 0.09 265);
+  --color-brand-400: oklch(0.72 0.14 265);
+  --color-brand-500: oklch(0.62 0.18 265);
+  --color-brand-600: oklch(0.55 0.19 265);
+  --color-brand-700: oklch(0.47 0.17 265);
+  --color-brand-800: oklch(0.39 0.14 265);
+  --color-brand-900: oklch(0.32 0.11 265);
+  --color-brand-950: oklch(0.22 0.08 265);
 
   --radius-card: 0.75rem;
 }
@@ -31,69 +31,69 @@
    컴포넌트는 brand-600 같은 원시 토큰이 아니라 여기의 의미 토큰만 쓴다.
    (bg-surface, text-muted, border-line …) */
 @theme inline {
-  --color-canvas: var(--moa-canvas);
-  --color-surface: var(--moa-surface);
-  --color-surface-hover: var(--moa-surface-hover);
-  --color-sunken: var(--moa-sunken);
-  --color-line: var(--moa-line);
-  --color-line-strong: var(--moa-line-strong);
+  --color-canvas: var(--zenith-canvas);
+  --color-surface: var(--zenith-surface);
+  --color-surface-hover: var(--zenith-surface-hover);
+  --color-sunken: var(--zenith-sunken);
+  --color-line: var(--zenith-line);
+  --color-line-strong: var(--zenith-line-strong);
 
-  --color-fg: var(--moa-fg);
-  --color-muted: var(--moa-muted);
-  --color-subtle: var(--moa-subtle);
+  --color-fg: var(--zenith-fg);
+  --color-muted: var(--zenith-muted);
+  --color-subtle: var(--zenith-subtle);
 
-  --color-accent: var(--moa-accent);
-  --color-accent-hover: var(--moa-accent-hover);
-  --color-on-accent: var(--moa-on-accent);
-  --color-accent-soft: var(--moa-accent-soft);
+  --color-accent: var(--zenith-accent);
+  --color-accent-hover: var(--zenith-accent-hover);
+  --color-on-accent: var(--zenith-on-accent);
+  --color-accent-soft: var(--zenith-accent-soft);
 
-  --color-success: var(--moa-success);
-  --color-warning: var(--moa-warning);
-  --color-danger: var(--moa-danger);
+  --color-success: var(--zenith-success);
+  --color-warning: var(--zenith-warning);
+  --color-danger: var(--zenith-danger);
 }
 
 :root {
-  --moa-canvas: oklch(0.985 0.002 275);
-  --moa-surface: oklch(1 0 0);
-  --moa-surface-hover: oklch(0.965 0.004 275);
-  --moa-sunken: oklch(0.955 0.005 275);
-  --moa-line: oklch(0.915 0.005 275);
-  --moa-line-strong: oklch(0.84 0.008 275);
+  --zenith-canvas: oklch(0.985 0.002 265);
+  --zenith-surface: oklch(1 0 0);
+  --zenith-surface-hover: oklch(0.965 0.004 265);
+  --zenith-sunken: oklch(0.955 0.005 265);
+  --zenith-line: oklch(0.915 0.005 265);
+  --zenith-line-strong: oklch(0.84 0.008 265);
 
-  --moa-fg: oklch(0.22 0.015 275);
-  --moa-muted: oklch(0.5 0.015 275);
-  --moa-subtle: oklch(0.63 0.012 275);
+  --zenith-fg: oklch(0.22 0.015 265);
+  --zenith-muted: oklch(0.5 0.015 265);
+  --zenith-subtle: oklch(0.63 0.012 265);
 
-  --moa-accent: oklch(0.55 0.19 275);
-  --moa-accent-hover: oklch(0.49 0.19 275);
-  --moa-on-accent: oklch(0.99 0 0);
-  --moa-accent-soft: oklch(0.95 0.03 275);
+  --zenith-accent: oklch(0.55 0.19 265);
+  --zenith-accent-hover: oklch(0.49 0.19 265);
+  --zenith-on-accent: oklch(0.99 0 0);
+  --zenith-accent-soft: oklch(0.95 0.03 265);
 
-  --moa-success: oklch(0.58 0.14 155);
-  --moa-warning: oklch(0.71 0.15 75);
-  --moa-danger: oklch(0.57 0.2 25);
+  --zenith-success: oklch(0.58 0.14 155);
+  --zenith-warning: oklch(0.71 0.15 75);
+  --zenith-danger: oklch(0.57 0.2 25);
 }
 
 .dark {
-  --moa-canvas: oklch(0.18 0.008 275);
-  --moa-surface: oklch(0.22 0.01 275);
-  --moa-surface-hover: oklch(0.26 0.012 275);
-  --moa-sunken: oklch(0.15 0.008 275);
-  --moa-line: oklch(0.3 0.012 275);
-  --moa-line-strong: oklch(0.4 0.015 275);
+  --zenith-canvas: oklch(0.18 0.008 265);
+  --zenith-surface: oklch(0.22 0.01 265);
+  --zenith-surface-hover: oklch(0.26 0.012 265);
+  --zenith-sunken: oklch(0.15 0.008 265);
+  --zenith-line: oklch(0.3 0.012 265);
+  --zenith-line-strong: oklch(0.4 0.015 265);
 
-  --moa-fg: oklch(0.95 0.005 275);
-  --moa-muted: oklch(0.71 0.012 275);
-  --moa-subtle: oklch(0.58 0.012 275);
+  --zenith-fg: oklch(0.95 0.005 265);
+  --zenith-muted: oklch(0.71 0.012 265);
+  --zenith-subtle: oklch(0.58 0.012 265);
 
-  --moa-accent: oklch(0.68 0.16 275);
-  --moa-accent-hover: oklch(0.74 0.15 275);
-  --moa-on-accent: oklch(0.17 0.02 275);
-  --moa-accent-soft: oklch(0.3 0.06 275);
+  --zenith-accent: oklch(0.68 0.16 265);
+  --zenith-accent-hover: oklch(0.74 0.15 265);
+  --zenith-on-accent: oklch(0.17 0.02 265);
+  --zenith-accent-soft: oklch(0.3 0.06 265);
 
-  --moa-success: oklch(0.7 0.14 155);
-  --moa-warning: oklch(0.79 0.14 75);
-  --moa-danger: oklch(0.68 0.18 25);
+  --zenith-success: oklch(0.7 0.14 155);
+  --zenith-warning: oklch(0.79 0.14 75);
+  --zenith-danger: oklch(0.68 0.18 25);
 }
 
 @layer base {
@@ -121,110 +121,110 @@
    @tailwindcss/typography 대신 직접 쓴다. 의존성이 하나 줄고,
    본문 색을 앱 토큰과 정확히 맞출 수 있다. */
 @layer components {
-  .moa-editor {
+  .zenith-editor {
     @apply text-fg text-[15px] leading-7;
   }
 
-  .moa-editor > * + * {
+  .zenith-editor > * + * {
     @apply mt-4;
   }
 
-  .moa-editor h1 {
+  .zenith-editor h1 {
     @apply mt-8 text-2xl font-bold tracking-tight;
   }
-  .moa-editor h2 {
+  .zenith-editor h2 {
     @apply mt-8 text-xl font-semibold tracking-tight;
   }
-  .moa-editor h3 {
+  .zenith-editor h3 {
     @apply mt-6 text-base font-semibold;
   }
 
-  .moa-editor ul {
+  .zenith-editor ul {
     @apply list-disc space-y-1 pl-5;
   }
-  .moa-editor ol {
+  .zenith-editor ol {
     @apply list-decimal space-y-1 pl-5;
   }
-  .moa-editor li > * + * {
+  .zenith-editor li > * + * {
     @apply mt-1;
   }
 
-  .moa-editor blockquote {
+  .zenith-editor blockquote {
     @apply border-accent text-muted border-l-2 pl-4;
   }
 
-  .moa-editor code {
+  .zenith-editor code {
     @apply bg-sunken text-accent rounded px-1 py-0.5 font-mono text-[0.85em];
   }
 
-  .moa-editor pre {
+  .zenith-editor pre {
     @apply bg-sunken overflow-x-auto rounded-lg p-4 font-mono text-sm;
   }
-  .moa-editor pre code {
+  .zenith-editor pre code {
     @apply bg-transparent p-0 text-inherit;
   }
 
-  .moa-editor hr {
+  .zenith-editor hr {
     @apply border-line my-8 border-t;
   }
 
-  .moa-editor a {
+  .zenith-editor a {
     @apply text-accent underline underline-offset-2;
   }
 
   /* 형광펜은 언제나 옅은 색이다. 다크 모드에서 흰 글자가 얹히면 읽을 수 없으므로
      글자색을 짙게 고정한다. */
-  .moa-editor mark {
-    @apply rounded-sm px-0.5 text-[oklch(0.22_0.015_275)];
+  .zenith-editor mark {
+    @apply rounded-sm px-0.5 text-[oklch(0.22_0.015_265)];
   }
 
   /* 할 일 목록 (TaskList) */
-  .moa-editor ul[data-type='taskList'] {
+  .zenith-editor ul[data-type='taskList'] {
     @apply list-none space-y-1 pl-0;
   }
-  .moa-editor ul[data-type='taskList'] li {
+  .zenith-editor ul[data-type='taskList'] li {
     @apply flex items-start gap-2;
   }
-  .moa-editor ul[data-type='taskList'] li > label {
+  .zenith-editor ul[data-type='taskList'] li > label {
     @apply mt-1 flex shrink-0 items-center;
   }
-  .moa-editor ul[data-type='taskList'] li > div {
+  .zenith-editor ul[data-type='taskList'] li > div {
     @apply min-w-0 flex-1;
   }
-  .moa-editor ul[data-type='taskList'] input[type='checkbox'] {
+  .zenith-editor ul[data-type='taskList'] input[type='checkbox'] {
     @apply accent-accent size-4 cursor-pointer;
   }
-  .moa-editor ul[data-type='taskList'] li[data-checked='true'] > div {
+  .zenith-editor ul[data-type='taskList'] li[data-checked='true'] > div {
     @apply text-subtle line-through;
   }
 
   /* 사진 블록.
      Tiptap의 React 노드뷰는 figure를 .node-imageBlock 로 한 번 더 감싼다.
      Placeholder 표시도 그 바깥 요소에 붙으므로 여백과 자리표시 문구를 거기서 잡는다. */
-  .moa-editor .node-imageBlock {
+  .zenith-editor .node-imageBlock {
     @apply relative my-6;
   }
-  .moa-editor figure.moa-image {
+  .zenith-editor figure.zenith-image {
     @apply m-0;
   }
-  .moa-editor figure.moa-image figcaption {
+  .zenith-editor figure.zenith-image figcaption {
     @apply text-subtle mt-2 text-sm;
   }
 
   /* 캡션 자리표시 문구 — 사진 위가 아니라 캡션 줄에 얹힌다. */
-  .moa-editor .node-imageBlock.is-empty::after {
+  .zenith-editor .node-imageBlock.is-empty::after {
     content: attr(data-placeholder);
     @apply text-subtle pointer-events-none absolute bottom-0 left-0 text-sm;
   }
 
   /* 드래그 손잡이로 고른 블록 */
-  .moa-editor .ProseMirror-selectednode {
+  .zenith-editor .ProseMirror-selectednode {
     @apply bg-accent-soft/60 rounded outline-none;
   }
 
   /* 커서를 둔 빈 줄에 자리표시 문구 (Placeholder 확장).
      사진 블록은 바로 위에서 따로 처리한다. */
-  .moa-editor .is-empty:not(.node-imageBlock)::before {
+  .zenith-editor .is-empty:not(.node-imageBlock)::before {
     content: attr(data-placeholder);
     @apply text-subtle pointer-events-none float-left h-0;
   }

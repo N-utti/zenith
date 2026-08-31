@@ -7,7 +7,7 @@ export const MOCK_USERS: User[] = [
   {
     id: 'u-1',
     name: '김수진',
-    email: 'sujin@moa.co.kr',
+    email: 'sujin@zenith.co.kr',
     role: 'member',
     title: '프론트엔드 개발',
     team: PRODUCT_TEAM,
@@ -16,7 +16,7 @@ export const MOCK_USERS: User[] = [
   {
     id: 'u-2',
     name: '박동현',
-    email: 'donghyun@moa.co.kr',
+    email: 'donghyun@zenith.co.kr',
     role: 'lead',
     title: '프로덕트 팀장',
     team: PRODUCT_TEAM,
@@ -25,7 +25,7 @@ export const MOCK_USERS: User[] = [
   {
     id: 'u-3',
     name: '최재호',
-    email: 'jaeho@moa.co.kr',
+    email: 'jaeho@zenith.co.kr',
     role: 'exec',
     title: '대표이사',
     team: MANAGEMENT_TEAM,

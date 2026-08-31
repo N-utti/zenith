@@ -1,6 +1,7 @@
 import { ChevronDown, Moon, PanelLeft, Search, Sun } from 'lucide-react'
 import { Link } from 'react-router'
 import { Button } from '@/components/ui/Button'
+import { ZenithMark } from '@/components/ui/ZenithMark'
 import { useTheme } from '@/lib/theme'
 import { UserMenu } from './UserMenu'
 
@@ -33,7 +34,8 @@ export function Header({
       </Button>
 
       <Link to="/" className="flex shrink-0 items-center gap-1.5">
-        <span className="text-fg text-[14.5px] font-bold tracking-tight">모아</span>
+        <ZenithMark className="size-[22px]" />
+        <span className="text-fg text-[14.5px] font-bold tracking-tight">제니스</span>
         <span className="text-subtle hidden items-center gap-0.5 text-[14.5px] sm:flex">
           · {ORG_NAME}
           <ChevronDown className="size-3.5" />

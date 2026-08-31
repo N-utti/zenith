@@ -38,7 +38,7 @@ export function ImageBlockView({ node, updateAttributes, selected, editor }: Nod
   const shownWidth = dragWidth ?? width
 
   return (
-    <NodeViewWrapper as="figure" className="moa-image group" data-type="imageBlock">
+    <NodeViewWrapper as="figure" className="zenith-image group" data-type="imageBlock">
       <div ref={frameRef} contentEditable={false} className="relative w-full">
         <span className="relative inline-block max-w-full align-bottom">
           <img

@@ -1,6 +1,6 @@
 # frontend
 
-MOA 웹 프론트엔드. React 19 · Vite · TypeScript · Tailwind v4.
+Zenith 웹 프론트엔드. React 19 · Vite · TypeScript · Tailwind v4.
 
 백엔드(`../backend`)가 아직 없으므로 개발 중에는 **MSW**가 `/api/*`를 가로채 목 응답을 준다.
 
@@ -23,13 +23,13 @@ npm run server     # 다른 터미널 — 공동편집·채팅 서버
 
 ### 목 계정
 
-비밀번호는 모두 `moa1234`. 로그인 화면 하단 버튼으로 바로 채울 수 있다.
+비밀번호는 모두 `zenith1234`. 로그인 화면 하단 버튼으로 바로 채울 수 있다.
 
 | 이메일 | 역할 |
 | --- | --- |
-| `sujin@moa.co.kr` | member (사원) |
-| `donghyun@moa.co.kr` | lead (팀장) |
-| `jaeho@moa.co.kr` | exec (임원) |
+| `sujin@zenith.co.kr` | member (사원) |
+| `donghyun@zenith.co.kr` | lead (팀장) |
+| `jaeho@zenith.co.kr` | exec (임원) |
 
 역할 체계는 [근태 모듈 설계서 §3](https://app.notion.com/p/3aea471660468172aea1c46d2b11addf)을 따른다.
 

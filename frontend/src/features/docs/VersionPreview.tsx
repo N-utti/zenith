@@ -30,7 +30,7 @@ export function VersionPreview({
       editable: false,
       extensions: [StarterKit.configure({ undoRedo: false })],
       content: content.json,
-      editorProps: { attributes: { class: 'moa-editor outline-none' } },
+      editorProps: { attributes: { class: 'zenith-editor outline-none' } },
     },
     [content],
   )

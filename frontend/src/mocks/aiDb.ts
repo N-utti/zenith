@@ -13,8 +13,8 @@ function minutesAgo(minutes: number): string {
 }
 
 export const AI_MODELS: AiModel[] = [
-  { id: 'moa-8b', label: '사내-LLM-8B', note: '빠름 · 기본' },
-  { id: 'moa-32b', label: '사내-LLM-32B', note: '느림 · 긴 문서에 강함' },
+  { id: 'zenith-8b', label: '사내-LLM-8B', note: '빠름 · 기본' },
+  { id: 'zenith-32b', label: '사내-LLM-32B', note: '느림 · 긴 문서에 강함' },
 ]
 
 /** `allowed`는 요청한 사용자의 등급으로 핸들러가 붙인다. 저장된 정의에는 없다. */
