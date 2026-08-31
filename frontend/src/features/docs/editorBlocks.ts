@@ -12,8 +12,12 @@ import {
   SquareCode,
   Type,
 } from 'lucide-react'
+import { Sparkles } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { PICK_IMAGE_EVENT } from './ImageBlock'
+
+/** 인라인 AI 팝오버를 여는 신호. 사진 고르기와 같은 방식으로 편집기 DOM에 쏜다. */
+export const OPEN_INLINE_AI_EVENT = 'moa:open-inline-ai'
 
 /** 블록 종류 하나. 툴바 드롭다운·슬래시 메뉴·버블 메뉴가 이 목록 하나를 공유한다. */
 export type EditorBlock = {
@@ -35,6 +39,18 @@ function toHeading(editor: Editor, level: 1 | 2 | 3) {
 }
 
 export const EDITOR_BLOCKS: EditorBlock[] = [
+  {
+    key: 'ai',
+    label: 'AI로 쓰기',
+    hint: '요약·이어쓰기·다듬기를 이 자리에서',
+    keywords: ['ai', '에이아이', '요약', '이어쓰기', '다듬기', '번역', 'gpt', 'llm'],
+    icon: Sparkles,
+    run: (e) => {
+      if (!e.isEditable) return
+      e.commands.focus()
+      e.view.dom.dispatchEvent(new CustomEvent(OPEN_INLINE_AI_EVENT))
+    },
+  },
   {
     key: 'paragraph',
     label: '본문',
@@ -145,7 +161,8 @@ export const BLOCK_BY_KEY: Record<string, EditorBlock> = Object.fromEntries(
 /** 툴바 드롭다운이 지금 무엇을 보여 줄지 고른다. 좁은 것부터 검사해야 인용 속 제목이 '인용'으로 뭉개지지 않는다. */
 export function activeBlock(editor: Editor): EditorBlock {
   const matched = EDITOR_BLOCKS.find((block) => block.key !== 'paragraph' && block.isActive?.(editor))
-  return matched ?? EDITOR_BLOCKS[0]
+  // 아무것도 안 걸리면 본문이다. 목록 순서에 기대지 않고 키로 찾는다.
+  return matched ?? BLOCK_BY_KEY.paragraph
 }
 
 /** 슬래시 메뉴 검색. 질의가 비면 전체를 그대로 돌려준다. */

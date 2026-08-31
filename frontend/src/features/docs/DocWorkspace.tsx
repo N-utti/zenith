@@ -10,7 +10,9 @@ import { formatRelative } from '@/lib/datetime'
 import { useDragAutoScroll } from '@/lib/useDragAutoScroll'
 import { useSaveVersion, useTouchDoc } from './api'
 import { CommentPanel } from './CommentPanel'
+import { DocBreadcrumb } from './DocBreadcrumb'
 import { EditorBubbleMenu } from './EditorBubbleMenu'
+import { InlineAiPopover } from './InlineAiPopover'
 import { buildDocExtensions } from './editorExtensions'
 import { EditorToolbar } from './EditorToolbar'
 import { VersionPanel } from './VersionPanel'
@@ -233,40 +235,48 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-      {preview ? (
-        <VersionPreview
-          version={preview.version}
-          content={preview.content}
-          onRestore={restore}
-          onClose={() => setPreview(null)}
-          restoring={savingVersion}
-        />
-      ) : (
-        <div className="flex min-h-0 flex-1 flex-col">
-          {editor && <EditorToolbar editor={editor} uploadingImage={uploading} />}
+    <div className="flex min-h-0 flex-1 flex-col">
+      {/* 경로와 함께 편집 중인 사람. 청사진 1b의 44px 상단 줄이다. */}
+      <div className="border-line bg-surface flex h-11 shrink-0 items-center gap-3 border-b px-4">
+        <DocBreadcrumb docId={meta.id} title={title} />
+        <div className="ml-auto shrink-0">
+          <PresenceBar session={session} />
+        </div>
+      </div>
 
-          {imageError && (
-            <p
-              role="alert"
-              className="text-danger bg-danger/10 flex items-center gap-2 px-4 py-2 text-xs"
-            >
-              <span className="flex-1">{imageError}</span>
-              <button
-                type="button"
-                aria-label="알림 닫기"
-                onClick={clearError}
-                className="cursor-pointer rounded p-0.5 hover:bg-black/5"
+      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+        {preview ? (
+          <VersionPreview
+            version={preview.version}
+            content={preview.content}
+            onRestore={restore}
+            onClose={() => setPreview(null)}
+            restoring={savingVersion}
+          />
+        ) : (
+          <div className="flex min-h-0 flex-1 flex-col">
+            {editor && <EditorToolbar editor={editor} uploadingImage={uploading} />}
+
+            {imageError && (
+              <p
+                role="alert"
+                className="text-danger bg-danger/10 flex items-center gap-2 px-4 py-2 text-xs"
               >
-                <X className="size-3.5" />
-              </button>
-            </p>
-          )}
+                <span className="flex-1">{imageError}</span>
+                <button
+                  type="button"
+                  aria-label="알림 닫기"
+                  onClick={clearError}
+                  className="cursor-pointer rounded p-0.5 hover:bg-black/5"
+                >
+                  <X className="size-3.5" />
+                </button>
+              </p>
+            )}
 
-          <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
-            <div className="mx-auto max-w-3xl px-6 py-8">
-              <div className="mb-1 flex items-center justify-between gap-4">
-                <p className="text-subtle text-xs">
+            <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
+              <div className="mx-auto max-w-3xl px-6 py-8">
+                <p className="text-subtle mb-1 text-xs">
                   <Avatar
                     name={meta.editorName}
                     hue={meta.editorHue}
@@ -275,49 +285,52 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
                   />
                   {meta.editorName} · {formatRelative(meta.updatedAt)} 수정
                 </p>
-                <PresenceBar session={session} />
+
+                <input
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="제목 없는 문서"
+                  aria-label="문서 제목"
+                  className="text-fg placeholder:text-subtle w-full bg-transparent py-2 text-3xl font-bold tracking-tight outline-none"
+                />
+
+                {editor ? (
+                  <>
+                    <EditorBubbleMenu editor={editor} />
+                    <BlockDragHandle editor={editor} />
+                    <EditorContent editor={editor} className="mt-4" />
+                    <InlineAiPopover editor={editor} />
+                  </>
+                ) : (
+                  <Spinner className="mt-6" />
+                )}
               </div>
-
-              <input
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="제목 없는 문서"
-                aria-label="문서 제목"
-                className="text-fg placeholder:text-subtle w-full bg-transparent py-2 text-3xl font-bold tracking-tight outline-none"
-              />
-
-              {editor ? (
-                <>
-                  <EditorBubbleMenu editor={editor} />
-                  <BlockDragHandle editor={editor} />
-                  <EditorContent editor={editor} className="mt-4" />
-                </>
-              ) : (
-                <Spinner className="mt-6" />
-              )}
             </div>
           </div>
-        </div>
-      )}
-
-      <DocSidebar tab={tab} onTabChange={setTab}>
-        {tab === 'comments' ? (
-          <CommentPanel docId={meta.id} />
-        ) : (
-          <>
-            {previewError && (
-              <p role="alert" className="text-danger bg-danger/10 m-2 rounded-lg px-3 py-2 text-xs">
-                {previewError}
-              </p>
-            )}
-            <VersionPanel
-              docId={meta.id}
-              selectedId={preview?.version.id ?? null}
-              onSelect={openPreview}
-            />
-          </>
         )}
-      </DocSidebar>
+
+        <DocSidebar tab={tab} onTabChange={setTab}>
+          {tab === 'comments' ? (
+            <CommentPanel docId={meta.id} />
+          ) : (
+            <>
+              {previewError && (
+                <p
+                  role="alert"
+                  className="text-danger bg-danger/10 m-2 rounded-lg px-3 py-2 text-xs"
+                >
+                  {previewError}
+                </p>
+              )}
+              <VersionPanel
+                docId={meta.id}
+                selectedId={preview?.version.id ?? null}
+                onSelect={openPreview}
+              />
+            </>
+          )}
+        </DocSidebar>
+      </div>
     </div>
   )
 }
