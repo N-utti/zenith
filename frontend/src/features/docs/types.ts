@@ -5,6 +5,8 @@ export interface DocSummary {
   /** 마지막으로 손댄 사람. 목록에서 아바타로 보여준다. */
   editorName: string
   editorHue: number
+  /** 사이드바 트리의 부모. 최상위 문서는 null. */
+  parentId: string | null
 }
 
 /** 업로드 결과. 문서에는 바이너리가 아니라 이 url만 들어간다. */

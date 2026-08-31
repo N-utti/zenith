@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { CornerDownLeft, Search } from 'lucide-react'
 import { cn } from '@/lib/cn'
-import { PRIMARY_NAV, SECONDARY_NAV } from '@/app/navigation'
+import { ALL_NAV } from '@/app/navigation'
 
 /**
  * ⌘K 통합검색의 껍데기. 지금은 화면 이동만 하고,
@@ -16,9 +16,8 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
   const [cursor, setCursor] = useState(0)
 
   const items = useMemo(() => {
-    const all = [...PRIMARY_NAV, ...SECONDARY_NAV]
     const q = query.trim().toLowerCase()
-    return q ? all.filter((item) => item.label.toLowerCase().includes(q)) : all
+    return q ? ALL_NAV.filter((item) => item.label.toLowerCase().includes(q)) : ALL_NAV
   }, [query])
 
   // 필터로 목록이 줄어들면 커서가 범위를 벗어날 수 있다.

@@ -2,7 +2,7 @@ import { http, HttpResponse, passthrough } from 'msw'
 import { ROLE_RANK, type User } from '@/types'
 import { DEMO_PASSWORD } from './accounts'
 import { MOCK_USERS, tokenFor, userFromToken } from './db'
-import { ANNOUNCEMENTS } from './dashboardDb'
+import { ANNOUNCEMENTS, MENTIONS, TODAY_TASKS } from './dashboardDb'
 import {
   addComment,
   addVersion,
@@ -65,16 +65,38 @@ export const handlers = [
     '/api/announcements',
     authed((user, request) => {
       const limit = Number(new URL(request.url).searchParams.get('limit') ?? 4)
-      // 권한 밖 등급의 글은 목록에 아예 넣지 않는다.
-      const visible = ANNOUNCEMENTS.filter(
-        (item) => ROLE_RANK[user.role] >= ROLE_RANK[item.boardLevel],
+      // 권한 밖 글은 목록에서 지우지 않고 제목만 가린다 (PRD 성공 기준: 제목 마스킹 + 본문 403).
+      const items = ANNOUNCEMENTS.map((item) =>
+        ROLE_RANK[user.role] >= ROLE_RANK[item.boardLevel]
+          ? item
+          : { ...item, title: '＿'.repeat(6), authorName: '＿＿＿', masked: true },
       )
-      const sorted = [...visible].sort(
+      const sorted = [...items].sort(
         (a, b) => Number(b.pinned) - Number(a.pinned) || b.createdAt.localeCompare(a.createdAt),
       )
       return HttpResponse.json({ items: sorted.slice(0, limit) })
     }),
   ),
+
+  http.get(
+    '/api/mentions',
+    authed((_user, request) => {
+      const limit = Number(new URL(request.url).searchParams.get('limit') ?? 3)
+      const sorted = [...MENTIONS].sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      return HttpResponse.json({ items: sorted.slice(0, limit) })
+    }),
+  ),
+
+  http.get('/api/tasks/today', authed(() => HttpResponse.json({ items: TODAY_TASKS }))),
+
+  http.patch('/api/tasks/:taskId', async ({ request, params }) => {
+    if (!authenticate(request)) return unauthorized()
+    const task = TODAY_TASKS.find((item) => item.id === String(params.taskId))
+    if (!task) return notFound()
+    const body = (await request.json()) as { done?: boolean }
+    if (body.done !== undefined) task.done = body.done
+    return HttpResponse.json(task)
+  }),
 
   http.get(
     '/api/documents/recent',

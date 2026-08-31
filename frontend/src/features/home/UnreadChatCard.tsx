@@ -1,58 +1,53 @@
 import { Link } from 'react-router'
-import { AtSign, Hash } from 'lucide-react'
-import { Card, CardEmpty, CardHeader } from '@/components/ui/Card'
+import { Hash } from 'lucide-react'
+import { Avatar } from '@/components/ui/Avatar'
+import { Card, CardEmpty } from '@/components/ui/Card'
 import { SkeletonRows } from '@/components/ui/Skeleton'
-import { formatRelative } from '@/lib/datetime'
 import { useChannels } from '@/features/chat/api'
+import { HomeSection } from './HomeSection'
 
 export function UnreadChatCard() {
   const { data, isPending, isError } = useChannels()
-
-  const unreadChannels = data?.items.filter((channel) => channel.unread > 0) ?? []
-  const total = unreadChannels.reduce((sum, channel) => sum + channel.unread, 0)
+  const unread = data?.items.filter((channel) => channel.unread > 0) ?? []
 
   return (
-    <Card>
-      <CardHeader title="안 읽은 채팅" count={total} to="/chat" />
+    <HomeSection title="안 읽은 메시지" to="/chat">
+      <Card>
+        {isPending && <SkeletonRows />}
+        {isError && <CardEmpty>채팅을 불러오지 못했습니다.</CardEmpty>}
 
-      {isPending && <SkeletonRows />}
-      {isError && <CardEmpty>채팅을 불러오지 못했습니다.</CardEmpty>}
-
-      {data &&
-        (unreadChannels.length === 0 ? (
-          <CardEmpty>모두 읽었습니다.</CardEmpty>
-        ) : (
-          <ul className="px-2 pb-2">
-            {unreadChannels.map((channel) => (
-              <li key={channel.id}>
-                <Link
-                  to={`/chat/${channel.id}`}
-                  className="hover:bg-surface-hover flex items-center gap-3 rounded-lg px-3 py-2 transition-colors"
-                >
-                  {channel.kind === 'channel' ? (
-                    <Hash className="text-subtle size-4 shrink-0" />
-                  ) : (
-                    <AtSign className="text-subtle size-4 shrink-0" />
-                  )}
-                  <div className="min-w-0 flex-1">
-                    <p className="text-fg truncate text-sm font-medium">{channel.name}</p>
-                    <p className="text-subtle truncate text-xs">{channel.lastMessage}</p>
-                  </div>
-                  <div className="flex shrink-0 flex-col items-end gap-1">
-                    <span className="bg-accent text-on-accent rounded-full px-1.5 py-0.5 text-[11px] font-semibold tabular-nums">
+        {data &&
+          (unread.length === 0 ? (
+            <CardEmpty>모두 읽었습니다.</CardEmpty>
+          ) : (
+            <ul>
+              {unread.map((channel, index) => (
+                <li key={channel.id}>
+                  <Link
+                    to={`/chat/${channel.id}`}
+                    className={
+                      'hover:bg-surface-hover flex items-center gap-2 px-4 py-3 transition-colors' +
+                      (index > 0 ? ' border-line border-t' : '')
+                    }
+                  >
+                    {channel.kind === 'channel' ? (
+                      <Hash className="text-subtle size-4 shrink-0" />
+                    ) : (
+                      <Avatar name={channel.name} hue={200} size="sm" className="size-6" />
+                    )}
+                    <span className="text-fg min-w-0 flex-1 truncate text-[13px]">
+                      {channel.name}
+                      {channel.kind === 'dm' && <span className="text-subtle"> (DM)</span>}
+                    </span>
+                    <span className="bg-accent text-on-accent shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold tabular-nums">
                       {channel.unread}
                     </span>
-                    {channel.lastAt && (
-                      <span className="text-subtle text-[11px]">
-                        {formatRelative(channel.lastAt)}
-                      </span>
-                    )}
-                  </div>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        ))}
-    </Card>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          ))}
+      </Card>
+    </HomeSection>
   )
 }
