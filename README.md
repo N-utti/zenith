@@ -28,6 +28,7 @@ zenith/
 ├─ backend/    FastAPI · 인증(JWT) · RAG · 실시간(WS/Yjs)
 ├─ frontend/   React 19 프로토타입 → API 연동
 ├─ apps/       Tauri(Win) · Capacitor(Android/iOS) 패키징
+│  └─ desktop/   Windows 데스크탑 셸 → .msi  (npm run dev / npm run build)
 ├─ infra/      배포·온프레미스 설정(Postgres/Redis/MinIO/Ollama)
 └─ docs/       문서 인덱스 — 정본은 Notion, 여기엔 링크만 둔다
 ```

@@ -1,0 +1,51 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Zenith",
+  "version": "0.1.0",
+  "identifier": "kr.zenith.desktop",
+  "build": {
+    "beforeDevCommand": "npm --prefix ../../frontend run dev",
+    "devUrl": "http://localhost:5173",
+    "beforeBuildCommand": "npm --prefix ../../frontend run build",
+    "frontendDist": "../../../frontend/dist"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "제니스 · Zenith",
+        "width": 1440,
+        "height": 900,
+        "minWidth": 960,
+        "minHeight": 640,
+        "resizable": true,
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: http: https:; connect-src 'self' ipc: http://ipc.localhost http: https: ws: wss:"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["msi"],
+    "publisher": "Zenith",
+    "copyright": "Zenith",
+    "category": "Business",
+    "shortDescription": "사내 협업툴",
+    "longDescription": "채팅·문서·게시판·전자결재·근태·사내 AI를 하나로 묶은 온프레미스 협업툴.",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "windows": {
+      "wix": {
+        "language": ["ko-KR"]
+      }
+    }
+  }
+}

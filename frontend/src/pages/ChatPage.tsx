@@ -5,7 +5,7 @@ import { useChannels, useMarkRead, useMessages } from '@/features/chat/api'
 import { ChannelList } from '@/features/chat/ChannelList'
 import { Composer } from '@/features/chat/Composer'
 import { MessageList } from '@/features/chat/MessageList'
-import { useChatSocket } from '@/features/chat/useChatSocket'
+import { useChatSocketContext } from '@/features/chat/ChatSocketContext'
 
 function TypingLine({ names }: { names: string[] }) {
   if (names.length === 0) return <span className="h-4" />
@@ -20,7 +20,7 @@ function TypingLine({ names }: { names: string[] }) {
 export function ChatPage() {
   const { channelId } = useParams()
   const { data: channels } = useChannels()
-  const { connected, typingByChannel, notifyTyping } = useChatSocket()
+  const { connected, typingByChannel, notifyTyping } = useChatSocketContext()
   const { mutate: markRead } = useMarkRead()
 
   const channel = channels?.items.find((c) => c.id === channelId)
