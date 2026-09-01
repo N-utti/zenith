@@ -1,0 +1,27 @@
+[package]
+name = "zenith-desktop"
+version = "0.1.0"
+description = "제니스(Zenith) 데스크탑 셸"
+authors = ["Zenith"]
+edition = "2021"
+rust-version = "1.77.2"
+
+[lib]
+# main.rs 와 (나중의) 모바일 진입점이 같은 run()을 공유한다.
+name = "zenith_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+tauri-plugin-notification = "2"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true

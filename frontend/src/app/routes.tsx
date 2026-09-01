@@ -8,6 +8,7 @@ import { AiPage } from '@/pages/AiPage'
 import { AttendancePage } from '@/pages/AttendancePage'
 import { BoardPage } from '@/pages/BoardPage'
 import { BoardPostPage } from '@/pages/BoardPostPage'
+import { ChatSocketProvider } from '@/features/chat/ChatSocketProvider'
 import { ChatPage } from '@/pages/ChatPage'
 import { DocsPage } from '@/pages/DocsPage'
 import { HomePage } from '@/pages/HomePage'
@@ -29,38 +30,42 @@ export function AppRoutes() {
       <Route path="/login" element={<LoginPage />} />
 
       <Route element={<RequireAuth />}>
-        {/* 에디터는 화면을 꽉 채우고 영역별로 따로 스크롤한다. */}
-        <Route element={<AppLayout bleed />}>
-          <Route path="chat" element={<ChatPage />} />
-          <Route path="chat/:channelId" element={<ChatPage />} />
-          {/* AI도 좌패널·대화·근거 3분할이라 영역별로 따로 스크롤한다. */}
-          <Route path="ai" element={<AiPage />} />
-          <Route
-            path="docs/:docId"
-            element={
-              <Suspense
-                fallback={
-                  <div className="grid h-full place-items-center">
-                    <Spinner className="size-6" />
-                  </div>
-                }
-              >
-                <DocEditorPage />
-              </Suspense>
-            }
-          />
-        </Route>
+        {/* 채팅 소켓은 AppLayout보다 위에 둔다. AppLayout은 bleed 유무로 두 벌이라
+            화면을 옮길 때 다시 마운트되는데, 소켓은 끊기면 안 된다. */}
+        <Route element={<ChatSocketProvider />}>
+          {/* 에디터는 화면을 꽉 채우고 영역별로 따로 스크롤한다. */}
+          <Route element={<AppLayout bleed />}>
+            <Route path="chat" element={<ChatPage />} />
+            <Route path="chat/:channelId" element={<ChatPage />} />
+            {/* AI도 좌패널·대화·근거 3분할이라 영역별로 따로 스크롤한다. */}
+            <Route path="ai" element={<AiPage />} />
+            <Route
+              path="docs/:docId"
+              element={
+                <Suspense
+                  fallback={
+                    <div className="grid h-full place-items-center">
+                      <Spinner className="size-6" />
+                    </div>
+                  }
+                >
+                  <DocEditorPage />
+                </Suspense>
+              }
+            />
+          </Route>
 
-        <Route element={<AppLayout />}>
-          <Route index element={<HomePage />} />
-          <Route path="docs" element={<DocsPage />} />
-          <Route path="board" element={<BoardPage />} />
-          <Route path="board/:boardId" element={<BoardPage />} />
-          <Route path="board/:boardId/:postId" element={<BoardPostPage />} />
-          <Route path="attendance" element={<AttendancePage />} />
-          <Route path="notifications" element={<NotificationsPage />} />
-          <Route path="settings" element={<SettingsPage />} />
-          <Route path="*" element={<NotFoundPage />} />
+          <Route element={<AppLayout />}>
+            <Route index element={<HomePage />} />
+            <Route path="docs" element={<DocsPage />} />
+            <Route path="board" element={<BoardPage />} />
+            <Route path="board/:boardId" element={<BoardPage />} />
+            <Route path="board/:boardId/:postId" element={<BoardPostPage />} />
+            <Route path="attendance" element={<AttendancePage />} />
+            <Route path="notifications" element={<NotificationsPage />} />
+            <Route path="settings" element={<SettingsPage />} />
+            <Route path="*" element={<NotFoundPage />} />
+          </Route>
         </Route>
       </Route>
     </Routes>

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import * as Y from 'yjs'
 import { IndexeddbPersistence } from 'y-indexeddb'
 import { WebsocketProvider } from 'y-websocket'
+import { wsUrl } from '@/lib/serverOrigin'
 
 export interface CollabSession {
   doc: Y.Doc
@@ -13,11 +14,10 @@ export interface CollabSession {
 /**
  * 릴레이는 같은 오리진의 /collab 으로 붙는다. vite가 개발용 y-websocket
  * 서버(:1234)로 넘겨준다. 운영에서는 프록시 대상만 실제 백엔드로 바꾸면 되고
- * 앱 코드는 그대로다.
+ * 앱 코드는 그대로다. 데스크탑 셸에서만 사내 서버 주소가 앞에 붙는다.
  */
 function relayUrl(): string {
-  const scheme = location.protocol === 'https:' ? 'wss' : 'ws'
-  return `${scheme}://${location.host}/collab`
+  return wsUrl('/collab')
 }
 
 /** 릴레이가 죽어 있어도 편집은 계속돼야 하므로, 서버 동기화를 무한정 기다리지 않는다. */

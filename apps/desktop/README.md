@@ -1,0 +1,158 @@
+# 🖥 apps/desktop — Windows 데스크탑 앱 (Tauri 2)
+
+`frontend/`의 웹앱을 그대로 감싸는 **셸**이다. 업무 로직은 하나도 여기 없다 —
+화면은 웹앱, 데이터는 사내 서버. Windows·Android·iOS가 같은 화면을 공유하는 구조라
+셸에 기능을 넣으면 셸마다 다시 만들어야 한다. 넣기 전에 웹앱에서 못 하는 일인지 확인할 것.
+
+산출물은 **`.msi`** — 사내 배포용 (성공 기준 참조).
+
+---
+
+## 사전 준비 (한 번만)
+
+| 필요한 것 | 확인 | 없으면 |
+| --- | --- | --- |
+| **Rust** (MSVC 툴체인) | `rustc --version` | <https://rustup.rs> |
+| **Visual Studio Build Tools** + "C++를 사용한 데스크톱 개발" | `where cl` | [Build Tools 설치 관리자](https://visualstudio.microsoft.com/visual-cpp-build-tools/) |
+| **WebView2 런타임** | Windows 11에 기본 탑재 | [Evergreen 설치 관리자](https://developer.microsoft.com/microsoft-edge/webview2/) |
+
+설치 후 `npm run tauri -- info` 로 전부 초록인지 확인한다.
+
+```powershell
+cd apps/desktop
+npm install
+```
+
+---
+
+## 개발
+
+```powershell
+npm run dev      # = tauri dev
+```
+
+`frontend`의 vite 개발 서버(:5173)를 자동으로 띄우고 그 화면을 창에 붙인다.
+**MSW 목이 그대로 살아 있으므로 백엔드 없이도 전 화면이 돈다.**
+
+채팅·공동편집까지 보려면 다른 터미널에서 릴레이도 함께 띄운다.
+
+```powershell
+cd frontend && npm run server    # :1234 — 채팅 + Yjs 릴레이
+```
+
+> vite 포트는 `strictPort`로 5173에 고정돼 있다. 셸의 `devUrl`이 이 번호를 보고 있어서,
+> vite가 5174로 비켜 가면 셸이 빈 창을 띄우기 때문이다.
+
+---
+
+## 배포 빌드
+
+```powershell
+npm run build    # = tauri build → src-tauri/target/release/bundle/msi/*.msi
+```
+
+`frontend`를 프로덕션 빌드한 뒤 `.msi`로 묶는다.
+
+### ⚠️ 서버 주소를 반드시 지정할 것
+
+프로덕션 빌드에서는 MSW 목이 통째로 사라지고, 셸 화면은 `tauri://localhost`에서 뜬다.
+그래서 `/api` 상대경로는 사내 서버가 아니라 **셸 자신에게** 간다. 서버 오리진을 박아야 한다.
+
+`frontend/.env.production` (커밋되지 않는다 — `frontend/.env.example` 참고):
+
+```
+VITE_SERVER_ORIGIN=https://zenith.example.co.kr
+```
+
+설치 후에 서버가 옮겨 갔다면 재빌드 없이도 바꿀 수 있다 —
+개발자 도구 콘솔에서 `localStorage.setItem('zenith.serverOrigin', 'https://새주소')` 후 재시작.
+(빌드 기본값보다 이 값이 우선한다. `frontend/src/lib/serverOrigin.ts`)
+
+> **지금은 붙을 서버가 없다.** `backend/`에 코드가 없어 프로덕션 빌드는 로그인 화면에서
+> 멈춘다. 실제로 쓸 수 있는 건 위의 `npm run dev`(MSW 목) 쪽이다.
+
+---
+
+## 구성
+
+```
+apps/desktop/
+├─ package.json          Tauri CLI · dev/build 스크립트
+├─ app-icon.png          아이콘 원본 1024² (바꾸면 npm run icons)
+└─ src-tauri/
+   ├─ tauri.conf.json    창 크기 · CSP · 번들(.msi) 설정
+   ├─ Cargo.toml
+   ├─ capabilities/      셸이 웹앱에 허용하는 권한. 파일시스템·셸 실행은 닫혀 있다.
+   ├─ icons/             생성물 (Windows/macOS/Android/iOS 전 사이즈)
+   └─ src/{main,lib}.rs  창을 띄우는 것 외에 하는 일이 없다
+```
+
+### 프론트엔드 쪽 짝
+
+| 파일 | 역할 |
+| --- | --- |
+| `frontend/src/lib/serverOrigin.ts` | REST·WebSocket·이미지 URL 앞에 서버 오리진을 붙인다 |
+| `frontend/src/lib/desktop.ts` | 바깥 링크를 기본 브라우저로 넘긴다 · OS 알림(`notify`) |
+| `frontend/src/features/chat/ChatSocketProvider.tsx` | 채팅 소켓을 로그인 구역 전체에서 하나만 연결 |
+
+모두 브라우저에서는 아무 일도 하지 않는다. 웹앱은 Tauri npm 패키지에 의존하지 않고,
+셸이 노출하는 `window.__TAURI__` 전역만 본다.
+
+---
+
+## 알림 (Windows 토스트)
+
+새 채팅이 오면 토스트를 띄운다. 조건은 두 가지다.
+
+- 내가 보낸 메시지가 아닐 것
+- **창을 보고 있지 않을 것** (`document.hasFocus()`) — 화면에 이미 보이는데 토스트까지 겹치면 방해다
+
+제목은 `#개발 · 박동현`, DM이면 상대 이름만. 구현은 `useChatSocket.ts`의 `notifyIncoming`이다.
+
+### ⚠️ 개발 모드에서는 토스트가 불안정하다
+
+Windows 토스트는 발신 앱이 **AppUserModelID(AUMID)** 로 등록돼 있어야 한다. `.msi`로 설치하면
+시작 메뉴 바로가기가 만들어지면서 AUMID(`kr.zenith.desktop`)가 등록되지만, `tauri dev`로 띄운
+앱에는 그게 없다. 그래서 실행한 터미널의 AUMID를 물려받고, 토스트가 그 이름으로 뜨거나
+아예 표시되지 않는다.
+
+> 2026-09-01 실측: `npm run dev`에서 첫 토스트는 내용까지 정확히 떴지만 발신 앱이
+> "Windows PowerShell"로 표시됐고, 이후 토스트는 표시되지 않았다.
+> `HKCU\Software\Classes\AppUserModelId\kr.zenith.desktop`을 손으로 등록해도 달라지지 않는다 —
+> dev 빌드는 그 AUMID를 쓰지 않기 때문이다.
+
+**알림을 검증하려면 `.msi`를 빌드해 설치한 뒤 테스트할 것.** 개발 중 알림 로직 자체
+(조건 판정·제목·본문)는 화면 안 배지로 확인하는 편이 빠르다.
+
+### 알림 테스트 방법
+
+앱과 릴레이(`cd frontend && npm run server`)가 떠 있는 상태에서, 로그인한 사람과
+**다른 사용자**로 메시지를 밀어넣는다.
+
+```powershell
+$body = [Text.Encoding]::UTF8.GetBytes('{"userId":"u-2","body":"테스트"}')
+Invoke-RestMethod "http://localhost:1234/chat/channels/c-dev/messages" -Method Post `
+  -ContentType "application/json; charset=utf-8" -Body $body
+```
+
+채널은 `c-dev`·`c-notice`·`c-random`·`dm-u1-u2`. 창을 최소화한 뒤 보내야 토스트 조건이 맞는다.
+
+---
+
+## 아이콘 교체
+
+`app-icon.png`(1024×1024, 여백 포함)를 갈아 끼우고:
+
+```powershell
+npm run icons
+```
+
+---
+
+## 아직 안 한 것
+
+- **코드 서명** — 서명 없는 `.msi`는 SmartScreen 경고가 뜬다. 사내 배포라도 인증서가 필요하다.
+- **자동 업데이트** — `tauri-plugin-updater` 미적용. 지금은 `.msi` 재배포.
+- **딥링크·트레이 아이콘·작업표시줄 배지** — 요구사항 확정 전.
+- **알림 범위** — 채팅뿐이다. 멘션·댓글·결재 알림은 `받은 알림`(M2) 설계가 정해진 뒤에 붙인다.
+  알림 클릭 시 해당 채널로 이동하는 것도 아직 없다.

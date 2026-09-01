@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { useCurrentUser } from '@/features/auth/AuthContext'
+import { notify } from '@/lib/desktop'
+import { wsUrl } from '@/lib/serverOrigin'
 import { chatKeys } from './api'
-import type { ChatEvent, ChatMessage } from './types'
+import type { ChatChannel, ChatEvent, ChatMessage } from './types'
 
 /** 타이핑 표시는 이 시간 동안만 유지한다. 상대가 멈춰도 서버가 알려 주지 않는다. */
 const TYPING_TTL_MS = 3000
@@ -11,8 +13,29 @@ const TYPING_THROTTLE_MS = 2000
 const RECONNECT_MS = 2000
 
 function socketUrl(userId: string): string {
-  const scheme = location.protocol === 'https:' ? 'wss' : 'ws'
-  return `${scheme}://${location.host}/api/chat/ws?userId=${encodeURIComponent(userId)}`
+  return wsUrl(`/api/chat/ws?userId=${encodeURIComponent(userId)}`)
+}
+
+/**
+ * 새 메시지를 OS 알림으로 띄운다. 데스크탑 셸이 아니면 notify가 알아서 빠진다.
+ *
+ * 창을 보고 있을 때는 띄우지 않는다 — 화면에 이미 메시지가 나타나는데 토스트까지
+ * 겹치면 방해만 된다. 최소화·다른 앱 사용 중일 때만 알린다.
+ */
+function notifyIncoming(qc: QueryClient, message: ChatMessage, currentUserId: string): void {
+  if (message.authorId === currentUserId) return
+  if (document.hasFocus()) return
+
+  const channels = qc.getQueryData<{ items: ChatChannel[] }>(chatKeys.channels)
+  const channel = channels?.items.find((item) => item.id === message.channelId)
+
+  // DM은 채널명이 곧 상대 이름이라 "박동현 · 박동현"이 되므로 이름만 쓴다.
+  const title =
+    channel && channel.kind === 'channel'
+      ? `#${channel.name} · ${message.authorName}`
+      : message.authorName
+
+  void notify({ title, body: message.body })
 }
 
 export interface ChatSocket {
@@ -78,6 +101,7 @@ export function useChatSocket(): ChatSocket {
             },
           )
           void qc.invalidateQueries({ queryKey: chatKeys.channels })
+          notifyIncoming(qc, message, user.id)
           return
         }
 

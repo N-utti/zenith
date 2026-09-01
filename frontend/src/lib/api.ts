@@ -1,3 +1,4 @@
+import { httpUrl } from './serverOrigin'
 import { getToken } from './token'
 
 export class ApiError extends Error {
@@ -15,6 +16,7 @@ export class ApiError extends Error {
 /**
  * 모든 API 호출의 단일 통로.
  * 개발 중에는 MSW가, MSW를 끄면 vite 프록시(→ FastAPI :8000)가 이 요청을 받는다.
+ * 데스크탑 셸에서는 `httpUrl`이 사내 서버 주소를 앞에 붙인다.
  */
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = getToken()
@@ -26,7 +28,7 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   }
   if (token) headers.set('Authorization', `Bearer ${token}`)
 
-  const res = await fetch(`/api${path}`, { ...init, headers })
+  const res = await fetch(httpUrl(`/api${path}`), { ...init, headers })
 
   if (res.status === 204) return undefined as T
 

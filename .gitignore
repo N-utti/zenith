@@ -5,6 +5,7 @@ __pycache__/
 venv/
 .env
 .env.*
+!.env.example
 *.sqlite3
 
 # Node / React
@@ -16,7 +17,13 @@ dist-ssr/
 .turbo/
 
 # Tauri / Capacitor
-src-tauri/target/
+**/src-tauri/target/
+# Tauri가 빌드 때 다시 만든다 (권한 스키마·모바일 프로젝트).
+**/src-tauri/gen/schemas/
+# 모바일은 Capacitor로 간다. `tauri icon`이 곁다리로 만드는 Tauri-모바일용
+# 아이콘 세트는 쓰지 않으므로 추적하지 않는다 (재생성해도 diff가 나지 않게).
+**/src-tauri/icons/android/
+**/src-tauri/icons/ios/
 apps/**/android/app/build/
 apps/**/ios/App/build/
 *.apk
