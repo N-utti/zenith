@@ -1,15 +1,9 @@
-import { ChevronDown, Moon, PanelLeft, Search, Sun } from 'lucide-react'
+import { Moon, PanelLeft, Search, Sun } from 'lucide-react'
 import { Link } from 'react-router'
 import { Button } from '@/components/ui/Button'
 import { ZenithMark } from '@/components/ui/ZenithMark'
 import { useTheme } from '@/lib/theme'
 import { UserMenu } from './UserMenu'
-
-/**
- * 온프레미스 단일 테넌트라 조직은 하나뿐이다. 워크스페이스 전환 UI는 청사진의
- * 자리만 잡아 두고, 실제 전환은 다중 조직이 생길 때 붙인다.
- */
-const ORG_NAME = '우리회사'
 
 export function Header({
   onOpenSidebar,
@@ -36,10 +30,6 @@ export function Header({
       <Link to="/" className="flex shrink-0 items-center gap-1.5">
         <ZenithMark className="size-[22px]" />
         <span className="text-fg text-[14.5px] font-bold tracking-tight">제니스</span>
-        <span className="text-subtle hidden items-center gap-0.5 text-[14.5px] sm:flex">
-          · {ORG_NAME}
-          <ChevronDown className="size-3.5" />
-        </span>
       </Link>
 
       <button
