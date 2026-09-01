@@ -111,18 +111,34 @@ apps/desktop/
 
 ### ⚠️ 개발 모드에서는 토스트가 불안정하다
 
-Windows 토스트는 발신 앱이 **AppUserModelID(AUMID)** 로 등록돼 있어야 한다. `.msi`로 설치하면
-시작 메뉴 바로가기가 만들어지면서 AUMID(`kr.zenith.desktop`)가 등록되지만, `tauri dev`로 띄운
-앱에는 그게 없다. 그래서 실행한 터미널의 AUMID를 물려받고, 토스트가 그 이름으로 뜨거나
-아예 표시되지 않는다.
+Windows 토스트는 발신 앱이 **AppUserModelID(AUMID)** 로 등록돼 있어야 한다. 등록은 시작 메뉴
+바로가기가 나른다.
 
-> 2026-09-01 실측: `npm run dev`에서 첫 토스트는 내용까지 정확히 떴지만 발신 앱이
-> "Windows PowerShell"로 표시됐고, 이후 토스트는 표시되지 않았다.
-> `HKCU\Software\Classes\AppUserModelId\kr.zenith.desktop`을 손으로 등록해도 달라지지 않는다 —
-> dev 빌드는 그 AUMID를 쓰지 않기 때문이다.
+`.msi`로 설치하면 `Zenith.lnk`가 AUMID `kr.zenith.desktop`을 달고 만들어진다. 그런데
+`tauri dev`로 띄우면 알림 플러그인이 `zenith-desktop.lnk`를 따로 만들면서 **AUMID 자리에
+디버그 exe의 전체 경로를 넣는다.** 그건 유효한 AUMID가 아니라서 토스트가 엉뚱한 이름으로
+뜨거나 아예 표시되지 않는다.
 
-**알림을 검증하려면 `.msi`를 빌드해 설치한 뒤 테스트할 것.** 개발 중 알림 로직 자체
-(조건 판정·제목·본문)는 화면 안 배지로 확인하는 편이 빠르다.
+> 2026-09-01 실측 (`Shell.Application`으로 바로가기 속성을 직접 읽음)
+>
+> | 바로가기 | AUMID |
+> | --- | --- |
+> | `…\Start Menu\Programs\Zenith\Zenith.lnk` (설치본) | `kr.zenith.desktop` |
+> | `…\Start Menu\Programs\zenith-desktop.lnk` (dev가 생성) | `C:\…\target\debug\zenith-desktop.exe` |
+>
+> dev에서는 첫 토스트만 내용이 정확한 채로 "Windows PowerShell" 이름으로 떴고 이후 3회는
+> 표시되지 않았다. 설치본 AUMID로 토스트를 직접 쏘면 발신 앱이 "Zenith", 아이콘도 제니스
+> 마크로 정상 표시된다. `HKCU\Software\Classes\AppUserModelId\…`를 손으로 등록하는 것은
+> 소용없다 — 바로가기가 나르는 값이 이기기 때문이다.
+
+**알림을 검증하려면 `.msi`를 설치한 뒤 테스트할 것.** 개발 중에는 알림 로직 자체
+(조건 판정·제목·본문)를 화면 안 배지로 확인하는 편이 빠르다.
+
+dev 실행이 남긴 `zenith-desktop.lnk`는 시작 메뉴에 계속 남는다. 지우려면:
+
+```powershell
+Remove-Item "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\zenith-desktop.lnk"
+```
 
 ### 알림 테스트 방법
 
