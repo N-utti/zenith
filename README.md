@@ -33,6 +33,45 @@ zenith/
 └─ docs/       문서 인덱스 — 정본은 Notion, 여기엔 링크만 둔다
 ```
 
+## 🚀 실행 — 개발 서버
+
+**화면을 볼 수 있는 경로는 개발 서버뿐이다.** `backend/`에 코드가 없어서 설치본 `.msi`는
+로그인 화면에서 멈춘다 — 배포 빌드에서는 MSW 목이 통째로 빠지고 `/api` 요청이 실제
+사내 서버로 나가기 때문이다. 데모는 목이 살아 있는 개발 모드에서 한다.
+
+터미널 두 개가 필요하다.
+
+```powershell
+cd frontend
+npm install
+npm run dev        # http://localhost:5173 — 앱 (MSW 목 켜짐)
+```
+
+```powershell
+cd frontend
+npm run server     # http://localhost:1234 — 채팅 · 문서 공동편집 릴레이
+```
+
+두 번째를 안 켜면 **채팅은 아예 동작하지 않고**, 문서 공동편집은 같은 브라우저의 탭끼리만
+붙는다(다른 브라우저·다른 PC와는 동기화되지 않는다).
+
+데스크탑 창으로 보려면 — vite(:5173)를 자동으로 띄우고 그 화면을 셸에 붙인다.
+릴레이는 위와 같이 따로 켠다.
+
+```powershell
+cd apps/desktop
+npm install
+npm run dev
+```
+
+로그인 비밀번호는 목 계정 셋 다 `zenith1234`이고, 로그인 화면 하단 버튼으로 사원·팀장·임원을
+바로 채울 수 있다. 계정 목록과 역할은 [`frontend/README.md`](frontend/README.md#목-계정) 참조.
+
+> ⚠️ `VITE_DISABLE_MSW=true`는 켜지 말 것. 목을 끄고 `/api`를 FastAPI(:8000)로 보내는
+> 스위치인데, 붙을 그 서버가 아직 없어서 개발 모드에서도 로그인이 막힌다.
+
+자세한 사항은 [`frontend/README.md`](frontend/README.md) · [`apps/desktop/README.md`](apps/desktop/README.md).
+
 ## 🗺 로드맵 (8주 · 2026-08-03 ~ 09-25)
 
 - **M1 — 코어 (3주)** · 인증, 문서 CRUD, TipTap+Yjs 실시간 공동편집, 댓글
