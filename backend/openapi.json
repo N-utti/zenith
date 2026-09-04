@@ -36,7 +36,7 @@
         "tags": [
           "auth"
         ],
-        "summary": "로그인 → 204 + Set-Cookie(access/refresh)",
+        "summary": "로그인 → 204 + Set-Cookie(access/refresh/csrf)",
         "operationId": "login_api_auth_login_post",
         "requestBody": {
           "content": {
@@ -51,6 +51,12 @@
         "responses": {
           "204": {
             "description": "Successful Response"
+          },
+          "401": {
+            "description": "AUTH_INVALID(불일치) · AUTH_DISABLED(비활성 계정)"
+          },
+          "429": {
+            "description": "AUTH_THROTTLED — 같은 이메일로 실패가 누적됨"
           },
           "422": {
             "description": "Validation Error",
@@ -70,7 +76,7 @@
         "tags": [
           "auth"
         ],
-        "summary": "refresh 쿠키로 access/refresh 재발급",
+        "summary": "refresh 쿠키로 access/refresh/csrf 재발급 — refresh 는 회전, 재사용은 세션 종료",
         "operationId": "refresh_api_auth_refresh_post",
         "responses": {
           "204": {
@@ -84,7 +90,7 @@
         "tags": [
           "auth"
         ],
-        "summary": "쿠키 제거",
+        "summary": "세션 회수 + 쿠키 제거. 쿠키가 없거나 깨져 있어도 204",
         "operationId": "logout_api_auth_logout_post",
         "responses": {
           "204": {
@@ -107,6 +113,54 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/MeOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/yjs-check": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "프록시 forward_auth 용 (04 §4.2 · 11 §7.5): 쿠키가 유효하면 204 + X-User-Id/X-User-Role",
+        "operationId": "yjs_check_api_auth_yjs_check_get",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        }
+      }
+    },
+    "/api/me/password": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "비밀번호 변경 — 지금 세션 외 다른 세션은 모두 종료",
+        "operationId": "change_password_api_me_password_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasswordIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -1521,18 +1575,21 @@
           "admin"
         ],
         "summary": "계정 목록",
-        "operationId": "stub_api_admin_users_get",
+        "operationId": "list_users_api_admin_users_get",
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/UserOut"
+                  },
+                  "type": "array",
+                  "title": "Response List Users Api Admin Users Get"
+                }
               }
             }
-          },
-          "501": {
-            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
           }
         }
       },
@@ -1540,41 +1597,94 @@
         "tags": [
           "admin"
         ],
-        "summary": "계정 생성",
-        "operationId": "stub_api_admin_users_post",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
+        "summary": "계정 생성 (FR-AUTH-03)",
+        "operationId": "create_user_api_admin_users_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserCreateIn"
               }
             }
           },
-          "501": {
-            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserOut"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "CONFLICT — 이미 있는 이메일"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
           }
         }
       }
     },
-    "/api/admin/users/{id}": {
+    "/api/admin/users/{user_id}": {
       "patch": {
         "tags": [
           "admin"
         ],
-        "summary": "등급 변경·비활성화",
-        "operationId": "stub_api_admin_users__id__patch",
+        "summary": "등급 변경·비활성화·임시 비밀번호. 자기 자신의 등급·활성 상태는 못 바꾼다",
+        "operationId": "update_user_api_admin_users__user_id__patch",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "User Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserPatchIn"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/UserOut"
+                }
               }
             }
           },
-          "501": {
-            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
           }
         }
       }
@@ -1584,19 +1694,74 @@
         "tags": [
           "admin"
         ],
-        "summary": "?kind=acl 권한 위반 시도 로그(403 기록)",
-        "operationId": "stub_api_admin_audit_get",
+        "summary": "감사 로그 — ?kind=acl 처럼 앞글자 일치, 최신순 커서 페이징 (04 §0)",
+        "operationId": "list_audit_api_admin_audit_get",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Kind"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AuditPage"
+                }
               }
             }
           },
-          "501": {
-            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
           }
         }
       }
@@ -1752,6 +1917,122 @@
   },
   "components": {
     "schemas": {
+      "AuditOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "At"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "actor_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Id"
+          },
+          "target_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Id"
+          },
+          "ip": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ip"
+          },
+          "user_agent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Agent"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "at",
+          "kind",
+          "actor_id",
+          "target_id",
+          "ip",
+          "user_agent",
+          "detail"
+        ],
+        "title": "AuditOut"
+      },
+      "AuditPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AuditOut"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "title": "AuditPage"
+      },
       "ChatIn": {
         "properties": {
           "session_id": {
@@ -1851,6 +2132,16 @@
               }
             ],
             "title": "Avatar"
+          },
+          "team": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TeamOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -1859,10 +2150,11 @@
           "name",
           "email",
           "role",
-          "avatar"
+          "avatar",
+          "team"
         ],
         "title": "MeOut",
-        "description": "04 §1 `GET /me` → {id, name, email, role, avatar}."
+        "description": "04 §1 `GET /me` → {id, name, email, role, avatar} + team (03 §2.6 조직, 계약 확장)."
       },
       "ModelOut": {
         "properties": {
@@ -1887,6 +2179,265 @@
           "name"
         ],
         "title": "ModelOut"
+      },
+      "PasswordIn": {
+        "properties": {
+          "current_password": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Current Password"
+          },
+          "new_password": {
+            "type": "string",
+            "minLength": 8,
+            "title": "New Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "current_password",
+          "new_password"
+        ],
+        "title": "PasswordIn"
+      },
+      "TeamOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "TeamOut"
+      },
+      "UserCreateIn": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Name"
+          },
+          "email": {
+            "type": "string",
+            "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$",
+            "title": "Email"
+          },
+          "password": {
+            "type": "string",
+            "minLength": 8,
+            "title": "Password"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "member",
+              "lead",
+              "exec"
+            ],
+            "title": "Role",
+            "default": "member"
+          },
+          "team_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Team Id"
+          },
+          "hire_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hire Date"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "email",
+          "password"
+        ],
+        "title": "UserCreateIn"
+      },
+      "UserOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "email": {
+            "type": "string",
+            "title": "Email"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role"
+          },
+          "avatar": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar"
+          },
+          "active": {
+            "type": "boolean",
+            "title": "Active"
+          },
+          "team_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Team Id"
+          },
+          "hire_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hire Date"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "email",
+          "role",
+          "avatar",
+          "active",
+          "team_id",
+          "hire_date",
+          "created_at"
+        ],
+        "title": "UserOut"
+      },
+      "UserPatchIn": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "member",
+                  "lead",
+                  "exec"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
+          },
+          "active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active"
+          },
+          "team_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Team Id"
+          },
+          "hire_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hire Date"
+          },
+          "password": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 8
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "title": "UserPatchIn",
+        "description": "보낸 필드만 바꾼다. password 를 보내면 임시 비밀번호로 재설정하고 그 사람의 세션을 전부 닫는다."
       },
       "ValidationError": {
         "properties": {

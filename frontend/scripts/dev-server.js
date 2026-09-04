@@ -17,7 +17,7 @@
 import { createServer } from 'node:http'
 import { WebSocketServer } from 'ws'
 import { handleCollabConnection } from './collab.js'
-import { handleChatConnection, handleChatRequest } from './chat.js'
+import { handleChatConnection, handleChatRequest, sessionUserId } from './chat.js'
 
 const PORT = Number(process.env.PORT ?? 1234)
 
@@ -59,7 +59,8 @@ server.on('upgrade', (req, socket, head) => {
   }
 
   if (url.pathname === '/chat/ws') {
-    const userId = url.searchParams.get('userId') ?? ''
+    // 누구인지는 핸드셰이크의 세션 쿠키가 말한다(11 §7.5). ?userId= 는 쿠키가 없을 때의 개발 편의.
+    const userId = sessionUserId(req) ?? url.searchParams.get('userId') ?? ''
     return wss.handleUpgrade(req, socket, head, (conn) => {
       handleChatConnection(conn, userId)
     })

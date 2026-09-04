@@ -20,6 +20,12 @@ class Settings(BaseSettings):
     access_ttl_minutes: int = 15  # 04-API §1
     refresh_ttl_days: int = 14  # 04-API §1
     cookie_secure: bool = True  # 11 §7.2 — 로컬 http 개발에서만 False
+    # 이 시간 안에 같은 이메일로 이만큼, 또는 같은 IP 로 이만큼 실패하면 429.
+    # 감사 로그(auth.login_fail)를 세므로 별도 저장소가 없다. IP 기준은 이메일을 바꿔 가며 두드리는 걸 막는다.
+    login_max_failures: int = 10
+    login_max_failures_per_ip: int = 30
+    login_failure_window_minutes: int = 15
+    password_min_length: int = 8
 
     # 비우면 SDK가 ANTHROPIC_API_KEY / `ant auth` 프로필을 찾는다.
     anthropic_api_key: str | None = None

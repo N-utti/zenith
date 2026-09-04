@@ -69,6 +69,47 @@ class User(Base):
     created_at: Mapped[datetime] = created_at_col()
 
 
+class AuthSession(Base):
+    """refresh 토큰의 서버측 기록 — 회전(jti 교체)과 회수(revoked_at)로 로그아웃·강제 종료를 실현한다.
+
+    03-ERD 에 없던 테이블. 근거: NFR-02 "JWT 만료·회전", 11 §4.1 서버측 세션, 11 I15 즉시 차단.
+    """
+
+    __tablename__ = "auth_sessions"
+    __table_args__ = (Index("idx_auth_sessions_user", "user_id", "revoked_at"),)
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    # 지금 유효한 refresh 토큰의 id. 회전 뒤 옛 토큰이 오면 탈취로 보고 세션을 닫는다.
+    refresh_jti: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    created_at: Mapped[datetime] = created_at_col()
+    last_used_at: Mapped[datetime] = created_at_col()
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    user_agent: Mapped[str | None] = mapped_column(Text)
+    ip: Mapped[str | None] = mapped_column(Text)
+
+
+class AuditEvent(Base):
+    """append-only 감사 기록 (04 §9 /admin/audit · 11 §7.4). 수정·삭제 경로를 만들지 않는다."""
+
+    __tablename__ = "audit_events"
+    __table_args__ = (
+        Index("idx_audit_kind_at", "kind", sql_text("at DESC")),
+        Index("idx_audit_actor_at", "actor_id", sql_text("at DESC")),
+    )
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    at: Mapped[datetime] = created_at_col()
+    kind: Mapped[str] = mapped_column(Text, nullable=False)  # auth.* · acl.* · admin.*
+    actor_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
+    # 대상 리소스 id. 어느 테이블이든 가리킬 수 있어 FK 를 걸지 않는다.
+    target_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    ip: Mapped[str | None] = mapped_column(Text)
+    user_agent: Mapped[str | None] = mapped_column(Text)
+    detail: Mapped[dict | None] = mapped_column(JSONB)
+
+
 class Workspace(Base):
     __tablename__ = "workspaces"
 

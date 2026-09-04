@@ -3,43 +3,59 @@ import type { User } from '@/types'
 const PRODUCT_TEAM = { id: 'team-product', name: '프로덕트팀' }
 const MANAGEMENT_TEAM = { id: 'team-management', name: '경영지원팀' }
 
+/** 서버 `GET /me` 와 같은 모양(04 §1 + team). 아바타 색은 서버가 주지 않는다 — lib/avatar 가 id 로 만든다. */
 export const MOCK_USERS: User[] = [
   {
     id: 'u-1',
     name: '김수진',
     email: 'sujin@zenith.co.kr',
     role: 'member',
-    title: '프론트엔드 개발',
+    avatar: null,
     team: PRODUCT_TEAM,
-    avatarHue: 275,
   },
   {
     id: 'u-2',
     name: '박동현',
     email: 'donghyun@zenith.co.kr',
     role: 'lead',
-    title: '프로덕트 팀장',
+    avatar: null,
     team: PRODUCT_TEAM,
-    avatarHue: 155,
   },
   {
     id: 'u-3',
     name: '최재호',
     email: 'jaeho@zenith.co.kr',
     role: 'exec',
-    title: '대표이사',
+    avatar: null,
     team: MANAGEMENT_TEAM,
-    avatarHue: 25,
   },
 ]
 
-/** MSW는 새로고침마다 초기화되므로, 세션은 sessionStorage가 아니라 토큰 문자열에 담는다. */
-export function tokenFor(user: User) {
-  return `mock.${user.id}`
+/**
+ * 목 세션 쿠키. 실제 서버의 HttpOnly `access` 대신 사용자 id 를 그대로 담는다 — 개발 편의.
+ * 개발 채팅 서버(scripts/dev-server.js)도 핸드셰이크의 이 쿠키로 사용자를 알아본다.
+ *
+ * MSW 2 의 핸들러는 페이지 안에서 돈다. 가로챈 요청의 Cookie 헤더는 JS 에 보이지 않고, 목 응답의
+ * Set-Cookie 도 브라우저가 심어 주지 않으므로 document.cookie 를 직접 쓰고 직접 읽는다.
+ */
+export const SESSION_COOKIE = 'zenith.mock.session'
+
+export function userFromCookie(header: string | null): User | undefined {
+  const id = header
+    ?.split(';')
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(`${SESSION_COOKIE}=`))
+    ?.slice(SESSION_COOKIE.length + 1)
+  return MOCK_USERS.find((user) => user.id === id)
 }
 
-export function userFromToken(token: string | null): User | undefined {
-  if (!token?.startsWith('mock.')) return undefined
-  const id = token.slice('mock.'.length)
-  return MOCK_USERS.find((user) => user.id === id)
+/** 04 §1 의 Set-Cookie 를 흉내 낸다. `csrf` 는 lib/api.ts 가 읽어 헤더로 되돌리는 쿠키다(11 §4.3). */
+export function setMockSession(user: User): void {
+  document.cookie = `${SESSION_COOKIE}=${user.id}; Path=/; SameSite=Lax`
+  document.cookie = `csrf=mock-csrf-${user.id}; Path=/; SameSite=Lax`
+}
+
+export function clearMockSession(): void {
+  document.cookie = `${SESSION_COOKIE}=; Path=/; Max-Age=0`
+  document.cookie = 'csrf=; Path=/; Max-Age=0'
 }

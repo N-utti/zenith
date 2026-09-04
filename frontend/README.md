@@ -40,7 +40,20 @@ VITE_DISABLE_MSW=true npm run dev
 ```
 
 MSW가 꺼지고 `/api` 요청이 vite 프록시를 통해 `http://localhost:8000`(FastAPI)으로 간다.
-프록시 대상은 `vite.config.ts`에서 바꾼다.
+8000 이 다른 프로세스에 잡혀 있으면 `.env.local` 에 `VITE_API_TARGET=http://localhost:8010` 처럼 적는다.
+백엔드 쪽 준비(DB·마이그레이션·시드)는 [`backend/README.md`](../backend/README.md).
+
+### 인증은 쿠키다
+
+[04 · API 명세서 §1](https://app.notion.com/p/3aaa4716604681a6bba4e0367463e8eb) 그대로다.
+로그인은 `POST /api/auth/login` → `204 + Set-Cookie`, 프로필은 `GET /api/me`.
+브라우저는 토큰을 갖지 않는다 — `access`(15분)·`refresh`(14일)는 HttpOnly 쿠키라 JS 가 읽을 수 없고,
+`csrf` 하나만 읽어 상태 변경 요청에 `X-CSRF-Token` 헤더로 되돌려 보낸다(11 §4.3).
+
+- `AuthProvider` 는 마운트 때 **항상** `GET /me` 를 부른다. 200 이면 로그인, 401 이면 익명. 로그인 여부의 판정자는 서버뿐이다.
+- `lib/api.ts` 가 `credentials: 'include'` · CSRF 헤더 · **access 만료(`AUTH_EXPIRED`) 시 refresh 후 1회 재시도**를 맡는다. 화면 코드는 신경 쓰지 않는다.
+- 로그아웃은 서버가 세션을 회수한다. 15분이 남은 access 도 그 즉시 죽는다.
+- MSW 모드에서는 `zenith.mock.session=<userId>` 쿠키가 세션을 흉내 낸다. 개발 채팅 서버도 이 쿠키로 사용자를 알아본다.
 
 ## 구조
 
@@ -56,7 +69,7 @@ src/
 │  ├─ chat/       채널 목록 · 메시지 · 입력창 · 실시간 소켓
 │  ├─ docs/       TipTap 에디터 · Yjs 협업 세션 · 댓글 · 버전 기록
 │  └─ home/       홈 대시보드 카드 (공지 · 최근문서 · 안읽은채팅)
-├─ lib/           api(fetch 래퍼) · token · queryClient · theme · datetime · cn
+├─ lib/           api(fetch 래퍼 · 쿠키 세션 · CSRF) · avatar · queryClient · theme · datetime · cn
 ├─ mocks/         MSW 핸들러 · 목 사용자 · 공지·문서 목 데이터
 ├─ pages/         화면별 컴포넌트
 ├─ styles/        index.css — 디자인 토큰
@@ -70,8 +83,8 @@ scripts/            개발 서버 (백엔드 대역)
 
 ## 규칙
 
-**API 호출은 반드시 `lib/api.ts`의 `api()`를 거친다.** 토큰 주입·에러 정규화(`ApiError`)가
-여기 한 곳에 있다. 컴포넌트에서 `fetch`를 직접 부르지 않는다.
+**API 호출은 반드시 `lib/api.ts`의 `api()`를 거친다.** 쿠키 전송·CSRF 헤더·만료 시 갱신·
+에러 정규화(`ApiError`)가 여기 한 곳에 있다. 컴포넌트에서 `fetch`를 직접 부르지 않는다.
 
 **색은 시맨틱 토큰만 쓴다.** `bg-surface`, `text-muted`, `border-line`, `text-accent` 처럼
 의미 단위 토큰을 쓰고 `bg-brand-600`, `text-slate-500` 같은 원시값은 쓰지 않는다.
@@ -202,8 +215,9 @@ WS    /api/chat/ws                        message · typing · read 이벤트
 서버를 한 바퀴 돌아 같은 경로로 돌아온다. 낙관적 추가를 하지 않으므로 다른 탭·다른
 사람과 순서가 어긋나지 않는다.
 
-> 인증은 개발 편의로 `userId`를 그대로 받는다. 실제 백엔드는 JWT에서 꺼내야 하고,
-> 채널 멤버가 아닌 요청은 403이어야 한다. 대화는 메모리에만 있어 서버를 끄면 사라진다.
+> 인증은 MSW 로그인이 심는 `zenith.mock.session` 쿠키로 한다 — 실제 백엔드가 HttpOnly 쿠키의
+> JWT 에서 사용자를 꺼내는 것과 같은 자리다. 채널 멤버가 아닌 요청은 403이어야 한다.
+> 대화는 메모리에만 있어 서버를 끄면 사라진다.
 
 ## 버전 기록과 되돌리기
 

@@ -1,3 +1,4 @@
+import { hueOf } from '@/lib/avatar'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { EditorContent, useEditor, type Editor } from '@tiptap/react'
 import DragHandle from '@tiptap/extension-drag-handle-react'
@@ -155,7 +156,7 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
     extensions: buildDocExtensions({
       doc,
       provider,
-      user: { name: user.name, color: hueToColor(user.avatarHue) },
+      user: { name: user.name, color: hueToColor(hueOf(user.id)) },
     }),
     editorProps: {
       attributes: { class: 'zenith-editor outline-none' },

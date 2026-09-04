@@ -41,8 +41,9 @@
 | [ARCHITECTURE](https://app.notion.com/p/3aaa471660468173baf8e1dd19d77ede) | 배포 구성·경계·온프레미스 제약 | 인프라·통신 경로 건드릴 때 |
 
 > ⚠️ **04를 먼저 읽어라.** 인증 규약은 `JWT (HttpOnly 쿠키 access 15분 / refresh 14일)`,
-> 프로필은 `GET /me`다. 현재 프론트 프로토타입은 `localStorage` + `Bearer` + `GET /auth/me`로
-> **규약을 따르지 않는다** — 알고 둔 임시 상태이며, 11번 설계서 §4·I5가 정정 계획이다.
+> 프로필은 `GET /me`다. 프론트·백엔드 모두 이 규약으로 맞춰져 있다(2026-09-04, 11번 I5 정정 완료).
+> 04에 없던 확장(`/me`의 `team`, `POST /me/password`, 감사 로그 커서 페이징, 에러 코드)은
+> [`backend/README.md`](../backend/README.md) "설계와 어긋나는 것"에 모아 두었다 — **04 갱신이 필요하다.**
 
 ### 계획·검증
 

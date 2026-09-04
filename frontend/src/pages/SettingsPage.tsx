@@ -4,6 +4,7 @@ import { Avatar } from '@/components/ui/Avatar'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { useCurrentUser } from '@/features/auth/AuthContext'
+import { hueOf } from '@/lib/avatar'
 import { useTheme } from '@/lib/theme'
 import { ROLE_LABEL } from '@/types'
 
@@ -18,15 +19,13 @@ export function SettingsPage() {
       <section className="border-line bg-surface rounded-xl border p-6">
         <h2 className="text-fg mb-4 text-sm font-semibold">계정</h2>
         <div className="flex items-center gap-4">
-          <Avatar name={user.name} hue={user.avatarHue} size="lg" />
+          <Avatar name={user.name} hue={hueOf(user.id)} size="lg" />
           <div className="min-w-0">
-            <p className="text-fg font-medium">
-              {user.name} <span className="text-subtle text-sm font-normal">{user.title}</span>
-            </p>
+            <p className="text-fg font-medium">{user.name}</p>
             <p className="text-muted text-sm">{user.email}</p>
             <div className="mt-2 flex gap-1.5">
               <Badge tone="accent">{ROLE_LABEL[user.role]}</Badge>
-              <Badge>{user.team.name}</Badge>
+              {user.team && <Badge>{user.team.name}</Badge>}
             </div>
           </div>
         </div>

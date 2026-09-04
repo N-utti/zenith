@@ -1,3 +1,4 @@
+import { hueOf } from '@/lib/avatar'
 import { useState, type FormEvent } from 'react'
 import { Avatar } from '@/components/ui/Avatar'
 import { Button } from '@/components/ui/Button'
@@ -51,7 +52,7 @@ export function CommentPanel({ docId }: { docId: string }) {
 
       <form onSubmit={submit} className="border-line border-t p-3">
         <div className="flex gap-2.5">
-          <Avatar name={user.name} hue={user.avatarHue} size="sm" />
+          <Avatar name={user.name} hue={hueOf(user.id)} size="sm" />
           {/* 줄바꿈은 Shift+Enter. 댓글은 짧게 여러 번 쓰는 쪽이 많다. */}
           <Textarea
             value={body}

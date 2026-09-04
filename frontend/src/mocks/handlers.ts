@@ -1,7 +1,7 @@
 import { delay, http, HttpResponse, passthrough } from 'msw'
 import { ROLE_RANK, type User } from '@/types'
 import { DEMO_PASSWORD } from './accounts'
-import { MOCK_USERS, tokenFor, userFromToken } from './db'
+import { clearMockSession, MOCK_USERS, setMockSession, userFromCookie } from './db'
 import {
   AI_MODELS,
   AI_TEMPLATES,
@@ -35,21 +35,22 @@ import {
 } from './docsDb'
 import { readFile, saveFile } from './filesDb'
 
-function authenticate(request: Request): User | undefined {
-  const header = request.headers.get('Authorization')
-  return userFromToken(header?.replace(/^Bearer\s+/i, '') ?? null)
+function authenticate(): User | undefined {
+  // 세션은 쿠키다(04 §1). 핸들러는 페이지 안에서 돌므로 document.cookie 를 그대로 읽는다.
+  return userFromCookie(document.cookie)
 }
 
 /** 사내망 파일 업로드 상한. 실제 서버(FastAPI)도 같은 값을 강제해야 한다. */
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 
-const unauthorized = () => HttpResponse.json({ detail: '인증이 필요합니다.' }, { status: 401 })
+const unauthorized = () =>
+  HttpResponse.json({ detail: '로그인이 필요합니다.', code: 'AUTH_REQUIRED' }, { status: 401 })
 const notFound = () => HttpResponse.json({ detail: '문서를 찾을 수 없습니다.' }, { status: 404 })
 
 /** 인증이 필요한 핸들러의 공통 껍데기. */
 function authed(resolve: (user: User, request: Request) => Response) {
   return ({ request }: { request: Request }) => {
-    const user = authenticate(request)
+    const user = authenticate()
     return user ? resolve(user, request) : unauthorized()
   }
 }
@@ -67,17 +68,29 @@ export const handlers = [
 
     if (!user || password !== DEMO_PASSWORD) {
       return HttpResponse.json(
-        { detail: '이메일 또는 비밀번호가 올바르지 않습니다.' },
+        { detail: '이메일 또는 비밀번호가 올바르지 않습니다.', code: 'AUTH_INVALID' },
         { status: 401 },
       )
     }
 
-    return HttpResponse.json({ token: tokenFor(user), user })
+    // 04 §1: 204 + 쿠키. 본문에 토큰이 없다.
+    setMockSession(user)
+    return new HttpResponse(null, { status: 204 })
   }),
 
-  http.get('/api/auth/me', authed((user) => HttpResponse.json(user))),
+  http.post('/api/auth/refresh', () => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    setMockSession(user)
+    return new HttpResponse(null, { status: 204 })
+  }),
 
-  http.post('/api/auth/logout', () => new HttpResponse(null, { status: 204 })),
+  http.get('/api/me', authed((user) => HttpResponse.json(user))),
+
+  http.post('/api/auth/logout', () => {
+    clearMockSession()
+    return new HttpResponse(null, { status: 204 })
+  }),
 
   // ── 게시판 ────────────────────────────────────────────────
   http.get('/api/boards', authed((user) => HttpResponse.json({ items: listBoards(user) }))),
@@ -92,8 +105,8 @@ export const handlers = [
     }),
   ),
 
-  http.get('/api/posts/:postId', ({ request, params }) => {
-    const user = authenticate(request)
+  http.get('/api/posts/:postId', ({ params }) => {
+    const user = authenticate()
     if (!user) return unauthorized()
 
     const post = findPost(String(params.postId))
@@ -111,7 +124,7 @@ export const handlers = [
   }),
 
   http.post('/api/boards/:boardId/posts', async ({ request, params }) => {
-    const user = authenticate(request)
+    const user = authenticate()
     if (!user) return unauthorized()
 
     const boardId = String(params.boardId)
@@ -176,7 +189,7 @@ export const handlers = [
   http.get('/api/ai/conversation', authed((user) => HttpResponse.json({ items: listConversation(user) }))),
 
   http.post('/api/ai/messages', async ({ request }) => {
-    const user = authenticate(request)
+    const user = authenticate()
     if (!user) return unauthorized()
 
     const { prompt } = (await request.json()) as { prompt: string }
@@ -192,7 +205,7 @@ export const handlers = [
   http.delete('/api/ai/conversation', authed((user) => HttpResponse.json({ items: resetConversation(user) }))),
 
   http.post('/api/ai/inline', async ({ request }) => {
-    if (!authenticate(request)) return unauthorized()
+    if (!authenticate()) return unauthorized()
     const { action, prompt, docText } = (await request.json()) as {
       action: string
       prompt: string
@@ -203,7 +216,7 @@ export const handlers = [
   }),
 
   http.patch('/api/tasks/:taskId', async ({ request, params }) => {
-    if (!authenticate(request)) return unauthorized()
+    if (!authenticate()) return unauthorized()
     const task = TODAY_TASKS.find((item) => item.id === String(params.taskId))
     if (!task) return notFound()
     const body = (await request.json()) as { done?: boolean }
@@ -230,8 +243,8 @@ export const handlers = [
 
   http.post('/api/documents', authed((user) => HttpResponse.json(createDoc(user), { status: 201 }))),
 
-  http.get('/api/documents/:docId', ({ request, params }) => {
-    if (!authenticate(request)) return unauthorized()
+  http.get('/api/documents/:docId', ({ params }) => {
+    if (!authenticate()) return unauthorized()
     const doc = findDoc(String(params.docId))
     if (!doc) return notFound()
     // 실제 서버라면 보관 중인 Yjs 초기 상태를 줄 자리다.
@@ -239,20 +252,20 @@ export const handlers = [
   }),
 
   http.patch('/api/documents/:docId', async ({ request, params }) => {
-    const user = authenticate(request)
+    const user = authenticate()
     if (!user) return unauthorized()
     const { title } = (await request.json()) as { title?: string }
     const doc = touchDoc(String(params.docId), user, title)
     return doc ? HttpResponse.json(doc) : notFound()
   }),
 
-  http.get('/api/documents/:docId/versions', ({ request, params }) => {
-    if (!authenticate(request)) return unauthorized()
+  http.get('/api/documents/:docId/versions', ({ params }) => {
+    if (!authenticate()) return unauthorized()
     return HttpResponse.json({ items: listVersions(String(params.docId)) })
   }),
 
   http.post('/api/documents/:docId/versions', async ({ request, params }) => {
-    const user = authenticate(request)
+    const user = authenticate()
     if (!user) return unauthorized()
     const { snapshot, label } = (await request.json()) as { snapshot: string; label?: string }
     if (!snapshot) {
@@ -265,7 +278,7 @@ export const handlers = [
 
   // ── 첨부 파일 ─────────────────────────────────────────────
   http.post('/api/files', async ({ request }) => {
-    if (!authenticate(request)) return unauthorized()
+    if (!authenticate()) return unauthorized()
 
     const file = (await request.formData()).get('file')
     if (!(file instanceof File)) {
@@ -295,13 +308,13 @@ export const handlers = [
     })
   }),
 
-  http.get('/api/documents/:docId/comments', ({ request, params }) => {
-    if (!authenticate(request)) return unauthorized()
+  http.get('/api/documents/:docId/comments', ({ params }) => {
+    if (!authenticate()) return unauthorized()
     return HttpResponse.json({ items: listComments(String(params.docId)) })
   }),
 
   http.post('/api/documents/:docId/comments', async ({ request, params }) => {
-    const user = authenticate(request)
+    const user = authenticate()
     if (!user) return unauthorized()
     const { body } = (await request.json()) as { body: string }
     if (!body.trim()) {

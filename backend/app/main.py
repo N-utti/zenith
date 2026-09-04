@@ -1,7 +1,8 @@
-from fastapi import APIRouter, FastAPI
+from fastapi import APIRouter, Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
+from app.deps import csrf_guard
 from app.errors import install_error_handlers
 from app.routers import (
     admin,
@@ -40,7 +41,8 @@ def create_app() -> FastAPI:
         )
 
     # 모든 계약 경로는 /api 아래에 있다 — vite 프록시(/api → :8000)·Caddy 라우팅과 짝.
-    api = APIRouter(prefix="/api")
+    # 상태 변경 요청은 전부 CSRF 검사를 지난다(11 §4.3). 로그인만 예외.
+    api = APIRouter(prefix="/api", dependencies=[Depends(csrf_guard)])
 
     @api.get("/healthz", tags=["admin"], summary="헬스체크 (04 §9)")
     async def healthz() -> dict[str, str]:

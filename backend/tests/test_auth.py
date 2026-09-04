@@ -1,146 +1,273 @@
-"""04-API §1 — 쿠키 JWT. DB 대신 가짜 세션을 끼워 로그인 → /me 왕복을 본다."""
+"""04-API §1 · 11 §4.3·§7.5 · 07 TC-AUTH-01~03 · TC-SEC-02~03 — 실제 Postgres 위에서 돈다."""
 
 import uuid
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
-import pytest
-from fastapi import FastAPI
+import jwt
 from httpx import AsyncClient
 
-from app.db import get_db
-from app.errors import ApiError
-from app.security import create_token, decode_token, hash_password
+from app import audit
+from app.config import settings
+from app.models import AuditEvent
+from app.security import create_token
 
-from .conftest import make_user
-
-
-class FakeDB:
-    def __init__(self, user) -> None:
-        self.user = user
-
-    async def execute(self, _stmt):
-        user = self.user
-
-        class Result:
-            def scalar_one_or_none(self):
-                return user
-
-        return Result()
-
-    async def get(self, _model, id_):
-        return self.user if id_ == self.user.id else None
+from .conftest import PASSWORD, Users, csrf, login
 
 
-@pytest.fixture
-def seeded(app: FastAPI):
-    user = make_user()
-    user.pw_hash = hash_password("zenith1234")
-
-    async def fake_get_db():
-        yield FakeDB(user)
-
-    app.dependency_overrides[get_db] = fake_get_db
-    return user
+def _cookie_names(response) -> list[str]:
+    return sorted(c.split("=", 1)[0] for c in response.headers.get_list("set-cookie"))
 
 
-USER_ID = uuid.uuid4()
+def _session_id(client: AsyncClient) -> uuid.UUID:
+    payload = jwt.decode(client.cookies["access"], options={"verify_signature": False})
+    return uuid.UUID(payload["sid"])
 
 
-def test_token_roundtrip() -> None:
-    token = create_token(str(USER_ID), "access", timedelta(minutes=15))
-    assert decode_token(token, "access") == USER_ID
+def _cookies(**values: str) -> dict[str, str]:
+    """쿠키 항아리를 우회해 원하는 쿠키만 보낸다 — 위조·만료·옛 토큰을 심을 때."""
+    return {"Cookie": "; ".join(f"{k}={v}" for k, v in values.items())}
 
 
-def test_refresh_token_is_not_an_access_token() -> None:
-    token = create_token(str(USER_ID), "refresh", timedelta(days=14))
-    with pytest.raises(ApiError) as e:
-        decode_token(token, "access")
-    assert e.value.code == "AUTH_INVALID"
+async def test_login_sets_three_cookies_then_me(client: AsyncClient, users: Users) -> None:
+    r = await login(client, "Sujin@zenith.co.kr ")
+    assert r.status_code == 204
+    assert r.content == b""
+    assert _cookie_names(r) == ["access", "csrf", "refresh"]
+    for c in r.headers.get_list("set-cookie"):
+        assert "SameSite=lax" in c and "Path=/" in c
+        assert ("Secure" in c) == settings.cookie_secure  # 로컬 http 개발은 false
+        assert ("HttpOnly" in c) == (not c.startswith("csrf="))  # csrf 만 JS 가 읽는다
+
+    r = await client.get("/api/me")
+    assert r.status_code == 200
+    assert r.json() == {
+        "id": str(users.member.id),
+        "name": "김수진",
+        "email": "sujin@zenith.co.kr",
+        "role": "member",
+        "avatar": None,
+        "team": {"id": str(users.team.id), "name": "개발팀"},
+    }
 
 
-def test_malformed_subject_is_401_not_500() -> None:
-    token = create_token("not-a-uuid", "access", timedelta(minutes=15))
-    with pytest.raises(ApiError) as e:
-        decode_token(token, "access")
-    assert e.value.status_code == 401
-    assert e.value.code == "AUTH_INVALID"
-
-
-def test_expired_token() -> None:
-    token = create_token(str(USER_ID), "access", timedelta(seconds=-1))
-    with pytest.raises(ApiError) as e:
-        decode_token(token, "access")
-    assert e.value.status_code == 401
-    assert e.value.code == "AUTH_EXPIRED"
-
-
-async def test_me_requires_login(client: AsyncClient) -> None:
+async def test_me_requires_login(client: AsyncClient, users: Users) -> None:
     r = await client.get("/api/me")
     assert r.status_code == 401
     assert r.json() == {"detail": "로그인이 필요합니다.", "code": "AUTH_REQUIRED"}
 
 
-async def test_login_sets_httponly_cookies_then_me(client: AsyncClient, seeded) -> None:
-    r = await client.post(
-        "/api/auth/login", json={"email": "Sujin@zenith.co.kr ", "password": "zenith1234"}
+async def test_wrong_password_and_unknown_email_are_indistinguishable(
+    client: AsyncClient, users: Users, app_db
+) -> None:
+    a = await login(client, "sujin@zenith.co.kr", "nope")
+    b = await login(client, "nobody@zenith.co.kr", "nope")
+    assert a.status_code == b.status_code == 401
+    assert (
+        a.json()
+        == b.json()
+        == {
+            "detail": "이메일 또는 비밀번호가 올바르지 않습니다.",
+            "code": "AUTH_INVALID",
+        }
     )
-    assert r.status_code == 204
-    assert r.content == b""
-    cookies = r.headers.get_list("set-cookie")
-    assert sorted(c.split("=", 1)[0] for c in cookies) == ["access", "refresh"]
-    for c in cookies:
-        assert "HttpOnly" in c and "SameSite=lax" in c and "Path=/" in c
-
-    r = await client.get("/api/me")  # 쿠키 항아리가 access 를 다시 보낸다
-    assert r.status_code == 200
-    assert r.json() == {
-        "id": str(seeded.id),
-        "name": "김수진",
-        "email": "sujin@zenith.co.kr",
-        "role": "member",
-        "avatar": None,
-    }
+    assert _cookie_names(a) == []
+    since = datetime.now(UTC) - timedelta(minutes=1)
+    assert await audit.count_since(app_db, "auth.login_fail", since) == 2
 
 
-async def test_cookie_for_another_user_id_is_rejected(client: AsyncClient, seeded) -> None:
-    client.cookies.set("access", create_token(str(uuid.uuid4()), "access", timedelta(minutes=15)))
-    r = await client.get("/api/me")
+async def test_disabled_account_gets_notice_only_with_right_password(
+    client: AsyncClient, users: Users, app_db
+) -> None:
+    """TC-AUTH-03: 비활성 계정 로그인 → 401 + 안내. 비밀번호가 틀리면 안내도 없다."""
+    users.member.active = False
+    await app_db.flush()
+    r = await login(client, "sujin@zenith.co.kr")
     assert r.status_code == 401
+    assert r.json()["code"] == "AUTH_DISABLED"
+    r = await login(client, "sujin@zenith.co.kr", "nope")
     assert r.json()["code"] == "AUTH_INVALID"
 
 
-async def test_inactive_account_is_locked_out_everywhere(client: AsyncClient, seeded) -> None:
-    r = await client.post(
-        "/api/auth/login", json={"email": "sujin@zenith.co.kr", "password": "zenith1234"}
+async def test_repeated_failures_are_throttled(client: AsyncClient, users: Users, app_db) -> None:
+    for _ in range(settings.login_max_failures):
+        app_db.add(AuditEvent(kind="auth.login_fail", detail={"email": "sujin@zenith.co.kr"}))
+    await app_db.flush()
+    r = await login(client, "sujin@zenith.co.kr")
+    assert r.status_code == 429
+    assert r.json()["code"] == "AUTH_THROTTLED"
+    assert r.headers["Retry-After"] == str(settings.login_failure_window_minutes * 60)
+    # 다른 계정은 영향이 없다
+    assert (await login(client, "donghyun@zenith.co.kr")).status_code == 204
+
+
+async def test_expired_access_then_refresh(client: AsyncClient, users: Users) -> None:
+    """TC-AUTH-02: 만료된 access + 유효한 refresh → 재발급."""
+    await login(client, "sujin@zenith.co.kr")
+    expired = create_token(
+        user_id=users.member.id,
+        session_id=_session_id(client),
+        kind="access",
+        ttl=timedelta(seconds=-1),
     )
+    r = await client.get("/api/me", headers=_cookies(access=expired))
+    assert (r.status_code, r.json()["code"]) == (401, "AUTH_EXPIRED")
+    r = await client.post("/api/auth/refresh", headers=csrf(client))
     assert r.status_code == 204
-    seeded.active = False  # 로그인 뒤 비활성화 — 살아 있는 쿠키도 막혀야 한다
-    assert (await client.get("/api/me")).status_code == 401
-    assert (await client.post("/api/auth/refresh")).status_code == 401
+    assert _cookie_names(r) == ["access", "csrf", "refresh"]
+    assert (await client.get("/api/me")).status_code == 200
+
+
+async def test_refresh_rotates_and_reuse_kills_the_session(
+    client: AsyncClient, users: Users
+) -> None:
+    """NFR-02 회전: 옛 refresh 가 다시 오면 탈취로 보고 세션을 통째로 닫는다."""
+    await login(client, "sujin@zenith.co.kr")
+    old_refresh = client.cookies["refresh"]
+    assert (await client.post("/api/auth/refresh", headers=csrf(client))).status_code == 204
+    assert client.cookies["refresh"] != old_refresh
+    assert (await client.get("/api/me")).status_code == 200
+
     r = await client.post(
-        "/api/auth/login", json={"email": "sujin@zenith.co.kr", "password": "zenith1234"}
+        "/api/auth/refresh",
+        headers={**csrf(client), **_cookies(refresh=old_refresh, csrf=client.cookies["csrf"])},
     )
-    assert r.status_code == 401
-    assert r.json()["code"] == "AUTH_INVALID"
+    assert (r.status_code, r.json()["code"]) == (401, "AUTH_INVALID")
+    assert (await client.get("/api/me")).status_code == 401  # access 도 같이 죽는다
 
 
-async def test_login_wrong_password(client: AsyncClient, seeded) -> None:
-    r = await client.post(
-        "/api/auth/login", json={"email": "sujin@zenith.co.kr", "password": "nope"}
-    )
-    assert r.status_code == 401
-    assert r.json()["code"] == "AUTH_INVALID"
-
-
-async def test_refresh_reissues_and_logout_clears(client: AsyncClient, seeded) -> None:
-    await client.post(
-        "/api/auth/login", json={"email": "sujin@zenith.co.kr", "password": "zenith1234"}
-    )
-    r = await client.post("/api/auth/refresh")
-    assert r.status_code == 204
-    assert len(r.headers.get_list("set-cookie")) == 2
-
-    r = await client.post("/api/auth/logout")
+async def test_logout_revokes_immediately_and_is_idempotent(
+    client: AsyncClient, users: Users
+) -> None:
+    await login(client, "sujin@zenith.co.kr")
+    access = client.cookies["access"]
+    r = await client.post("/api/auth/logout", headers=csrf(client))
     assert r.status_code == 204
     assert all("Max-Age=0" in c for c in r.headers.get_list("set-cookie"))
-    assert (await client.get("/api/me")).status_code == 401
+    assert _cookie_names(r) == ["access", "csrf", "refresh"]
+
+    # 아직 15분이 안 지난 access 를 다시 보내도 세션이 죽었으니 401
+    r = await client.get("/api/me", headers=_cookies(access=access))
+    assert (r.status_code, r.json()["code"]) == (401, "AUTH_INVALID")
+    assert (await client.post("/api/auth/logout")).status_code == 204  # 쿠키 없이도 204
+
+
+async def test_forged_session_id_is_rejected(client: AsyncClient, users: Users) -> None:
+    """TC-SEC-02: 서명은 맞아도 없는 세션이면 401."""
+    forged = create_token(
+        user_id=users.member.id,
+        session_id=uuid.uuid4(),
+        kind="access",
+        ttl=timedelta(minutes=15),
+    )
+    r = await client.get("/api/me", headers=_cookies(access=forged))
+    assert (r.status_code, r.json()["code"]) == (401, "AUTH_INVALID")
+
+
+async def test_csrf_double_submit_and_origin(client: AsyncClient, users: Users) -> None:
+    """11 §4.3 — 쿠키 세션의 상태 변경 요청은 헤더가 쿠키와 같아야 하고 Origin 은 우리 것이어야 한다."""
+    await login(client, "sujin@zenith.co.kr")
+    r = await client.post("/api/auth/refresh")
+    assert (r.status_code, r.json()["code"]) == (403, "CSRF_TOKEN")
+    r = await client.post("/api/auth/refresh", headers={"X-CSRF-Token": "bogus"})
+    assert r.json()["code"] == "CSRF_TOKEN"
+    r = await client.post(
+        "/api/auth/refresh", headers={**csrf(client), "Origin": "https://evil.example"}
+    )
+    assert (r.status_code, r.json()["code"]) == (403, "CSRF_ORIGIN")
+    r = await client.post("/api/auth/refresh", headers={**csrf(client), "Origin": "https://test"})
+    assert r.status_code == 204
+    # 로그인도 교차 출처면 막는다 (로그인 CSRF)
+    r = await client.post(
+        "/api/auth/login",
+        json={"email": "sujin@zenith.co.kr", "password": PASSWORD},
+        headers={"Origin": "https://evil.example"},
+    )
+    assert r.json()["code"] == "CSRF_ORIGIN"
+    # 조회는 검사하지 않는다
+    assert (
+        await client.get("/api/me", headers={"Origin": "https://evil.example"})
+    ).status_code == 200
+
+
+async def test_csrf_header_must_match_the_session_hmac(client: AsyncClient, users: Users) -> None:
+    """쿠키를 심을 수 있는 공격자가 cookie=header 로 맞춰 보내도, 세션 id 로 다시 계산한 값과 달라 403."""
+    await login(client, "sujin@zenith.co.kr")
+    r = await client.post(
+        "/api/auth/refresh",
+        headers={
+            "X-CSRF-Token": "attacker-chosen",
+            **_cookies(
+                access=client.cookies["access"],
+                refresh=client.cookies["refresh"],
+                csrf="attacker-chosen",
+            ),
+        },
+    )
+    assert (r.status_code, r.json()["code"]) == (403, "CSRF_TOKEN")
+
+
+async def test_fetch_metadata_blocks_cross_site_even_without_origin(
+    client: AsyncClient, users: Users
+) -> None:
+    await login(client, "sujin@zenith.co.kr")
+    for site in ("cross-site", "same-site"):
+        r = await client.post("/api/auth/refresh", headers={**csrf(client), "Sec-Fetch-Site": site})
+        assert (r.status_code, r.json()["code"]) == (403, "CSRF_ORIGIN"), site
+    r = await client.post(
+        "/api/auth/refresh", headers={**csrf(client), "Sec-Fetch-Site": "same-origin"}
+    )
+    assert r.status_code == 204
+    r = await client.post(
+        "/api/auth/login",
+        json={"email": "sujin@zenith.co.kr", "password": PASSWORD},
+        headers={"Sec-Fetch-Site": "cross-site"},
+    )
+    assert r.json()["code"] == "CSRF_ORIGIN"
+
+
+async def test_failures_from_one_ip_are_throttled_across_emails(
+    client: AsyncClient, users: Users, app_db
+) -> None:
+    for i in range(settings.login_max_failures_per_ip):
+        app_db.add(
+            AuditEvent(
+                kind="auth.login_fail", ip="127.0.0.1", detail={"email": f"x{i}@zenith.co.kr"}
+            )
+        )
+    await app_db.flush()
+    r = await login(client, "sujin@zenith.co.kr")
+    assert (r.status_code, r.json()["code"]) == (429, "AUTH_THROTTLED")
+
+
+async def test_yjs_check_for_forward_auth(client: AsyncClient, users: Users) -> None:
+    """TC-SEC-03: 쿠키 없이 → 거부. 있으면 204 + 사용자 헤더."""
+    assert (await client.get("/api/auth/yjs-check")).status_code == 401
+    await login(client, "sujin@zenith.co.kr")
+    r = await client.get("/api/auth/yjs-check")
+    assert r.status_code == 204
+    assert r.headers["X-User-Id"] == str(users.member.id)
+    assert r.headers["X-User-Role"] == "member"
+
+
+async def test_password_change_keeps_this_session_and_kills_others(
+    client: AsyncClient, make_client, users: Users
+) -> None:
+    await login(client, "sujin@zenith.co.kr")
+    async with make_client() as other:
+        await login(other, "sujin@zenith.co.kr")
+        r = await client.post(
+            "/api/me/password",
+            json={"current_password": "nope", "new_password": "new-password-1"},
+            headers=csrf(client),
+        )
+        assert (r.status_code, r.json()["code"]) == (400, "PASSWORD_MISMATCH")
+        r = await client.post(
+            "/api/me/password",
+            json={"current_password": PASSWORD, "new_password": "new-password-1"},
+            headers=csrf(client),
+        )
+        assert r.status_code == 204
+        assert (await client.get("/api/me")).status_code == 200
+        assert (await other.get("/api/me")).status_code == 401
+    assert (await login(client, "sujin@zenith.co.kr")).status_code == 401
+    assert (await login(client, "sujin@zenith.co.kr", "new-password-1")).status_code == 204

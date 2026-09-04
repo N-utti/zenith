@@ -7,20 +7,19 @@ import pytest
 from fastapi import FastAPI
 from httpx import AsyncClient
 
-from app.deps import current_user
 from app.main import create_app
 
-from .conftest import make_user
-
 CONTRACT_PATHS = {
-    # §1 인증 · §9 관리
+    # §1 인증 · §4.2 프록시 인증 확인 · §9 관리
     "/api/auth/login",
     "/api/auth/refresh",
     "/api/auth/logout",
+    "/api/auth/yjs-check",
     "/api/me",
+    "/api/me/password",
     "/api/healthz",
     "/api/admin/users",
-    "/api/admin/users/{id}",
+    "/api/admin/users/{user_id}",
     "/api/admin/audit",
     # §2 홈·개인
     "/api/me/home",
@@ -127,18 +126,6 @@ async def test_validation_error_shape(client: AsyncClient, member) -> None:
     assert body["detail"][0]["loc"] == ["body", "message"]
 
 
-async def test_exec_only_route_forbids_member(client: AsyncClient, member) -> None:
-    r = await client.get("/api/admin/users")
-    assert r.status_code == 403
-    assert r.json() == {"detail": "권한이 부족합니다.", "code": "FORBIDDEN"}
-
-
-async def test_exec_is_admitted_to_admin_route(app: FastAPI, client: AsyncClient) -> None:
-    app.dependency_overrides[current_user] = lambda: make_user(role="exec")
-    r = await client.get("/api/admin/users")
-    assert r.status_code == 501  # 권한은 통과, 구현만 없다
-
-
 def test_cors_wildcard_is_refused(monkeypatch) -> None:
     """쿠키 자격증명 + '*' 는 어느 오리진에서나 응답을 읽게 한다 — 기동 자체를 막는다."""
     from app.config import settings
@@ -146,13 +133,6 @@ def test_cors_wildcard_is_refused(monkeypatch) -> None:
     monkeypatch.setattr(settings, "cors_origins", ["*"])
     with pytest.raises(ValueError):
         create_app()
-
-
-async def test_unknown_role_fails_closed(app: FastAPI, client: AsyncClient) -> None:
-    """users.role 은 CHECK 없는 text — 모르는 값이 들어 있어도 500 이 아니라 403."""
-    app.dependency_overrides[current_user] = lambda: make_user(role="admin")
-    r = await client.get("/api/admin/users")
-    assert r.status_code == 403
 
 
 async def test_router_404_and_405_keep_error_shape(client: AsyncClient) -> None:

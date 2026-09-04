@@ -4,6 +4,7 @@ from fastapi import FastAPI, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import HTTPException, RequestValidationError
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import IntegrityError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 CODE_BY_STATUS = {
@@ -18,8 +19,10 @@ CODE_BY_STATUS = {
 
 
 class ApiError(HTTPException):
-    def __init__(self, status_code: int, code: str, detail: str) -> None:
-        super().__init__(status_code=status_code, detail=detail)
+    def __init__(
+        self, status_code: int, code: str, detail: str, headers: dict[str, str] | None = None
+    ) -> None:
+        super().__init__(status_code=status_code, detail=detail, headers=headers)
         self.code = code
 
 
@@ -43,4 +46,11 @@ def install_error_handlers(app: FastAPI) -> None:
         # 04 §0: 422 = Pydantic 검증 실패. FastAPI 기본 오류 목록은 그대로 두고 code만 얹는다.
         return JSONResponse(
             {"detail": jsonable_encoder(exc.errors()), "code": "VALIDATION"}, status_code=422
+        )
+
+    @app.exception_handler(IntegrityError)
+    async def _integrity(_: Request, exc: IntegrityError) -> JSONResponse:
+        # 유일·외래키 제약 위반은 500 이 아니라 409 — 사전 검사와 commit 사이의 경합도 여기로 떨어진다.
+        return JSONResponse(
+            {"detail": "데이터 제약을 위반했습니다.", "code": "CONFLICT"}, status_code=409
         )
