@@ -76,8 +76,9 @@
 
 백엔드가 붙는 시점에:
 
-1. 생성된 `openapi.json`을 레포에 커밋
-2. 프론트 타입을 거기서 생성
+1. ✅ 생성된 [`backend/openapi.json`](../backend/openapi.json)을 레포에 커밋 — `uv run python scripts/export_openapi.py`로 뽑고,
+   `backend/tests/test_contract.py`가 04·13의 경로 목록과 커밋본의 최신성을 검사한다 (2026-09-04)
+2. ⏳ 프론트 타입을 거기서 생성
 
 그러면 `GET /auth/me` vs `GET /me` 같은 불일치는 **컴파일 에러**가 된다.
 04는 사람이 읽는 요약으로 남기고, 강제는 기계가 한다.

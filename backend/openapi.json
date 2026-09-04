@@ -1,0 +1,1933 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Zenith API",
+    "description": "04-API 명세서의 기계 판독본. 정본은 Notion, 강제는 이 스키마(openapi.json)로 한다.",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/healthz": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "헬스체크 (04 §9)",
+        "operationId": "healthz_api_healthz_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response Healthz Api Healthz Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/login": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "로그인 → 204 + Set-Cookie(access/refresh)",
+        "operationId": "login_api_auth_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/refresh": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "refresh 쿠키로 access/refresh 재발급",
+        "operationId": "refresh_api_auth_refresh_post",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        }
+      }
+    },
+    "/api/auth/logout": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "쿠키 제거",
+        "operationId": "logout_api_auth_logout_post",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        }
+      }
+    },
+    "/api/me": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "내 프로필",
+        "operationId": "me_api_me_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/home": {
+      "get": {
+        "tags": [
+          "me"
+        ],
+        "summary": "대시보드 집계 1콜 {recent_docs[], mentions[], unread[], posts[], todos[]}",
+        "operationId": "stub_api_me_home_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      }
+    },
+    "/api/me/todos": {
+      "get": {
+        "tags": [
+          "me"
+        ],
+        "summary": "오늘 할 일 목록",
+        "operationId": "stub_api_me_todos_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "me"
+        ],
+        "summary": "할 일 추가 {text}",
+        "operationId": "stub_api_me_todos_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      }
+    },
+    "/api/me/todos/{id}": {
+      "delete": {
+        "tags": [
+          "me"
+        ],
+        "summary": "할 일 삭제",
+        "operationId": "stub_api_me_todos__id__delete",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "me"
+        ],
+        "summary": "할 일 수정 {text?, done?}",
+        "operationId": "stub_api_me_todos__id__patch",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      }
+    },
+    "/api/me/notifications": {
+      "get": {
+        "tags": [
+          "me"
+        ],
+        "summary": "알림 목록 (?unread=1)",
+        "operationId": "stub_api_me_notifications_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      }
+    },
+    "/api/me/notifications/read": {
+      "post": {
+        "tags": [
+          "me"
+        ],
+        "summary": "읽음 처리 {ids[]}",
+        "operationId": "stub_api_me_notifications_read_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      }
+    },
+    "/api/tree": {
+      "get": {
+        "tags": [
+          "docs"
+        ],
+        "summary": "사이드바 트리 {folders[], docs[]} (정렬 포함)",
+        "operationId": "stub_api_tree_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      }
+    },
+    "/api/folders": {
+      "post": {
+        "tags": [
+          "docs"
+        ],
+        "summary": "폴더 생성",
+        "operationId": "stub_api_folders_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      }
+    },
+    "/api/folders/{id}": {
+      "patch": {
+        "tags": [
+          "docs"
+        ],
+        "summary": "폴더 이름·이동·정렬",
+        "operationId": "stub_api_folders__id__patch",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      }
+    },
+    "/api/docs": {
+      "post": {
+        "tags": [
+          "docs"
+        ],
+        "summary": "{folder_id, title, blocks?} → 문서 생성 (AI 템플릿 저장 포함)",
+        "operationId": "stub_api_docs_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      }
+    },
+    "/api/docs/{id}": {
+      "get": {
+        "tags": [
+          "docs"
+        ],
+        "summary": "메타 + 최신 스냅숏 (초기 로드용)",
+        "operationId": "stub_api_docs__id__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "docs"
+        ],
+        "summary": "휴지통 이동(30일) / ?hard=1 관리자만",
+        "operationId": "stub_api_docs__id__delete",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "docs"
+        ],
+        "summary": "제목·폴더 이동",
+        "operationId": "stub_api_docs__id__patch",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      }
+    },
+    "/api/docs/{id}/versions": {
+      "get": {
+        "tags": [
+          "docs"
+        ],
+        "summary": "버전 목록",
+        "operationId": "stub_api_docs__id__versions_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      }
+    },
+    "/api/docs/{id}/restore": {
+      "post": {
+        "tags": [
+          "docs"
+        ],
+        "summary": "버전 복구",
+        "operationId": "stub_api_docs__id__restore_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      }
+    },
+    "/api/docs/{id}/comments": {
+      "get": {
+        "tags": [
+          "docs"
+        ],
+        "summary": "블록 댓글 목록",
+        "operationId": "stub_api_docs__id__comments_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "docs"
+        ],
+        "summary": "{block_id?, body} — @멘션 파싱 → 알림",
+        "operationId": "stub_api_docs__id__comments_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      }
+    },
+    "/api/channels": {
+      "get": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "내 채널·DM 목록 + unread 카운트",
+        "operationId": "stub_api_channels_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "{name} 또는 {dm_user_id}",
+        "operationId": "stub_api_channels_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      }
+    },
+    "/api/channels/{id}/messages": {
+      "get": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "과거 메시지 (?cursor=, 50개 단위)",
+        "operationId": "stub_api_channels__id__messages_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      }
+    },
+    "/api/channels/{id}/attachments": {
+      "post": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "multipart 업로드 → MinIO, {url, name, size}",
+        "operationId": "stub_api_channels__id__attachments_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      }
+    },
+    "/api/boards": {
+      "get": {
+        "tags": [
+          "boards"
+        ],
+        "summary": "게시판 목록 (내 등급 표시)",
+        "operationId": "stub_api_boards_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      }
+    },
+    "/api/boards/{id}/posts": {
+      "get": {
+        "tags": [
+          "boards"
+        ],
+        "summary": "글 목록 — 권한 밖이면 {title: '＿＿＿＿＿ 보고', masked: true}",
+        "operationId": "stub_api_boards__id__posts_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "boards"
+        ],
+        "summary": "글 작성 (min_role 이상)",
+        "operationId": "stub_api_boards__id__posts_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      }
+    },
+    "/api/posts/{id}": {
+      "get": {
+        "tags": [
+          "boards"
+        ],
+        "summary": "글 본문 — 권한 밖 403",
+        "operationId": "stub_api_posts__id__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "boards"
+        ],
+        "summary": "글 삭제",
+        "operationId": "stub_api_posts__id__delete",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "boards"
+        ],
+        "summary": "글 수정",
+        "operationId": "stub_api_posts__id__patch",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      }
+    },
+    "/api/search": {
+      "get": {
+        "tags": [
+          "search"
+        ],
+        "summary": "?q=&types=doc,chat,post → [{type, id, title, sub, snippet, to}]",
+        "operationId": "stub_api_search_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      }
+    },
+    "/api/ai/models": {
+      "get": {
+        "tags": [
+          "ai"
+        ],
+        "summary": "사용 가능한 모델 목록 (04 §8: Ollama 태그 → Claude 모델)",
+        "operationId": "models_api_ai_models_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ModelOut"
+                  },
+                  "type": "array",
+                  "title": "Response Models Api Ai Models Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ai/chat": {
+      "post": {
+        "tags": [
+          "ai"
+        ],
+        "summary": "{session_id?, message, scope?} → SSE 스트림 (token → citations → done)",
+        "operationId": "chat_api_ai_chat_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              },
+              "text/event-stream": {}
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ai/feedback": {
+      "post": {
+        "tags": [
+          "ai"
+        ],
+        "summary": "{message_id, value: 1|-1}",
+        "operationId": "stub_api_ai_feedback_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      }
+    },
+    "/api/ai/doc-action": {
+      "post": {
+        "tags": [
+          "ai"
+        ],
+        "summary": "{doc_id, block_id?, action: summarize|continue|polish|translate|table} 인라인 AI",
+        "operationId": "stub_api_ai_doc_action_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      }
+    },
+    "/api/ai/template": {
+      "post": {
+        "tags": [
+          "ai"
+        ],
+        "summary": "{template: minutes|weekly|notice, context?} → {blocks[]}",
+        "operationId": "stub_api_ai_template_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      }
+    },
+    "/api/attendance/me": {
+      "get": {
+        "tags": [
+          "attendance"
+        ],
+        "summary": "?month= 월별 일자 배열 + 월 집계 {days[], summary}",
+        "operationId": "stub_api_attendance_me_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      }
+    },
+    "/api/attendance/me/summary": {
+      "get": {
+        "tags": [
+          "attendance"
+        ],
+        "summary": "?from=&to= 기간 집계",
+        "operationId": "stub_api_attendance_me_summary_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      }
+    },
+    "/api/attendance/arrangements": {
+      "get": {
+        "tags": [
+          "attendance"
+        ],
+        "summary": "?scope=me|team 예외근무 목록 (team은 lead 이상)",
+        "operationId": "stub_api_attendance_arrangements_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "attendance"
+        ],
+        "summary": "{kind, start_date, end_date, reason} 재택·외근·출장",
+        "operationId": "stub_api_attendance_arrangements_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      }
+    },
+    "/api/attendance/overtime": {
+      "get": {
+        "tags": [
+          "attendance"
+        ],
+        "summary": "?from=&to= 내 연장근로 목록·누계",
+        "operationId": "stub_api_attendance_overtime_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "attendance"
+        ],
+        "summary": "{work_date, start_time, end_time, reason} 연장근로",
+        "operationId": "stub_api_attendance_overtime_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      }
+    },
+    "/api/attendance/corrections": {
+      "get": {
+        "tags": [
+          "attendance"
+        ],
+        "summary": "?status=pending 내 정정 신청 목록",
+        "operationId": "stub_api_attendance_corrections_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "attendance"
+        ],
+        "summary": "{work_date, after:{status?, note?}, reason} 정정 신청",
+        "operationId": "stub_api_attendance_corrections_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      }
+    },
+    "/api/leaves/balance": {
+      "get": {
+        "tags": [
+          "attendance"
+        ],
+        "summary": "{year, granted, used, remaining, expires_on, grant_basis}",
+        "operationId": "stub_api_leaves_balance_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      }
+    },
+    "/api/leaves": {
+      "get": {
+        "tags": [
+          "attendance"
+        ],
+        "summary": "?scope=me|team 휴가 목록",
+        "operationId": "stub_api_leaves_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "attendance"
+        ],
+        "summary": "{type_code, start_date, end_date, reason} — 잔여 부족 422",
+        "operationId": "stub_api_leaves_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      }
+    },
+    "/api/leaves/{id}/cancel": {
+      "post": {
+        "tags": [
+          "attendance"
+        ],
+        "summary": "승인 전 취소",
+        "operationId": "stub_api_leaves__id__cancel_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      }
+    },
+    "/api/leave-types": {
+      "get": {
+        "tags": [
+          "attendance"
+        ],
+        "summary": "휴가 종류 목록",
+        "operationId": "stub_api_leave_types_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      }
+    },
+    "/api/attendance/team": {
+      "get": {
+        "tags": [
+          "attendance"
+        ],
+        "summary": "?month=&team_id= 팀원 × 일자 그리드 — 타 팀 403",
+        "operationId": "stub_api_attendance_team_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      }
+    },
+    "/api/attendance/report": {
+      "get": {
+        "tags": [
+          "attendance"
+        ],
+        "summary": "?month=&format=csv 월 리포트 (exec)",
+        "operationId": "stub_api_attendance_report_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      }
+    },
+    "/api/attendance/close": {
+      "post": {
+        "tags": [
+          "attendance"
+        ],
+        "summary": "월 마감 (exec)",
+        "operationId": "stub_api_attendance_close_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      }
+    },
+    "/api/attendance/reopen": {
+      "post": {
+        "tags": [
+          "attendance"
+        ],
+        "summary": "월 마감 해제 {reason} 필수 + 감사 로그 (exec)",
+        "operationId": "stub_api_attendance_reopen_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      }
+    },
+    "/api/approval-types": {
+      "get": {
+        "tags": [
+          "approvals"
+        ],
+        "summary": "문서 유형 목록 + 유형별 기본 결재선",
+        "operationId": "stub_api_approval_types_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      }
+    },
+    "/api/approvals/drafts": {
+      "post": {
+        "tags": [
+          "approvals"
+        ],
+        "summary": "{type_code, title, subject, steps?} 임시저장",
+        "operationId": "stub_api_approvals_drafts_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      }
+    },
+    "/api/approvals/drafts/{id}": {
+      "patch": {
+        "tags": [
+          "approvals"
+        ],
+        "summary": "임시저장 수정",
+        "operationId": "stub_api_approvals_drafts__id__patch",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      }
+    },
+    "/api/approvals/{id}/submit": {
+      "post": {
+        "tags": [
+          "approvals"
+        ],
+        "summary": "상신 → pending. 도메인 사전검증 실패 422",
+        "operationId": "stub_api_approvals__id__submit_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      }
+    },
+    "/api/approvals/{id}/cancel": {
+      "post": {
+        "tags": [
+          "approvals"
+        ],
+        "summary": "회수. 승인된 단계가 있으면 409",
+        "operationId": "stub_api_approvals__id__cancel_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      }
+    },
+    "/api/approvals/{id}/approve": {
+      "post": {
+        "tags": [
+          "approvals"
+        ],
+        "summary": "{comment?, version} → 다음 단계 또는 확정. version 불일치 409",
+        "operationId": "stub_api_approvals__id__approve_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      }
+    },
+    "/api/approvals/{id}/reject": {
+      "post": {
+        "tags": [
+          "approvals"
+        ],
+        "summary": "{reason, version} — 사유 없으면 400",
+        "operationId": "stub_api_approvals__id__reject_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      }
+    },
+    "/api/approvals/{id}/force-close": {
+      "post": {
+        "tags": [
+          "approvals"
+        ],
+        "summary": "{reason} exec 강제 종결 — 감사 로그",
+        "operationId": "stub_api_approvals__id__force_close_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      }
+    },
+    "/api/approvals": {
+      "get": {
+        "tags": [
+          "approvals"
+        ],
+        "summary": "?box=inbox|sent|reference|draft 결재함 · ?type=&status=&from=&to=&drafter= 필터",
+        "operationId": "stub_api_approvals_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      }
+    },
+    "/api/approvals/{id}": {
+      "get": {
+        "tags": [
+          "approvals"
+        ],
+        "summary": "문서 상세 + 결재선 진행 + 의견 이력. 권한 밖 403",
+        "operationId": "stub_api_approvals__id__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      }
+    },
+    "/api/approvals/delegations": {
+      "get": {
+        "tags": [
+          "approvals"
+        ],
+        "summary": "위임 목록",
+        "operationId": "stub_api_approvals_delegations_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "approvals"
+        ],
+        "summary": "위임 설정",
+        "operationId": "stub_api_approvals_delegations_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      }
+    },
+    "/api/approvals/delegations/{id}": {
+      "delete": {
+        "tags": [
+          "approvals"
+        ],
+        "summary": "위임 해제",
+        "operationId": "stub_api_approvals_delegations__id__delete",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      }
+    },
+    "/api/admin/users": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "계정 목록",
+        "operationId": "stub_api_admin_users_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "계정 생성",
+        "operationId": "stub_api_admin_users_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      }
+    },
+    "/api/admin/users/{id}": {
+      "patch": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "등급 변경·비활성화",
+        "operationId": "stub_api_admin_users__id__patch",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      }
+    },
+    "/api/admin/audit": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "?kind=acl 권한 위반 시도 로그(403 기록)",
+        "operationId": "stub_api_admin_audit_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      }
+    },
+    "/api/admin/holidays": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "공휴일·회사 휴일 목록",
+        "operationId": "stub_api_admin_holidays_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "휴일 등록 → 근무 달력 재생성 (10-근태 §6.2)",
+        "operationId": "stub_api_admin_holidays_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      }
+    },
+    "/api/admin/attendance/calendar/rebuild": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "{year} 근무 달력 재생성",
+        "operationId": "stub_api_admin_attendance_calendar_rebuild_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      }
+    },
+    "/api/admin/leave-policy": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "연차 부여 기준 (입사일 / 회계연도)",
+        "operationId": "stub_api_admin_leave_policy_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "연차 부여 기준 변경",
+        "operationId": "stub_api_admin_leave_policy_patch",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      }
+    },
+    "/api/admin/approval-policy": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "결재 양식·전결 기준 (13 §9.3)",
+        "operationId": "stub_api_admin_approval_policy_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "결재 양식·전결 기준 변경",
+        "operationId": "stub_api_admin_approval_policy_patch",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ChatIn": {
+        "properties": {
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Message"
+          },
+          "scope": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "title": "ChatIn"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "LoginIn": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "minLength": 3,
+            "title": "Email"
+          },
+          "password": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "LoginIn"
+      },
+      "MeOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "email": {
+            "type": "string",
+            "title": "Email"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role"
+          },
+          "avatar": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "email",
+          "role",
+          "avatar"
+        ],
+        "title": "MeOut",
+        "description": "04 §1 `GET /me` → {id, name, email, role, avatar}."
+      },
+      "ModelOut": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "ModelOut"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}
