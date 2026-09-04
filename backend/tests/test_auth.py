@@ -27,8 +27,8 @@ class FakeDB:
 
         return Result()
 
-    async def get(self, _model, _id):
-        return self.user
+    async def get(self, _model, id_):
+        return self.user if id_ == self.user.id else None
 
 
 @pytest.fixture
@@ -100,6 +100,28 @@ async def test_login_sets_httponly_cookies_then_me(client: AsyncClient, seeded) 
         "role": "member",
         "avatar": None,
     }
+
+
+async def test_cookie_for_another_user_id_is_rejected(client: AsyncClient, seeded) -> None:
+    client.cookies.set("access", create_token(str(uuid.uuid4()), "access", timedelta(minutes=15)))
+    r = await client.get("/api/me")
+    assert r.status_code == 401
+    assert r.json()["code"] == "AUTH_INVALID"
+
+
+async def test_inactive_account_is_locked_out_everywhere(client: AsyncClient, seeded) -> None:
+    r = await client.post(
+        "/api/auth/login", json={"email": "sujin@zenith.co.kr", "password": "zenith1234"}
+    )
+    assert r.status_code == 204
+    seeded.active = False  # 로그인 뒤 비활성화 — 살아 있는 쿠키도 막혀야 한다
+    assert (await client.get("/api/me")).status_code == 401
+    assert (await client.post("/api/auth/refresh")).status_code == 401
+    r = await client.post(
+        "/api/auth/login", json={"email": "sujin@zenith.co.kr", "password": "zenith1234"}
+    )
+    assert r.status_code == 401
+    assert r.json()["code"] == "AUTH_INVALID"
 
 
 async def test_login_wrong_password(client: AsyncClient, seeded) -> None:

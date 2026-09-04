@@ -11,9 +11,18 @@ from app.db import get_db
 from app.deps import current_user
 from app.errors import ApiError
 from app.models import User
-from app.security import clear_auth_cookies, decode_token, set_auth_cookies, verify_password
+from app.security import (
+    clear_auth_cookies,
+    decode_token,
+    hash_password,
+    set_auth_cookies,
+    verify_password,
+)
 
 router = APIRouter(tags=["auth"])
+
+# 없는 이메일에도 argon2 검증을 한 번 태워, 응답 시간으로 가입 여부를 알 수 없게 한다.
+_DUMMY_HASH = hash_password("not-a-real-password")
 
 
 class LoginIn(BaseModel):
@@ -42,7 +51,8 @@ class MeOut(BaseModel):
 async def login(body: LoginIn, response: Response, db: AsyncSession = Depends(get_db)) -> None:
     email = body.email.strip().lower()
     user = (await db.execute(select(User).where(User.email == email))).scalar_one_or_none()
-    if user is None or not user.active or not verify_password(body.password, user.pw_hash):
+    ok = verify_password(body.password, user.pw_hash if user else _DUMMY_HASH)
+    if user is None or not user.active or not ok:
         raise ApiError(401, "AUTH_INVALID", "이메일 또는 비밀번호가 올바르지 않습니다.")
     set_auth_cookies(response, str(user.id))
 

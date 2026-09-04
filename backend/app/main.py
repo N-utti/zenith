@@ -27,6 +27,8 @@ def create_app() -> FastAPI:
         redoc_url=None,
     )
     install_error_handlers(app)
+    if "*" in settings.cors_origins:
+        raise ValueError("CORS_ORIGINS 에 '*' 는 안 된다 — 쿠키 자격증명이 아무 오리진에나 열린다.")
     if settings.cors_origins:
         # 웹·Caddy 경로는 같은 오리진이라 CORS가 필요 없다. 네이티브 셸(11 §8.2 · I6)만 여기로.
         app.add_middleware(

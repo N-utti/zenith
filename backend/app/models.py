@@ -19,6 +19,7 @@ from sqlalchemy import (
     Integer,
     LargeBinary,
     Text,
+    func,
 )
 from sqlalchemy import text as sql_text
 from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR, UUID
@@ -97,7 +98,13 @@ class Document(Base):
     text_cache: Mapped[str | None] = mapped_column(Text)  # 검색용 파생
     tsv: Mapped[str | None] = mapped_column(TSVECTOR)
     updated_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
-    updated_at: Mapped[datetime] = created_at_col()
+    # ORM UPDATE 때 now() 로 갱신된다. 원시 SQL 로 고치면 직접 세팅해야 한다.
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=sql_text("now()"),
+        onupdate=func.now(),
+    )
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # 휴지통
 
 
