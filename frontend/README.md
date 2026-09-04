@@ -51,7 +51,7 @@ MSW가 꺼지고 `/api` 요청이 vite 프록시를 통해 `http://localhost:800
 `csrf` 하나만 읽어 상태 변경 요청에 `X-CSRF-Token` 헤더로 되돌려 보낸다(11 §4.3).
 
 - `AuthProvider` 는 마운트 때 **항상** `GET /me` 를 부른다. 200 이면 로그인, 401 이면 익명. 로그인 여부의 판정자는 서버뿐이다.
-- `lib/api.ts` 가 `credentials: 'include'` · CSRF 헤더 · **access 만료(`AUTH_EXPIRED`) 시 refresh 후 1회 재시도**를 맡는다. 화면 코드는 신경 쓰지 않는다.
+- `lib/api.ts` 가 `credentials: 'include'` · CSRF 헤더 · **access 만료(`AUTH_EXPIRED`) 시 refresh 후 1회 재시도**를 맡는다. 화면 코드는 신경 쓰지 않는다. 이 규약은 `src/lib/api.test.ts`(`npm test`, vitest)가 고정한다.
 - 로그아웃은 서버가 세션을 회수한다. 15분이 남은 access 도 그 즉시 죽는다.
 - MSW 모드에서는 `zenith.mock.session=<userId>` 쿠키가 세션을 흉내 낸다. 개발 채팅 서버도 이 쿠키로 사용자를 알아본다.
 

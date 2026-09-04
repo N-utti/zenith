@@ -47,7 +47,7 @@ openapi.json        생성물 — 커밋한다 (아래 "계약의 강제")
 
 | 04 절 | 경로 | 상태 |
 | --- | --- | --- |
-| §1 인증 | `POST /auth/login·refresh·logout`, `GET /me` | ✅ HttpOnly 쿠키 JWT(access 15분 / refresh 14일) + `csrf` 쿠키. refresh 는 서버 세션(`auth_sessions`)에 묶여 매번 회전하고, 재사용·로그아웃·비활성화·비밀번호 변경이 세션을 즉시 회수한다. 실패 누적(이메일 10회 또는 IP 30회 / 15분) → 429. argon2 는 워커 스레드에서 돈다 |
+| §1 인증 | `POST /auth/login·refresh·logout`, `GET /me` | ✅ HttpOnly 쿠키 JWT(access 15분 / refresh 14일) + `csrf` 쿠키. refresh 는 서버 세션(`auth_sessions`)에 묶여 매번 회전하고, 재사용·로그아웃·비활성화·비밀번호 변경이 세션을 즉시 회수한다. 세션은 로그인 후 14일에 절대 만료(쓸수록 늘지 않음). 실패 누적((이메일, IP) 쌍 10회 또는 IP 30회 / 15분) → 429. argon2 는 워커 스레드에서 돈다 |
 | §1 (확장) | `POST /me/password` | ✅ 현재 비밀번호 확인 → 변경 → 다른 세션 전부 종료. **04 에 없던 경로** |
 | §4.2 · 11 §7.5 | `GET /auth/yjs-check` | ✅ 프록시 forward_auth 용. 쿠키가 유효하면 204 + `X-User-Id`/`X-User-Role`. `?token=` 은 받지 않는다(I16) |
 | 11 §4.3 CSRF | 모든 상태 변경 요청 | ✅ `csrf_guard`: 출처는 `Sec-Fetch-Site`(cross-site·same-site 거부)와 `Origin` 으로 대조, 토큰은 쿠키와 비교하지 않고 **세션 id 로 HMAC 을 다시 계산**해 대조. 로그인은 출처 대조만 |
@@ -80,3 +80,4 @@ access **쿠키**의 수명은 refresh 와 같다(14일). 15분은 토큰의 `ex
 4. **근태·결재 테이블은 아직 없다.** 03 §3 은 신청 테이블에 `status`·`approver_id` 를 두고, 13 §7.2 는 그 컬럼을 결재 엔진으로 옮기라 한다. 10번 v0.4(13 A9)·로드맵(A2)이 정리되면 한 마이그레이션으로 넣는다. 경로 스텁은 13 §9 기준으로 이미 있다.
 5. **11번 설계서 중 안 한 것.** OIDC/IdP·비상 로컬 로그인·`/auth/config` 는 도입 자체가 미결(11 I1·I2)이라 손대지 않았다. FR-AUTH-04 의 LDAP 확장점은 `routers/auth.py::_verify_credentials` 한 함수다. 네이티브 셸(Tauri/Capacitor)의 교차 오리진 쿠키(11 I6)는 `CORS_ORIGINS` 로 열 수 있게만 해 두었고 검증은 M4 몫.
 6. **`/api/docs` 와 `/api/openapi.json` 은 인증 없이 열린다.** 계약은 어차피 이 레포에 공개돼 있고 사내망 전제라 두었다. 외부 노출 경로가 생기면 `docs_url`·`openapi_url` 을 끈다. `/metrics` 는 미구현.
+7. **알고 둔 한계(리뷰 2026-09-04).** 로그인 실패 제한은 (이메일, IP) 쌍이라 같은 IP 의 반복만 그 계정을 잠근다 — 남이 내 주소를 두드려 나를 잠글 수는 없지만, IP 를 바꿔 가며 한 계정을 두드리는 건 IP 당 30회 한도가 늦출 뿐이다. `audit_events` 는 403 도 기록하므로 member 가 관리 경로를 두드리면 표가 자란다 — 보존 기간·정리 배치는 운영 정책과 함께 정한다. 두 탭이 동시에 refresh 하는 경우는 프론트의 `navigator.locks` 가 막고, 서버측 유예 창(옛 jti 를 잠깐 허용)은 두지 않았다.

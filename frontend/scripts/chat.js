@@ -14,9 +14,9 @@
  *   POST /channels/:id/read           읽음 처리
  *   WS   /ws                          message · typing · read 이벤트
  *
- * 인증은 MSW 로그인이 심는 세션 쿠키(zenith.mock.session=<userId>)로 한다 — 실제 백엔드가
- * HttpOnly 쿠키의 JWT 에서 사용자를 꺼내는 것과 같은 자리다. 쿠키가 없으면 개발 편의로
- * ?userId= 와 본문의 userId 를 받아 준다. 채널 멤버가 아닌 사용자의 요청은 403이어야 한다.
+ * 인증은 MSW 로그인이 심는 세션 쿠키(zenith.mock.session=<userId>)로만 한다 — 실제 백엔드가
+ * HttpOnly 쿠키의 JWT 에서 사용자를 꺼내는 것과 같은 자리다. URL·본문의 userId 는 보지 않는다
+ * (11 §7.5). 채널 멤버가 아닌 사용자의 요청은 403이어야 한다.
  *
  * 메모리에만 보관한다. 서버를 끄면 대화가 사라진다.
  */
@@ -201,7 +201,7 @@ export function sessionUserId(req) {
 
 export async function handleChatRequest(req, res, url) {
   const path = url.pathname.replace(/^\/chat/, '')
-  const viewerId = sessionUserId(req) ?? url.searchParams.get('userId')
+  const viewerId = sessionUserId(req)
 
   if (path === '/channels' && req.method === 'GET') {
     if (!USERS[viewerId]) return json(res, 401, { detail: '알 수 없는 사용자입니다.' })
@@ -228,8 +228,8 @@ export async function handleChatRequest(req, res, url) {
     }
 
     if (req.method === 'POST') {
-      const { userId: bodyUserId, body } = await readBody(req)
-      const userId = viewerId ?? bodyUserId
+      const { body } = await readBody(req)
+      const userId = viewerId
       if (!USERS[userId]) return json(res, 401, { detail: '알 수 없는 사용자입니다.' })
       if (!channel.memberIds.includes(userId)) {
         return json(res, 403, { detail: '이 채널의 멤버가 아닙니다.' })
@@ -247,7 +247,7 @@ export async function handleChatRequest(req, res, url) {
 
   const readMatch = path.match(/^\/channels\/([^/]+)\/read$/)
   if (readMatch && req.method === 'POST') {
-    const userId = viewerId ?? (await readBody(req)).userId
+    const userId = viewerId
     if (!USERS[userId]) return json(res, 401, { detail: '알 수 없는 사용자입니다.' })
     markRead(userId, readMatch[1])
     publish(readMatch[1], { type: 'read', channelId: readMatch[1], userId })

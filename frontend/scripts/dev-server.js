@@ -59,8 +59,8 @@ server.on('upgrade', (req, socket, head) => {
   }
 
   if (url.pathname === '/chat/ws') {
-    // 누구인지는 핸드셰이크의 세션 쿠키가 말한다(11 §7.5). ?userId= 는 쿠키가 없을 때의 개발 편의.
-    const userId = sessionUserId(req) ?? url.searchParams.get('userId') ?? ''
+    // 누구인지는 핸드셰이크의 세션 쿠키가 말한다(11 §7.5). URL 의 사용자 id 는 보지 않는다.
+    const userId = sessionUserId(req) ?? ''
     return wss.handleUpgrade(req, socket, head, (conn) => {
       handleChatConnection(conn, userId)
     })

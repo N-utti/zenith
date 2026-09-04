@@ -214,7 +214,7 @@ async def list_audit(
 ) -> AuditPage:
     stmt = select(AuditEvent).order_by(AuditEvent.at.desc(), AuditEvent.id.desc()).limit(limit + 1)
     if kind:
-        stmt = stmt.where(AuditEvent.kind.like(f"{kind}%"))
+        stmt = stmt.where(AuditEvent.kind.startswith(kind, autoescape=True))  # %·_ 를 글자로
     if cursor:
         at, id_ = _decode_cursor(cursor)
         stmt = stmt.where(tuple_(AuditEvent.at, AuditEvent.id) < (at, id_))

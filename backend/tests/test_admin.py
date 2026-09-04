@@ -183,5 +183,8 @@ async def test_audit_kind_prefix_and_cursor_paging(
     r = await client.get("/api/admin/audit", params={"kind": "auth"})
     kinds = {item["kind"] for item in r.json()["items"]}
     assert kinds == {"auth.login_ok"}  # 방금 exec 로그인도 여기 들어 있다
+    # LIKE 와일드카드는 글자 그대로다
+    assert (await client.get("/api/admin/audit", params={"kind": "%"})).json()["items"] == []
+    assert (await client.get("/api/admin/audit", params={"kind": "_cl"})).json()["items"] == []
     assert (await client.get("/api/admin/audit", params={"cursor": "!!"})).status_code == 422
     assert (await client.get("/api/admin/audit", params={"limit": 0})).status_code == 422

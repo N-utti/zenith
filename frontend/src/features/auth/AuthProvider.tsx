@@ -21,7 +21,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const { data, isPending, isError } = useQuery({
     queryKey: meQueryKey,
     queryFn: fetchMe,
-    retry: false,
+    // 401 은 fetchMe 가 null 로 바꾸므로 여기 오는 오류는 서버 응답이 아닌 것(네트워크 등)뿐이다.
+    // 부팅 때 한 번 삐끗했다고 로그인 화면으로 보내지 않는다.
+    retry: (failureCount, error) => !(error instanceof ApiError) && failureCount < 2,
     staleTime: Infinity,
   })
 

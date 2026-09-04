@@ -90,7 +90,11 @@ async def test_disabled_account_gets_notice_only_with_right_password(
 
 async def test_repeated_failures_are_throttled(client: AsyncClient, users: Users, app_db) -> None:
     for _ in range(settings.login_max_failures):
-        app_db.add(AuditEvent(kind="auth.login_fail", detail={"email": "sujin@zenith.co.kr"}))
+        app_db.add(
+            AuditEvent(
+                kind="auth.login_fail", ip="127.0.0.1", detail={"email": "sujin@zenith.co.kr"}
+            )
+        )
     await app_db.flush()
     r = await login(client, "sujin@zenith.co.kr")
     assert r.status_code == 429
@@ -133,6 +137,44 @@ async def test_refresh_rotates_and_reuse_kills_the_session(
     )
     assert (r.status_code, r.json()["code"]) == (401, "AUTH_INVALID")
     assert (await client.get("/api/me")).status_code == 401  # access 도 같이 죽는다
+
+
+async def test_refresh_keeps_the_absolute_expiry_and_rejects_deactivated_user(
+    client: AsyncClient, users: Users, app_db
+) -> None:
+    from app.models import AuthSession
+
+    await login(client, "sujin@zenith.co.kr")
+    session = await app_db.get(AuthSession, _session_id(client))
+    assert session is not None
+    expires_at = session.expires_at
+    assert (await client.post("/api/auth/refresh", headers=csrf(client))).status_code == 204
+    await app_db.refresh(session)
+    assert session.expires_at == expires_at  # 슬라이딩 없음 — 로그인 후 14일에 끝난다
+
+    # 관리 API 를 거치지 않고 DB 에서 바로 비활성화돼도(세션은 아직 살아 있음) refresh 는 막히고 세션이 닫힌다
+    users.member.active = False
+    await app_db.flush()
+    r = await client.post("/api/auth/refresh", headers=csrf(client))
+    assert (r.status_code, r.json()["code"]) == (401, "AUTH_DISABLED")
+    await app_db.refresh(session)
+    assert session.revoked_at is not None
+
+
+async def test_logout_with_only_a_refresh_cookie_still_revokes(
+    client: AsyncClient, users: Users, app_db
+) -> None:
+    from app.models import AuthSession
+
+    await login(client, "sujin@zenith.co.kr")
+    sid = _session_id(client)
+    r = await client.post(
+        "/api/auth/logout",
+        headers={**csrf(client), **_cookies(refresh=client.cookies["refresh"])},
+    )
+    assert r.status_code == 204
+    session = await app_db.get(AuthSession, sid)
+    assert session is not None and session.revoked_at is not None
 
 
 async def test_logout_revokes_immediately_and_is_idempotent(
@@ -223,6 +265,36 @@ async def test_fetch_metadata_blocks_cross_site_even_without_origin(
         headers={"Sec-Fetch-Site": "cross-site"},
     )
     assert r.json()["code"] == "CSRF_ORIGIN"
+
+
+async def test_non_browser_clients_and_allowed_shells_pass_the_origin_check(
+    client: AsyncClient, users: Users, monkeypatch
+) -> None:
+    """Origin·Sec-Fetch-Site 가 둘 다 없는 요청(curl)은 쿠키를 자동으로 싣지 않으니 통과. 등록된 셸 오리진도 통과."""
+    await login(client, "sujin@zenith.co.kr")
+    assert (await client.post("/api/auth/refresh", headers=csrf(client))).status_code == 204
+    monkeypatch.setattr(settings, "cors_origins", ["tauri://localhost"])
+    r = await client.post(
+        "/api/auth/refresh",
+        headers={**csrf(client), "Origin": "tauri://localhost", "Sec-Fetch-Site": "cross-site"},
+    )
+    assert r.status_code == 204
+
+
+async def test_lockout_needs_the_same_ip_as_the_failures(
+    client: AsyncClient, users: Users, app_db
+) -> None:
+    """남의 주소로 실패를 쌓아도 그 사람은 다른 IP 에서 로그인할 수 있다."""
+    for _ in range(settings.login_max_failures):
+        app_db.add(
+            AuditEvent(
+                kind="auth.login_fail", ip="10.0.0.99", detail={"email": "sujin@zenith.co.kr"}
+            )
+        )
+    await app_db.flush()
+    assert (
+        await login(client, "sujin@zenith.co.kr")
+    ).status_code == 204  # 테스트 클라이언트는 127.0.0.1
 
 
 async def test_failures_from_one_ip_are_throttled_across_emails(

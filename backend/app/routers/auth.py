@@ -104,7 +104,9 @@ async def login(
     email = body.email.strip().lower()
     window_start = _now() - timedelta(minutes=settings.login_failure_window_minutes)
     ip = audit.client_ip(request)
-    by_email = await audit.count_since(db, "auth.login_fail", window_start, email=email)
+    # 이메일 기준은 (이메일, IP) 쌍으로 센다 — 남의 주소를 두드려 그 사람을 잠그지 못하게.
+    # IP 기준은 이메일을 바꿔 가며 두드리는 걸 막는다. 둘이 합쳐 IP 당 시도 총량이 갇힌다.
+    by_email = await audit.count_since(db, "auth.login_fail", window_start, ip=ip, email=email)
     by_ip = await audit.count_since(db, "auth.login_fail", window_start, ip=ip) if ip else 0
     if by_email >= settings.login_max_failures or by_ip >= settings.login_max_failures_per_ip:
         raise ApiError(
@@ -168,9 +170,9 @@ async def refresh(request: Request, response: Response, db: AsyncSession = Depen
         await db.commit()
         raise ApiError(401, "AUTH_DISABLED", "비활성화된 계정입니다. 관리자에게 문의하세요.")
 
+    # expires_at 은 로그인 때 정한 그대로다 — 세션 수명은 절대값 14일이고 쓸수록 늘어나지 않는다.
     session.refresh_jti = uuid.uuid4()
     session.last_used_at = _now()
-    session.expires_at = _now() + timedelta(days=settings.refresh_ttl_days)
     await db.commit()
     set_auth_cookies(
         response, user_id=user.id, session_id=session.id, refresh_jti=session.refresh_jti
