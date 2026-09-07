@@ -35,11 +35,12 @@ app/
 ├─ audit.py         감사 기록 쓰기·집계 (로그인 실패 제한도 이걸로 센다)
 ├─ errors.py        04 §0 에러 본문 {detail, code}
 ├─ stubs.py         미구현 경로를 501로 OpenAPI 에 올리는 헬퍼
+├─ realtime/yjs.py  /api/yjs/{doc_id} — y-websocket 릴레이 + Y.Doc 영속화 (§4.2)
 ├─ ai/provider.py   LLMProvider 프로토콜 · ClaudeProvider
 └─ routers/         auth · me · docs · channels · boards · search · ai · attendance · approvals · admin
 alembic/            비동기 env.py · versions/
 scripts/            export_openapi.py · seed.py
-tests/              계약 경로 검사 · 인증 왕복 · SSE 프레이밍 (DB 불필요) · 문서·관리자 (실 Postgres)
+tests/              계약 경로 검사 · 인증 왕복 · SSE 프레이밍 (DB 불필요) · 문서·관리자·공동편집 (실 Postgres · httpx-ws)
 openapi.json        생성물 — 커밋한다 (아래 "계약의 강제")
 ```
 
@@ -56,7 +57,8 @@ openapi.json        생성물 — 커밋한다 (아래 "계약의 강제")
 | §9 | `GET /healthz` | ✅ |
 | §3 문서 | `GET /tree`, `POST /folders`, `PATCH /folders/{id}`, `POST /docs`, `GET/PATCH/DELETE /docs/{id}`, `GET/POST /docs/{id}/versions`, `POST /docs/{id}/restore`, `GET/POST /docs/{id}/comments` | ✅ 트리·메타·버전 표식·댓글. 본문은 Y.Doc 이라 여기 없다(`GET /docs/{id}` 의 `ydoc` 은 /yjs 릴레이가 영속화하기 전까지 null). 휴지통은 `deleted_at`(트리에서만 빠짐, 열기는 됨) + `POST /docs/{id}/untrash`, `?hard=1` 은 exec 만(버전·댓글·색인까지 삭제, 감사 `docs.hard_deleted`, 거부는 `acl.denied`). 버전은 같은 사람의 무명 스냅샷을 3분 안에 하나로 접고 라벨이 붙으면 안 접는다. 댓글의 `@이름` 은 활성 사용자 이름과 맞춰 `notifications(kind=mention)` 행을 만든다(푸시는 /ws 몫). 문서에 열람 등급은 없다 — 로그인하면 모두 읽고 쓴다 |
 | §2·5·6·7·8(나머지)·10, 13 §9 | 전부 | 🟡 **501 스텁** — 경로·요약만 OpenAPI 에 있다 |
-| §4 실시간 | `/ws`, `/yjs/{doc_id}` | ⏳ 미착수. WebSocket 이라 OpenAPI 밖 — 핸드셰이크 인증은 `deps.authenticate(websocket.cookies, db)` 로 |
+| §4.2 공동편집 | `WS /api/yjs/{doc_id}` | ✅ y-websocket 프로토콜 릴레이(pycrdt). 쿠키 핸드셰이크 인증(`?token=` 없음, TC-SEC-03), 문서마다 Y.Doc(gc 끔) 하나를 들고 업데이트·awareness 중계. **영속화**: `documents.ydoc_snapshot` 을 원본으로, 제목(`meta.title`)·`text_cache`·`tsv` 를 파생으로 — 활동 중 30초마다, 마지막 사람이 나갈 때, 한 명이 나갈 때 더러워져 있으면. 방은 프로세스 메모리(worker 1개 전제). OpenAPI 밖 |
+| §4.1 채팅·알림 | `/ws` | ⏳ 미착수 — 핸드셰이크 인증은 `deps.authenticate(websocket.cookies, db)` 로 |
 
 프론트(`frontend/`)도 같은 규약으로 옮겼다 — 토큰을 갖지 않고, `csrf` 쿠키만 읽어 헤더로 되돌리며, access 만료 시 refresh 후 1회 재시도한다. refresh 는 같은 오리진 탭들이 `navigator.locks` 로 줄을 서서 회전 토큰이 겹치지 않고, 어떤 요청이든 진짜 401 을 받으면 프로필을 비워 로그인 화면으로 간다(`frontend/README.md` "인증은 쿠키다").
 
@@ -82,4 +84,5 @@ access **쿠키**의 수명은 refresh 와 같다(14일). 15분은 토큰의 `ex
 5. **11번 설계서 중 안 한 것.** OIDC/IdP·비상 로컬 로그인·`/auth/config` 는 도입 자체가 미결(11 I1·I2)이라 손대지 않았다. FR-AUTH-04 의 LDAP 확장점은 `routers/auth.py::_verify_credentials` 한 함수다. 네이티브 셸(Tauri/Capacitor)의 교차 오리진 쿠키(11 I6)는 `CORS_ORIGINS` 로 열 수 있게만 해 두었고 검증은 M4 몫.
 6. **`/api/docs` 와 `/api/openapi.json` 은 인증 없이 열린다.** 계약은 어차피 이 레포에 공개돼 있고 사내망 전제라 두었다. 외부 노출 경로가 생기면 `docs_url`·`openapi_url` 을 끈다. `/metrics` 는 미구현.
 8. **§3 문서 API 가 04 를 넓히거나 달리 읽은 것(2026-09-07) — Notion 04·03 반영 필요.** (a) `POST /docs/{id}/versions {snapshot(base64), label?}` 추가 — 스냅샷은 클라이언트(Yjs)가 만들어 올린다. (b) `GET /docs/{id}/versions` 목록에는 스냅샷이 없고(버전이 쌓인 문서에서 목록 한 번이 수십 MB 가 된다), `POST /docs/{id}/restore {version_id}` 가 **복원할 스냅샷을 돌려주기만** 한다. 서버가 Y.Doc 을 과거로 갈아끼우면 접속 중인 다른 사람과 병합돼 도로 취소되므로, 적용은 클라이언트가 앞으로 가는 편집 한 번으로 한다(frontend/README "되돌리기는 되감기가 아니다"). (c) `POST /docs/{id}/untrash` 추가(TC-DOC-05). 휴지통 목록 조회와 30일 뒤 자동 삭제 배치는 아직 없다. (d) `POST /docs` 의 `blocks?` 는 받지 않는다 — AI 템플릿 저장은 보류. (e) `doc_versions` 에 `author_id`·`label` 컬럼 추가(03 개정 필요). (f) 문서에 열람 등급이 없다 — 03 §2.2 는 등급을 게시판·RAG 에만 둔다. 폴더 단위 등급이 필요해지면 `folders.min_role` 로. (g) 제목·라벨 200자, 댓글 1만 자, 스냅샷 base64 8MB, block_id 100자 상한. (h) 멘션은 `@이름` 정확 일치·동명이인 전부(글쓴이 자신만 id 로 제외) — 프론트 자동완성이 id 를 실어 보내면 `@[id]` 로 바꾼다.
+9. **§4.2 공동편집을 API 프로세스 안에 넣었다(2026-09-07) — ARCHITECTURE §1·§7 과 다름, Notion 반영 필요.** ARCHITECTURE 는 별도 y-websocket(Node) 컨테이너 + Caddy forward_auth(`/auth/yjs-check`) 구성이었다. pycrdt(yrs 바인딩)로 FastAPI 안에 릴레이를 두면 컨테이너 하나·언어 하나·DB 접근 경로 하나가 줄고, §2 가 이미 "ypy-websocket 으로 파이썬 통일 가능" 이라 적어 두었다. `yjs-check` 는 남겨 둔다(프록시가 다른 이유로 쓸 수 있다). 대가: 방(room)이 프로세스 메모리라 **uvicorn worker 는 1개**. 다중 프로세스는 문서별 sticky 라우팅이나 Redis 중계가 선행돼야 한다. 저장 시점은 활동 중 30초 간격 + 퇴장 시라, 마지막 활동 30초 안에 프로세스가 죽으면 그만큼 잃는다(클라이언트 IndexedDB 가 재접속 때 다시 밀어 넣는다). 프론트는 `/collab` 프록시 대상을 `/api/yjs` 로 바꾸면 된다(y-websocket 클라이언트 3.1 로 실측 상호운용 확인). 리뷰(2026-09-07)로 넣은 것: 핸드셰이크 Origin 대조(Cross-Site WebSocket Hijacking — `deps.origin_allowed`), 60초마다 쿠키 재검증(세션 회수가 열린 소켓에도 먹게), 프레임 1MB 상한, 휴지통 문서 거부, 영구 삭제 시 방 닫기, 브로드캐스트 5초 타임아웃(느린 연결 격리), 제목은 Y.Doc `meta.title` 이 바뀌었을 때만 투영(트리 PATCH 를 되돌리지 않음), `updated_by` 는 마지막 편집자. DB 세션은 소켓 수명 동안 붙잡지 않는다(핸드셰이크·저장·재검증 때만).
 9. **알고 둔 한계(리뷰 2026-09-04).** 로그인 실패 제한은 (이메일, IP) 쌍이라 같은 IP 의 반복만 그 계정을 잠근다 — 남이 내 주소를 두드려 나를 잠글 수는 없지만, IP 를 바꿔 가며 한 계정을 두드리는 건 IP 당 30회 한도가 늦출 뿐이다. `audit_events` 는 403 도 기록하므로 member 가 관리 경로를 두드리면 표가 자란다 — 보존 기간·정리 배치는 운영 정책과 함께 정한다. 두 탭이 동시에 refresh 하는 경우는 프론트의 `navigator.locks` 가 막고, 서버측 유예 창(옛 jti 를 잠깐 허용)은 두지 않았다.
