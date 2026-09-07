@@ -59,5 +59,5 @@ Claude Code(메인) = 기획·구현·테스트 → Codex = 독립 리뷰(파일
 
 - **대상**: 위 "대형/보안민감"에 해당하는 백엔드 변경. 소~중형은 Claude 리뷰어 1회로 끝낸다.
 - **방법**: `codex-reviewer` 에이전트(`.claude/agents/`)와 Claude 리뷰어를 **병렬**로 돌리고, 메인 세션이 종합(중복 병합·심각도 조정·채택/기각)한다.
-- Codex 호출은 codex MCP(`.mcp.json`) 우선, 미가용 시 `codex exec` 폴백. Codex 왕복 실패는 결과에 **"Codex 미가동"** 으로 명시한다 — 교차검증 안 된 결과를 숨기지 않는다.
+- Codex 모델은 `gpt-5.6-sol`. 호출은 codex MCP(`.mcp.json`) 우선, 미가용 시 `codex exec` 폴백. Codex 왕복 실패는 결과에 **"Codex 미가동"** 으로 명시한다 — 교차검증 안 된 결과를 숨기지 않는다.
 - 프론트 PR 은 Codex 를 쓰지 않는다(프론트 PC 에 codex CLI 전제 없음).

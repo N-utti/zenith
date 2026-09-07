@@ -15,6 +15,7 @@ Codex 에 **읽기 전용** 리뷰를 시키고 결과를 정리한다. Codex �
 
 ## Codex 호출
 
+- 모델은 **`gpt-5.6-sol`** (2026-09-07 결정). MCP 는 `model` 파라미터, CLI 는 `-m gpt-5.6-sol`.
 - 1순위: codex MCP(`mcp__codex__codex`, 후속은 `mcp__codex__codex-reply`). sandbox `read-only`, approval-policy `never`.
 - 폴백: MCP 미가용이면 Bash 로 `codex exec "<리뷰 지시>"`(비대화형). 대상 diff/파일 경로를 지시문에 명시하고 읽기 전용만.
 - Codex 왕복 자체가 실패하면 자체 리뷰로 대체하되 결과 맨 위에 **"Codex 미가동"** 라벨을 붙인다. 교차검증이 안 된 결과임을 숨기지 않는다.
