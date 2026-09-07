@@ -150,16 +150,25 @@ class Document(Base):
 
 
 class DocVersion(Base):
+    """Yjs 스냅샷(시점 표식). 내용 사본이 아니라 gc:false 인 Y.Doc 이력에서 되살린다(frontend/README).
+
+    03 에 없던 컬럼 둘: author_id(누가 남겼나 — 3분 접기 기준), label(되돌리기처럼 이유가 있는 버전).
+    """
+
     __tablename__ = "doc_versions"
+    __table_args__ = (Index("idx_doc_versions_doc", "doc_id", sql_text("created_at DESC")),)
 
     id: Mapped[uuid.UUID] = uuid_pk()
     doc_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("documents.id"), nullable=False)
     snapshot: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    author_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
+    label: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = created_at_col()
 
 
 class DocComment(Base):
     __tablename__ = "doc_comments"
+    __table_args__ = (Index("idx_doc_comments_doc", "doc_id", "created_at"),)
 
     id: Mapped[uuid.UUID] = uuid_pk()
     doc_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("documents.id"), nullable=False)

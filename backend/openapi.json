@@ -324,18 +324,17 @@
           "docs"
         ],
         "summary": "사이드바 트리 {folders[], docs[]} (정렬 포함)",
-        "operationId": "stub_api_tree_get",
+        "operationId": "tree_api_tree_get",
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/TreeOut"
+                }
               }
             }
-          },
-          "501": {
-            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
           }
         }
       }
@@ -346,18 +345,37 @@
           "docs"
         ],
         "summary": "폴더 생성",
-        "operationId": "stub_api_folders_post",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
+        "operationId": "create_folder_api_folders_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FolderCreateIn"
               }
             }
           },
-          "501": {
-            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FolderOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
           }
         }
       }
@@ -368,18 +386,49 @@
           "docs"
         ],
         "summary": "폴더 이름·이동·정렬",
-        "operationId": "stub_api_folders__id__patch",
+        "operationId": "update_folder_api_folders__id__patch",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FolderPatchIn"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/FolderOut"
+                }
               }
             }
           },
-          "501": {
-            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
           }
         }
       }
@@ -389,19 +438,38 @@
         "tags": [
           "docs"
         ],
-        "summary": "{folder_id, title, blocks?} → 문서 생성 (AI 템플릿 저장 포함)",
-        "operationId": "stub_api_docs_post",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
+        "summary": "{folder_id, title} → 문서 생성",
+        "operationId": "create_doc_api_docs_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DocCreateIn"
               }
             }
           },
-          "501": {
-            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
           }
         }
       }
@@ -411,39 +479,40 @@
         "tags": [
           "docs"
         ],
-        "summary": "메타 + 최신 스냅숏 (초기 로드용)",
-        "operationId": "stub_api_docs__id__get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
+        "summary": "메타 + 서버 보관 Yjs 상태 (초기 로드용)",
+        "operationId": "get_doc_api_docs__id__get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
             }
-          },
-          "501": {
-            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
           }
-        }
-      },
-      "delete": {
-        "tags": [
-          "docs"
         ],
-        "summary": "휴지통 이동(30일) / ?hard=1 관리자만",
-        "operationId": "stub_api_docs__id__delete",
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/DocDetail"
+                }
               }
             }
           },
-          "501": {
-            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
           }
         }
       },
@@ -451,19 +520,137 @@
         "tags": [
           "docs"
         ],
-        "summary": "제목·폴더 이동",
-        "operationId": "stub_api_docs__id__patch",
+        "summary": "제목·폴더 이동 (목록용 투영 — 본문 원천은 Y.Doc)",
+        "operationId": "update_doc_api_docs__id__patch",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DocPatchIn"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/DocOut"
+                }
               }
             }
           },
-          "501": {
-            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "docs"
+        ],
+        "summary": "휴지통 이동(30일) / ?hard=1 은 exec 만 — 버전·댓글·색인까지 지운다",
+        "operationId": "delete_doc_api_docs__id__delete",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          },
+          {
+            "name": "hard",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Hard"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/docs/{id}/untrash": {
+      "post": {
+        "tags": [
+          "docs"
+        ],
+        "summary": "휴지통에서 복구 (TC-DOC-05) — 04 에 없던 경로",
+        "operationId": "untrash_doc_api_docs__id__untrash_post",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
           }
         }
       }
@@ -473,19 +660,91 @@
         "tags": [
           "docs"
         ],
-        "summary": "버전 목록",
-        "operationId": "stub_api_docs__id__versions_get",
+        "summary": "버전 목록 (최신순) — 스냅샷은 /restore 로 받는다",
+        "operationId": "list_versions_api_docs__id__versions_get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Items_VersionMeta_"
+                }
               }
             }
           },
-          "501": {
-            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "docs"
+        ],
+        "summary": "Yjs 스냅샷 보관 — 같은 사람의 무명 스냅샷은 3분 안에 하나로 접는다. 04 에 없던 경로",
+        "operationId": "create_version_api_docs__id__versions_post",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VersionCreateIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VersionOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
           }
         }
       }
@@ -495,19 +754,50 @@
         "tags": [
           "docs"
         ],
-        "summary": "버전 복구",
-        "operationId": "stub_api_docs__id__restore_post",
+        "summary": "버전 복구 — 복원할 스냅샷을 돌려준다. 적용은 클라이언트가 '앞으로 가는 편집' 한 번으로 한다",
+        "operationId": "restore_version_api_docs__id__restore_post",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RestoreIn"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/VersionOut"
+                }
               }
             }
           },
-          "501": {
-            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
           }
         }
       }
@@ -517,19 +807,40 @@
         "tags": [
           "docs"
         ],
-        "summary": "블록 댓글 목록",
-        "operationId": "stub_api_docs__id__comments_get",
+        "summary": "블록 댓글 목록 (오래된 순)",
+        "operationId": "list_comments_api_docs__id__comments_get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Items_CommentOut_"
+                }
               }
             }
           },
-          "501": {
-            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
           }
         }
       },
@@ -537,19 +848,50 @@
         "tags": [
           "docs"
         ],
-        "summary": "{block_id?, body} — @멘션 파싱 → 알림",
-        "operationId": "stub_api_docs__id__comments_post",
+        "summary": "{block_id?, body} — @이름 멘션은 notifications(kind=mention) 로 (FR-DOC-04)",
+        "operationId": "create_comment_api_docs__id__comments_post",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CommentCreateIn"
+              }
+            }
+          }
+        },
         "responses": {
-          "200": {
+          "201": {
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/CommentOut"
+                }
               }
             }
           },
-          "501": {
-            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
           }
         }
       }
@@ -2070,6 +2412,361 @@
         ],
         "title": "ChatIn"
       },
+      "CommentCreateIn": {
+        "properties": {
+          "block_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Block Id"
+          },
+          "body": {
+            "type": "string",
+            "maxLength": 10000,
+            "minLength": 1,
+            "title": "Body"
+          }
+        },
+        "type": "object",
+        "required": [
+          "body"
+        ],
+        "title": "CommentCreateIn"
+      },
+      "CommentOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "block_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Block Id"
+          },
+          "author": {
+            "$ref": "#/components/schemas/Person"
+          },
+          "body": {
+            "type": "string",
+            "title": "Body"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "block_id",
+          "author",
+          "body",
+          "created_at"
+        ],
+        "title": "CommentOut"
+      },
+      "DocCreateIn": {
+        "properties": {
+          "folder_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Folder Id"
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Title"
+          }
+        },
+        "type": "object",
+        "required": [
+          "folder_id",
+          "title"
+        ],
+        "title": "DocCreateIn",
+        "description": "04 의 `blocks?`(AI 템플릿 저장)는 받지 않는다 — AI 보류(2026-09-07). 본문은 Y.Doc 으로 들어온다."
+      },
+      "DocDetail": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "folder_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Folder Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "updated_by": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Person"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "deleted_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deleted At"
+          },
+          "ydoc": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ydoc"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "folder_id",
+          "title",
+          "updated_at",
+          "updated_by",
+          "deleted_at",
+          "ydoc"
+        ],
+        "title": "DocDetail"
+      },
+      "DocOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "folder_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Folder Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "updated_by": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Person"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "deleted_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deleted At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "folder_id",
+          "title",
+          "updated_at",
+          "updated_by",
+          "deleted_at"
+        ],
+        "title": "DocOut"
+      },
+      "DocPatchIn": {
+        "properties": {
+          "title": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "folder_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Folder Id"
+          }
+        },
+        "type": "object",
+        "title": "DocPatchIn"
+      },
+      "FolderCreateIn": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Title"
+          },
+          "parent_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Id"
+          },
+          "sort": {
+            "type": "integer",
+            "title": "Sort",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "title"
+        ],
+        "title": "FolderCreateIn"
+      },
+      "FolderOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "parent_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "sort": {
+            "type": "integer",
+            "title": "Sort"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "parent_id",
+          "title",
+          "sort"
+        ],
+        "title": "FolderOut"
+      },
+      "FolderPatchIn": {
+        "properties": {
+          "title": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "parent_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Id"
+          },
+          "sort": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sort"
+          }
+        },
+        "type": "object",
+        "title": "FolderPatchIn"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -2082,6 +2779,38 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
+      },
+      "Items_CommentOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CommentOut"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "Items[CommentOut]"
+      },
+      "Items_VersionMeta_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/VersionMeta"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "Items[VersionMeta]"
       },
       "LoginIn": {
         "properties": {
@@ -2200,6 +2929,39 @@
         ],
         "title": "PasswordIn"
       },
+      "Person": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "Person"
+      },
+      "RestoreIn": {
+        "properties": {
+          "version_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Version Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "version_id"
+        ],
+        "title": "RestoreIn"
+      },
       "TeamOut": {
         "properties": {
           "id": {
@@ -2218,6 +2980,30 @@
           "name"
         ],
         "title": "TeamOut"
+      },
+      "TreeOut": {
+        "properties": {
+          "folders": {
+            "items": {
+              "$ref": "#/components/schemas/FolderOut"
+            },
+            "type": "array",
+            "title": "Folders"
+          },
+          "docs": {
+            "items": {
+              "$ref": "#/components/schemas/DocOut"
+            },
+            "type": "array",
+            "title": "Docs"
+          }
+        },
+        "type": "object",
+        "required": [
+          "folders",
+          "docs"
+        ],
+        "title": "TreeOut"
       },
       "UserCreateIn": {
         "properties": {
@@ -2478,6 +3264,125 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "VersionCreateIn": {
+        "properties": {
+          "snapshot": {
+            "type": "string",
+            "maxLength": 8000000,
+            "minLength": 1,
+            "title": "Snapshot"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          }
+        },
+        "type": "object",
+        "required": [
+          "snapshot"
+        ],
+        "title": "VersionCreateIn"
+      },
+      "VersionMeta": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "author": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Person"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "created_at",
+          "author",
+          "label"
+        ],
+        "title": "VersionMeta"
+      },
+      "VersionOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "author": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Person"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "snapshot": {
+            "type": "string",
+            "title": "Snapshot"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "created_at",
+          "author",
+          "label",
+          "snapshot"
+        ],
+        "title": "VersionOut"
       }
     }
   }

@@ -11,12 +11,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import Base, SessionLocal
-from app.models import Board, Channel, Team, User, Workspace
+from app.models import Board, Channel, Folder, Team, User, Workspace
 from app.security import hash_password
 
 PASSWORD = os.environ.get("SEED_PASSWORD", "zenith1234")
 BOARDS = [("전체공지", "member"), ("팀장 회의록", "lead"), ("경영 보고", "exec")]
 CHANNELS = ["공지사항", "일반"]
+ROOT_FOLDER = "회사 위키"
 USERS = [
     ("김수진", "sujin@zenith.co.kr", "member"),
     ("박동현", "donghyun@zenith.co.kr", "lead"),
@@ -42,6 +43,8 @@ async def main() -> None:
             await get_or_create(db, Board, defaults={"min_role": min_role}, name=name)
         for name in CHANNELS:
             await get_or_create(db, Channel, ws_id=ws.id, name=name)
+        # 문서는 폴더 안에만 산다(03 documents.folder_id NOT NULL). 루트 폴더 하나로 시작한다.
+        await get_or_create(db, Folder, ws_id=ws.id, parent_id=None, title=ROOT_FOLDER)
         team = await get_or_create(db, Team, name="개발팀")
         pw_hash = hash_password(PASSWORD)
         for name, email, role in USERS:
@@ -55,7 +58,8 @@ async def main() -> None:
                 team.lead_id = user.id
         await db.commit()
     print(
-        f"seeded: workspace 1, boards {len(BOARDS)}, channels {len(CHANNELS)}, users {len(USERS)}"
+        f"seeded: workspace 1, boards {len(BOARDS)}, channels {len(CHANNELS)}, "
+        f"folder 1, users {len(USERS)}"
     )
 
 
