@@ -27,8 +27,9 @@ jobs:
     name: 변경 영역 감지
     runs-on: ubuntu-latest
     outputs:
-      backend: ${{ steps.filter.outputs.backend || steps.filter.outputs.ci }}
-      frontend: ${{ steps.filter.outputs.frontend || steps.filter.outputs.ci }}
+      # outputs 는 문자열이라 'false' 도 truthy — 반드시 == 'true' 로 비교한 뒤 OR 한다.
+      backend: ${{ steps.filter.outputs.backend == 'true' || steps.filter.outputs.ci == 'true' }}
+      frontend: ${{ steps.filter.outputs.frontend == 'true' || steps.filter.outputs.ci == 'true' }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
