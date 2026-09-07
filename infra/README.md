@@ -24,6 +24,6 @@ caddy(TLS)가 없는 동안 api 는 평문 http 라 `COOKIE_SECURE=false` 로 �
 
 - **caddy** — TLS(사내 CA)·리버스 프록시·`/yjs` forward_auth. 프론트 빌드가 붙을 때.
 - **web** — Vite 산출물 file_server.
-- **yjs** — y-websocket 릴레이. 지금은 `frontend/scripts/dev-server.js` 가 개발용으로 대신한다.
+- ~~**yjs** — y-websocket 릴레이~~ → 필요 없어졌다(2026-09-07). 릴레이는 `api` 안에 있다(`/api/yjs/{doc_id}`, pycrdt). 그래서 `api` 는 **worker 1개**로 띄운다. 개발 중 프론트는 `frontend/scripts/dev-server.js` 대신 vite `/collab` 프록시를 `/api/yjs` 로 돌리면 된다.
 - **ollama** — ARCHITECTURE §7은 Mac mini 네이티브 실행이었으나, AI는 Claude API로 가기로 했다(2026-09-04). 되돌리면 `OLLAMA_URL` 만 추가하면 된다.
 - 일일 `pg_dump` 백업, 모니터링(`/metrics`).

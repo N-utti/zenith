@@ -8,6 +8,7 @@ from typing import Any
 from fastapi import Depends, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.requests import HTTPConnection
 
 from app import audit
 from app.config import settings
@@ -84,11 +85,27 @@ _CSRF_EXEMPT = frozenset({"/api/auth/login"})  # 아직 세션이 없어 토큰�
 _FORBIDDEN_SITES = frozenset({"cross-site", "same-site"})
 
 
-def _own_origin(request: Request) -> str:
-    # Caddy·vite 프록시 뒤에서는 X-Forwarded-* 가 브라우저가 본 주소다.
-    scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
-    host = request.headers.get("x-forwarded-host") or request.headers.get("host", "")
-    return f"{scheme}://{host}"
+_WS_SCHEMES = {"ws": "http", "wss": "https"}
+
+
+def _own_origin(conn: HTTPConnection) -> str:
+    # Caddy·vite 프록시 뒤에서는 X-Forwarded-* 가 브라우저가 본 주소다. WebSocket 도 브라우저의 Origin 은 http(s) 다.
+    scheme = conn.headers.get("x-forwarded-proto", conn.url.scheme)
+    host = conn.headers.get("x-forwarded-host") or conn.headers.get("host", "")
+    return f"{_WS_SCHEMES.get(scheme, scheme)}://{host}"
+
+
+def origin_allowed(headers: Mapping[str, str], request_origin: str) -> bool:
+    """브라우저가 붙인 출처가 우리 것(또는 CORS_ORIGINS)인지. Origin 이 없으면(비브라우저) 통과 — 쿠키를 자동으로 싣지 않는다.
+
+    HTTP 의 csrf_guard 와 WebSocket 핸드셰이크(realtime/*)가 같이 쓴다 — 브라우저는 WebSocket 에 CORS 를
+    적용하지 않고 쿠키는 자동으로 실으므로, Origin 을 서버가 대조하지 않으면 악성 사이트가 로그인된
+    사용자의 쿠키로 소켓을 열 수 있다(Cross-Site WebSocket Hijacking).
+    """
+    origin = headers.get("origin")
+    if origin is None:
+        return headers.get("sec-fetch-site") not in _FORBIDDEN_SITES
+    return origin == request_origin or origin in settings.cors_origins
 
 
 async def csrf_guard(request: Request) -> None:

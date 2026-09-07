@@ -33,6 +33,7 @@ from app.models import (
     User,
     Workspace,
 )
+from app.realtime import yjs
 
 router = APIRouter(tags=["docs"], dependencies=[Depends(current_user)])
 
@@ -369,6 +370,7 @@ async def delete_doc(
         await db.execute(delete(model).where(model.doc_id == doc.id))
     await db.execute(update(Message).where(Message.doc_ref == doc.id).values(doc_ref=None))
     await db.delete(doc)
+    await yjs.close_room(doc.id)  # 접속 중인 편집자는 4404 로 끊는다
     audit.record(
         db,
         "docs.hard_deleted",

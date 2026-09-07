@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.deps import csrf_guard
 from app.errors import install_error_handlers
+from app.realtime import yjs
 from app.routers import (
     admin,
     ai,
@@ -51,6 +52,7 @@ def create_app() -> FastAPI:
     for module in (auth, me, docs, channels, boards, search, ai, attendance, approvals, admin):
         api.include_router(module.router)
     app.include_router(api)
+    yjs.register(app)  # WebSocket — OpenAPI 밖 (04 §4.2)
     return app
 
 
