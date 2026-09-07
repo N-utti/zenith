@@ -1,0 +1,126 @@
+name: CI
+
+# 단일 워크플로 + 영역 path 필터 + 단일 게이트(ci-ok). CLAUDE.md §협업 워크플로.
+# - backend 잡은 backend/** 가 바뀐 PR 에서만, frontend 잡은 frontend/** 가 바뀐 PR 에서만 돈다.
+#   → 백엔드 PR 은 프론트 빌드를, 프론트 PR 은 백엔드 테스트를 서로 안 기다린다.
+# - 브랜치 보호의 required check 는 ci-ok 하나만. ci-ok 는 항상 돌고, 관련 잡이 통과(또는 skip)면 green
+#   → path 필터로 skip 된 잡이 required 라서 머지가 영구 pending 되는 문제를 피한다.
+# - 문서(*.md)만 바뀐 PR 은 어느 잡도 돌지 않는다 — CLAUDE.md·README 수정에 테스트가 필요하진 않다.
+# - apps/desktop(Tauri) 은 Rust 툴체인이 무거워 CI 에 올리지 않는다 — apps/desktop/CLAUDE.md 의 로컬 게이트.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# 레포 기본 토큰이 읽기 전용이라 paths-filter 가 PR 파일 목록을 읽으려면 pull-requests: read 가 명시돼야 한다.
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  changes:
+    name: 변경 영역 감지
+    runs-on: ubuntu-latest
+    outputs:
+      # outputs 는 문자열이라 'false' 도 truthy — 반드시 == 'true' 로 비교한 뒤 OR 한다.
+      backend: ${{ steps.filter.outputs.backend == 'true' || steps.filter.outputs.ci == 'true' }}
+      frontend: ${{ steps.filter.outputs.frontend == 'true' || steps.filter.outputs.ci == 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          # every: 파일이 필터의 모든 패턴을 만족해야 매치 — 부정 패턴(*.md 제외)이 이 모드에서만 동작한다.
+          # 그래서 ci.yml 은 별도 필터로 두고 outputs 에서 OR 한다.
+          predicate-quantifier: every
+          filters: |
+            backend:
+              - 'backend/**'
+              - '!backend/**/*.md'
+            frontend:
+              - 'frontend/**'
+              - '!frontend/**/*.md'
+            ci:
+              - '.github/workflows/ci.yml'
+
+  backend:
+    name: 백엔드 — ruff · pytest(pgvector PG) · openapi 최신성
+    needs: changes
+    if: ${{ needs.changes.outputs.backend == 'true' }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        # infra/docker-compose.yml 과 같은 이미지 — 마이그레이션이 vector 확장을 만든다.
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: zenith
+          POSTGRES_PASSWORD: zenith
+          POSTGRES_DB: zenith
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U zenith -d zenith"
+          --health-interval 5s --health-timeout 3s --health-retries 12
+    env:
+      # conftest 가 이 URL 의 DB 이름을 zenith_test 로 바꿔 만들고 마이그레이션한다. JWT_SECRET 도 conftest 가 채운다.
+      DATABASE_URL: postgresql+asyncpg://zenith:zenith@localhost:5432/zenith
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - name: uv sync (dev 그룹 포함, lock 고정)
+        run: uv sync --locked
+      - name: ruff
+        run: uv run ruff check .
+      - name: pytest (DB 테스트 skip 없이)
+        run: uv run pytest -q -rs
+
+  frontend:
+    name: 프론트엔드 — lint · vitest · build
+    needs: changes
+    if: ${{ needs.changes.outputs.frontend == 'true' }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      - name: build (tsc -b + vite build)
+        run: npm run build
+
+  ci-ok:
+    name: CI Gate
+    # 브랜치 보호에서 required 로 거는 유일한 체크. 항상 실행한다.
+    needs: [changes, backend, frontend]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: 관련 잡 결과 집계 (skip=통과, failure/cancelled=차단)
+        run: |
+          # changes 가 실패하면 뒤 잡이 전부 skip 돼 게이트가 헛되이 green 이 된다 — changes 도 집계한다.
+          for r in "${{ needs.changes.result }}" "${{ needs.backend.result }}" "${{ needs.frontend.result }}"; do
+            echo "result: $r"
+            if [ "$r" = "failure" ] || [ "$r" = "cancelled" ]; then
+              echo "::error::필수 잡이 실패/취소됨($r)"
+              exit 1
+            fi
+          done
+          echo "모든 관련 잡 통과(또는 해당 없음)."

@@ -46,3 +46,6 @@ minio-data/
 # 에이전트 로컬 상태
 .gstack/
 .omc/
+
+# Claude Code 개인 설정(권한 허용 목록 등) — 공용 하네스는 .claude/settings.json 에 커밋한다
+.claude/settings.local.json

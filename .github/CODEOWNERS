@@ -1,0 +1,13 @@
+# 코드 소유권 — CLAUDE.md §역할 분담 과 같다. 아래로 갈수록 구체적인 규칙이 덮어쓴다.
+# 인간 상호 리뷰는 안 하므로(각자 Claude 리뷰 + self-merge) 승인 요구는 0 — 이 파일은 소유 표기와
+# PR 알림용이다.
+
+# 기본값 — 백엔드(정성운). docs/ · 루트 README 는 공용이지만 기본 소유자로 둔다.
+*                               @wjdtjddns98
+/backend/                       @wjdtjddns98
+/infra/                         @wjdtjddns98
+/.github/                       @wjdtjddns98
+
+# 프론트(진수연) — 웹앱과 네이티브 셸.
+/frontend/                      @jinxuyeon
+/apps/                          @jinxuyeon
