@@ -17,26 +17,34 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# 레포 기본 토큰이 읽기 전용이라 paths-filter 가 PR 파일 목록을 읽으려면 pull-requests: read 가 명시돼야 한다.
+permissions:
+  contents: read
+  pull-requests: read
+
 jobs:
   changes:
     name: 변경 영역 감지
     runs-on: ubuntu-latest
     outputs:
-      backend: ${{ steps.filter.outputs.backend }}
-      frontend: ${{ steps.filter.outputs.frontend }}
+      backend: ${{ steps.filter.outputs.backend || steps.filter.outputs.ci }}
+      frontend: ${{ steps.filter.outputs.frontend || steps.filter.outputs.ci }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
         id: filter
         with:
+          # every: 파일이 필터의 모든 패턴을 만족해야 매치 — 부정 패턴(*.md 제외)이 이 모드에서만 동작한다.
+          # 그래서 ci.yml 은 별도 필터로 두고 outputs 에서 OR 한다.
+          predicate-quantifier: every
           filters: |
             backend:
               - 'backend/**'
               - '!backend/**/*.md'
-              - '.github/workflows/ci.yml'
             frontend:
               - 'frontend/**'
               - '!frontend/**/*.md'
+            ci:
               - '.github/workflows/ci.yml'
 
   backend:
@@ -100,13 +108,14 @@ jobs:
   ci-ok:
     name: CI Gate
     # 브랜치 보호에서 required 로 거는 유일한 체크. 항상 실행한다.
-    needs: [backend, frontend]
+    needs: [changes, backend, frontend]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     steps:
       - name: 관련 잡 결과 집계 (skip=통과, failure/cancelled=차단)
         run: |
-          for r in "${{ needs.backend.result }}" "${{ needs.frontend.result }}"; do
+          # changes 가 실패하면 뒤 잡이 전부 skip 돼 게이트가 헛되이 green 이 된다 — changes 도 집계한다.
+          for r in "${{ needs.changes.result }}" "${{ needs.backend.result }}" "${{ needs.frontend.result }}"; do
             echo "result: $r"
             if [ "$r" = "failure" ] || [ "$r" = "cancelled" ]; then
               echo "::error::필수 잡이 실패/취소됨($r)"
