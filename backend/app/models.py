@@ -229,11 +229,13 @@ class Post(Base):
 
 class Todo(Base):
     __tablename__ = "todos"
+    __table_args__ = (Index("idx_todos_user", "user_id", "created_at"),)
 
     id: Mapped[uuid.UUID] = uuid_pk()
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
     text: Mapped[str] = mapped_column(Text, nullable=False)
     done: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=sql_text("false"))
+    created_at: Mapped[datetime] = created_at_col()  # 03 에 없던 컬럼 — 목록 순서 (2026-09-07)
 
 
 class Notification(Base):

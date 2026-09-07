@@ -41,6 +41,14 @@ def create_app() -> FastAPI:
             allow_headers=["*"],
         )
 
+    @app.middleware("http")
+    async def no_store(request, call_next):
+        # 쿠키로 인증하는 개인화 응답이라 공유 캐시가 휴리스틱으로 담지 않게. 직접 만든 Response 에도 붙는다.
+        response = await call_next(request)
+        if request.url.path.startswith("/api/"):
+            response.headers.setdefault("Cache-Control", "no-store")
+        return response
+
     # 모든 계약 경로는 /api 아래에 있다 — vite 프록시(/api → :8000)·Caddy 라우팅과 짝.
     # 상태 변경 요청은 전부 CSRF 검사를 지난다(11 §4.3). 로그인만 예외.
     api = APIRouter(prefix="/api", dependencies=[Depends(csrf_guard)])
