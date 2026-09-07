@@ -12,8 +12,9 @@ const TYPING_TTL_MS = 3000
 const TYPING_THROTTLE_MS = 2000
 const RECONNECT_MS = 2000
 
-function socketUrl(userId: string): string {
-  return wsUrl(`/api/chat/ws?userId=${encodeURIComponent(userId)}`)
+/** 누구인지는 핸드셰이크에 실리는 세션 쿠키가 말한다(11 §7.5). URL 에 사용자 id 를 싣지 않는다. */
+function socketUrl(): string {
+  return wsUrl('/api/chat/ws')
 }
 
 /**
@@ -71,7 +72,7 @@ export function useChatSocket(): ChatSocket {
 
     const connect = () => {
       if (closed) return
-      socket = new WebSocket(socketUrl(user.id))
+      socket = new WebSocket(socketUrl())
       socketRef.current = socket
 
       socket.onopen = () => setConnected(true)

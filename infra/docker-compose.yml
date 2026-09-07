@@ -1,0 +1,69 @@
+# ARCHITECTURE §7 골격 중 지금 있는 것: db · redis · minio · api.
+# caddy(TLS·리버스 프록시) · web(정적) · yjs(공동편집) 는 각 구성요소가 생길 때 붙인다.
+# ollama 는 compose 밖(Mac mini)이었으나 2026-09-04 결정으로 AI는 Claude API — backend/README 참조.
+#
+#   docker compose up -d db              # 개발: DB만
+#   docker compose up -d --build         # 전부 (api 이미지 빌드)
+#
+# 이 PC처럼 5432/8000 이 다른 프로젝트에 잡혀 있으면 호스트 포트만 바꾼다:
+#   ZENITH_DB_PORT=5434 ZENITH_API_PORT=8010 docker compose up -d
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: zenith
+      POSTGRES_PASSWORD: zenith
+      POSTGRES_DB: zenith
+    ports:
+      - "${ZENITH_DB_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U zenith -d zenith"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "${ZENITH_REDIS_PORT:-6379}:6379"
+
+  minio:
+    image: minio/minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: zenith
+      MINIO_ROOT_PASSWORD: zenith-minio
+    ports:
+      - "${ZENITH_MINIO_PORT:-9000}:9000"
+      - "${ZENITH_MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - miniodata:/data
+
+  api:
+    build: ../backend
+    env_file:
+      - path: ../backend/.env
+        required: false
+    environment:
+      DATABASE_URL: postgresql+asyncpg://zenith:zenith@db:5432/zenith
+      REDIS_URL: redis://redis:6379/0
+      MINIO_ENDPOINT: minio:9000
+      # caddy(TLS)가 아직 없어 api 는 평문 http 다. Secure 쿠키는 http 에서 브라우저가 버린다 → TLS 붙이면 true.
+      COOKIE_SECURE: ${ZENITH_COOKIE_SECURE:-false}
+      # JWT_SECRET 은 backend/.env 로 넣는다 (기본값 없음 — 비어 있으면 api 가 뜨지 않는다).
+    # 기동 때 스키마를 최신으로 올린다. 실패하면 uvicorn 을 띄우지 않는다.
+    command: >
+      sh -c "uv run --no-dev alembic upgrade head
+      && uv run --no-dev uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    ports:
+      - "${ZENITH_API_PORT:-8000}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  miniodata:

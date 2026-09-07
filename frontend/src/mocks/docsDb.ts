@@ -1,3 +1,4 @@
+import { hueOf } from '@/lib/avatar'
 import type { DocComment, DocSummary, DocVersion } from '@/features/docs/types'
 import type { User } from '@/types'
 
@@ -155,7 +156,7 @@ export function createDoc(user: User): DocSummary {
     title: '제목 없는 문서',
     updatedAt: new Date().toISOString(),
     editorName: user.name,
-    editorHue: user.avatarHue,
+    editorHue: hueOf(user.id),
     parentId: null,
   }
   DOCS.unshift(doc)
@@ -169,7 +170,7 @@ export function touchDoc(id: string, user: User, title?: string): DocSummary | u
   if (title !== undefined) doc.title = title
   doc.updatedAt = new Date().toISOString()
   doc.editorName = user.name
-  doc.editorHue = user.avatarHue
+  doc.editorHue = hueOf(user.id)
   return doc
 }
 
@@ -202,7 +203,7 @@ export function addVersion(
     createdAt: new Date().toISOString(),
     authorId: user.id,
     authorName: user.name,
-    authorHue: user.avatarHue,
+    authorHue: hueOf(user.id),
     snapshot,
     label,
   }
@@ -233,7 +234,7 @@ export function addComment(docId: string, user: User, body: string): DocComment 
     id: `cm-${nextId++}`,
     authorId: user.id,
     authorName: user.name,
-    authorHue: user.avatarHue,
+    authorHue: hueOf(user.id),
     body,
     createdAt: new Date().toISOString(),
   }

@@ -18,7 +18,7 @@
 | --- | --- |
 | **FE** | React 19 · Vite · Tailwind v4 · TipTap + Yjs |
 | **BE** | FastAPI · PostgreSQL 16 + pgvector · Redis · MinIO |
-| **AI** | Mac mini M4 · Ollama(8B Q4) · bge-m3 |
+| **AI** | Mac mini M4 · Ollama(8B Q4) · bge-m3 → **Claude API로 전환 예정** (2026-09-04 결정 · [backend/README](backend/README.md) "설계와 어긋나는 것") |
 | **앱** | Tauri 2(Win) · Capacitor 8(And/iOS) |
 
 ## 📁 모노레포 구조
@@ -82,8 +82,9 @@ npm run dev
 > 🔴 **이 로드맵은 재수립 대기 중이다 (2026-08-31).**
 >
 > 전자결재가 v1으로 편입되면서(약 4주) 근태(약 3주)와 함께 M1~M4 어디에도 자리가 없다.
-> 게다가 **프론트엔드는 MSW 목 위에서 동작하고 `backend/`에는 아직 코드가 없다** —
-> 결재를 빼도 남은 3.5주에 백엔드 전체를 넣을 수 없다.
+> 게다가 **`backend/`는 2026-09-04 기준 인증·계정 관리·감사 로그만 실구현이고 나머지는 501 스텁이다**
+> ([backend/README](backend/README.md)). 프론트는 인증만 실서버 규약(쿠키)으로 옮겼고 다른 화면은 아직 MSW 목이다 —
+> 결재를 빼도 남은 3주에 백엔드 전체를 넣을 수 없다.
 >
 > A(오픈 범위 축소) / B(8주 → 14~16주) / C(인력 추가) 중 미결.
 > 근거와 권고는 [13 · 전자결재 모듈 설계서](https://app.notion.com/p/3cda471660468170b325d0ea56562418) §12,

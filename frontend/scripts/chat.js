@@ -14,8 +14,9 @@
  *   POST /channels/:id/read           읽음 처리
  *   WS   /ws                          message · typing · read 이벤트
  *
- * 인증은 개발 편의로 userId를 그대로 받는다. 실제 백엔드는 JWT에서 꺼내야
- * 하며, 채널 멤버가 아닌 사용자의 요청은 403이어야 한다.
+ * 인증은 MSW 로그인이 심는 세션 쿠키(zenith.mock.session=<userId>)로만 한다 — 실제 백엔드가
+ * HttpOnly 쿠키의 JWT 에서 사용자를 꺼내는 것과 같은 자리다. URL·본문의 userId 는 보지 않는다
+ * (11 §7.5). 채널 멤버가 아닌 사용자의 요청은 403이어야 한다.
  *
  * 메모리에만 보관한다. 서버를 끄면 대화가 사라진다.
  */
@@ -189,9 +190,18 @@ function readBody(req) {
 }
 
 /** 처리했으면 true. dev-server가 나머지를 404로 응답한다. */
+/** 세션 쿠키의 사용자 id. dev-server 의 WebSocket 업그레이드도 이걸로 사용자를 정한다. */
+export function sessionUserId(req) {
+  const cookie = (req.headers.cookie ?? '')
+    .split(';')
+    .map((part) => part.trim())
+    .find((part) => part.startsWith('zenith.mock.session='))
+  return cookie ? decodeURIComponent(cookie.slice('zenith.mock.session='.length)) : null
+}
+
 export async function handleChatRequest(req, res, url) {
   const path = url.pathname.replace(/^\/chat/, '')
-  const viewerId = url.searchParams.get('userId')
+  const viewerId = sessionUserId(req)
 
   if (path === '/channels' && req.method === 'GET') {
     if (!USERS[viewerId]) return json(res, 401, { detail: '알 수 없는 사용자입니다.' })
@@ -218,7 +228,8 @@ export async function handleChatRequest(req, res, url) {
     }
 
     if (req.method === 'POST') {
-      const { userId, body } = await readBody(req)
+      const { body } = await readBody(req)
+      const userId = viewerId
       if (!USERS[userId]) return json(res, 401, { detail: '알 수 없는 사용자입니다.' })
       if (!channel.memberIds.includes(userId)) {
         return json(res, 403, { detail: '이 채널의 멤버가 아닙니다.' })
@@ -236,7 +247,7 @@ export async function handleChatRequest(req, res, url) {
 
   const readMatch = path.match(/^\/channels\/([^/]+)\/read$/)
   if (readMatch && req.method === 'POST') {
-    const { userId } = await readBody(req)
+    const userId = viewerId
     if (!USERS[userId]) return json(res, 401, { detail: '알 수 없는 사용자입니다.' })
     markRead(userId, readMatch[1])
     publish(readMatch[1], { type: 'read', channelId: readMatch[1], userId })
