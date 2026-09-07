@@ -173,19 +173,18 @@
         "tags": [
           "me"
         ],
-        "summary": "대시보드 집계 1콜 {recent_docs[], mentions[], unread[], posts[], todos[]}",
-        "operationId": "stub_api_me_home_get",
+        "summary": "대시보드 집계 1콜 {recent_docs[], mentions[], unread[], posts[], todos[]} — posts 는 서버 마스킹",
+        "operationId": "home_api_me_home_get",
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/HomeOut"
+                }
               }
             }
-          },
-          "501": {
-            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
           }
         }
       }
@@ -195,19 +194,18 @@
         "tags": [
           "me"
         ],
-        "summary": "오늘 할 일 목록",
-        "operationId": "stub_api_me_todos_get",
+        "summary": "오늘 할 일 목록 (FR-HOM-05)",
+        "operationId": "list_todos_api_me_todos_get",
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Items_TodoOut_"
+                }
               }
             }
-          },
-          "501": {
-            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
           }
         }
       },
@@ -216,60 +214,124 @@
           "me"
         ],
         "summary": "할 일 추가 {text}",
-        "operationId": "stub_api_me_todos_post",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
+        "operationId": "create_todo_api_me_todos_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TodoCreateIn"
               }
             }
           },
-          "501": {
-            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TodoOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
           }
         }
       }
     },
     "/api/me/todos/{id}": {
-      "delete": {
-        "tags": [
-          "me"
-        ],
-        "summary": "할 일 삭제",
-        "operationId": "stub_api_me_todos__id__delete",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "501": {
-            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
-          }
-        }
-      },
       "patch": {
         "tags": [
           "me"
         ],
         "summary": "할 일 수정 {text?, done?}",
-        "operationId": "stub_api_me_todos__id__patch",
+        "operationId": "update_todo_api_me_todos__id__patch",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TodoPatchIn"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/TodoOut"
+                }
               }
             }
           },
-          "501": {
-            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "me"
+        ],
+        "summary": "할 일 삭제",
+        "operationId": "delete_todo_api_me_todos__id__delete",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
           }
         }
       }
@@ -279,19 +341,52 @@
         "tags": [
           "me"
         ],
-        "summary": "알림 목록 (?unread=1)",
-        "operationId": "stub_api_me_notifications_get",
+        "summary": "알림함 (FR-SHL-04) — ?unread=1 이면 안 읽은 것만, 최신순",
+        "operationId": "list_notifications_api_me_notifications_get",
+        "parameters": [
+          {
+            "name": "unread",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Unread"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Items_NotificationOut_"
+                }
               }
             }
           },
-          "501": {
-            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
           }
         }
       }
@@ -301,19 +396,31 @@
         "tags": [
           "me"
         ],
-        "summary": "읽음 처리 {ids[]}",
-        "operationId": "stub_api_me_notifications_read_post",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
+        "summary": "읽음 처리 {ids[]} — 내 알림만, 이미 읽은 것은 그대로",
+        "operationId": "read_notifications_api_me_notifications_read_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReadIn"
               }
             }
           },
-          "501": {
-            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
           }
         }
       }
@@ -2780,6 +2887,111 @@
         "type": "object",
         "title": "HTTPValidationError"
       },
+      "HomeOut": {
+        "properties": {
+          "recent_docs": {
+            "items": {
+              "$ref": "#/components/schemas/RecentDoc"
+            },
+            "type": "array",
+            "title": "Recent Docs"
+          },
+          "mentions": {
+            "items": {
+              "$ref": "#/components/schemas/NotificationOut"
+            },
+            "type": "array",
+            "title": "Mentions"
+          },
+          "unread": {
+            "items": {
+              "$ref": "#/components/schemas/UnreadChannel"
+            },
+            "type": "array",
+            "title": "Unread"
+          },
+          "posts": {
+            "items": {
+              "$ref": "#/components/schemas/HomePost"
+            },
+            "type": "array",
+            "title": "Posts"
+          },
+          "todos": {
+            "items": {
+              "$ref": "#/components/schemas/TodoOut"
+            },
+            "type": "array",
+            "title": "Todos"
+          }
+        },
+        "type": "object",
+        "required": [
+          "recent_docs",
+          "mentions",
+          "unread",
+          "posts",
+          "todos"
+        ],
+        "title": "HomeOut"
+      },
+      "HomePost": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "board_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Board Id"
+          },
+          "board_name": {
+            "type": "string",
+            "title": "Board Name"
+          },
+          "min_role": {
+            "type": "string",
+            "title": "Min Role"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "masked": {
+            "type": "boolean",
+            "title": "Masked"
+          },
+          "author": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Person"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "board_id",
+          "board_name",
+          "min_role",
+          "title",
+          "masked",
+          "author",
+          "created_at"
+        ],
+        "title": "HomePost"
+      },
       "Items_CommentOut_": {
         "properties": {
           "items": {
@@ -2795,6 +3007,38 @@
           "items"
         ],
         "title": "Items[CommentOut]"
+      },
+      "Items_NotificationOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/NotificationOut"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "Items[NotificationOut]"
+      },
+      "Items_TodoOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/TodoOut"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "Items[TodoOut]"
       },
       "Items_VersionMeta_": {
         "properties": {
@@ -2909,6 +3153,57 @@
         ],
         "title": "ModelOut"
       },
+      "NotificationOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "payload": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payload"
+          },
+          "read_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Read At"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "payload",
+          "read_at",
+          "created_at"
+        ],
+        "title": "NotificationOut"
+      },
       "PasswordIn": {
         "properties": {
           "current_password": {
@@ -2948,6 +3243,69 @@
         ],
         "title": "Person"
       },
+      "ReadIn": {
+        "properties": {
+          "ids": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "maxItems": 200,
+            "minItems": 1,
+            "title": "Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ids"
+        ],
+        "title": "ReadIn"
+      },
+      "RecentDoc": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "path": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Path"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "updated_by": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Person"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "path",
+          "updated_at",
+          "updated_by"
+        ],
+        "title": "RecentDoc"
+      },
       "RestoreIn": {
         "properties": {
           "version_id": {
@@ -2981,6 +3339,81 @@
         ],
         "title": "TeamOut"
       },
+      "TodoCreateIn": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Text"
+          }
+        },
+        "type": "object",
+        "required": [
+          "text"
+        ],
+        "title": "TodoCreateIn"
+      },
+      "TodoOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "done": {
+            "type": "boolean",
+            "title": "Done"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "text",
+          "done",
+          "created_at"
+        ],
+        "title": "TodoOut"
+      },
+      "TodoPatchIn": {
+        "properties": {
+          "text": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          },
+          "done": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Done"
+          }
+        },
+        "type": "object",
+        "title": "TodoPatchIn"
+      },
       "TreeOut": {
         "properties": {
           "folders": {
@@ -3004,6 +3437,35 @@
           "docs"
         ],
         "title": "TreeOut"
+      },
+      "UnreadChannel": {
+        "properties": {
+          "channel_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Channel Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "is_dm": {
+            "type": "boolean",
+            "title": "Is Dm"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "channel_id",
+          "name",
+          "is_dm",
+          "count"
+        ],
+        "title": "UnreadChannel"
       },
       "UserCreateIn": {
         "properties": {
