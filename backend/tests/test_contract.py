@@ -36,6 +36,8 @@ CONTRACT_PATHS = {
     "/api/docs/{id}/versions",
     "/api/docs/{id}/restore",
     "/api/docs/{id}/comments",
+    # §3 확장 (backend/README "설계와 어긋나는 것")
+    "/api/docs/{id}/untrash",
     # §5 채팅
     "/api/channels",
     "/api/channels/{id}/messages",
@@ -113,7 +115,7 @@ async def test_healthz(client: AsyncClient) -> None:
 
 
 async def test_stub_returns_501_with_error_shape(client: AsyncClient, member) -> None:
-    r = await client.get("/api/tree")
+    r = await client.get("/api/channels")
     assert r.status_code == 501
     assert r.json() == {"detail": "아직 구현되지 않은 엔드포인트입니다.", "code": "NOT_IMPLEMENTED"}
 
