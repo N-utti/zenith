@@ -2,6 +2,8 @@ import { Fragment, useEffect, useRef } from 'react'
 import { Check, Copy, FilePlus2, Sparkles, ThumbsUp } from 'lucide-react'
 import { useState } from 'react'
 import { cn } from '@/lib/cn'
+import { useToast } from '@/components/ui/ToastContext'
+import { useFeedback } from './api'
 import { ExcludedNote, SourceCard } from './SourcesPanel'
 import type { AiMessage } from './types'
 
@@ -21,9 +23,28 @@ function withCitations(body: string) {
   })
 }
 
-function AnswerActions({ body }: { body: string }) {
+function AnswerActions({ id, body }: { id: string; body: string }) {
   const [copied, setCopied] = useState(false)
   const [helpful, setHelpful] = useState(false)
+  const feedback = useFeedback()
+  const toast = useToast()
+
+  /** 켤 때만 1 을 보낸다. -1 은 "도움 안 됨" 이지 철회가 아니라, 끄기는 화면 표시만 되돌린다. */
+  const toggleHelpful = () => {
+    const next = !helpful
+    setHelpful(next)
+    if (next) {
+      feedback.mutate(
+        { messageId: id, value: 1 },
+        {
+          onError: () => {
+            setHelpful(false)
+            toast.error('평가를 보내지 못했습니다.')
+          },
+        },
+      )
+    }
+  }
 
   const copy = async () => {
     await navigator.clipboard.writeText(body.replace(/\[\[\d+\]\]/g, ''))
@@ -31,13 +52,15 @@ function AnswerActions({ body }: { body: string }) {
     setTimeout(() => setCopied(false), 1500)
   }
 
-  const item = 'text-subtle hover:text-fg flex cursor-pointer items-center gap-1.5 transition-colors'
+  const item =
+    'text-subtle hover:text-fg flex cursor-pointer items-center gap-1.5 transition-colors disabled:cursor-default disabled:opacity-50'
 
   return (
     <div className="mt-3 flex gap-4 text-[11.5px]">
       <button
         type="button"
-        onClick={() => setHelpful((v) => !v)}
+        onClick={toggleHelpful}
+        disabled={feedback.isPending}
         aria-pressed={helpful}
         className={cn(item, helpful && 'text-accent')}
       >
@@ -121,7 +144,7 @@ export function Conversation({
                   <p className="text-danger mt-2 text-xs">{message.error}</p>
                 )}
                 {!message.error && !(streaming && index === messages.length - 1) && (
-                  <AnswerActions body={message.body} />
+                  <AnswerActions id={message.id} body={message.body} />
                 )}
 
                 {/* lg 미만에는 우측 근거 패널이 없다. 따라갈 수 없는 각주를 남기지 않는다. */}

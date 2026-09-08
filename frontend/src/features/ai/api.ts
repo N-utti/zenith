@@ -3,6 +3,20 @@ import { api, apiEvents } from '@/lib/api'
 import { appendMessage, getSessionId, patchMessage, uuid } from './store'
 import type { AiModel, Citation } from './types'
 
+/**
+ * 04 §8 `POST /ai/feedback {message_id, value: 1|-1}`. 응답은 04 에 없어 204 로 가정.
+ * message_id 는 클라이언트가 만든 답변 id 다. 서버가 세션을 저장하지 않아 대응되는 행이 없다(PR 본문).
+ */
+export function useFeedback() {
+  return useMutation({
+    mutationFn: ({ messageId, value }: { messageId: string; value: 1 | -1 }) =>
+      api<void>('/ai/feedback', {
+        method: 'POST',
+        body: JSON.stringify({ message_id: messageId, value }),
+      }),
+  })
+}
+
 export function useAiModels() {
   return useQuery({
     queryKey: ['ai', 'models'],

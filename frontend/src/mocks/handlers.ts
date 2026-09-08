@@ -211,6 +211,21 @@ data: ${JSON.stringify(data)}
     return new HttpResponse(stream, { headers: { 'Content-Type': 'text/event-stream' } })
   }),
 
+  // 04 §8 feedback. 응답은 04 에 없다. 204 는 프론트 가정(PR 본문).
+  http.post('/api/ai/feedback', async ({ request }) => {
+    if (!authenticate()) return unauthorized()
+    const { message_id, value } = (await request.json()) as { message_id?: unknown; value?: unknown }
+    const bad =
+      typeof message_id !== 'string' || !message_id
+        ? { loc: ['body', 'message_id'], msg: 'Input should be a valid string', type: 'string_type' }
+        : value !== 1 && value !== -1
+          ? { loc: ['body', 'value'], msg: 'Input should be 1 or -1', type: 'literal_error' }
+          : null
+    if (bad) return HttpResponse.json({ detail: [bad], code: 'VALIDATION' }, { status: 422 })
+    await delay(300)
+    return new HttpResponse(null, { status: 204 })
+  }),
+
   // 04 §8 doc-action. 응답 모양은 04 에 없다. `{draft}` 는 프론트 제안(PR 본문).
   http.post('/api/ai/doc-action', async ({ request }) => {
     if (!authenticate()) return unauthorized()
