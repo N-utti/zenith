@@ -1,14 +1,14 @@
 import { useState } from 'react'
-import { Plus } from 'lucide-react'
+import { FilePen } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Calendar, CalendarDayNumber, type CalendarDay } from '@/components/ui/Calendar'
 import { Card } from '@/components/ui/Card'
 import { SkeletonRows } from '@/components/ui/Skeleton'
 import { cn } from '@/lib/cn'
-import { currentMonth, formatISODate } from '@/lib/datetime'
-import { useLeaveBalance, useLeaveTypes, useMyAttendance } from './api'
+import { currentMonth, formatISODate, toISODate } from '@/lib/datetime'
+import { useLeaveBalance, useMyAttendance } from './api'
 import { cellStatus, formatMinutes, indexByDate, type CellStatus } from './attendanceDays'
-import { LeaveRequestModal } from './LeaveRequestModal'
+import { CorrectionRequestModal } from './CorrectionRequestModal'
 import { Stat } from './Stat'
 import { ATTENDANCE_STATUS_LABEL, type AttendanceDay } from './types'
 
@@ -35,13 +35,18 @@ const LEGEND: Array<[label: string, solid: string]> = [
   ['결근', 'bg-danger'],
 ]
 
-/** 05 SCR-ATT-01: 월 집계 + 잔여 연차 + 신청 버튼 + 상태 색 캘린더. */
+/**
+ * 05 SCR-ATT-01: 월 집계 + 잔여 연차 + 상태 색 캘린더 + 근태 정정.
+ * 휴가 신청은 휴가 탭에만 둔다(2026-09-08). 정정은 "저 날이 잘못됐다"는 사후 신고라 캘린더 옆이 제자리다.
+ * 지난 근무일 칸을 누르면 그 날짜로 정정 폼이 열린다.
+ */
 export function MyAttendanceSection() {
   const [month, setMonth] = useState(currentMonth)
-  const [open, setOpen] = useState(false)
+  // 정정 폼에 채울 날짜. null 이면 닫힘.
+  const [correcting, setCorrecting] = useState<string | null>(null)
   const attendance = useMyAttendance(month)
   const balance = useLeaveBalance()
-  const types = useLeaveTypes()
+  const today = toISODate(new Date())
   const byDate = indexByDate(attendance.data?.days ?? [])
   const summary = attendance.data?.summary
 
@@ -68,22 +73,17 @@ export function MyAttendanceSection() {
               />
             </dl>
           )}
-          {/* 휴가 신청은 근태 조회와 별개다. 근태가 안 와도 잔여와 버튼은 보여야 한다. */}
-          {balance.data && (
-            <div className="flex items-end gap-4">
+          <div className="flex items-end gap-4">
+            {balance.data && (
               <dl>
                 <Stat label="잔여 연차" value={balance.data.remaining} strong />
               </dl>
-              <Button
-                size="sm"
-                onClick={() => setOpen(true)}
-                disabled={!types.data || types.data.items.length === 0}
-              >
-                <Plus className="size-4" />
-                휴가 신청
-              </Button>
-            </div>
-          )}
+            )}
+            <Button size="sm" variant="secondary" onClick={() => setCorrecting(today)}>
+              <FilePen className="size-4" />
+              근태 정정
+            </Button>
+          </div>
         </div>
       </Card>
 
@@ -95,7 +95,13 @@ export function MyAttendanceSection() {
           actions={<Legend className="hidden sm:flex" />}
           className={cn(attendance.isPending && 'animate-pulse opacity-60')}
           renderDay={(day) => (
-            <DayCell day={day} row={byDate.get(day.iso)} status={cellStatus(byDate, day)} />
+            <DayCell
+              day={day}
+              row={byDate.get(day.iso)}
+              status={cellStatus(byDate, day)}
+              // 정정할 수 있는 날은 지난 근무일뿐. 주말·휴일·미래는 누를 게 없다.
+              onCorrect={byDate.has(day.iso) && day.iso <= today ? setCorrecting : undefined}
+            />
           )}
         />
         <Legend className="mt-3 flex sm:hidden" />
@@ -104,12 +110,8 @@ export function MyAttendanceSection() {
         )}
       </Card>
 
-      {open && balance.data && types.data && (
-        <LeaveRequestModal
-          onClose={() => setOpen(false)}
-          types={types.data.items}
-          balance={balance.data}
-        />
+      {correcting && (
+        <CorrectionRequestModal date={correcting} onClose={() => setCorrecting(null)} />
       )}
     </div>
   )
@@ -119,23 +121,24 @@ function DayCell({
   day,
   row,
   status,
+  onCorrect,
 }: {
   day: CalendarDay
   row: AttendanceDay | undefined
   status: CellStatus
+  /** 있으면 칸이 버튼이 되어 그 날짜로 정정 폼을 연다. */
+  onCorrect?: (iso: string) => void
 }) {
   const tone = TONE[status]
   const label = status === 'none' ? null : ATTENDANCE_STATUS_LABEL[status]
-  const overtime = row && row.overtime_minutes > 0 ? `+${formatMinutes(row.overtime_minutes)}` : null
+  const overtime =
+    row && row.overtime_minutes > 0 ? `+${formatMinutes(row.overtime_minutes)}` : null
   const title = [formatISODate(day.iso), label, overtime && `연장 ${overtime.slice(1)}`, row?.note]
     .filter(Boolean)
     .join(' · ')
 
-  return (
-    <div
-      title={title}
-      className={cn('flex h-full flex-col items-start gap-0.5', !day.inMonth && 'opacity-60')}
-    >
+  const content = (
+    <>
       <CalendarDayNumber day={day} />
       {/* 좁은 화면에서는 글자가 한 자씩만 남아 읽을 수 없다. 점으로 색만 보이고, 라벨은 읽기 전용으로 남긴다. */}
       {tone && label && (
@@ -144,7 +147,9 @@ function DayCell({
         </span>
       )}
       {tone && label && (
-        <span className={cn('hidden w-full truncate rounded px-1 text-[11px] leading-4 sm:block', tone)}>
+        <span
+          className={cn('hidden w-full truncate rounded px-1 text-[11px] leading-4 sm:block', tone)}
+        >
           {label}
         </span>
       )}
@@ -153,7 +158,31 @@ function DayCell({
           {overtime}
         </span>
       )}
-    </div>
+    </>
+  )
+  const className = cn(
+    'flex h-full w-full flex-col items-start gap-0.5',
+    !day.inMonth && 'opacity-60',
+  )
+
+  // 누를 수 있는 칸만 버튼. 전부 버튼으로 만들면 탭 키가 주말·미래 칸에도 멈춘다.
+  if (!onCorrect) {
+    return (
+      <div title={title} className={className}>
+        {content}
+      </div>
+    )
+  }
+  return (
+    <button
+      type="button"
+      title={title}
+      aria-label={`${title} · 정정 신청`}
+      onClick={() => onCorrect(day.iso)}
+      className={cn(className, 'hover:bg-surface-hover rounded-md text-left transition-colors')}
+    >
+      {content}
+    </button>
   )
 }
 
