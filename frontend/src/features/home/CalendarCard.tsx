@@ -16,10 +16,12 @@ import { useCreateEvent, useDeleteEvent, useMyEvents } from './api'
 import { itemsByDay, type CalendarItem } from './calendarItems'
 import { HomeSection } from './HomeSection'
 
-/** 05 상태 색상 규약: 휴가는 파랑(accent), 재택·외근·출장은 청록(info). 내 일정은 초록. 근태 캘린더와 같은 색. */
+/**
+ * 부재(휴가·재택·외근·출장)는 파랑(accent) 하나, 내 일정은 초록. 홈에서는 종류를 색으로 가르지 않는다.
+ * 05 의 상태 색 규약(휴가 파랑 / 예외 근무 청록)은 근태 캘린더 몫이고, 홈은 "자리에 없다"만 보면 된다.
+ */
 const TONE: Record<CalendarItem['kind'], string> = {
-  leave: 'bg-accent-soft text-accent',
-  arrangement: 'bg-info/12 text-info',
+  absence: 'bg-accent-soft text-accent',
   event: 'bg-success/12 text-success',
 }
 
@@ -35,8 +37,7 @@ export function CalendarCard() {
   const [selected, setSelected] = useState<string | null>(null)
   // 범례를 눌러 종류별로 끈다. 휴가만 보거나 내 일정만 보거나.
   const [show, setShow] = useState<Record<CalendarItem['kind'], boolean>>({
-    leave: true,
-    arrangement: true,
+    absence: true,
     event: true,
   })
   const toggle = (kind: CalendarItem['kind']) => setShow((s) => ({ ...s, [kind]: !s[kind] }))
@@ -56,11 +57,11 @@ export function CalendarCard() {
   const isPending = leaves.isPending || arrangements.isPending || events.isPending
 
   const days = itemsByDay(
-    (show.leave && leaves.data?.items) || [],
+    (show.absence && leaves.data?.items) || [],
     (show.event && events.data?.items) || [],
     typeName,
     range,
-    (show.arrangement && arrangements.data?.items) || [],
+    (show.absence && arrangements.data?.items) || [],
   )
 
   return (
@@ -133,8 +134,7 @@ export function CalendarCard() {
 
 /** 범례 견본. 켜진 것은 단색, 끈 것은 칩과 같은 연한 색. */
 const LEGEND: Array<[CalendarItem['kind'], string, string]> = [
-  ['leave', '휴가', 'bg-accent'],
-  ['arrangement', '재택·외근·출장', 'bg-info'],
+  ['absence', '휴가·예외 근무', 'bg-accent'],
   ['event', '내 일정', 'bg-success'],
 ]
 

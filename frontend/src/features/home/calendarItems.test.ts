@@ -58,3 +58,39 @@ describe('홈 캘린더 날짜별 항목', () => {
     ])
   })
 })
+
+describe('홈 캘린더 부재 묶음', () => {
+  it('휴가와 예외 근무가 한 범주로, 이름순으로 섞인다', () => {
+    const days = itemsByDay(
+      [
+        leave({
+          user: { id: 'u-6', name: '김다인' },
+          start_date: '2026-09-08',
+          end_date: '2026-09-08',
+        }),
+      ],
+      [],
+      () => '연차',
+      { from: '2026-09-08', to: '2026-09-08' },
+      [
+        {
+          id: 'ar-1',
+          user: { id: 'u-3', name: '홍성완' },
+          kind: 'trip',
+          start_date: '2026-09-08',
+          end_date: '2026-09-08',
+        },
+        {
+          id: 'ar-2',
+          user: { id: 'u-1', name: '강민지' },
+          kind: 'remote',
+          start_date: '2026-09-08',
+          end_date: '2026-09-08',
+        },
+      ],
+    )
+    const items = days.get('2026-09-08') ?? []
+    expect(items.map((i) => i.kind)).toEqual(['absence', 'absence', 'absence'])
+    expect(items.map((i) => i.label)).toEqual(['강민지 재택', '김다인 연차', '홍성완 출장'])
+  })
+})

@@ -6,16 +6,14 @@ import {
 import { toISODate } from '@/lib/datetime'
 import type { CalendarEvent } from './types'
 
-/** 캘린더 칸 하나에 그리는 항목. 내 일정이 앞, 남의 휴가·예외 근무가 뒤. */
+/**
+ * 캘린더 칸 하나에 그리는 항목. 내 일정이 앞, 남의 부재가 뒤.
+ * 휴가와 재택·외근·출장은 홈에서 한 범주(`absence`)다. 홈 캘린더는 "누가 왜 자리에 없나"를 보는
+ * 곳이라 둘을 가를 이유가 없고, 무엇 때문인지는 라벨("김다인 연차"·"홍성완 출장")이 말한다(2026-09-08 결정).
+ */
 export type CalendarItem =
   | { kind: 'event'; id: string; label: string; event: CalendarEvent }
-  | { kind: 'leave'; id: string; label: string; leave: LeaveOnCalendar }
-  | {
-      kind: 'arrangement'
-      id: string
-      label: string
-      arrangement: ArrangementOnCalendar
-    }
+  | { kind: 'absence'; id: string; label: string }
 
 /** `2026-09-08` 의 다음 날. 문자열끼리 비교하려고 ISO 로 되돌린다. */
 function nextDay(iso: string): string {
@@ -24,9 +22,8 @@ function nextDay(iso: string): string {
 }
 
 /**
- * 날짜별 항목. 휴가·예외 근무는 기간을 하루씩 펼치되 `range` 밖은 걷는다(연말 장기 휴가가 화면 밖까지 돌지 않게).
+ * 날짜별 항목. 부재는 기간을 하루씩 펼치되 `range` 밖은 걷는다(연말 장기 휴가가 화면 밖까지 돌지 않게).
  * 어떤 것을 보여 줄지(승인분만)는 서버가 정한다. 여기서 거르지 않는다.
- * 홈 캘린더는 "누가 왜 자리에 없나"를 보는 곳이라 재택·외근·출장도 휴가와 나란히 올린다.
  */
 export function itemsByDay(
   leaves: LeaveOnCalendar[],
@@ -49,31 +46,19 @@ export function itemsByDay(
     push(event.date, { kind: 'event', id: event.id, label, event })
   }
 
-  const spread = (start_date: string, end_date: string, item: (iso: string) => CalendarItem) => {
-    const start = start_date < range.from ? range.from : start_date
-    const end = end_date > range.to ? range.to : end_date
-    for (let iso = start; iso <= end; iso = nextDay(iso)) push(iso, item(iso))
-  }
-  const byName = <T extends { user: { name: string } }>(list: T[]) =>
-    [...list].sort((a, b) => a.user.name.localeCompare(b.user.name, 'ko'))
+  // 휴가와 예외 근무를 한 목록으로 합쳐 이름순. 같은 사람의 연차와 출장이 나란히 온다.
+  const absences = [
+    ...leaves.map((r) => ({ ...r, id: `lv:${r.id}`, what: typeName(r.type_code) })),
+    ...arrangements.map((r) => ({ ...r, id: `ar:${r.id}`, what: ATTENDANCE_STATUS_LABEL[r.kind] })),
+  ].sort((a, b) => a.user.name.localeCompare(b.user.name, 'ko'))
 
-  for (const leave of byName(leaves)) {
-    const label = `${leave.user.name} ${typeName(leave.type_code)}`
-    spread(leave.start_date, leave.end_date, (iso) => ({
-      kind: 'leave',
-      id: `${leave.id}:${iso}`,
-      label,
-      leave,
-    }))
-  }
-  for (const arrangement of byName(arrangements)) {
-    const label = `${arrangement.user.name} ${ATTENDANCE_STATUS_LABEL[arrangement.kind]}`
-    spread(arrangement.start_date, arrangement.end_date, (iso) => ({
-      kind: 'arrangement',
-      id: `${arrangement.id}:${iso}`,
-      label,
-      arrangement,
-    }))
+  for (const absence of absences) {
+    const label = `${absence.user.name} ${absence.what}`
+    const start = absence.start_date < range.from ? range.from : absence.start_date
+    const end = absence.end_date > range.to ? range.to : absence.end_date
+    for (let iso = start; iso <= end; iso = nextDay(iso)) {
+      push(iso, { kind: 'absence', id: `${absence.id}:${iso}`, label })
+    }
   }
   return days
 }
