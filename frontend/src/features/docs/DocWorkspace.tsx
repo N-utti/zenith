@@ -300,7 +300,7 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
                     <EditorBubbleMenu editor={editor} />
                     <BlockDragHandle editor={editor} />
                     <EditorContent editor={editor} className="mt-4" />
-                    <InlineAiPopover editor={editor} />
+                    <InlineAiPopover editor={editor} docId={meta.id} />
                   </>
                 ) : (
                   <Spinner className="mt-6" />

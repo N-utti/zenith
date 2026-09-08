@@ -2,7 +2,7 @@ import { delay, http, HttpResponse, passthrough } from 'msw'
 import type { User } from '@/types'
 import { DEMO_PASSWORD } from './accounts'
 import { clearMockSession, MOCK_USERS, setMockSession, userFromCookie } from './db'
-import { AI_MODELS, answer, inlineDraft } from './aiDb'
+import { AI_MODELS, answer, DOC_ACTIONS, docActionDraft } from './aiDb'
 import {
   BOARD_DEFS,
   canRead,
@@ -36,7 +36,7 @@ const MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 
 const unauthorized = () =>
   HttpResponse.json({ detail: '로그인이 필요합니다.', code: 'AUTH_REQUIRED' }, { status: 401 })
-const notFound = () => HttpResponse.json({ detail: '문서를 찾을 수 없습니다.' }, { status: 404 })
+const notFound = () => HttpResponse.json({ detail: '문서를 찾을 수 없습니다.', code: 'NOT_FOUND' }, { status: 404 })
 
 /** 인증이 필요한 핸들러의 공통 껍데기. */
 function authed(resolve: (user: User, request: Request) => Response) {
@@ -211,15 +211,21 @@ data: ${JSON.stringify(data)}
     return new HttpResponse(stream, { headers: { 'Content-Type': 'text/event-stream' } })
   }),
 
-  http.post('/api/ai/inline', async ({ request }) => {
+  // 04 §8 doc-action. 응답 모양은 04 에 없다. `{draft}` 는 프론트 제안(PR 본문).
+  http.post('/api/ai/doc-action', async ({ request }) => {
     if (!authenticate()) return unauthorized()
-    const { action, prompt, docText } = (await request.json()) as {
-      action: string
-      prompt: string
-      docText: string
+    const { doc_id, action } = (await request.json()) as { doc_id?: string; action?: string }
+    // 실제 서버는 Pydantic 검증(422)이 핸들러(404)보다 먼저다.
+    if (!(DOC_ACTIONS as readonly string[]).includes(action ?? '')) {
+      return HttpResponse.json(
+        { detail: [{ loc: ['body', 'action'], msg: 'Input should be one of the allowed actions', type: 'enum' }], code: 'VALIDATION' },
+        { status: 422 },
+      )
     }
+    const doc = doc_id ? findDoc(doc_id) : undefined
+    if (!doc) return notFound()
     await delay(700)
-    return HttpResponse.json({ draft: inlineDraft(action, prompt ?? '', docText ?? '') })
+    return HttpResponse.json({ draft: docActionDraft(action as (typeof DOC_ACTIONS)[number], doc.title) })
   }),
 
   http.patch('/api/tasks/:taskId', async ({ request, params }) => {

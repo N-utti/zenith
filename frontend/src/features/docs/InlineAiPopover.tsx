@@ -5,12 +5,10 @@ import { Button } from '@/components/ui/Button'
 import { api } from '@/lib/api'
 import { OPEN_INLINE_AI_EVENT } from './editorBlocks'
 
-interface QuickAction {
-  id: string
-  label: string
-}
+/** 04 §8 `POST /ai/doc-action` 의 `action`. 자유 프롬프트는 계약에 없다. */
+type DocAction = 'summarize' | 'continue' | 'polish' | 'translate' | 'table'
 
-const QUICK_ACTIONS: QuickAction[] = [
+const QUICK_ACTIONS: { id: DocAction; label: string }[] = [
   { id: 'summarize', label: '요약' },
   { id: 'continue', label: '이어쓰기' },
   { id: 'polish', label: '문장 다듬기' },
@@ -31,30 +29,34 @@ function anchorAt(editor: Editor): { top: number; left: number } {
 }
 
 /**
- * 문서 안에서 부르는 AI (청사진 TURN 6a).
+ * 문서 안에서 부르는 AI (청사진 TURN 6a). 편집기에서 `/` 를 치면 뜬다.
  *
- * 어시스턴트 화면과 달리 근거는 **이 문서 본문**이다. 위키 RAG가 아니라서
+ * 어시스턴트 화면과 달리 근거는 **이 문서 본문**이다. 본문은 서버가 Y.Doc 에서 읽으므로
+ * 여기서는 문서 id 와 동작만 보낸다(04 §8 `/ai/doc-action`). 위키 RAG 가 아니라서
  * 근거 문서 패널이 없고, 대신 그 사실을 한 줄로 밝힌다.
  */
-export function InlineAiPopover({ editor }: { editor: Editor }) {
+export function InlineAiPopover({ editor, docId }: { editor: Editor; docId: string }) {
   const [open, setOpen] = useState(false)
   const [pos, setPos] = useState({ top: 0, left: 0 })
-  const [prompt, setPrompt] = useState('')
   const [draft, setDraft] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [lastAction, setLastAction] = useState('custom')
+  const [lastAction, setLastAction] = useState<DocAction | null>(null)
 
   const ref = useRef<HTMLDivElement>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
-  // 팝오버를 연 시점의 커서. 입력하는 동안 선택이 흔들려도 삽입 위치는 고정한다.
+  const firstChipRef = useRef<HTMLButtonElement>(null)
+  const applyRef = useRef<HTMLButtonElement>(null)
+  // 요청 세대. 닫은 뒤 도착한 응답이 다음에 연 팝오버에 새어 들지 않게 한다.
+  const reqId = useRef(0)
+  // 팝오버를 연 시점의 커서. 생성을 기다리는 동안 선택이 흔들려도 삽입 위치는 고정한다.
   const insertAt = useRef<number | null>(null)
 
   const close = useCallback(() => {
+    reqId.current++
     setOpen(false)
-    setPrompt('')
     setDraft(null)
     setError(null)
+    setBusy(false)
     insertAt.current = null
     editor.commands.focus()
   }, [editor])
@@ -65,7 +67,6 @@ export function InlineAiPopover({ editor }: { editor: Editor }) {
       setPos(anchorAt(editor))
       setDraft(null)
       setError(null)
-      setPrompt('')
       setOpen(true)
     }
     const dom = editor.view.dom
@@ -75,7 +76,7 @@ export function InlineAiPopover({ editor }: { editor: Editor }) {
 
   useEffect(() => {
     if (!open) return
-    inputRef.current?.focus()
+    firstChipRef.current?.focus()
 
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -94,22 +95,29 @@ export function InlineAiPopover({ editor }: { editor: Editor }) {
     }
   }, [open, close])
 
-  const generate = async (action: string) => {
+  const generate = async (action: DocAction) => {
+    const id = ++reqId.current
     setBusy(true)
     setError(null)
     setLastAction(action)
     try {
-      const result = await api<{ draft: string }>('/ai/inline', {
+      // block_id 는 편집기가 블록 id 를 갖지 않아 보내지 않는다. 서버는 문서 전체를 본다.
+      const result = await api<{ draft: string }>('/ai/doc-action', {
         method: 'POST',
-        body: JSON.stringify({ action, prompt, docText: editor.getText() }),
+        body: JSON.stringify({ doc_id: docId, action }),
       })
-      setDraft(result.draft)
+      if (reqId.current === id) setDraft(result.draft)
     } catch {
-      setError('초안을 만들지 못했습니다. 다시 시도해 주세요.')
+      if (reqId.current === id) setError('초안을 만들지 못했습니다. 다시 시도해 주세요.')
     } finally {
-      setBusy(false)
+      if (reqId.current === id) setBusy(false)
     }
   }
+
+  // 생성 중엔 칩이 전부 비활성이라 포커스가 body 로 떨어진다. 초안이 뜨면 "삽입" 으로 되돌린다.
+  useEffect(() => {
+    if (draft) applyRef.current?.focus()
+  }, [draft])
 
   /** 삽입: 커서 자리에 / 아래에 추가: 그 블록 다음 줄에. */
   const apply = (mode: 'inline' | 'below') => {
@@ -138,22 +146,14 @@ export function InlineAiPopover({ editor }: { editor: Editor }) {
         <span className="bg-accent-soft text-accent grid size-6 shrink-0 place-items-center rounded-md">
           <Sparkles className="size-3.5" />
         </span>
-        <input
-          ref={inputRef}
-          value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && prompt.trim() && !busy) void generate('custom')
-          }}
-          placeholder="이 문서를 두고 무엇을 할까요?"
-          className="text-fg placeholder:text-subtle min-w-0 flex-1 bg-transparent text-[13.5px] outline-none"
-        />
+        <span className="text-fg text-[13.5px] font-semibold">이 문서를 두고 무엇을 할까요?</span>
       </div>
 
       <div className="border-line flex flex-wrap gap-2 border-b px-4 py-3">
-        {QUICK_ACTIONS.map((action) => (
+        {QUICK_ACTIONS.map((action, index) => (
           <button
             key={action.id}
+            ref={index === 0 ? firstChipRef : undefined}
             type="button"
             disabled={busy}
             onClick={() => void generate(action.id)}
@@ -165,7 +165,7 @@ export function InlineAiPopover({ editor }: { editor: Editor }) {
       </div>
 
       {busy && (
-        <div className="bg-canvas flex items-center gap-2 px-4 py-4">
+        <div aria-live="polite" className="bg-canvas flex items-center gap-2 px-4 py-4">
           <span className="flex gap-1">
             {[0, 1, 2].map((i) => (
               <span
@@ -175,7 +175,7 @@ export function InlineAiPopover({ editor }: { editor: Editor }) {
               />
             ))}
           </span>
-          <span className="text-subtle text-xs">사내 LLM이 생성 중…</span>
+          <span className="text-subtle text-xs">AI가 생성 중…</span>
         </div>
       )}
 
@@ -192,18 +192,18 @@ export function InlineAiPopover({ editor }: { editor: Editor }) {
             <p className="text-fg text-sm leading-[1.75] whitespace-pre-wrap">{draft}</p>
             <p className="text-subtle mt-2.5 flex items-center gap-1.5 text-[11px]">
               <span className="bg-success size-1.5 rounded-full" />
-              로컬 LLM · 근거: 이 문서 본문
+              Claude API · 사내 서버 경유 · 근거: 이 문서 본문
             </p>
           </div>
 
           <div className="border-line flex items-center gap-2 border-t px-4 py-3">
-            <Button size="sm" onClick={() => apply('inline')}>
+            <Button ref={applyRef} size="sm" onClick={() => apply('inline')}>
               삽입
             </Button>
             <Button variant="secondary" size="sm" onClick={() => apply('below')}>
               아래에 추가
             </Button>
-            <Button variant="secondary" size="sm" onClick={() => void generate(lastAction)}>
+            <Button variant="secondary" size="sm" onClick={() => lastAction && void generate(lastAction)}>
               다시 생성
             </Button>
             <button

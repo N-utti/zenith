@@ -49,30 +49,23 @@ export function answer(user: User): { body: string; citations: Citation[] } {
   }
 }
 
-/**
- * 문서 안 인라인 AI. 위키 RAG가 아니라 **열려 있는 문서 본문**을 근거로 쓴다.
- * 그래서 근거 패널이 없고, 대신 "근거: 이 문서 본문"이라고 밝힌다.
- */
-export function inlineDraft(action: string, prompt: string, docText: string): string {
-  const body = docText.trim().replace(/\s+/g, ' ')
-  const head = body.slice(0, 120)
+export const DOC_ACTIONS = ['summarize', 'continue', 'polish', 'translate', 'table'] as const
 
+/**
+ * 문서 안 인라인 AI(04 §8 `/ai/doc-action`). 위키 RAG 가 아니라 **그 문서 본문**을 근거로 쓴다.
+ * 본문(Y.Doc)은 브라우저에만 있어 목은 제목만 안다. 동작별 모양만 재현한다.
+ */
+export function docActionDraft(action: (typeof DOC_ACTIONS)[number], title: string): string {
   switch (action) {
     case 'summarize':
-      return head
-        ? `${head.split('. ').slice(0, 2).join('. ')}. 핵심만 세 줄로 줄이면 이렇습니다.`
-        : '요약할 본문이 아직 없습니다. 문서를 먼저 채워 주세요.'
+      return `「${title}」의 핵심은 세 가지입니다. 배경, 결정 사항, 다음 할 일.`
     case 'continue':
       return '앞 내용에 이어, 다음 단계에서 확인할 항목과 담당을 정리합니다.'
     case 'polish':
-      return head ? `${head} (문장을 다듬어 군더더기를 덜어냈습니다.)` : '다듬을 문장이 없습니다.'
+      return `「${title}」의 문장을 다듬어 군더더기를 덜어냈습니다.`
     case 'table':
       return '| 항목 | 내용 | 담당 |\n| --- | --- | --- |\n| 정리 대상 | 위 본문 | 미정 |'
     case 'translate':
-      return head ? `[EN] ${head}` : 'There is nothing to translate yet.'
-    default:
-      return prompt
-        ? `${prompt}. 요청하신 내용을 이 문서 본문을 근거로 정리했습니다.`
-        : '무엇을 도와드릴까요?'
+      return `[EN] ${title}`
   }
 }
