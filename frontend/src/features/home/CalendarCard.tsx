@@ -16,12 +16,9 @@ import { useCreateEvent, useDeleteEvent, useMyEvents } from './api'
 import { itemsByDay, type CalendarItem } from './calendarItems'
 import { HomeSection } from './HomeSection'
 
-/**
- * 05 상태 색상 규약: 휴가는 파랑(accent). 내 일정은 초록. 색값은 `Badge` 의 accent·success 와 같다.
- * 색만으로 가르지 않도록 휴가 칩에는 왼쪽 테두리를 준다(흑백에서도 구분).
- */
+/** 05 상태 색상 규약: 휴가는 파랑(accent). 내 일정은 초록. 색값은 `Badge` 의 accent·success 와 같다. */
 const TONE: Record<CalendarItem['kind'], string> = {
-  leave: 'bg-accent-soft text-accent border-accent border-l-2',
+  leave: 'bg-accent-soft text-accent',
   event: 'bg-success/12 text-success',
 }
 
