@@ -24,3 +24,22 @@ export interface TodayTask {
   title: string
   done: boolean
 }
+
+/**
+ * 내 개인 일정(홈 캘린더). 04 에 없는 개념이라 `/me/todos`(§2)와 같은 꼴로 `/me/events` 를 가정했다(PR 본문).
+ * 하루 단위. 시각은 선택이고 `HH:MM`.
+ */
+export interface CalendarEvent {
+  id: string
+  /** `2026-09-08` */
+  date: string
+  title: string
+  time: string | null
+  created_at: string
+}
+
+export interface CalendarEventInput {
+  date: string
+  title: string
+  time?: string | null
+}

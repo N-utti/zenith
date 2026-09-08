@@ -25,7 +25,15 @@ import {
   touchDoc,
 } from './docsDb'
 import { readFile, saveFile } from './filesDb'
-import { cancelLeave, createLeave, LEAVE_TYPES, leaveBalance, listLeaves } from './leavesDb'
+import { createEvent, deleteEvent, listEvents } from './eventsDb'
+import {
+  cancelLeave,
+  createLeave,
+  LEAVE_TYPES,
+  leaveBalance,
+  listLeaves,
+  listLeavesInRange,
+} from './leavesDb'
 
 function authenticate(): User | undefined {
   // 세션은 쿠키다(04 §1). 핸들러는 페이지 안에서 돌므로 document.cookie 를 그대로 읽는다.
@@ -164,7 +172,19 @@ export const handlers = [
   // 백엔드는 501 스텁. 목록 응답의 `{items}` 감싸기와 항목 모양은 프론트 가정(PR 본문).
   http.get('/api/leave-types', authed(() => HttpResponse.json({ items: LEAVE_TYPES }))),
   http.get('/api/leaves/balance', authed((user) => HttpResponse.json(leaveBalance(user)))),
-  http.get('/api/leaves', authed((user) => HttpResponse.json({ items: listLeaves(user) }))),
+  http.get(
+    '/api/leaves',
+    authed((user, request) => {
+      const params = new URL(request.url).searchParams
+      // `scope=all` 은 04 에 없는 확장(홈 캘린더). 백엔드가 붙을 때 계약을 맞춘다.
+      if (params.get('scope') === 'all') {
+        const from = params.get('from') ?? ''
+        const to = params.get('to') ?? ''
+        return HttpResponse.json({ items: listLeavesInRange(from, to) })
+      }
+      return HttpResponse.json({ items: listLeaves(user) })
+    }),
+  ),
 
   http.post('/api/leaves', async ({ request }) => {
     const user = authenticate()
@@ -193,6 +213,38 @@ export const handlers = [
       )
     }
     return HttpResponse.json(result)
+  }),
+
+  // ── 내 일정 (04 에 없음. §2 /me/todos 와 같은 꼴로 가정) ──────
+  http.get(
+    '/api/me/events',
+    authed((user, request) => {
+      const params = new URL(request.url).searchParams
+      return HttpResponse.json({
+        items: listEvents(user, params.get('from') ?? '', params.get('to') ?? ''),
+      })
+    }),
+  ),
+
+  http.post('/api/me/events', async ({ request }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    const input = (await request.json()) as Parameters<typeof createEvent>[1]
+    await delay(250)
+    const result = createEvent(user, input)
+    if ('error' in result) {
+      return HttpResponse.json({ detail: result.error, code: 'VALIDATION' }, { status: 422 })
+    }
+    return HttpResponse.json(result.event, { status: 201 })
+  }),
+
+  http.delete('/api/me/events/:eventId', ({ params }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    if (!deleteEvent(user, String(params.eventId))) {
+      return HttpResponse.json({ detail: '일정을 찾을 수 없습니다.', code: 'NOT_FOUND' }, { status: 404 })
+    }
+    return new HttpResponse(null, { status: 204 })
   }),
 
   // ── AI 어시스턴트 (04 §8) ─────────────────────────────────

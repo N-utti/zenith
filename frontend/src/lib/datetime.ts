@@ -59,6 +59,16 @@ export function toISODate(date: Date): string {
   return `${date.getFullYear()}-${month}-${day}`
 }
 
+/** `2026-09-08` → "9월 8일 (화)". `new Date(iso)` 는 UTC 로 읽혀 KST 서쪽에서 하루 밀리므로 숫자로 만든다. */
+export function formatISODate(iso: string): string {
+  const [year, month, day] = iso.split('-').map(Number)
+  return new Date(year, month - 1, day).toLocaleDateString('ko-KR', {
+    month: 'long',
+    day: 'numeric',
+    weekday: 'short',
+  })
+}
+
 /**
  * `2026-08` → 그 달을 덮는 주 배열. 앞뒤 주는 이웃 달 날짜로 채운다.
  *
