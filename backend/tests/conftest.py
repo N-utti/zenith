@@ -168,6 +168,29 @@ async def users(app_db: AsyncSession) -> Users:
     return Users(member, lead, exec_, team)
 
 
+def share_session(app: FastAPI, app_db: AsyncSession, monkeypatch, module) -> None:
+    """WebSocket 핸들러(realtime/*)는 요청 의존성이 아니라 `session_scope()` 로 자기 세션을 짧게 연다 —
+    테스트 트랜잭션 안의 세션을 대신 쓰게 한다. 공유 세션은 한 태스크씩(락) — 서버 쪽 처리와 테스트의
+    HTTP 호출이 겹치면 세션이 깨진다."""
+    lock = asyncio.Lock()
+
+    class Scope:
+        async def __aenter__(self):
+            await lock.acquire()
+            return app_db
+
+        async def __aexit__(self, *exc):
+            lock.release()
+            return False  # 닫지 않는다 — 트랜잭션은 conftest 가 끝에 되돌린다
+
+    async def locked_get_db():
+        async with lock:
+            yield app_db
+
+    monkeypatch.setattr(module, "session_scope", lambda: Scope())
+    app.dependency_overrides[get_db] = locked_get_db
+
+
 async def login(client: AsyncClient, email: str, password: str = PASSWORD):
     return await client.post("/api/auth/login", json={"email": email, "password": password})
 

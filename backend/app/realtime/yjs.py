@@ -40,7 +40,7 @@ from pycrdt import (
 )
 from sqlalchemy import func, update
 
-from app import db as database
+from app.db import session_scope
 from app.deps import _own_origin, authenticate, origin_allowed
 from app.errors import ApiError
 from app.models import Document
@@ -55,11 +55,6 @@ REAUTH_INTERVAL = timedelta(seconds=60)
 MAX_FRAME = 1_000_000
 SEND_TIMEOUT = 5  # 초. 읽기를 멈춘 연결 하나가 방 전체를 세우지 않게
 EMPTY_UPDATE = b"\x00\x00"
-
-
-def session_scope():
-    """짧게 열고 닫는 DB 세션. 테스트는 이 이름을 바꿔 끼워 트랜잭션 안의 세션을 쓴다."""
-    return database.SessionLocal()
 
 
 @dataclass
@@ -283,7 +278,8 @@ async def yjs_endpoint(websocket: WebSocket, doc_id: uuid.UUID) -> None:
                 break
             if datetime.now(UTC) - checked_at >= REAUTH_INTERVAL:
                 async with session_scope() as db:
-                    await authenticate(websocket.cookies, db)  # 회수됐으면 ApiError → 아래서 닫힌다
+                    # 회수됐으면 ApiError → 아래서 닫힌다. exp 는 안 본다(deps.authenticate 참조)
+                    await authenticate(websocket.cookies, db, verify_exp=False)
                 checked_at = datetime.now(UTC)
             kind = message[0]
             if kind == YMessageType.SYNC:
