@@ -72,7 +72,7 @@ function Generating() {
             />
           ))}
         </span>
-        <span className="text-subtle text-xs">사내 LLM이 생성 중…</span>
+        <span className="text-subtle text-xs">AI가 생성 중…</span>
       </div>
     </div>
   )
@@ -81,20 +81,26 @@ function Generating() {
 export function Conversation({
   messages,
   generating,
+  streaming,
 }: {
   messages: AiMessage[]
+  /** 질문은 갔는데 첫 토큰이 아직 안 왔다. */
   generating: boolean
+  /** 답변이 자라는 중. 마지막 말풍선의 액션은 다 받은 뒤에 보인다. */
+  streaming: boolean
 }) {
   const endRef = useRef<HTMLDivElement>(null)
 
+  // 스트리밍은 메시지를 추가하지 않고 마지막 본문만 늘린다. 그 길이도 따라간다.
+  const lastLength = messages.at(-1)?.body.length ?? 0
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: 'end' })
-  }, [messages.length, generating])
+  }, [messages.length, lastLength, generating])
 
   return (
     <div className="flex-1 overflow-y-auto px-5 py-5">
       <div className="mx-auto flex max-w-3xl flex-col gap-5">
-        {messages.map((message) =>
+        {messages.map((message, index) =>
           message.role === 'user' ? (
             <div key={message.id} className="flex justify-end">
               <p className="bg-accent text-on-accent max-w-[78%] rounded-xl rounded-tr-sm px-3.5 py-2.5 text-sm leading-relaxed">
@@ -111,23 +117,28 @@ export function Conversation({
                 <p className="text-fg mt-1.5 text-sm leading-[1.75]">
                   {withCitations(message.body)}
                 </p>
-                <AnswerActions body={message.body} />
+                {message.error && (
+                  <p className="text-danger mt-2 text-xs">{message.error}</p>
+                )}
+                {!message.error && !(streaming && index === messages.length - 1) && (
+                  <AnswerActions body={message.body} />
+                )}
 
                 {/* lg 미만에는 우측 근거 패널이 없다. 따라갈 수 없는 각주를 남기지 않는다. */}
-                {(message.sources?.length ?? 0) > 0 && (
+                {(message.citations?.length ?? 0) > 0 && (
                   <div className="mt-3 lg:hidden">
                     <p className="text-subtle mb-2 text-[11px] font-bold">
-                      근거 문서 {message.sources?.length}
+                      근거 문서 {message.citations?.length}
                     </p>
                     <ul className="space-y-2">
-                      {message.sources?.map((source) => (
-                        <li key={source.id}>
+                      {message.citations?.map((source) => (
+                        <li key={source.n}>
                           <SourceCard source={source} />
                         </li>
                       ))}
                     </ul>
                     <div className="mt-2">
-                      <ExcludedNote count={message.excludedCount ?? 0} />
+                      <ExcludedNote />
                     </div>
                   </div>
                 )}

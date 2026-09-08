@@ -21,10 +21,13 @@ function codeOf(body: unknown): string | null {
     : null
 }
 
+/** 422 의 `detail` 은 Pydantic 오류 배열이라 문자열이 아니다. 그때는 호출부의 폴백 문구가 뜨게 null. */
 function detailOf(body: unknown): string | null {
-  return typeof body === 'object' && body !== null && 'detail' in body
-    ? String((body as { detail: unknown }).detail)
-    : null
+  const detail =
+    typeof body === 'object' && body !== null && 'detail' in body
+      ? (body as { detail: unknown }).detail
+      : null
+  return typeof detail === 'string' ? detail : null
 }
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
@@ -40,7 +43,7 @@ function csrfToken(): string | null {
 
 async function send(path: string, init: RequestInit): Promise<Response> {
   const headers = new Headers(init.headers)
-  headers.set('Accept', 'application/json')
+  if (!headers.has('Accept')) headers.set('Accept', 'application/json')
   // FormData는 브라우저가 boundary까지 넣어 Content-Type을 붙인다. 여기서 덮으면 깨진다.
   if (init.body && !(init.body instanceof FormData) && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json')
@@ -104,4 +107,65 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     throw new ApiError(res.status, detailOf(body) ?? `요청에 실패했습니다 (${res.status})`, body)
   }
   return body as T
+}
+
+export interface SseEvent {
+  event: string
+  data: unknown
+}
+
+/**
+ * SSE 응답을 이벤트 단위로 넘긴다(04 §8 `/ai/chat`). `EventSource` 는 POST 도 쿠키 헤더도 못 쓰므로
+ * `api()` 와 같은 통로(쿠키·CSRF·만료 시 refresh 1회)로 fetch 하고 본문을 직접 자른다.
+ * 스트림 도중의 실패는 서버가 `event: error` 로 보내므로 호출한 쪽이 이벤트로 받는다.
+ */
+export async function* apiEvents(path: string, init: RequestInit = {}): AsyncGenerator<SseEvent> {
+  const headers = new Headers(init.headers)
+  headers.set('Accept', 'text/event-stream')
+  const request = { ...init, headers }
+  let res = await send(path, request)
+  if (res.status === 401) {
+    const body = await read(res)
+    if (codeOf(body) === 'AUTH_EXPIRED' && (await refreshSession())) res = await send(path, request)
+    else throw new ApiError(401, detailOf(body) ?? '요청에 실패했습니다 (401)', body)
+  }
+  if (!res.ok) {
+    const body = await read(res)
+    throw new ApiError(res.status, detailOf(body) ?? `요청에 실패했습니다 (${res.status})`, body)
+  }
+  if (!res.body) throw new ApiError(res.status, '스트림 응답이 아닙니다.')
+
+  const reader = res.body.pipeThrough(new TextDecoderStream()).getReader()
+  let buffer = ''
+  try {
+    for (;;) {
+      const { value, done } = await reader.read()
+      if (done) {
+        // 마지막 프레임 뒤에 빈 줄이 없어도 버리지 않는다.
+        if (buffer.trim()) yield* parseFrames([buffer])
+        return
+      }
+      buffer += value
+      // 프레임 경계는 빈 줄. 마지막 조각은 다음 chunk 와 이어질 수 있어 남겨 둔다.
+      const frames = buffer.split(/\r?\n\r?\n/)
+      buffer = frames.pop() ?? ''
+      yield* parseFrames(frames)
+    }
+  } finally {
+    // 소비자가 `done` 에서 빠져나가거나 화면을 떠나도 연결을 붙들고 있지 않는다.
+    await reader.cancel().catch(() => {})
+  }
+}
+
+function* parseFrames(frames: string[]): Generator<SseEvent> {
+  for (const frame of frames) {
+    let event = 'message'
+    const data: string[] = []
+    for (const line of frame.split(/\r?\n/)) {
+      if (line.startsWith('event:')) event = line.slice(6).trim()
+      // 명세는 콜론 뒤 공백 하나만 뗀다.
+      else if (line.startsWith('data:')) data.push(line.slice(5).replace(/^ /, ''))
+    }
+    if (data.length) yield { event, data: JSON.parse(data.join('\n')) }
+  }
 }
