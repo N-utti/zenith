@@ -15,6 +15,9 @@ def encode_cursor(at: datetime, id_: uuid.UUID) -> str:
 def decode_cursor(cursor: str) -> tuple[datetime, uuid.UUID]:
     try:
         at, id_ = base64.urlsafe_b64decode(cursor.encode()).decode().split("|")
-        return datetime.fromisoformat(at), uuid.UUID(id_)
+        parsed = datetime.fromisoformat(at)
+        if parsed.tzinfo is None:
+            raise ValueError("naive datetime")  # timestamptz 비교에 tz 없는 값이 들어가면 안 된다
+        return parsed, uuid.UUID(id_)
     except (ValueError, UnicodeDecodeError, binascii.Error) as e:
         raise ApiError(422, "VALIDATION", "cursor 형식이 잘못됐습니다.") from e

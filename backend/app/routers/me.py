@@ -207,7 +207,7 @@ async def _posts(db: AsyncSession, user: User, limit: int) -> list[HomePost]:
         select(Post, Board, User)
         .join(Board, Board.id == Post.board_id)
         .outerjoin(User, User.id == Post.author_id)
-        .order_by(Post.created_at.desc(), Post.id)
+        .order_by(Post.created_at.desc(), Post.id.desc())  # 게시판 목록·커서와 같은 순서
         .limit(limit)
     )
     out: list[HomePost] = []
@@ -341,8 +341,42 @@ async def list_notifications(
     )
     if unread:
         stmt = stmt.where(Notification.read_at.is_(None))
-    rows = (await db.execute(stmt)).scalars()
+    rows = list((await db.execute(stmt)).scalars())
+    await _mask_post_notices(db, user, rows)
     return Items(items=[NotificationOut.model_validate(n) for n in rows])
+
+
+async def _mask_post_notices(db: AsyncSession, user: User, rows: list[Notification]) -> None:
+    """kind=post 알림의 제목은 만든 시점 값이다 — 강등·게시판 등급 상향 뒤에도 읽히면 안 되므로 지금 등급으로
+    다시 판정해 권한 밖(글이 지워진 것 포함)이면 제목을 가린다. 행은 바꾸지 않고 응답만 바꾼다."""
+    post_ids: list[uuid.UUID] = []
+    for n in rows:
+        if n.kind == "post" and n.payload and n.payload.get("post_id"):
+            try:
+                post_ids.append(uuid.UUID(n.payload["post_id"]))
+            except ValueError:
+                pass
+    if not post_ids:
+        return
+    min_roles = dict(
+        (
+            await db.execute(
+                select(Post.id, Board.min_role)
+                .join(Board, Board.id == Post.board_id)
+                .where(Post.id.in_(post_ids))
+            )
+        ).all()
+    )
+    rank = ROLE_RANK.get(user.role, 0)
+    for n in rows:
+        if n.kind != "post" or not n.payload:
+            continue
+        try:
+            pid = uuid.UUID(n.payload.get("post_id", ""))
+        except ValueError:
+            continue
+        if rank < ROLE_RANK.get(min_roles.get(pid, "?"), 99):
+            n.payload = {**n.payload, "title": MASKED_TITLE, "masked": True}
 
 
 @router.post(
