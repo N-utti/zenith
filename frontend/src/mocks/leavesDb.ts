@@ -92,7 +92,8 @@ export function createLeave(
   if (!ISO_DATE.test(start) || !ISO_DATE.test(end) || end < start) {
     return { error: '기간이 올바르지 않습니다.', status: 422, code: 'VALIDATION' }
   }
-  if (!input.reason?.trim()) {
+  // 사유는 차감 없는 휴가(병가·경조사·공가)에만 필수. 연차·반차는 받지 않는다.
+  if (type.deduct_days === 0 && !input.reason?.trim()) {
     return { error: '사유를 입력해 주세요.', status: 422, code: 'VALIDATION' }
   }
   const days = leaveDays(type, start, end)
@@ -106,7 +107,7 @@ export function createLeave(
     start_date: start,
     end_date: end,
     days,
-    reason: input.reason.trim(),
+    reason: input.reason?.trim() ?? '',
     status: 'pending',
     created_at: new Date().toISOString(),
     decided_at: null,
