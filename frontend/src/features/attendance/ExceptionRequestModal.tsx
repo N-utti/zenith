@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router'
 import { Button } from '@/components/ui/Button'
 import { Field } from '@/components/ui/Field'
 import { Input } from '@/components/ui/Input'
@@ -32,6 +33,7 @@ const KIND_OPTIONS: Array<{ value: FormKind; label: string }> = [
  */
 export function ExceptionRequestModal({ onClose }: { onClose: () => void }) {
   const toast = useToast()
+  const navigate = useNavigate()
   const arrangement = useRequestArrangement()
   const overtime = useRequestOvertime()
   const today = toISODate(new Date())
@@ -43,6 +45,8 @@ export function ExceptionRequestModal({ onClose }: { onClose: () => void }) {
   const [endTime, setEndTime] = useState('20:00')
   const [reason, setReason] = useState('')
   const [error, setError] = useState<string | null>(null)
+  // 출장을 신청하고 나면 결의서를 이어 쓸지 묻는다. 그 출장의 id.
+  const [tripId, setTripId] = useState<string | null>(null)
 
   const isArrangement = kind === 'remote' || kind === 'field' || kind === 'trip'
   // 오류는 그 입력에 붙인다. 시작일 오류를 종료일 밑에 내면 스크린리더가 멀쩡한 칸을 잘못됐다고 읽는다.
@@ -74,7 +78,11 @@ export function ExceptionRequestModal({ onClose }: { onClose: () => void }) {
     setError(null)
     const body = { onSuccess: done, onError: fail }
     if (isArrangement) {
-      arrangement.mutate({ kind, start_date: start, end_date: end, reason: reason.trim() }, body)
+      arrangement.mutate(
+        { kind, start_date: start, end_date: end, reason: reason.trim() },
+        // 출장은 결의서가 딸린다(13 일반 기안). 닫지 않고 이어 쓸지 묻는 단계로 넘어간다.
+        kind === 'trip' ? { onSuccess: (item) => setTripId(item.id), onError: fail } : body,
+      )
     } else {
       overtime.mutate(
         {
@@ -91,6 +99,33 @@ export function ExceptionRequestModal({ onClose }: { onClose: () => void }) {
   const description = isArrangement
     ? '사전 등록입니다. 승인되면 정상 근무로 집계됩니다.'
     : '소정 종업(18:00) 이후 구간만 인정됩니다. 승인된 신고분만 집계에 들어갑니다.'
+
+  if (tripId) {
+    return (
+      <Modal
+        open
+        onClose={close}
+        title="출장을 신청했습니다"
+        description="승인되면 알려 드립니다. 출장비 결의서는 지금 쓰거나, 나중에 예외 근무 표의 출장 행에서 쓸 수 있습니다."
+        size="sm"
+        footer={
+          <>
+            <Button variant="secondary" size="sm" onClick={close}>
+              나중에
+            </Button>
+            <Button size="sm" onClick={() => void navigate(`/approvals/new?arrangement=${tripId}`)}>
+              결의서 작성
+            </Button>
+          </>
+        }
+      >
+        <p className="text-muted text-sm">
+          결의서는 별도 결재 문서입니다(팀장 → 임원). 출장 승인과 따로 진행되며, 출장 기간과 목적이
+          미리 채워집니다.
+        </p>
+      </Modal>
+    )
+  }
 
   return (
     <Modal

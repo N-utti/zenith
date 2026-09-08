@@ -94,10 +94,11 @@ export function useMyAttendance(month: string) {
 
 const exceptionsKey = ['exceptions'] as const
 
-export function useMyArrangements() {
+export function useMyArrangements(enabled = true) {
   return useQuery({
     queryKey: [...exceptionsKey, 'arrangements'],
     queryFn: () => api<{ items: Arrangement[] }>('/attendance/arrangements?scope=me'),
+    enabled,
   })
 }
 

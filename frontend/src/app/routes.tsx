@@ -5,6 +5,9 @@ import { Spinner } from '@/components/ui/Spinner'
 import { LoginPage } from '@/features/auth/LoginPage'
 import { RequireAuth } from '@/features/auth/RequireAuth'
 import { AiPage } from '@/pages/AiPage'
+import { ApprovalDetailPage } from '@/pages/ApprovalDetailPage'
+import { ApprovalNewPage } from '@/pages/ApprovalNewPage'
+import { ApprovalsPage } from '@/pages/ApprovalsPage'
 import { AttendancePage } from '@/pages/AttendancePage'
 import { BoardPage } from '@/pages/BoardPage'
 import { BoardPostPage } from '@/pages/BoardPostPage'
@@ -62,6 +65,9 @@ export function AppRoutes() {
             <Route path="board/:boardId" element={<BoardPage />} />
             <Route path="board/:boardId/:postId" element={<BoardPostPage />} />
             <Route path="attendance" element={<AttendancePage />} />
+            <Route path="approvals" element={<ApprovalsPage />} />
+            <Route path="approvals/new" element={<ApprovalNewPage />} />
+            <Route path="approvals/:approvalId" element={<ApprovalDetailPage />} />
             <Route path="notifications" element={<NotificationsPage />} />
             <Route path="settings" element={<SettingsPage />} />
             <Route path="*" element={<NotFoundPage />} />

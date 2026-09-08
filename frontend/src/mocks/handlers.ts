@@ -37,6 +37,16 @@ import {
   MONTH,
   type ExceptionStore,
 } from './attendanceDb'
+import {
+  APPROVAL_TYPES,
+  cancelApproval,
+  createDraft,
+  decide,
+  getApproval,
+  listApprovals,
+  submitApproval,
+  updateDraft,
+} from './approvalsDb'
 import { readFile, saveFile } from './filesDb'
 import { createEvent, deleteEvent, listEvents } from './eventsDb'
 import {
@@ -59,6 +69,14 @@ const MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 const unauthorized = () =>
   HttpResponse.json({ detail: '로그인이 필요합니다.', code: 'AUTH_REQUIRED' }, { status: 401 })
 const notFound = () => HttpResponse.json({ detail: '문서를 찾을 수 없습니다.', code: 'NOT_FOUND' }, { status: 404 })
+
+/** 결재 목의 결과 → 응답. 실패는 `{error, status, code}` 모양(13 §9 의 403·404·409·422). */
+function approvalResponse(result: { error: string; status: number; code: string } | object, ok = 200) {
+  if ('error' in result) {
+    return HttpResponse.json({ detail: result.error, code: result.code }, { status: result.status })
+  }
+  return HttpResponse.json(result, { status: ok })
+}
 
 /** 인증이 필요한 핸들러의 공통 껍데기. */
 function authed(resolve: (user: User, request: Request) => Response) {
@@ -180,6 +198,63 @@ export const handlers = [
   ),
 
   http.get('/api/tasks/today', authed(() => HttpResponse.json({ items: TODAY_TASKS }))),
+
+  // ── 전자결재 (13 §9) ──────────────────────────────────────
+  http.get('/api/approval-types', authed(() => HttpResponse.json({ items: APPROVAL_TYPES }))),
+  http.get(
+    '/api/approvals',
+    authed((user, request) => {
+      const box = new URL(request.url).searchParams.get('box') ?? 'inbox'
+      if (!['inbox', 'sent', 'reference', 'draft'].includes(box)) {
+        return HttpResponse.json({ detail: 'box 가 올바르지 않습니다.', code: 'VALIDATION' }, { status: 422 })
+      }
+      return HttpResponse.json({ items: listApprovals(user, box as 'inbox'), next_cursor: null })
+    }),
+  ),
+  http.post('/api/approvals/drafts', async ({ request }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    const result = createDraft(user, (await request.json()) as Parameters<typeof createDraft>[1])
+    await delay(300)
+    return approvalResponse(result, 201)
+  }),
+  http.patch('/api/approvals/drafts/:id', async ({ request, params }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    const input = (await request.json()) as Parameters<typeof updateDraft>[2]
+    await delay(300)
+    return approvalResponse(updateDraft(user, String(params.id), input))
+  }),
+  http.get('/api/approvals/:id', authed((user, request) => {
+    const id = new URL(request.url).pathname.split('/').pop() ?? ''
+    return approvalResponse(getApproval(user, id))
+  })),
+  http.post('/api/approvals/:id/submit', async ({ params }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    await delay(400)
+    return approvalResponse(submitApproval(user, String(params.id)))
+  }),
+  http.post('/api/approvals/:id/cancel', async ({ params }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    await delay(300)
+    return approvalResponse(cancelApproval(user, String(params.id)))
+  }),
+  http.post('/api/approvals/:id/approve', async ({ request, params }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    const { version, comment } = (await request.json()) as { version: number; comment?: string }
+    await delay(400)
+    return approvalResponse(decide(user, String(params.id), 'approve', version, comment))
+  }),
+  http.post('/api/approvals/:id/reject', async ({ request, params }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    const { version, reason } = (await request.json()) as { version: number; reason?: string }
+    await delay(400)
+    return approvalResponse(decide(user, String(params.id), 'reject', version, reason))
+  }),
 
   // ── 근태 · 내 근태 (04 §10.1) ─────────────────────────────
   http.get(

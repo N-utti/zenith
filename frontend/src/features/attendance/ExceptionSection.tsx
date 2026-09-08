@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router'
 import { Plus } from 'lucide-react'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -6,6 +7,8 @@ import { Card } from '@/components/ui/Card'
 import { SkeletonRows } from '@/components/ui/Skeleton'
 import { Table, TableEmpty, TBody, TD, TH, THead, TR } from '@/components/ui/Table'
 import { useToast } from '@/components/ui/ToastContext'
+import { useApprovals } from '@/features/approvals/api'
+import { DOCUMENT_STATUS_LABEL, DOCUMENT_STATUS_TONE } from '@/features/approvals/types'
 import { ApiError } from '@/lib/api'
 import { formatDateTime, formatRelative } from '@/lib/datetime'
 import {
@@ -23,6 +26,7 @@ import {
   LEAVE_STATUS_LABEL,
   REQUEST_STATUS_TONE,
   type Arrangement,
+  type ArrangementKind,
   type Correction,
   type Overtime,
   type RequestStatus,
@@ -39,6 +43,8 @@ interface Row {
   detail: string
   status: RequestStatus
   created_at: string
+  /** 예외 근무의 세부 종류. 결의서가 딸리는 출장인지 표시 문구가 아니라 이것으로 본다. */
+  subKind?: ArrangementKind
 }
 
 const period = (start: string, end: string) => (start === end ? start : `${start} ~ ${end}`)
@@ -52,6 +58,7 @@ function toRows(
     ...arrangements.map((r) => ({
       kind: 'arrangement' as const,
       id: r.id,
+      subKind: r.kind,
       label: ATTENDANCE_STATUS_LABEL[r.kind],
       date: r.start_date,
       period: period(r.start_date, r.end_date),
@@ -96,6 +103,14 @@ export function ExceptionSection() {
   const cancel = useCancelException()
   const toast = useToast()
   const [open, setOpen] = useState(false)
+  // 출장 행에 결의서 상태를 붙인다. 출장 승인과 결의서는 별개 문서라 상태도 따로 보인다(2026-09-08 결정).
+  // 임시저장도 본다. 안 그러면 저장만 해 둔 결의서를 두고 "결의서 작성"이 또 떠서 두 장이 된다.
+  const sent = useApprovals('sent')
+  const drafts = useApprovals('draft')
+  const expenseOf = (arrangementId: string) =>
+    [...(sent.data?.items ?? []), ...(drafts.data?.items ?? [])].find(
+      (d) => d.related?.type === 'arrangement' && d.related.id === arrangementId,
+    )
 
   const isPending = arrangements.isPending || overtime.isPending || corrections.isPending
   const isError = arrangements.isError || overtime.isError || corrections.isError
@@ -156,54 +171,76 @@ export function ExceptionSection() {
             <TH>일자</TH>
             <TH>내용</TH>
             <TH>상태</TH>
+            <TH>결의서</TH>
             <TH>신청</TH>
             <TH />
           </tr>
         </THead>
         <TBody>
-          {isPending && <TableEmpty colSpan={6}>불러오는 중</TableEmpty>}
+          {isPending && <TableEmpty colSpan={7}>불러오는 중</TableEmpty>}
           {isError && !isPending && (
-            <TableEmpty colSpan={6}>신청 목록을 불러오지 못했습니다.</TableEmpty>
+            <TableEmpty colSpan={7}>신청 목록을 불러오지 못했습니다.</TableEmpty>
           )}
           {!isPending && !isError && rows.length === 0 && (
-            <TableEmpty colSpan={6}>아직 신청한 예외 근무가 없습니다.</TableEmpty>
+            <TableEmpty colSpan={7}>아직 신청한 예외 근무가 없습니다.</TableEmpty>
           )}
-          {rows.map((row) => (
-            <TR key={`${row.kind}:${row.id}`} muted={row.status === 'canceled'}>
-              <TD>{row.label}</TD>
-              <TD className="whitespace-nowrap">{row.period}</TD>
-              <TD className="text-muted max-w-xs truncate" title={row.detail}>
-                {row.detail}
-              </TD>
-              <TD>
-                <Badge tone={REQUEST_STATUS_TONE[row.status]}>
-                  {LEAVE_STATUS_LABEL[row.status]}
-                </Badge>
-              </TD>
-              <TD className="text-muted whitespace-nowrap">
-                <time dateTime={row.created_at} title={formatDateTime(row.created_at)}>
-                  {formatRelative(row.created_at)}
-                </time>
-              </TD>
-              <TD className="text-right">
-                {row.status === 'pending' && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    aria-label={`${row.label} ${row.period} 신청 취소`}
-                    onClick={() => onCancel(row)}
-                    disabled={
-                      cancel.isPending &&
-                      cancel.variables?.kind === row.kind &&
-                      cancel.variables.id === row.id
-                    }
-                  >
-                    취소
-                  </Button>
-                )}
-              </TD>
-            </TR>
-          ))}
+          {rows.map((row) => {
+            const expense =
+              row.subKind === 'trip' && row.status !== 'canceled' ? expenseOf(row.id) : undefined
+            return (
+              <TR key={`${row.kind}:${row.id}`} muted={row.status === 'canceled'}>
+                <TD>{row.label}</TD>
+                <TD className="whitespace-nowrap">{row.period}</TD>
+                <TD className="text-muted max-w-xs truncate" title={row.detail}>
+                  {row.detail}
+                </TD>
+                <TD>
+                  <Badge tone={REQUEST_STATUS_TONE[row.status]}>
+                    {LEAVE_STATUS_LABEL[row.status]}
+                  </Badge>
+                </TD>
+                <TD className="whitespace-nowrap">
+                  {expense && (
+                    <Link to={`/approvals/${expense.id}`} aria-label="출장비 결의서 보기">
+                      <Badge tone={DOCUMENT_STATUS_TONE[expense.status]}>
+                        {DOCUMENT_STATUS_LABEL[expense.status]}
+                      </Badge>
+                    </Link>
+                  )}
+                  {!expense && row.subKind === 'trip' && row.status !== 'canceled' && (
+                    <Link
+                      to={`/approvals/new?arrangement=${row.id}`}
+                      className="text-accent text-xs hover:underline"
+                    >
+                      결의서 작성
+                    </Link>
+                  )}
+                </TD>
+                <TD className="text-muted whitespace-nowrap">
+                  <time dateTime={row.created_at} title={formatDateTime(row.created_at)}>
+                    {formatRelative(row.created_at)}
+                  </time>
+                </TD>
+                <TD className="text-right">
+                  {row.status === 'pending' && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      aria-label={`${row.label} ${row.period} 신청 취소`}
+                      onClick={() => onCancel(row)}
+                      disabled={
+                        cancel.isPending &&
+                        cancel.variables?.kind === row.kind &&
+                        cancel.variables.id === row.id
+                      }
+                    >
+                      취소
+                    </Button>
+                  )}
+                </TD>
+              </TR>
+            )
+          })}
         </TBody>
       </Table>
 
