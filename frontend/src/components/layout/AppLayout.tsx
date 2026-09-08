@@ -37,7 +37,14 @@ export function AppLayout({ bleed = false }: { bleed?: boolean }) {
       <div className="flex min-h-0 flex-1">
         <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
-        <main className={cn('min-w-0 flex-1', bleed ? 'overflow-hidden' : 'overflow-y-auto')}>
+        {/* 스크롤바 자리를 늘 비워 둔다. 긴 화면에서 짧은 화면(탭 전환)으로 갈 때 스크롤바가
+            사라지며 본문이 옆으로 움직이지 않게. */}
+        <main
+          className={cn(
+            'min-w-0 flex-1',
+            bleed ? 'overflow-hidden' : 'overflow-y-auto [scrollbar-gutter:stable]',
+          )}
+        >
           {bleed ? (
             <Outlet />
           ) : (
