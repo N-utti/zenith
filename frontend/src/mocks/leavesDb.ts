@@ -7,7 +7,10 @@ import type {
 import { leaveDays } from '@/features/attendance/leaveDays'
 import type { User } from '@/types'
 
-/** 10 근태 설계서 §4.1 `leave_types` 시드. */
+/**
+ * 10 근태 설계서 §4.1 `leave_types` 시드. 무급 휴가(`unpaid`)는 뺐다. 직원이 폼에서 고르는
+ * 항목이 아니라 인사가 처리하는 예외라서다(2026-09-08 결정). 스키마의 `paid` 는 그대로 둔다.
+ */
 export const LEAVE_TYPES: LeaveType[] = [
   { code: 'annual', name: '연차', paid: true, deduct_days: 1, unit: 'day' },
   { code: 'half_am', name: '오전 반차', paid: true, deduct_days: 0.5, unit: 'half' },
@@ -15,7 +18,6 @@ export const LEAVE_TYPES: LeaveType[] = [
   { code: 'sick', name: '병가', paid: true, deduct_days: 0, unit: 'day' },
   { code: 'family', name: '경조사', paid: true, deduct_days: 0, unit: 'day' },
   { code: 'official', name: '공가', paid: true, deduct_days: 0, unit: 'day' },
-  { code: 'unpaid', name: '무급 휴가', paid: false, deduct_days: 0, unit: 'day' },
 ]
 
 const YEAR = new Date().getFullYear()
