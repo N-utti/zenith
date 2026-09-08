@@ -32,7 +32,7 @@ function PresenceBar({ session }: { session: CollabSession }) {
   if (status !== 'connected') {
     return (
       <p
-        title="npm run collab 로 실시간 릴레이를 켜면 다른 사람과 함께 편집할 수 있습니다."
+        title="릴레이에 연결되면 다른 사람과 함께 편집됩니다. 개발 중이면 npm run server, 로그인이 풀렸으면 다시 로그인하세요."
         className="text-warning flex items-center gap-1.5 text-xs"
       >
         <WifiOff className="size-3.5" />

@@ -5,7 +5,9 @@ import path from 'node:path'
 
 export default defineConfig(({ mode }) => {
   // MSW를 끄면(VITE_DISABLE_MSW=true) /api 가 여기로 간다. 8000 이 다른 프로세스에 잡혀 있으면 바꾼다.
-  const apiTarget = loadEnv(mode, process.cwd(), '').VITE_API_TARGET || 'http://localhost:8000'
+  const env = loadEnv(mode, process.cwd(), '')
+  const apiTarget = env.VITE_API_TARGET || 'http://localhost:8000'
+  const mswEnabled = env.VITE_DISABLE_MSW !== 'true'
 
   return {
     plugins: [react(), tailwindcss()],
@@ -30,16 +32,15 @@ export default defineConfig(({ mode }) => {
           ws: true,
           rewrite: (path) => path.replace(/^\/api\/chat/, '/chat'),
         },
+        // 문서 공동편집(04 §4.2). 앱은 항상 /api/yjs/{docId} 로 붙는다. 문서 id 는 REST 가 준 것이라
+        // 릴레이도 같은 곳이어야 한다 — MSW 문서면 개발 릴레이(:1234, /collab), 실제 백엔드 문서면 백엔드.
+        '/api/yjs': mswEnabled
+          ? { target: 'ws://localhost:1234', ws: true, rewrite: (path) => path.replace(/^\/api\/yjs/, '/collab') }
+          : { target: apiTarget, ws: true },
         // Host 헤더를 바꾸지 않는다(changeOrigin 없음). 서버가 Origin 과 Host 를 대조해 CSRF 를 막는데,
         // Host 가 대상 주소로 바뀌면 브라우저의 Origin(localhost:5173)과 어긋나 403 이 난다.
         '/api': {
           target: apiTarget,
-        },
-        // 문서 공동편집. 앱은 항상 같은 오리진의 /collab 으로 붙으므로,
-        // 운영에서는 이 대상만 실제 백엔드로 바꾸면 된다.
-        '/collab': {
-          target: 'ws://localhost:1234',
-          ws: true,
         },
       },
     },
