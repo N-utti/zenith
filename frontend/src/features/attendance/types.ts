@@ -9,6 +9,15 @@ export const LEAVE_STATUS_LABEL: Record<LeaveStatus, string> = {
   canceled: '취소',
 }
 
+/** 신청 상태 배지 색. 휴가·예외 근무 목록이 같이 쓴다. */
+export const REQUEST_STATUS_TONE: Record<LeaveStatus, 'neutral' | 'accent' | 'success' | 'danger'> =
+  {
+    pending: 'accent',
+    approved: 'success',
+    rejected: 'danger',
+    canceled: 'neutral',
+  }
+
 export interface LeaveType {
   /** annual | half_am | half_pm | sick | family | unpaid | official */
   code: string
@@ -67,14 +76,7 @@ export interface LeaveRequestInput {
 
 /** 10 §5.2 상태 판정 결과. 출퇴근 시각이 없으므로 지각·조퇴는 없다. */
 export type AttendanceStatus =
-  | 'normal'
-  | 'leave'
-  | 'half_leave'
-  | 'remote'
-  | 'field'
-  | 'trip'
-  | 'holiday'
-  | 'absent'
+  'normal' | 'leave' | 'half_leave' | 'remote' | 'field' | 'trip' | 'holiday' | 'absent'
 
 export const ATTENDANCE_STATUS_LABEL: Record<AttendanceStatus, string> = {
   normal: '정상',
@@ -114,4 +116,82 @@ export interface AttendanceMonth {
     overtime_minutes: number
     night_minutes: number
   }
+}
+
+// ── 예외 근무 (04 §10.3 · 10 §9.3) ─────────────────────────────
+
+/** 신청 상태는 휴가와 같다(10 §4.1 세 신청 테이블 모두 pending|approved|rejected|canceled). */
+export type RequestStatus = LeaveStatus
+
+export type ArrangementKind = 'remote' | 'field' | 'trip'
+
+/** 재택·외근·출장 사전 등록(10 §4.1 `work_arrangements`). */
+export interface Arrangement {
+  id: string
+  kind: ArrangementKind
+  start_date: string
+  end_date: string
+  reason: string
+  status: RequestStatus
+  created_at: string
+  decided_at: string | null
+}
+
+export interface ArrangementInput {
+  kind: ArrangementKind
+  start_date: string
+  end_date: string
+  reason: string
+}
+
+/**
+ * 전사 캘린더(홈)에 오르는 예외 근무. 휴가와 같이 "누가 언제 무엇" 뿐이고 사유는 없다(10 §8).
+ * 04 §10.3 의 scope 는 `me|team` 뿐이라 `all` 은 프론트 확장(PR 본문).
+ */
+export interface ArrangementOnCalendar {
+  id: string
+  user: { id: string; name: string }
+  kind: ArrangementKind
+  start_date: string
+  end_date: string
+}
+
+/** 연장근로 신청(10 §4.1 `overtime_requests`). `minutes`·`night_minutes` 는 서버 산출(10 §5.3). */
+export interface Overtime {
+  id: string
+  work_date: string
+  /** `18:00` */
+  start_time: string
+  /** 시작보다 이르면 자정을 넘긴 것 */
+  end_time: string
+  minutes: number
+  night_minutes: number
+  reason: string
+  status: RequestStatus
+  created_at: string
+  decided_at: string | null
+}
+
+export interface OvertimeInput {
+  work_date: string
+  start_time: string
+  end_time: string
+  reason: string
+}
+
+/** 근태 정정 신청(10 §4.1 `att_corrections`). `after` 가 바꾸려는 값, 승인 전 값은 서버가 `before` 로 보존. */
+export interface Correction {
+  id: string
+  work_date: string
+  after: { status?: AttendanceStatus; note?: string }
+  reason: string
+  status: RequestStatus
+  created_at: string
+  decided_at: string | null
+}
+
+export interface CorrectionInput {
+  work_date: string
+  after: { status?: AttendanceStatus; note?: string }
+  reason: string
 }

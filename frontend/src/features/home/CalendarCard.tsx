@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
 import { Spinner } from '@/components/ui/Spinner'
 import { useToast } from '@/components/ui/ToastContext'
-import { useAllLeaves, useLeaveTypes } from '@/features/attendance/api'
+import { useAllArrangements, useAllLeaves, useLeaveTypes } from '@/features/attendance/api'
 import { cn } from '@/lib/cn'
 import { ApiError } from '@/lib/api'
 import { currentMonth, formatISODate, monthMatrix, toISODate } from '@/lib/datetime'
@@ -16,9 +16,10 @@ import { useCreateEvent, useDeleteEvent, useMyEvents } from './api'
 import { itemsByDay, type CalendarItem } from './calendarItems'
 import { HomeSection } from './HomeSection'
 
-/** 05 상태 색상 규약: 휴가는 파랑(accent). 내 일정은 초록. 색값은 `Badge` 의 accent·success 와 같다. */
+/** 05 상태 색상 규약: 휴가는 파랑(accent), 재택·외근·출장은 청록(info). 내 일정은 초록. 근태 캘린더와 같은 색. */
 const TONE: Record<CalendarItem['kind'], string> = {
   leave: 'bg-accent-soft text-accent',
+  arrangement: 'bg-info/12 text-info',
   event: 'bg-success/12 text-success',
 }
 
@@ -28,13 +29,14 @@ const MAX_CHIPS = 3
 /** 조회 기간과 격자가 같은 주 시작을 봐야 한다. 취업규칙이 일요일 시작이면 여기만 0 으로. */
 const WEEK_STARTS_ON = 1
 
-/** 홈 캘린더. 전 직원의 승인된 휴가 + 내 개인 일정. 날짜를 누르면 그날 항목과 일정 추가. */
+/** 홈 캘린더. 전 직원의 승인된 휴가·재택·외근·출장 + 내 개인 일정. 날짜를 누르면 그날 항목과 일정 추가. */
 export function CalendarCard() {
   const [month, setMonth] = useState(currentMonth)
   const [selected, setSelected] = useState<string | null>(null)
   // 범례를 눌러 종류별로 끈다. 휴가만 보거나 내 일정만 보거나.
   const [show, setShow] = useState<Record<CalendarItem['kind'], boolean>>({
     leave: true,
+    arrangement: true,
     event: true,
   })
   const toggle = (kind: CalendarItem['kind']) => setShow((s) => ({ ...s, [kind]: !s[kind] }))
@@ -46,17 +48,19 @@ export function CalendarCard() {
     to: toISODate(weeks[weeks.length - 1][6]),
   }
   const leaves = useAllLeaves(range.from, range.to)
+  const arrangements = useAllArrangements(range.from, range.to)
   const events = useMyEvents(range.from, range.to)
   const types = useLeaveTypes()
   const typeName = (code: string) => types.data?.items.find((t) => t.code === code)?.name ?? code
-  const isError = leaves.isError || events.isError
-  const isPending = leaves.isPending || events.isPending
+  const isError = leaves.isError || arrangements.isError || events.isError
+  const isPending = leaves.isPending || arrangements.isPending || events.isPending
 
   const days = itemsByDay(
     (show.leave && leaves.data?.items) || [],
     (show.event && events.data?.items) || [],
     typeName,
     range,
+    (show.arrangement && arrangements.data?.items) || [],
   )
 
   return (
@@ -130,6 +134,7 @@ export function CalendarCard() {
 /** 범례 견본. 켜진 것은 단색, 끈 것은 칩과 같은 연한 색. */
 const LEGEND: Array<[CalendarItem['kind'], string, string]> = [
   ['leave', '휴가', 'bg-accent'],
+  ['arrangement', '재택·외근·출장', 'bg-info'],
   ['event', '내 일정', 'bg-success'],
 ]
 

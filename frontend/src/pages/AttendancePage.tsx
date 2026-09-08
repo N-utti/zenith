@@ -3,15 +3,17 @@ import { Clock } from 'lucide-react'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { PlaceholderPanel } from '@/components/ui/PlaceholderPanel'
 import { Tabs } from '@/components/ui/Tabs'
+import { ExceptionSection } from '@/features/attendance/ExceptionSection'
 import { LeaveSection } from '@/features/attendance/LeaveSection'
 import { MyAttendanceSection } from '@/features/attendance/MyAttendanceSection'
 import { useCurrentUser } from '@/features/auth/AuthContext'
 import { ROLE_RANK } from '@/types'
 
-/** 화면마다 탭 하나. 05 SCR-ATT-01(내 근태)·02(휴가). 예외 근무·팀 현황은 뒤에 붙는다. */
+/** 화면마다 탭 하나. 05 SCR-ATT-01(내 근태)·02(휴가)·03(예외 근무). 팀 현황은 뒤에 붙는다. */
 const TABS = [
   { key: 'me', label: '내 근태' },
   { key: 'leave', label: '휴가' },
+  { key: 'exception', label: '예외 근무' },
 ]
 
 export function AttendancePage() {
@@ -49,6 +51,8 @@ export function AttendancePage() {
         {(key) =>
           key === 'leave' ? (
             <LeaveSection />
+          ) : key === 'exception' ? (
+            <ExceptionSection />
           ) : (
             <div className="space-y-6">
               <MyAttendanceSection />
@@ -56,7 +60,7 @@ export function AttendancePage() {
                 icon={Clock}
                 milestone="일정 미확정 (설계서 §12)"
                 items={[
-                  '재택 · 외근 · 출장 · 연장근로 신청, 팀장 1단계 승인',
+                  '신청 승인 흐름(전자결재 편입, 설계서 13)',
                   canSeeOthers ? '팀원 근태 조회 · 신청 승인/반려' : '연차 사용촉진 안내',
                 ]}
               />

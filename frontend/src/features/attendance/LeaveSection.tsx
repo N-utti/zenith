@@ -11,14 +11,7 @@ import { formatDateTime, formatRelative, toISODate } from '@/lib/datetime'
 import { useCancelLeave, useLeaveBalance, useLeaveTypes, useMyLeaves } from './api'
 import { LeaveRequestModal } from './LeaveRequestModal'
 import { Stat } from './Stat'
-import { LEAVE_STATUS_LABEL, type LeaveBalance, type LeaveStatus } from './types'
-
-const STATUS_TONE: Record<LeaveStatus, 'neutral' | 'accent' | 'success' | 'danger'> = {
-  pending: 'accent',
-  approved: 'success',
-  rejected: 'danger',
-  canceled: 'neutral',
-}
+import { LEAVE_STATUS_LABEL, REQUEST_STATUS_TONE, type LeaveBalance } from './types'
 
 /** 소멸 60일 전부터 경고한다(FR-ATT-23 의 D-60 시점). 날짜는 ISO 문자열끼리 비교한다. 파싱하면 시간대에 밀린다. */
 function expiringSoon(balance: LeaveBalance): boolean {
@@ -95,9 +88,7 @@ export function LeaveSection() {
         </THead>
         <TBody>
           {leaves.isPending && <TableEmpty colSpan={6}>불러오는 중</TableEmpty>}
-          {leaves.isError && (
-            <TableEmpty colSpan={6}>휴가 목록을 불러오지 못했습니다.</TableEmpty>
-          )}
+          {leaves.isError && <TableEmpty colSpan={6}>휴가 목록을 불러오지 못했습니다.</TableEmpty>}
           {leaves.data && items.length === 0 && (
             <TableEmpty colSpan={6}>아직 신청한 휴가가 없습니다.</TableEmpty>
           )}
@@ -111,7 +102,9 @@ export function LeaveSection() {
               </TD>
               <TD className="text-right tabular-nums">{leave.days}일</TD>
               <TD>
-                <Badge tone={STATUS_TONE[leave.status]}>{LEAVE_STATUS_LABEL[leave.status]}</Badge>
+                <Badge tone={REQUEST_STATUS_TONE[leave.status]}>
+                  {LEAVE_STATUS_LABEL[leave.status]}
+                </Badge>
               </TD>
               <TD className="text-muted whitespace-nowrap">
                 {/* "1시간 전"은 읽기 편하지만 언제인지는 모른다. 커서를 올리면 정확한 시각. */}
