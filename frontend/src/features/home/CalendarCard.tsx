@@ -149,8 +149,9 @@ function Legend({
           aria-pressed={show[kind]}
           onClick={() => onToggle(kind)}
           className={cn(
-            'text-subtle hover:bg-surface-hover hover:text-fg flex items-center gap-1 rounded-md px-1.5 py-1 text-xs transition-colors',
-            !show[kind] && 'opacity-50',
+            'hover:bg-surface-hover flex items-center gap-1 rounded-md px-1.5 py-1 text-xs transition-colors',
+            // 켜진 것은 진하게, 끈 것은 흐리게. 색 견본도 같이 흐려져 어느 쪽이 꺼졌는지 보인다.
+            show[kind] ? 'text-fg font-medium' : 'text-subtle opacity-50',
           )}
         >
           <span className={cn('size-2.5 rounded-sm', TONE[kind])} />
