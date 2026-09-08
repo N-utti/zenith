@@ -62,9 +62,10 @@ function AnswerActions({ id, body }: { id: string; body: string }) {
         onClick={toggleHelpful}
         disabled={feedback.isPending}
         aria-pressed={helpful}
-        className={cn(item, helpful && 'text-accent')}
+        // 눌린 상태는 호버·전송 중 반투명보다 우선한다. 커서를 치우기 전에도 눌렸다는 게 보여야 한다.
+        className={cn(item, helpful && 'text-accent hover:text-accent disabled:opacity-100')}
       >
-        <ThumbsUp className="size-3.5" />
+        <ThumbsUp className={cn('size-3.5', helpful && 'fill-current')} />
         도움돼요
       </button>
       <button type="button" onClick={() => void copy()} className={item}>
