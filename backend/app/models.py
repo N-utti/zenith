@@ -180,6 +180,11 @@ class DocComment(Base):
 
 class Channel(Base):
     __tablename__ = "channels"
+    __table_args__ = (  # 공개 채널 이름 유일 — 사전 검사와 commit 사이 경합은 이게 막는다(409)
+        Index(
+            "uq_channels_public_name", "name", unique=True, postgresql_where=sql_text("NOT is_dm")
+        ),
+    )
 
     id: Mapped[uuid.UUID] = uuid_pk()
     ws_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("workspaces.id"), nullable=False)

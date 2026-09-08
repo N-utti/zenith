@@ -3,8 +3,6 @@
 FR-AUTH-03: 셀프 가입이 없다. 계정은 여기서만 만들고 비활성화한다.
 """
 
-import base64
-import binascii
 import uuid
 from datetime import UTC, date, datetime
 
@@ -19,6 +17,8 @@ from app.db import get_db
 from app.deps import require_role
 from app.errors import ApiError
 from app.models import AuditEvent, AuthSession, Role, Team, User
+from app.paging import decode_cursor, encode_cursor
+from app.routers import channels
 from app.security import hash_password_async
 from app.stubs import register_stubs
 
@@ -130,6 +130,7 @@ async def create_user(
     )
     db.add(user)
     await db.flush()
+    await channels.join_public_channels(db, user.id)  # 공개 채널은 전원 멤버 (04 §5, README 12)
     audit.record(
         db,
         "admin.user_created",
@@ -189,18 +190,6 @@ async def update_user(
     return user
 
 
-def _encode_cursor(at: datetime, id_: uuid.UUID) -> str:
-    return base64.urlsafe_b64encode(f"{at.isoformat()}|{id_}".encode()).decode()
-
-
-def _decode_cursor(cursor: str) -> tuple[datetime, uuid.UUID]:
-    try:
-        at, id_ = base64.urlsafe_b64decode(cursor.encode()).decode().split("|")
-        return datetime.fromisoformat(at), uuid.UUID(id_)
-    except (ValueError, UnicodeDecodeError, binascii.Error) as e:
-        raise ApiError(422, "VALIDATION", "cursor 형식이 잘못됐습니다.") from e
-
-
 @router.get(
     "/admin/audit",
     response_model=AuditPage,
@@ -216,14 +205,14 @@ async def list_audit(
     if kind:
         stmt = stmt.where(AuditEvent.kind.startswith(kind, autoescape=True))  # %·_ 를 글자로
     if cursor:
-        at, id_ = _decode_cursor(cursor)
+        at, id_ = decode_cursor(cursor)
         stmt = stmt.where(tuple_(AuditEvent.at, AuditEvent.id) < (at, id_))
     rows = list((await db.execute(stmt)).scalars())
     more = len(rows) > limit
     rows = rows[:limit]
     return AuditPage(
         items=[AuditOut.model_validate(row) for row in rows],
-        next_cursor=_encode_cursor(rows[-1].at, rows[-1].id) if more else None,
+        next_cursor=encode_cursor(rows[-1].at, rows[-1].id) if more else None,
     )
 
 
