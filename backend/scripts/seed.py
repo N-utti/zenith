@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import Base, SessionLocal
 from app.models import Board, Channel, Folder, Team, User, Workspace
+from app.routers import channels
 from app.security import hash_password
 
 PASSWORD = os.environ.get("SEED_PASSWORD", "zenith1234")
@@ -56,6 +57,9 @@ async def main() -> None:
             )
             if role == "lead":
                 team.lead_id = user.id
+        # 공개 채널은 전원 멤버(04 §5, README 12). 이미 들어 있으면 건너뛴다.
+        for user_id in (await db.execute(select(User.id))).scalars():
+            await channels.join_public_channels(db, user_id)
         await db.commit()
     print(
         f"seeded: workspace 1, boards {len(BOARDS)}, channels {len(CHANNELS)}, "

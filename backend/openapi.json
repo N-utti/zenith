@@ -1008,19 +1008,18 @@
         "tags": [
           "chat"
         ],
-        "summary": "내 채널·DM 목록 + unread 카운트",
-        "operationId": "stub_api_channels_get",
+        "summary": "내 채널·DM 목록 + unread 카운트 + 마지막 메시지 — 최근 대화순",
+        "operationId": "list_channels_api_channels_get",
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Items_ChannelOut_"
+                }
               }
             }
-          },
-          "501": {
-            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
           }
         }
       },
@@ -1028,19 +1027,41 @@
         "tags": [
           "chat"
         ],
-        "summary": "{name} 또는 {dm_user_id}",
-        "operationId": "stub_api_channels_post",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
+        "summary": "{name} 공개 채널(활성 사용자 전원 멤버) 또는 {dm_user_id} DM(있으면 그것) 생성",
+        "operationId": "create_channel_api_channels_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChannelCreateIn"
               }
             }
           },
-          "501": {
-            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChannelOut"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "CONFLICT — 같은 이름의 채널"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
           }
         }
       }
@@ -1050,19 +1071,68 @@
         "tags": [
           "chat"
         ],
-        "summary": "과거 메시지 (?cursor=, 50개 단위)",
-        "operationId": "stub_api_channels__id__messages_get",
+        "summary": "과거 메시지 — ?cursor= 이전 것 limit(기본 50)개, 오래된 순. next_cursor 로 더 과거",
+        "operationId": "list_messages_api_channels__id__messages_get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/MessagePage"
+                }
               }
             }
           },
-          "501": {
-            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
           }
         }
       }
@@ -2482,6 +2552,85 @@
         ],
         "title": "AuditPage"
       },
+      "ChannelCreateIn": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "dm_user_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dm User Id"
+          }
+        },
+        "type": "object",
+        "title": "ChannelCreateIn"
+      },
+      "ChannelOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "is_dm": {
+            "type": "boolean",
+            "title": "Is Dm"
+          },
+          "members": {
+            "items": {
+              "$ref": "#/components/schemas/Person"
+            },
+            "type": "array",
+            "title": "Members"
+          },
+          "unread": {
+            "type": "integer",
+            "title": "Unread"
+          },
+          "last_message": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MessageOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "is_dm",
+          "members",
+          "unread",
+          "last_message"
+        ],
+        "title": "ChannelOut"
+      },
       "ChatIn": {
         "properties": {
           "session_id": {
@@ -2992,6 +3141,22 @@
         ],
         "title": "HomePost"
       },
+      "Items_ChannelOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ChannelOut"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "Items[ChannelOut]"
+      },
       "Items_CommentOut_": {
         "properties": {
           "items": {
@@ -3128,6 +3293,96 @@
         ],
         "title": "MeOut",
         "description": "04 §1 `GET /me` → {id, name, email, role, avatar} + team (03 §2.6 조직, 계약 확장)."
+      },
+      "MessageOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "channel_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Channel Id"
+          },
+          "author": {
+            "$ref": "#/components/schemas/Person"
+          },
+          "body": {
+            "type": "string",
+            "title": "Body"
+          },
+          "doc_ref": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Doc Ref"
+          },
+          "attachments": {
+            "anyOf": [
+              {
+                "items": {},
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attachments"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "channel_id",
+          "author",
+          "body",
+          "doc_ref",
+          "attachments",
+          "created_at"
+        ],
+        "title": "MessageOut",
+        "description": "§4.1 `msg` 이벤트의 message 와 같은 모양."
+      },
+      "MessagePage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MessageOut"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "title": "MessagePage"
       },
       "ModelOut": {
         "properties": {
