@@ -1,13 +1,25 @@
+import { useSearchParams } from 'react-router'
 import { Clock } from 'lucide-react'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { PlaceholderPanel } from '@/components/ui/PlaceholderPanel'
+import { Tabs } from '@/components/ui/Tabs'
 import { LeaveSection } from '@/features/attendance/LeaveSection'
+import { MyAttendanceSection } from '@/features/attendance/MyAttendanceSection'
 import { useCurrentUser } from '@/features/auth/AuthContext'
 import { ROLE_RANK } from '@/types'
+
+/** 화면마다 탭 하나. 05 SCR-ATT-01(내 근태)·02(휴가). 예외 근무·팀 현황은 뒤에 붙는다. */
+const TABS = [
+  { key: 'me', label: '내 근태' },
+  { key: 'leave', label: '휴가' },
+]
 
 export function AttendancePage() {
   const user = useCurrentUser()
   const canSeeOthers = ROLE_RANK[user.role] >= ROLE_RANK.lead
+  // 탭은 URL 에 둔다(`?tab=leave`). 알림에서 휴가 탭으로 바로 들어오고, 새로고침해도 그 자리다.
+  const [params, setParams] = useSearchParams()
+  const tab = params.get('tab') ?? 'me'
 
   return (
     <>
@@ -19,19 +31,39 @@ export function AttendancePage() {
             : '본인 근태만 조회할 수 있습니다. (설계서 NFR-ATT-01)'
         }
       />
-      <div className="space-y-6">
-        <LeaveSection />
-        <PlaceholderPanel
-          icon={Clock}
-          milestone="일정 미확정 (설계서 §12)"
-          items={[
-            // 설계서 v0.3: 출퇴근 시각을 기록하지 않는다. 기록하는 것은 예외뿐이다.
-            '월별 근태 캘린더: 휴가 · 재택 · 외근 · 출장 상태 표시 (설계서 SCR-ATT-01)',
-            '재택 · 외근 · 출장 · 연장근로 신청, 팀장 1단계 승인',
-            canSeeOthers ? '팀원 근태 조회 · 신청 승인/반려' : '연차 사용촉진 안내',
-          ]}
-        />
-      </div>
+      <Tabs
+        items={TABS}
+        value={tab}
+        // 다른 파라미터는 남기고 `tab` 만 바꾼다. 화살표로 탭을 옮길 때마다 히스토리가 쌓이지 않게 replace.
+        onChange={(key) =>
+          setParams(
+            (prev) => {
+              if (key === 'me') prev.delete('tab')
+              else prev.set('tab', key)
+              return prev
+            },
+            { replace: true },
+          )
+        }
+      >
+        {(key) =>
+          key === 'leave' ? (
+            <LeaveSection />
+          ) : (
+            <div className="space-y-6">
+              <MyAttendanceSection />
+              <PlaceholderPanel
+                icon={Clock}
+                milestone="일정 미확정 (설계서 §12)"
+                items={[
+                  '재택 · 외근 · 출장 · 연장근로 신청, 팀장 1단계 승인',
+                  canSeeOthers ? '팀원 근태 조회 · 신청 승인/반려' : '연차 사용촉진 안내',
+                ]}
+              />
+            </div>
+          )
+        }
+      </Tabs>
     </>
   )
 }

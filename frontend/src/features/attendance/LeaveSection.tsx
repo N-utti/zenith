@@ -10,6 +10,7 @@ import { ApiError } from '@/lib/api'
 import { formatDateTime, formatRelative, toISODate } from '@/lib/datetime'
 import { useCancelLeave, useLeaveBalance, useLeaveTypes, useMyLeaves } from './api'
 import { LeaveRequestModal } from './LeaveRequestModal'
+import { Stat } from './Stat'
 import { LEAVE_STATUS_LABEL, type LeaveBalance, type LeaveStatus } from './types'
 
 const STATUS_TONE: Record<LeaveStatus, 'neutral' | 'accent' | 'success' | 'danger'> = {
@@ -143,22 +144,6 @@ export function LeaveSection() {
           balance={balance.data}
         />
       )}
-    </div>
-  )
-}
-
-function Stat({ label, value, strong }: { label: string; value: number; strong?: boolean }) {
-  return (
-    <div>
-      <dt className="text-subtle text-xs">{label}</dt>
-      <dd
-        className={
-          strong ? 'text-fg text-2xl font-semibold tabular-nums' : 'text-muted text-2xl tabular-nums'
-        }
-      >
-        {value}
-        <span className="text-subtle ml-0.5 text-sm font-normal">일</span>
-      </dd>
     </div>
   )
 }
