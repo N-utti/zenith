@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, ReactNode } from 'react'
+import type { ButtonHTMLAttributes, ReactNode, Ref } from 'react'
 import { cn } from '@/lib/cn'
 
 type Variant = 'primary' | 'secondary' | 'ghost' | 'danger'
@@ -20,6 +20,8 @@ interface Props extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: Variant
   size?: Size
   children?: ReactNode
+  /** React 19: ref 는 일반 prop 이라 그대로 흘러간다. 포커스를 되돌릴 때 쓴다. */
+  ref?: Ref<HTMLButtonElement>
 }
 
 export function Button({ variant = 'primary', size = 'md', className, ...props }: Props) {
