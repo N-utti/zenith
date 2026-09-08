@@ -1,5 +1,6 @@
 import {
   Bell,
+  ClipboardCheck,
   Clock,
   FileText,
   House,
@@ -29,6 +30,7 @@ export const TOP_NAV: NavItem[] = [
   { to: '/', label: '홈', icon: House, end: true },
   { to: '/notifications', label: '받은 알림', icon: Bell },
   { to: '/attendance', label: '근태', icon: Clock },
+  { to: '/approvals', label: '결재', icon: ClipboardCheck },
   { to: '/ai', label: 'AI 어시스턴트', icon: Sparkles },
 ]
 
@@ -53,6 +55,7 @@ export const ALL_NAV: NavItem[] = [
   { to: '/chat', label: '채팅', icon: MessagesSquare },
   { to: '/board', label: '게시판', icon: Megaphone },
   { to: '/attendance', label: '근태', icon: Clock },
+  { to: '/approvals', label: '결재', icon: ClipboardCheck },
   { to: '/ai', label: 'AI 어시스턴트', icon: Sparkles },
   { to: '/notifications', label: '받은 알림', icon: Bell },
   ...SECONDARY_NAV,
