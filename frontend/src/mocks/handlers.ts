@@ -24,7 +24,19 @@ import {
   listVersions,
   touchDoc,
 } from './docsDb'
-import { attendanceMonth, MONTH } from './attendanceDb'
+import {
+  attendanceMonth,
+  cancelException,
+  createArrangement,
+  createCorrection,
+  createOvertime,
+  listArrangements,
+  listArrangementsInRange,
+  listCorrections,
+  listOvertime,
+  MONTH,
+  type ExceptionStore,
+} from './attendanceDb'
 import { readFile, saveFile } from './filesDb'
 import { createEvent, deleteEvent, listEvents } from './eventsDb'
 import {
@@ -180,6 +192,86 @@ export const handlers = [
       return HttpResponse.json(attendanceMonth(user, month))
     }),
   ),
+
+  // ── 근태 · 예외 근무 (04 §10.3) ───────────────────────────
+  http.get(
+    '/api/attendance/arrangements',
+    authed((user, request) => {
+      const params = new URL(request.url).searchParams
+      // `scope=all` 은 04 에 없는 확장(홈 캘린더). 휴가의 `scope=all` 과 같은 모양.
+      if (params.get('scope') === 'all') {
+        return HttpResponse.json({
+          items: listArrangementsInRange(params.get('from') ?? '', params.get('to') ?? ''),
+        })
+      }
+      return HttpResponse.json({ items: listArrangements(user) })
+    }),
+  ),
+  http.post('/api/attendance/arrangements', async ({ request }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    const input = (await request.json()) as Parameters<typeof createArrangement>[1]
+    await delay(400)
+    const result = createArrangement(user, input)
+    if ('error' in result) {
+      return HttpResponse.json({ detail: result.error, code: result.code }, { status: result.status })
+    }
+    return HttpResponse.json(result.item, { status: 201 })
+  }),
+  http.get(
+    '/api/attendance/overtime',
+    authed((user, request) => {
+      const params = new URL(request.url).searchParams
+      return HttpResponse.json(
+        listOvertime(user, params.get('from') ?? '', params.get('to') ?? '9999'),
+      )
+    }),
+  ),
+  http.post('/api/attendance/overtime', async ({ request }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    const input = (await request.json()) as Parameters<typeof createOvertime>[1]
+    await delay(400)
+    const result = createOvertime(user, input)
+    if ('error' in result) {
+      return HttpResponse.json({ detail: result.error, code: result.code }, { status: result.status })
+    }
+    return HttpResponse.json(result.item, { status: 201 })
+  }),
+  http.get(
+    '/api/attendance/corrections',
+    authed((user) => HttpResponse.json({ items: listCorrections(user) })),
+  ),
+  http.post('/api/attendance/corrections', async ({ request }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    const input = (await request.json()) as Parameters<typeof createCorrection>[1]
+    await delay(400)
+    const result = createCorrection(user, input)
+    if ('error' in result) {
+      return HttpResponse.json({ detail: result.error, code: result.code }, { status: result.status })
+    }
+    return HttpResponse.json(result.item, { status: 201 })
+  }),
+  // 승인 전 취소. 04 에 없는 경로(프론트 확장, PR 본문). 휴가 취소와 같은 규칙.
+  http.post('/api/attendance/:store/:id/cancel', async ({ params }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    const store = String(params.store)
+    if (!['arrangements', 'overtime', 'corrections'].includes(store)) return passthrough()
+    await delay(300)
+    const result = cancelException(user, store as ExceptionStore, String(params.id))
+    if (result === 'not_found') {
+      return HttpResponse.json({ detail: '신청을 찾을 수 없습니다.', code: 'NOT_FOUND' }, { status: 404 })
+    }
+    if (result === 'conflict') {
+      return HttpResponse.json(
+        { detail: '이미 처리된 신청은 취소할 수 없습니다.', code: 'REQUEST_DECIDED' },
+        { status: 409 },
+      )
+    }
+    return HttpResponse.json(result)
+  }),
 
   // ── 근태 · 휴가 (04 §10.2) ────────────────────────────────
   // 백엔드는 501 스텁. 목록 응답의 `{items}` 감싸기와 항목 모양은 프론트 가정(PR 본문).

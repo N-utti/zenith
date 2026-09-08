@@ -1,11 +1,11 @@
-import { useId, useRef, useState, type ReactNode } from "react";
-import { cn } from "@/lib/cn";
+import { useId, useRef, useState, type ReactNode } from 'react'
+import { cn } from '@/lib/cn'
 
 export interface TabItem {
-  key: string;
-  label: string;
+  key: string
+  label: string
   /** 대기 건수 같은 숫자. 0이면 배지를 그리지 않는다. "0건"은 알릴 내용이 아니다. */
-  count?: number;
+  count?: number
 }
 
 /**
@@ -30,43 +30,41 @@ export function Tabs({
   children,
   className,
 }: {
-  items: TabItem[];
+  items: TabItem[]
   /** 넘기면 제어 컴포넌트. 없으면 첫 탭에서 시작해 스스로 상태를 든다. */
-  value?: string;
-  onChange?: (key: string) => void;
+  value?: string
+  onChange?: (key: string) => void
   /** 현재 탭 키를 받아 패널 내용을 그린다. */
-  children: (key: string) => ReactNode;
-  className?: string;
+  children: (key: string) => ReactNode
+  className?: string
 }) {
-  const baseId = useId();
-  const [internal, setInternal] = useState(items[0]?.key ?? "");
-  const refs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const baseId = useId()
+  const [internal, setInternal] = useState(items[0]?.key ?? '')
+  const refs = useRef<Record<string, HTMLButtonElement | null>>({})
 
   // 제어 중이라도 넘어온 값이 목록에 없으면(잘못된 URL 파라미터 등) 첫 탭으로 접는다.
-  const requested = value ?? internal;
-  const active = items.some((item) => item.key === requested)
-    ? requested
-    : (items[0]?.key ?? "");
+  const requested = value ?? internal
+  const active = items.some((item) => item.key === requested) ? requested : (items[0]?.key ?? '')
 
   const select = (key: string) => {
-    if (value === undefined) setInternal(key);
-    onChange?.(key);
-  };
+    if (value === undefined) setInternal(key)
+    onChange?.(key)
+  }
 
   const move = (event: React.KeyboardEvent, index: number) => {
-    const last = items.length - 1;
-    let next: number;
-    if (event.key === "ArrowRight") next = index === last ? 0 : index + 1;
-    else if (event.key === "ArrowLeft") next = index === 0 ? last : index - 1;
-    else if (event.key === "Home") next = 0;
-    else if (event.key === "End") next = last;
-    else return;
+    const last = items.length - 1
+    let next: number
+    if (event.key === 'ArrowRight') next = index === last ? 0 : index + 1
+    else if (event.key === 'ArrowLeft') next = index === 0 ? last : index - 1
+    else if (event.key === 'Home') next = 0
+    else if (event.key === 'End') next = last
+    else return
 
-    event.preventDefault();
-    const key = items[next].key;
-    select(key);
-    refs.current[key]?.focus();
-  };
+    event.preventDefault()
+    const key = items[next].key
+    select(key)
+    refs.current[key]?.focus()
+  }
 
   return (
     <div className={className}>
@@ -75,12 +73,12 @@ export function Tabs({
       <div className="border-line border-b">
         <div role="tablist" className="-mb-px flex gap-1 overflow-x-auto">
           {items.map((item, index) => {
-            const selected = item.key === active;
+            const selected = item.key === active
             return (
               <button
                 key={item.key}
                 ref={(node) => {
-                  refs.current[item.key] = node;
+                  refs.current[item.key] = node
                 }}
                 role="tab"
                 id={`${baseId}-tab-${item.key}`}
@@ -92,28 +90,26 @@ export function Tabs({
                 onClick={() => select(item.key)}
                 onKeyDown={(event) => move(event, index)}
                 className={cn(
-                  "relative shrink-0 px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors",
-                  "border-b-2",
+                  'relative shrink-0 px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors',
+                  'border-b-2',
                   selected
-                    ? "border-accent text-fg"
-                    : "text-muted hover:text-fg border-transparent",
+                    ? 'border-accent text-fg'
+                    : 'text-muted hover:text-fg border-transparent',
                 )}
               >
                 {item.label}
                 {item.count ? (
                   <span
                     className={cn(
-                      "ml-1.5 rounded-md px-1.5 py-0.5 text-[11px] font-semibold",
-                      selected
-                        ? "bg-accent-soft text-accent"
-                        : "bg-sunken text-muted",
+                      'ml-1.5 rounded-md px-1.5 py-0.5 text-[11px] font-semibold',
+                      selected ? 'bg-accent-soft text-accent' : 'bg-sunken text-muted',
                     )}
                   >
                     {item.count}
                   </span>
                 ) : null}
               </button>
-            );
+            )
           })}
         </div>
       </div>
@@ -128,5 +124,5 @@ export function Tabs({
         {children(active)}
       </div>
     </div>
-  );
+  )
 }
