@@ -57,7 +57,7 @@ services:
     # 기동 때 스키마를 최신으로 올린다. 실패하면 uvicorn 을 띄우지 않는다.
     command: >
       sh -c "uv run --no-dev alembic upgrade head
-      && uv run --no-dev uvicorn app.main:app --host 0.0.0.0 --port 8000"
+      && uv run --no-dev uvicorn app.main:app --host 0.0.0.0 --port 8000 --ws-max-size 1048576"
     ports:
       - "${ZENITH_API_PORT:-8000}:8000"
     depends_on:

@@ -5,9 +5,9 @@
 로그인한 사람은 모두 읽고 쓴다(03 §2.2 의 등급은 게시판·RAG 에만 있다). 영구 삭제만 exec.
 """
 
+import asyncio
 import base64
 import binascii
-import re
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
@@ -33,13 +33,12 @@ from app.models import (
     User,
     Workspace,
 )
-from app.realtime import yjs
+from app.realtime import chat, yjs
 
 router = APIRouter(tags=["docs"], dependencies=[Depends(current_user)])
 
 # 같은 사람이 이어서 편집하는 동안의 무명 스냅샷은 하나로 접는다(frontend/README "버전 기록").
 VERSION_COALESCE = timedelta(minutes=3)
-MENTION = re.compile(r"@(\S+)")
 # 공백만 있는 제목·본문·라벨은 422. 앞뒤 공백은 잘라 저장한다.
 NonBlank = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
 LongText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=10_000)]
@@ -542,32 +541,26 @@ async def create_comment(
     db.add(comment)
     await db.flush()
 
-    # ponytail: 멘션은 `@이름` 토큰을 활성 사용자 이름과 정확히 맞춘다. 동명이인은 전부 받는다.
-    # 프론트 자동완성이 id 를 실어 보내게 되면 그때 `@[id]` 형식으로 바꾼다.
-    names = {m.rstrip(".,!?:;)") for m in MENTION.findall(comment.body)}
-    if names:
-        targets = (
-            await db.execute(
-                select(User).where(User.name.in_(names), User.active.is_(True), User.id != user.id)
-            )
-        ).scalars()
-        for target in targets:
-            db.add(
-                Notification(
-                    user_id=target.id,
-                    kind="mention",
-                    payload={
-                        "doc_id": str(doc.id),
-                        "doc_title": doc.title,
-                        "comment_id": str(comment.id),
-                        "block_id": comment.block_id,
-                        "from": {"id": str(user.id), "name": user.name},
-                        "preview": comment.body[:120],
-                    },
-                )
-            )
+    notices = [
+        Notification(
+            user_id=target.id,
+            kind="mention",
+            created_at=comment.created_at,
+            payload={
+                "doc_id": str(doc.id),
+                "doc_title": doc.title,
+                "comment_id": str(comment.id),
+                "block_id": comment.block_id,
+                "from": {"id": str(user.id), "name": user.name},
+                "preview": comment.body[:120],
+            },
+        )
+        for target in await chat.mention_targets(db, comment.body, user.id)
+    ]
+    db.add_all(notices)
     await db.commit()
     await db.refresh(comment)
+    await asyncio.gather(*(chat.push_notice(n) for n in notices))  # 04 §3: 푸시는 /ws 몫
     return CommentOut(
         id=comment.id,
         block_id=comment.block_id,

@@ -3,14 +3,16 @@
 import uuid
 from datetime import datetime
 
-from fastapi import Request
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.requests import (
+    HTTPConnection,  # Request 와 WebSocket 의 공통 부모 — headers·client 만 쓴다
+)
 
 from app.models import AuditEvent
 
 
-def client_ip(request: Request) -> str | None:
+def client_ip(request: HTTPConnection) -> str | None:
     # Caddy 뒤에서는 X-Forwarded-For 의 첫 값이 실제 클라이언트다.
     forwarded = request.headers.get("x-forwarded-for")
     if forwarded:
@@ -22,7 +24,7 @@ def record(
     db: AsyncSession,
     kind: str,
     *,
-    request: Request | None = None,
+    request: HTTPConnection | None = None,
     actor_id: uuid.UUID | None = None,
     target_id: uuid.UUID | None = None,
     detail: dict | None = None,

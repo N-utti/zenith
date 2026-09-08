@@ -20,16 +20,21 @@ from app.security import csrf_token, decode_token, session_id_from_cookies
 Auth = tuple[User, AuthSession]
 
 
-async def authenticate(cookies: Mapping[str, str], db: AsyncSession) -> Auth:
+async def authenticate(
+    cookies: Mapping[str, str], db: AsyncSession, *, verify_exp: bool = True
+) -> Auth:
     """access 쿠키 → (사용자, 세션). HTTP 와 WebSocket 핸드셰이크가 같이 쓴다.
 
     쿠키가 없으면 DB 를 건드리지 않는다. 세션을 함께 읽어 로그아웃·강제 종료가 access 만료(15분)를
     기다리지 않고 바로 먹히게 한다.
+    `verify_exp=False` 는 열린 WebSocket 의 주기 재검증 전용 — 소켓의 쿠키는 핸드셰이크 시점에 고정돼
+    refresh 로 새 access 가 나와도 볼 수 없다. 회수·만료·비활성 판정은 어차피 세션 행이 하므로 토큰의
+    exp 만 빼고 본다(소켓은 세션이 살아 있는 동안 유지된다).
     """
     token = cookies.get("access")
     if not token:
         raise ApiError(401, "AUTH_REQUIRED", "로그인이 필요합니다.")
-    claims = decode_token(token, "access")
+    claims = decode_token(token, "access", verify_exp=verify_exp)
     row = (
         await db.execute(
             select(User, AuthSession)

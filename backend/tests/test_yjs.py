@@ -24,37 +24,17 @@ from pycrdt import (
 )
 from sqlalchemy import select
 
-from app.db import get_db
 from app.models import Document, Folder, Workspace
 from app.realtime.yjs import ROOMS
 
-from .conftest import Users, csrf, login
+from .conftest import Users, csrf, login, share_session
 
 
 @pytest.fixture(autouse=True)
 def _yjs_uses_test_session(app, app_db, monkeypatch):
-    """릴레이는 요청 의존성이 아니라 자기 세션을 짧게 연다 — 테스트 트랜잭션 안의 세션을 대신 쓰게 한다."""
     from app.realtime import yjs as mod
 
-    lock = (
-        asyncio.Lock()
-    )  # 공유 세션은 한 태스크씩 — 서버 저장과 테스트의 HTTP 호출이 겹치면 세션이 깨진다
-
-    class Scope:
-        async def __aenter__(self):
-            await lock.acquire()
-            return app_db
-
-        async def __aexit__(self, *exc):
-            lock.release()
-            return False  # 닫지 않는다 — 트랜잭션은 conftest 가 끝에 되돌린다
-
-    async def locked_get_db():
-        async with lock:
-            yield app_db
-
-    monkeypatch.setattr(mod, "session_scope", lambda: Scope())
-    app.dependency_overrides[get_db] = locked_get_db
+    share_session(app, app_db, monkeypatch, mod)
 
 
 def ws_client(app: FastAPI) -> AsyncClient:
