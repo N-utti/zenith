@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import type {
+  AttendanceMonth,
   LeaveBalance,
   LeaveOnCalendar,
   LeaveRequest,
@@ -48,8 +49,9 @@ export function useAllLeaves(from: string, to: string) {
 function useRefetchLeaves() {
   const qc = useQueryClient()
   return () => {
-    // 'leaves' 로 시작하는 키 전부(내 목록·잔여·전 직원 캘린더).
+    // 'leaves' 로 시작하는 키 전부(내 목록·잔여·전 직원 캘린더). 승인되면 근태 달력도 바뀐다.
     void qc.invalidateQueries({ queryKey: ['leaves'] })
+    void qc.invalidateQueries({ queryKey: ['attendance'] })
   }
 }
 
@@ -70,5 +72,13 @@ export function useCancelLeave() {
   return useMutation({
     mutationFn: (id: string) => api<LeaveRequest>(`/leaves/${id}/cancel`, { method: 'POST' }),
     onSuccess: refetch,
+  })
+}
+
+/** 내 근태 한 달(04 §10.1). `month` 는 `2026-09`. */
+export function useMyAttendance(month: string) {
+  return useQuery({
+    queryKey: ['attendance', 'me', month],
+    queryFn: () => api<AttendanceMonth>(`/attendance/me?month=${month}`),
   })
 }

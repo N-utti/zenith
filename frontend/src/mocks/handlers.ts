@@ -24,6 +24,7 @@ import {
   listVersions,
   touchDoc,
 } from './docsDb'
+import { attendanceMonth, MONTH } from './attendanceDb'
 import { readFile, saveFile } from './filesDb'
 import { createEvent, deleteEvent, listEvents } from './eventsDb'
 import {
@@ -167,6 +168,18 @@ export const handlers = [
   ),
 
   http.get('/api/tasks/today', authed(() => HttpResponse.json({ items: TODAY_TASKS }))),
+
+  // ── 근태 · 내 근태 (04 §10.1) ─────────────────────────────
+  http.get(
+    '/api/attendance/me',
+    authed((user, request) => {
+      const month = new URL(request.url).searchParams.get('month') ?? ''
+      if (!MONTH.test(month)) {
+        return HttpResponse.json({ detail: 'month 는 YYYY-MM 형식입니다.', code: 'VALIDATION' }, { status: 422 })
+      }
+      return HttpResponse.json(attendanceMonth(user, month))
+    }),
+  ),
 
   // ── 근태 · 휴가 (04 §10.2) ────────────────────────────────
   // 백엔드는 501 스텁. 목록 응답의 `{items}` 감싸기와 항목 모양은 프론트 가정(PR 본문).
