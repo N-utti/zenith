@@ -4,7 +4,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { api, ApiError } from './api'
+import { api, apiEvents, ApiError } from './api'
 
 function reply(status: number, body?: unknown): Response {
   return new Response(body === undefined ? null : JSON.stringify(body), {
@@ -94,6 +94,82 @@ describe('api()', () => {
       status: 500,
       code: null,
       message: '요청에 실패했습니다 (500)',
+    })
+  })
+})
+
+describe('apiEvents()', () => {
+  // jsdom 에는 Blob.stream 이 없다. chunk 경계를 시험하려면 직접 흘린다.
+  const sse = (...chunks: string[]) =>
+    new Response(
+      new ReadableStream({
+        start(controller) {
+          const encoder = new TextEncoder()
+          for (const chunk of chunks) controller.enqueue(encoder.encode(chunk))
+          controller.close()
+        },
+      }),
+      { status: 200, headers: { 'Content-Type': 'text/event-stream' } },
+    )
+
+  async function collect(path: string) {
+    const out: { event: string; data: unknown }[] = []
+    for await (const e of apiEvents(path, { method: 'POST', body: '{}' })) out.push(e)
+    return out
+  }
+
+  it('프레임을 event·data 로 자르고, chunk 경계에 걸린 프레임도 이어 붙인다 (04 §8)', async () => {
+    fetchMock.mockImplementation(async () =>
+      sse('event: token\ndata: {"text":"안녕"}\n\nevent: tok', 'en\ndata: {"text":"하세요"}\n\n', 'event: citations\ndata: []\n\nevent: done\ndata: {}\n\n'),
+    )
+    await expect(collect('/ai/chat')).resolves.toEqual([
+      { event: 'token', data: { text: '안녕' } },
+      { event: 'token', data: { text: '하세요' } },
+      { event: 'citations', data: [] },
+      { event: 'done', data: {} },
+    ])
+    expect(headersOf(0).get('Accept')).toBe('text/event-stream')
+    expect(headersOf(0).get('X-CSRF-Token')).toBe('session-hmac')
+  })
+
+  it('AUTH_EXPIRED 401 이면 refresh 후 한 번 다시 연다', async () => {
+    fetchMock
+      .mockResolvedValueOnce(reply(401, { detail: '만료', code: 'AUTH_EXPIRED' }))
+      .mockResolvedValueOnce(reply(204))
+      .mockResolvedValueOnce(sse('event: done\ndata: {}\n\n'))
+    await expect(collect('/ai/chat')).resolves.toEqual([{ event: 'done', data: {} }])
+    expect(calledUrls()).toEqual(['/api/ai/chat', '/api/auth/refresh', '/api/ai/chat'])
+  })
+
+  it('스트림이 아닌 에러 응답은 ApiError 로 던진다', async () => {
+    fetchMock.mockResolvedValueOnce(reply(422, { detail: '질문을 입력해 주세요.', code: 'VALIDATION' }))
+    await expect(collect('/ai/chat')).rejects.toMatchObject({ status: 422, code: 'VALIDATION' })
+  })
+})
+
+describe('apiEvents() 마무리', () => {
+  it('마지막 프레임 뒤에 빈 줄이 없어도 버리지 않는다', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode('event: token' + String.fromCharCode(10) + 'data: {"text":"끝"}'))
+            controller.close()
+          },
+        }),
+        { status: 200, headers: { 'Content-Type': 'text/event-stream' } },
+      ),
+    )
+    const out: unknown[] = []
+    for await (const e of apiEvents('/ai/chat', { method: 'POST', body: '{}' })) out.push(e)
+    expect(out).toEqual([{ event: 'token', data: { text: '끝' } }])
+  })
+
+  it('detail 이 배열(422)이면 메시지는 폴백 문구가 된다', async () => {
+    fetchMock.mockResolvedValueOnce(reply(422, { detail: [{ msg: 'x' }], code: 'VALIDATION' }))
+    await expect(api('/ai/chat', { method: 'POST', body: '{}' })).rejects.toMatchObject({
+      status: 422,
+      message: '요청에 실패했습니다 (422)',
     })
   })
 })

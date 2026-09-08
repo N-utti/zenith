@@ -1,17 +1,8 @@
 import { delay, http, HttpResponse, passthrough } from 'msw'
-import { ROLE_RANK, type User } from '@/types'
+import type { User } from '@/types'
 import { DEMO_PASSWORD } from './accounts'
 import { clearMockSession, MOCK_USERS, setMockSession, userFromCookie } from './db'
-import {
-  AI_MODELS,
-  AI_TEMPLATES,
-  ask,
-  inlineDraft,
-  KNOWLEDGE_SOURCES,
-  listConversation,
-  RECENT_QUESTIONS,
-  resetConversation,
-} from './aiDb'
+import { AI_MODELS, answer, inlineDraft } from './aiDb'
 import {
   BOARD_DEFS,
   canRead,
@@ -168,41 +159,57 @@ export const handlers = [
 
   http.get('/api/tasks/today', authed(() => HttpResponse.json({ items: TODAY_TASKS }))),
 
-  // ── AI 어시스턴트 ─────────────────────────────────────────
-  http.get(
-    '/api/ai/meta',
-    authed((user) =>
-      HttpResponse.json({
-        models: AI_MODELS,
-        // 권한 밖 지식 소스는 목록에 남기되 고를 수 없다. 어떤 소스가 있는지는
-        // 알아도 되지만, 그 안의 문장은 근거에서 아예 빠진다.
-        sources: KNOWLEDGE_SOURCES.map((source) => ({
-          ...source,
-          allowed: !source.minRole || ROLE_RANK[user.role] >= ROLE_RANK[source.minRole],
-        })),
-        templates: AI_TEMPLATES,
-        recent: RECENT_QUESTIONS,
-      }),
-    ),
-  ),
+  // ── AI 어시스턴트 (04 §8) ─────────────────────────────────
+  http.get('/api/ai/models', authed(() => HttpResponse.json(AI_MODELS))),
 
-  http.get('/api/ai/conversation', authed((user) => HttpResponse.json({ items: listConversation(user) }))),
-
-  http.post('/api/ai/messages', async ({ request }) => {
+  // SSE: token → citations → done. 실제 서버(routers/ai.py)와 같은 프레임 모양.
+  http.post('/api/ai/chat', async ({ request }) => {
     const user = authenticate()
     if (!user) return unauthorized()
-
-    const { prompt } = (await request.json()) as { prompt: string }
-    if (!prompt?.trim()) {
-      return HttpResponse.json({ detail: '질문을 입력해 주세요.' }, { status: 400 })
+    const { message } = (await request.json()) as { message?: string }
+    if (!message?.trim()) {
+      // 실제 서버(errors.py)의 422 detail 은 Pydantic 오류 배열이다. 문자열이 아니다.
+      return HttpResponse.json(
+        {
+          detail: [{ loc: ['body', 'message'], msg: 'String should have at least 1 character', type: 'string_too_short' }],
+          code: 'VALIDATION',
+        },
+        { status: 422 },
+      )
     }
+    const { body, citations } = answer(user)
+    const frame = (event: string, data: unknown) => `event: ${event}
+data: ${JSON.stringify(data)}
 
-    // 로컬 LLM은 즉답하지 않는다. 생성 중 상태가 실제로 보이도록 지연을 준다.
-    await delay(900)
-    return HttpResponse.json({ items: ask(user, prompt.trim()) })
+`
+    const encoder = new TextEncoder()
+    const stream = new ReadableStream({
+      async start(controller) {
+        await delay(600)
+        // 공급자 실패 경로(routers/ai.py LLMError). error 뒤에는 done 이 오지 않고 스트림이 끝난다.
+        if (message.includes('오류')) {
+          controller.enqueue(encoder.encode(frame('token', { text: '답변을 시작하다가 ' })))
+          await delay(300)
+          controller.enqueue(
+            encoder.encode(
+              frame('error', { detail: 'AI 요청이 몰려 있습니다. 잠시 후 다시 시도해 주세요.', code: 'AI_RATE_LIMITED' }),
+            ),
+          )
+          controller.close()
+          return
+        }
+        // 어절 단위로 흘려 보내 스트리밍 타이핑이 실제로 보이게 한다.
+        for (const word of body.split(/(?<= )/)) {
+          controller.enqueue(encoder.encode(frame('token', { text: word })))
+          await delay(40)
+        }
+        controller.enqueue(encoder.encode(frame('citations', citations)))
+        controller.enqueue(encoder.encode(frame('done', {})))
+        controller.close()
+      },
+    })
+    return new HttpResponse(stream, { headers: { 'Content-Type': 'text/event-stream' } })
   }),
-
-  http.delete('/api/ai/conversation', authed((user) => HttpResponse.json({ items: resetConversation(user) }))),
 
   http.post('/api/ai/inline', async ({ request }) => {
     if (!authenticate()) return unauthorized()

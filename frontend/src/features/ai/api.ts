@@ -1,65 +1,59 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api } from '@/lib/api'
-import type { AiMessage, AiMeta } from './types'
+import { useMutation, useQuery } from '@tanstack/react-query'
+import { api, apiEvents } from '@/lib/api'
+import { appendMessage, getSessionId, patchMessage, uuid } from './store'
+import type { AiModel, Citation } from './types'
 
-const conversationKey = ['ai', 'conversation'] as const
-
-export function useAiMeta() {
+export function useAiModels() {
   return useQuery({
-    queryKey: ['ai', 'meta'],
-    queryFn: () => api<AiMeta>('/ai/meta'),
-    // 모델·지식 소스 목록은 세션 중에 바뀌지 않는다.
+    queryKey: ['ai', 'models'],
+    queryFn: () => api<AiModel[]>('/ai/models'),
+    // 공급자 모델 목록은 세션 중에 바뀌지 않는다.
     staleTime: Infinity,
   })
 }
 
-export function useConversation() {
-  return useQuery({
-    queryKey: conversationKey,
-    queryFn: () => api<{ items: AiMessage[] }>('/ai/conversation'),
-  })
-}
-
+/**
+ * 04 §8 `POST /ai/chat`. 내 질문은 즉시 붙이고, 답변은 `token` 이 오는 대로 자라난다.
+ * `citations` 는 본문이 끝난 뒤 한 번, `done` 으로 닫힌다. `error` 는 받은 데까지 남기고 사유를 단다.
+ */
 export function useAsk() {
-  const qc = useQueryClient()
   return useMutation({
-    mutationFn: (prompt: string) =>
-      api<{ items: AiMessage[] }>('/ai/messages', {
+    mutationFn: async ({ prompt, scope }: { prompt: string; scope: string | null }) => {
+      appendMessage({
+        id: uuid(),
+        role: 'user',
+        body: prompt,
+        createdAt: new Date().toISOString(),
+      })
+      const answerId = uuid()
+      let started = false
+      const events = apiEvents('/ai/chat', {
         method: 'POST',
-        body: JSON.stringify({ prompt }),
-      }),
-    // 내 질문은 즉시 붙인다. 답변을 기다리는 동안 화면이 멈춘 것처럼 보이면 안 된다.
-    onMutate: async (prompt) => {
-      await qc.cancelQueries({ queryKey: conversationKey })
-      const previous = qc.getQueryData<{ items: AiMessage[] }>(conversationKey)
-      qc.setQueryData<{ items: AiMessage[] }>(conversationKey, (old) => ({
-        items: [
-          ...(old?.items ?? []),
-          {
-            id: `pending-${Date.now()}`,
-            role: 'user',
-            body: prompt,
-            createdAt: new Date().toISOString(),
-          },
-        ],
-      }))
-      return { previous }
-    },
-    onError: (_error, _prompt, context) => {
-      if (context?.previous) qc.setQueryData(conversationKey, context.previous)
-    },
-    onSuccess: (data) => {
-      qc.setQueryData(conversationKey, data)
-    },
-  })
-}
-
-export function useResetConversation() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: () => api<{ items: AiMessage[] }>('/ai/conversation', { method: 'DELETE' }),
-    onSuccess: (data) => {
-      qc.setQueryData(conversationKey, data)
+        body: JSON.stringify({ session_id: getSessionId(), message: prompt, scope }),
+      })
+      try {
+        for await (const { event, data } of events) {
+          if (!started) {
+            // 첫 이벤트에서야 말풍선을 만든다. 그 전까지는 "생성 중" 표시가 자리를 지킨다.
+            appendMessage({ id: answerId, role: 'assistant', body: '', createdAt: new Date().toISOString() })
+            started = true
+          }
+          if (event === 'token') {
+            const text = (data as { text?: unknown }).text
+            if (typeof text === 'string') patchMessage(answerId, (m) => ({ body: m.body + text }))
+          } else if (event === 'citations') {
+            patchMessage(answerId, { citations: Array.isArray(data) ? (data as Citation[]) : [] })
+          } else if (event === 'error') {
+            patchMessage(answerId, { error: (data as { detail: string }).detail })
+          } else if (event === 'done') {
+            return
+          }
+        }
+      } catch (error) {
+        // 답변 도중 연결이 끊긴 경우. 받은 데까지는 남기고 그 자리에 사유를 단다.
+        if (started) patchMessage(answerId, { error: '연결이 끊겨 답변이 중단됐습니다.' })
+        throw error
+      }
     },
   })
 }

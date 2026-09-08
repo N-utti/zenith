@@ -16,7 +16,7 @@ npm run build     # tsc -b + vite build
 
 ## 규칙
 
-- **API 호출은 `lib/api.ts` 의 `api()` 만.** 쿠키 전송·CSRF 헤더·`AUTH_EXPIRED` 시 refresh 1회 재시도·`ApiError` 정규화가 여기 한 곳에 있다. 컴포넌트에서 `fetch` 직접 호출 금지.
+- **API 호출은 `lib/api.ts` 의 `api()` 만.** SSE(04 §8 `/ai/chat`)는 같은 파일의 `apiEvents()`. 쿠키 전송·CSRF 헤더·`AUTH_EXPIRED` 시 refresh 1회 재시도·`ApiError` 정규화가 여기 한 곳에 있다. 컴포넌트에서 `fetch` 직접 호출 금지.
 - **브라우저는 토큰을 갖지 않는다.** `access`·`refresh` 는 HttpOnly 쿠키. 읽는 쿠키는 `csrf` 하나. 로그인 여부의 판정자는 `GET /me` 뿐(`AuthProvider`).
 - **401 은 화면에서 처리하지 않는다.** 만료(`AUTH_EXPIRED`)는 `lib/api.ts` 가 refresh 한 번으로 살리고, 그래도 죽은 401 은 `lib/queryClient.ts` 가 프로필을 비워 익명으로 전이시킨다. 화면은 `status === 'anonymous'` 만 보면 된다.
 - **누구인지는 URL 이 아니라 쿠키가 말한다.** WebSocket 도 `?userId=` 없이 붙는다. 신원은 핸드셰이크에 실리는 세션 쿠키다.

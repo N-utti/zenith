@@ -1,37 +1,30 @@
 import { useState } from 'react'
-import { FileText, Plus, SendHorizontal } from 'lucide-react'
+import { Cpu, FileText, Plus, SendHorizontal } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Dropdown } from '@/components/ui/Dropdown'
 import { Textarea } from '@/components/ui/Textarea'
-import type { AiMeta } from './types'
+import { AI_SCOPES, AI_TEMPLATES } from './catalog'
+import type { AiModel } from './types'
 
 export function AiComposer({
-  meta,
+  models,
   disabled,
   initialText = '',
   onSend,
 }: {
-  meta: AiMeta | undefined
+  models: AiModel[]
   disabled: boolean
   /** 최근 질문을 눌러 들어온 값. 부모가 `key`로 리마운트시켜 채운다. */
   initialText?: string
-  onSend: (prompt: string) => void
+  onSend: (prompt: string, scope: string | null) => void
 }) {
   const [text, setText] = useState(initialText)
-  const [model, setModel] = useState('')
-  const [source, setSource] = useState('')
-
-  const models = meta?.models ?? []
-  const sources = meta?.sources ?? []
-  const templates = meta?.templates ?? []
-
-  const currentModel = model || models[0]?.id || ''
-  const currentSource = source || sources[0]?.id || ''
+  const [scope, setScope] = useState(AI_SCOPES[0].id)
 
   const send = () => {
     const prompt = text.trim()
     if (!prompt || disabled) return
-    onSend(prompt)
+    onSend(prompt, scope === 'all' ? null : scope)
     setText('')
   }
 
@@ -41,7 +34,7 @@ export function AiComposer({
         {/* 템플릿 자동작성. 누르면 컴포저에 프롬프트를 채운다 */}
         <div className="mb-3 flex flex-wrap items-center gap-2">
           <span className="text-subtle text-[11.5px] font-bold">템플릿으로 자동작성</span>
-          {templates.map((template) => (
+          {AI_TEMPLATES.map((template) => (
             <button
               key={template.id}
               type="button"
@@ -76,22 +69,16 @@ export function AiComposer({
           />
 
           <div className="mt-2.5 flex flex-wrap items-center gap-2">
-            <Dropdown
-              label="모델:"
-              value={currentModel}
-              onChange={setModel}
-              options={models.map((m) => ({ value: m.id, label: m.label, note: m.note }))}
-            />
+            {/* 모델은 서버가 정한다(`/ai/chat` 에 model 필드가 없다). 무엇으로 답하는지만 밝힌다. */}
+            <span className="text-subtle flex items-center gap-1.5 text-xs" title="공급자 모델">
+              <Cpu className="size-3.5" />
+              {models[0]?.name ?? '모델 확인 중'}
+            </span>
             <Dropdown
               label="지식 소스:"
-              value={currentSource}
-              onChange={setSource}
-              options={sources.map((s) => ({
-                value: s.id,
-                label: s.label,
-                disabled: !s.allowed,
-                disabledReason: '열람 권한이 없습니다',
-              }))}
+              value={scope}
+              onChange={setScope}
+              options={AI_SCOPES.map((s) => ({ value: s.id, label: s.label }))}
             />
             <Button
               size="sm"
