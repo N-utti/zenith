@@ -20,6 +20,18 @@ export function formatDay(iso: string): string {
   return date.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'short' })
 }
 
+/** "2026년 9월 8일 (화) 13:42". 상대 시각("1시간 전")의 툴팁처럼 정확한 시점이 필요한 자리. */
+export function formatDateTime(iso: string): string {
+  const date = new Date(iso)
+  const day = date.toLocaleDateString('ko-KR', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    weekday: 'short',
+  })
+  return `${day} ${formatTime(iso)}`
+}
+
 /**
  * "방금" · "12분 전" · "3시간 전" · "어제" · "8/25"
  * 목록 안에서 쓰이므로 하루가 넘어가면 한 줄에 들어가는 짧은 날짜로 접는다.

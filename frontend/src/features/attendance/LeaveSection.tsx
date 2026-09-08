@@ -7,7 +7,7 @@ import { SkeletonRows } from '@/components/ui/Skeleton'
 import { Table, TableEmpty, TBody, TD, TH, THead, TR } from '@/components/ui/Table'
 import { useToast } from '@/components/ui/ToastContext'
 import { ApiError } from '@/lib/api'
-import { formatRelative, toISODate } from '@/lib/datetime'
+import { formatDateTime, formatRelative, toISODate } from '@/lib/datetime'
 import { useCancelLeave, useLeaveBalance, useLeaveTypes, useMyLeaves } from './api'
 import { LeaveRequestModal } from './LeaveRequestModal'
 import { LEAVE_STATUS_LABEL, type LeaveBalance, type LeaveStatus } from './types'
@@ -112,7 +112,12 @@ export function LeaveSection() {
               <TD>
                 <Badge tone={STATUS_TONE[leave.status]}>{LEAVE_STATUS_LABEL[leave.status]}</Badge>
               </TD>
-              <TD className="text-muted whitespace-nowrap">{formatRelative(leave.created_at)}</TD>
+              <TD className="text-muted whitespace-nowrap">
+                {/* "1시간 전"은 읽기 편하지만 언제인지는 모른다. 커서를 올리면 정확한 시각. */}
+                <time dateTime={leave.created_at} title={formatDateTime(leave.created_at)}>
+                  {formatRelative(leave.created_at)}
+                </time>
+              </TD>
               <TD className="text-right">
                 {/* 승인 전에만 취소할 수 있다(04 §10.2). 승인 뒤는 서버가 409 로 막는다. */}
                 {leave.status === 'pending' && (
