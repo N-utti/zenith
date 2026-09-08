@@ -115,7 +115,7 @@ async def test_healthz(client: AsyncClient) -> None:
 
 
 async def test_stub_returns_501_with_error_shape(client: AsyncClient, member) -> None:
-    r = await client.get("/api/boards")
+    r = await client.get("/api/attendance/me")
     assert r.status_code == 501
     assert r.json() == {"detail": "아직 구현되지 않은 엔드포인트입니다.", "code": "NOT_IMPLEMENTED"}
 
