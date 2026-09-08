@@ -127,9 +127,10 @@ export function CalendarCard() {
   )
 }
 
-const LEGEND: Array<[CalendarItem['kind'], string]> = [
-  ['leave', '휴가'],
-  ['event', '내 일정'],
+/** 범례 견본. 켜진 것은 단색, 끈 것은 칩과 같은 연한 색. */
+const LEGEND: Array<[CalendarItem['kind'], string, string]> = [
+  ['leave', '휴가', 'bg-accent'],
+  ['event', '내 일정', 'bg-success'],
 ]
 
 /** 범례이자 토글. 끈 종류는 흐리게. */
@@ -142,19 +143,18 @@ function Legend({
 }) {
   return (
     <div className="flex items-center gap-1">
-      {LEGEND.map(([kind, label]) => (
+      {LEGEND.map(([kind, label, solid]) => (
         <button
           key={kind}
           type="button"
           aria-pressed={show[kind]}
           onClick={() => onToggle(kind)}
           className={cn(
-            'hover:bg-surface-hover flex items-center gap-1 rounded-md px-1.5 py-1 text-xs transition-colors',
-            // 켜진 것은 진하게, 끈 것은 흐리게. 색 견본도 같이 흐려져 어느 쪽이 꺼졌는지 보인다.
-            show[kind] ? 'text-fg font-medium' : 'text-subtle opacity-50',
+            'text-subtle hover:bg-surface-hover hover:text-fg flex items-center gap-1 rounded-md px-1.5 py-1 text-xs transition-colors',
+            !show[kind] && 'opacity-50',
           )}
         >
-          <span className={cn('size-2.5 rounded-sm', TONE[kind])} />
+          <span className={cn('size-2.5 rounded-sm', show[kind] ? solid : TONE[kind])} />
           {label}
         </button>
       ))}
