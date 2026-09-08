@@ -46,14 +46,17 @@ export function LeaveRequestModal({
       : null
   const days = type && !rangeError ? leaveDays(type, start, endDate) : 0
   const overBalance = days > balance.remaining
-  // 연차인데 주말만 골라 차감이 0 이면 신청할 게 없다. 무급·공가(차감 0 종류)와는 다른 상태다.
+  // 연차인데 주말만 골라 차감이 0 이면 신청할 게 없다. 공가(차감 0 종류)와는 다른 상태다.
   const noWorkday = !!type && type.deduct_days > 0 && !rangeError && days === 0
+  // 연차·반차는 사유를 묻지 않는다. 회사는 시기만 조정할 수 있지 이유로 거부할 수 없다(근기법 §60).
+  // 차감 없이 쉬는 병가·경조사·공가는 무엇 때문인지가 승인 근거라 필수.
+  const needsReason = !!type && type.deduct_days === 0
   const canSubmit =
     !!type &&
     !rangeError &&
     !overBalance &&
     !noWorkday &&
-    reason.trim().length > 0 &&
+    (!needsReason || reason.trim().length > 0) &&
     !request.isPending
 
   const hint = rangeError
@@ -77,7 +80,12 @@ export function LeaveRequestModal({
   const submit = () => {
     setError(null)
     request.mutate(
-      { type_code: typeCode, start_date: start, end_date: endDate, reason: reason.trim() },
+      {
+        type_code: typeCode,
+        start_date: start,
+        end_date: endDate,
+        ...(needsReason ? { reason: reason.trim() } : {}),
+      },
       {
         onSuccess: () => {
           close()
@@ -160,17 +168,19 @@ export function LeaveRequestModal({
         </p>
 
         {/* 사유는 승인자와 본인에게만 보인다(10 §8 민감정보). Enter 로 제출하지 않는다. */}
-        <Field label="사유" required>
-          {(slot) => (
-            <Textarea
-              {...slot}
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              rows={4}
-              placeholder="사유를 입력하세요"
-            />
-          )}
-        </Field>
+        {needsReason && (
+          <Field label="사유" required>
+            {(slot) => (
+              <Textarea
+                {...slot}
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                rows={4}
+                placeholder="사유를 입력하세요"
+              />
+            )}
+          </Field>
+        )}
 
         {/* 잔여 부족·마감된 달처럼 서버만 아는 거절. 특정 입력의 오류가 아니라 폼 전체의 오류다. */}
         {error && (

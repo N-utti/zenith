@@ -46,5 +46,6 @@ export interface LeaveRequestInput {
   type_code: string
   start_date: string
   end_date: string
-  reason: string
+  /** 연차·반차는 사유가 없다(근기법 §60, 청구한 시기에 준다). 차감 없는 휴가(병가·경조사·공가)만 필수. */
+  reason?: string
 }
