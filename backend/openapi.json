@@ -1290,19 +1290,69 @@
         "tags": [
           "search"
         ],
-        "summary": "?q=&types=doc,chat,post → [{type, id, title, sub, snippet, to}]",
-        "operationId": "stub_api_search_get",
+        "summary": "⌘K 통합검색 — FTS + 최근성, 권한 필터 서버 적용 (FR-SHL-02). 권한 밖은 결과에서 빠진다",
+        "operationId": "search_api_search_get",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "title": "Q"
+            }
+          },
+          {
+            "name": "types",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "쉼표 구분 — doc, chat, post",
+              "default": "doc,chat,post",
+              "title": "Types"
+            },
+            "description": "쉼표 구분 — doc, chat, post"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 50,
+              "minimum": 1,
+              "default": 20,
+              "title": "Limit"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Hit"
+                  },
+                  "title": "Response Search Api Search Get"
+                }
               }
             }
           },
-          "501": {
-            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
           }
         }
       }
@@ -3035,6 +3085,56 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
+      },
+      "Hit": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "doc",
+              "chat",
+              "post"
+            ],
+            "title": "Type"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "sub": {
+            "type": "string",
+            "title": "Sub"
+          },
+          "snippet": {
+            "type": "string",
+            "title": "Snippet"
+          },
+          "to": {
+            "type": "string",
+            "title": "To"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "id",
+          "title",
+          "sub",
+          "snippet",
+          "to",
+          "at"
+        ],
+        "title": "Hit"
       },
       "HomeOut": {
         "properties": {
