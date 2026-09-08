@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import * as Y from 'yjs'
 import { IndexeddbPersistence } from 'y-indexeddb'
 import { WebsocketProvider } from 'y-websocket'
+import { api } from '@/lib/api'
 import { wsUrl } from '@/lib/serverOrigin'
 
 export interface CollabSession {
@@ -12,12 +13,12 @@ export interface CollabSession {
 }
 
 /**
- * 릴레이는 같은 오리진의 /collab 으로 붙는다. vite가 개발용 y-websocket
- * 서버(:1234)로 넘겨준다. 운영에서는 프록시 대상만 실제 백엔드로 바꾸면 되고
- * 앱 코드는 그대로다. 데스크탑 셸에서만 사내 서버 주소가 앞에 붙는다.
+ * 릴레이는 백엔드의 /api/yjs/{docId} 다(04 §4.2). 신원은 핸드셰이크에 실리는 세션 쿠키가 말하고
+ * `?token=` 은 없다(11 §7.5). MSW 모드에서는 vite 가 개발용 릴레이(:1234)로 넘겨준다(vite.config.ts).
+ * 데스크탑 셸에서만 사내 서버 주소가 앞에 붙는다.
  */
 function relayUrl(): string {
-  return wsUrl('/collab')
+  return wsUrl('/api/yjs')
 }
 
 /** 릴레이가 죽어 있어도 편집은 계속돼야 하므로, 서버 동기화를 무한정 기다리지 않는다. */
@@ -39,9 +40,16 @@ export function useCollabSession(docId: string): CollabSession | null {
   useEffect(() => {
     // gc: false — 삭제된 내용을 수거하지 않는다. 수거해 버리면 과거 스냅샷을
     // 복원할 수 없어 버전 기록·되돌리기가 성립하지 않는다. 대신 문서가 계속
-    // 커지므로, 릴레이(scripts/collab-server.js)도 같은 설정이어야 한다.
+    // 커지므로, 릴레이(scripts/collab.js · backend realtime/yjs.py)도 같은 설정이어야 한다.
     const doc = new Y.Doc({ gc: false })
     const provider = new WebsocketProvider(relayUrl(), docId, doc)
+    // 백엔드는 60초마다 쿠키를 재검증하고 access 가 만료돼 있으면 4401 로 닫는다. y-websocket 은
+    // 44xx 를 영구 종료로 보고 다시 붙지 않으므로, HTTP 와 같은 refresh 경로(lib/api.ts)로 세션을
+    // 살린 뒤 한 번 다시 붙인다. 살아나지 않으면 진짜 로그아웃 — 화면은 오프라인 편집으로 남는다.
+    provider.on('closed', (event) => {
+      if (event.code !== 4401) return
+      void api('/me').then(() => provider.connect(), () => undefined)
+    })
     const persistence = new IndexeddbPersistence(`zenith.doc.${docId}`, doc)
 
     // StrictMode의 두 번째 마운트에서 이미 정리된 세션을 넘기지 않도록 막는다.
