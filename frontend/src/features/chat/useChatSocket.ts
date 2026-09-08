@@ -20,7 +20,7 @@ function socketUrl(): string {
 /**
  * 새 메시지를 OS 알림으로 띄운다. 데스크탑 셸이 아니면 notify가 알아서 빠진다.
  *
- * 창을 보고 있을 때는 띄우지 않는다 — 화면에 이미 메시지가 나타나는데 토스트까지
+ * 창을 보고 있을 때는 띄우지 않는다. 화면에 이미 메시지가 나타나는데 토스트까지
  * 겹치면 방해만 된다. 최소화·다른 앱 사용 중일 때만 알린다.
  */
 function notifyIncoming(qc: QueryClient, message: ChatMessage, currentUserId: string): void {
@@ -30,7 +30,7 @@ function notifyIncoming(qc: QueryClient, message: ChatMessage, currentUserId: st
   const channels = qc.getQueryData<{ items: ChatChannel[] }>(chatKeys.channels)
   const channel = channels?.items.find((item) => item.id === message.channelId)
 
-  // DM은 채널명이 곧 상대 이름이라 "박동현 · 박동현"이 되므로 이름만 쓴다.
+  // DM은 채널명이 곧 상대 이름이라 "정성운 · 정성운"이 되므로 이름만 쓴다.
   const title =
     channel && channel.kind === 'channel'
       ? `#${channel.name} · ${message.authorName}`
@@ -47,7 +47,7 @@ export interface ChatSocket {
 }
 
 /**
- * 채팅 실시간 채널. 메시지 전송은 REST로 하고, 반영은 전부 이 소켓이 한다 —
+ * 채팅 실시간 채널. 메시지 전송은 REST로 하고, 반영은 전부 이 소켓이 한다.
  * 내가 보낸 메시지도 서버를 한 바퀴 돌아 같은 경로로 돌아온다. 낙관적 추가를
  * 하지 않으므로 다른 탭·다른 사람과 순서가 어긋날 일이 없다.
  */

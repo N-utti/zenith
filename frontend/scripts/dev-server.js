@@ -45,7 +45,7 @@ const server = createServer((req, res) => {
   res.end(JSON.stringify({ detail: '없는 경로입니다.' }))
 })
 
-// noServer — 경로를 보고 우리가 직접 업그레이드를 나눠 준다.
+// noServer. 경로를 보고 우리가 직접 업그레이드를 나눠 준다.
 const wss = new WebSocketServer({ noServer: true })
 
 server.on('upgrade', (req, socket, head) => {
@@ -83,6 +83,6 @@ server.on('error', (error) => {
 })
 
 server.listen(PORT, () => {
-  console.log(`[dev-server] 실행 중 — http://localhost:${PORT}`)
+  console.log(`[dev-server] 실행 중. http://localhost:${PORT}`)
   console.log('           /collab/<문서ID>  공동편집 · /chat/*  채팅')
 })

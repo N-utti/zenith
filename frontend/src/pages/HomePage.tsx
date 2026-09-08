@@ -31,7 +31,7 @@ export function HomePage() {
   const navigate = useNavigate()
   const createDoc = useCreateDoc()
 
-  // 청사진의 "안 읽은 항목 N" — 채널 미읽음과 멘션을 합친 수다.
+  // 청사진의 "안 읽은 항목 N". 채널 미읽음과 멘션을 합친 수다.
   const unreadMessages =
     useChannels().data?.items.reduce((sum, channel) => sum + channel.unread, 0) ?? 0
   const unreadMentions = useMentions().data?.items.length ?? 0

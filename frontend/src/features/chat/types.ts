@@ -1,7 +1,7 @@
 export interface ChatChannel {
   id: string
   kind: 'channel' | 'dm'
-  /** DM은 보는 사람에 따라 이름이 다르다 — 상대의 이름이 온다. */
+  /** DM은 보는 사람에 따라 이름이 다르다. 상대의 이름이 온다. */
   name: string
   memberIds: string[]
   unread: number

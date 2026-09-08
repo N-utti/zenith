@@ -125,7 +125,7 @@ export function EditorToolbar({
 
       <ToolDivider />
 
-      {/* 되돌리기는 Yjs UndoManager가 담당한다 — 남의 편집은 건드리지 않고 내 것만 되돌린다. */}
+      {/* 되돌리기는 Yjs UndoManager가 담당한다. 남의 편집은 건드리지 않고 내 것만 되돌린다. */}
       <ToolButton
         icon={Undo2}
         label="실행 취소"

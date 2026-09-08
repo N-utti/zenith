@@ -1,13 +1,13 @@
-# 📦 apps — 앱 패키징
+# 📦 apps: 앱 패키징
 
 `frontend/`의 웹앱 하나를 각 플랫폼 셸로 감싼다. 셸은 화면을 띄우는 일만 하고,
 업무 로직은 전부 웹앱에 있다.
 
 | | 셸 | 산출물 | 상태 |
 | --- | --- | --- | --- |
-| **Windows** | [`desktop/`](desktop/) — Tauri 2 | `.msi` | 스캐폴딩 완료. 빌드에 Rust + VS Build Tools 필요 |
-| **Android** | `mobile/` — Capacitor 8 | `.apk` | 미착수 |
-| **iOS** | `mobile/` — Capacitor 8 | TestFlight | 미착수 |
+| **Windows** | [`desktop/`](desktop/). Tauri 2 | `.msi` | 스캐폴딩 완료. 빌드에 Rust + VS Build Tools 필요 |
+| **Android** | `mobile/`. Capacitor 8 | `.apk` | 미착수 |
+| **iOS** | `mobile/`. Capacitor 8 | TestFlight | 미착수 |
 
 ## 셸에 기능을 넣기 전에
 

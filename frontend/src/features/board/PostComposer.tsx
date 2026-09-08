@@ -42,7 +42,7 @@ export function PostComposer({
           close()
           toast.success('글을 올렸습니다.')
         },
-        // 실패는 토스트가 아니라 입력 옆에 낸다 — 고칠 곳이 이 폼 안에 있다.
+        // 실패는 토스트가 아니라 입력 옆에 낸다. 고칠 곳이 이 폼 안에 있다.
         onError: (err) =>
           setError(err instanceof ApiError ? err.message : '글을 올리지 못했습니다.'),
       },
@@ -82,7 +82,7 @@ export function PostComposer({
           )}
         </Field>
 
-        {/* 본문은 Enter로 제출하지 않는다 — 줄바꿈을 하려다 폼이 날아간다. */}
+        {/* 본문은 Enter로 제출하지 않는다. 줄바꿈을 하려다 폼이 날아간다. */}
         <Field label="내용" required error={error}>
           {(slot) => (
             <Textarea

@@ -1,0 +1,15 @@
+[
+  { "id": "u-1", "name": "진수연", "email": "suyeon@zenith.co.kr", "role": "member", "team": "dev" },
+  { "id": "u-2", "name": "정성운", "email": "sungwoon@zenith.co.kr", "role": "member", "team": "dev" },
+  { "id": "u-4", "name": "장지윤", "email": "jiyun@zenith.co.kr", "role": "member", "team": "infra" },
+  { "id": "u-5", "name": "안재호", "email": "jaeho@zenith.co.kr", "role": "member", "team": "fund" },
+  { "id": "u-6", "name": "김다인", "email": "dain@zenith.co.kr", "role": "member", "team": "fund" },
+  { "id": "u-7", "name": "김혜리", "email": "hyeri@zenith.co.kr", "role": "member", "team": "research" },
+  { "id": "u-8", "name": "성예림", "email": "yerim@zenith.co.kr", "role": "member", "team": "accounting" },
+  { "id": "u-9", "name": "오유경", "email": "yukyung@zenith.co.kr", "role": "member", "team": "accounting" },
+  { "id": "u-3", "name": "홍성완", "email": "sungwan@zenith.co.kr", "role": "exec", "team": null },
+  { "id": "u-10", "name": "신영훈", "email": "younghoon@zenith.co.kr", "role": "exec", "team": null },
+  { "id": "u-11", "name": "신준희", "email": "junhee@zenith.co.kr", "role": "exec", "team": null },
+  { "id": "u-12", "name": "김철성", "email": "chulsung@zenith.co.kr", "role": "exec", "team": null },
+  { "id": "u-13", "name": "김창업", "email": "changup@zenith.co.kr", "role": "exec", "team": null }
+]

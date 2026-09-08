@@ -6,7 +6,7 @@ import type { AiMeta } from './types'
 
 /**
  * AI 화면의 좌패널. 와이어프레임은 이 내용을 전역 사이드바 자리에 넣지만,
- * 우리 셸은 사이드바가 항상 같은 것을 보여준다 — 채팅의 채널 목록과 같은 자리에 둔다.
+ * 우리 셸은 사이드바가 항상 같은 것을 보여준다. 채팅의 채널 목록과 같은 자리에 둔다.
  */
 export function AiHistoryPanel({
   meta,

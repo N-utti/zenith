@@ -4,7 +4,7 @@ import { cn } from '@/lib/cn'
 /**
  * 모든 입력이 공유하는 껍데기. 지금까지 여러 곳에 인라인으로 복사돼 있던 값이다.
  *
- * 포커스는 전역 `:focus-visible` 링이 아니라 **테두리 색**으로 표시한다 — 입력은
+ * 포커스는 전역 `:focus-visible` 링이 아니라 **테두리 색**으로 표시한다. 입력은
  * 이미 테두리가 있어서, 그 위에 outline을 더하면 두 겹이 된다.
  */
 export const CONTROL_BASE =

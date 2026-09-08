@@ -24,7 +24,7 @@ function fromImg(element: HTMLElement, name: string): string | null {
 }
 
 /**
- * 사진 블록. 캡션은 속성이 아니라 노드 내용(inline*)이다 —
+ * 사진 블록. 캡션은 속성이 아니라 노드 내용(inline*)이다.
  * 그래야 두 사람이 동시에 캡션을 고쳐도 Yjs가 글자 단위로 합쳐 준다.
  *
  * 이미지 자체는 문서에 담지 않는다. src에는 `/api/files/{id}` URL만 들어간다.

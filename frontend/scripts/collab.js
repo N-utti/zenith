@@ -46,7 +46,7 @@ function getRoom(name) {
   const existing = rooms.get(name)
   if (existing) return existing
 
-  // gc: false — 클라이언트와 맞춰야 한다. 여기서 삭제 내용을 수거하면
+  // gc: false. 클라이언트와 맞춰야 한다. 여기서 삭제 내용을 수거하면
   // 나중에 접속한 사람이 과거 버전을 복원할 수 없다 (useCollabSession.ts 참조).
   const doc = new Y.Doc({ gc: false })
   const awareness = new awarenessProtocol.Awareness(doc)

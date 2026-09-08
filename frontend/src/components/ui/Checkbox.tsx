@@ -2,7 +2,7 @@ import type { InputHTMLAttributes, ReactNode } from 'react'
 import { cn } from '@/lib/cn'
 
 /**
- * 체크박스와 라디오. 네이티브 input을 그대로 쓰되 모양만 바꾼다 —
+ * 체크박스와 라디오. 네이티브 input을 그대로 쓰되 모양만 바꾼다.
  * `div`로 흉내 내면 키보드·폼 제출·스크린리더를 전부 다시 만들어야 한다.
  *
  * `appearance-none` + `checked:` 로 칠하므로 다크 모드도 토큰을 따라간다.

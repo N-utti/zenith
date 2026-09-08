@@ -6,8 +6,8 @@ export const MSW_ENABLED = import.meta.env.DEV && import.meta.env.VITE_DISABLE_M
 
 export const DEMO_PASSWORD = 'zenith1234'
 
+/** 로그인 화면의 바로가기. 등급별 한 명씩. 전체 명단은 users.json. */
 export const DEMO_ACCOUNTS = [
-  { email: 'sujin@zenith.co.kr', label: '사원 · 김수진' },
-  { email: 'donghyun@zenith.co.kr', label: '팀장 · 박동현' },
-  { email: 'jaeho@zenith.co.kr', label: '임원 · 최재호' },
+  { email: 'sungwoon@zenith.co.kr', label: '사원 · 정성운' },
+  { email: 'chulsung@zenith.co.kr', label: '임원 · 김철성 대표' },
 ] as const

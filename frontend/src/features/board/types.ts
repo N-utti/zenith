@@ -5,7 +5,7 @@ export interface Board {
   name: string
   /** 이 등급 이상만 열람·작성. 서버가 `allowed`로 판정해 내려준다. */
   minRole: Role
-  /** 사이드바·목록에 붙는 짧은 표기 — 전체 / 팀장↑ / 임원 */
+  /** 사이드바·목록에 붙는 짧은 표기. 전체 / 팀장↑ / 임원 */
   badge: string
   allowed: boolean
 }
@@ -22,7 +22,7 @@ export interface BoardPost {
   createdAt: string
   pinned: boolean
   /**
-   * 권한 밖 글. **목록에서 지우지 않고 제목을 가린 채 남긴다** —
+   * 권한 밖 글. **목록에서 지우지 않고 제목을 가린 채 남긴다**.
    * PRD 성공 기준이 "제목 마스킹 + 본문 API 403"이다.
    */
   masked?: boolean

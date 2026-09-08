@@ -12,7 +12,7 @@ export interface FieldSlotProps {
  *
  * 입력을 함수로 받는 이유는 `id`와 `aria-describedby`를 이 컴포넌트가 만들어
  * 넘겨줘야 해서다. 그냥 children으로 받으면 라벨과 입력이 이름만 나란히 있고
- * 실제로는 연결되지 않는다 — 지금 흩어져 있는 인라인 입력들이 정확히 그 상태다.
+ * 실제로는 연결되지 않는다. 지금 흩어져 있는 인라인 입력들이 정확히 그 상태다.
  *
  * ```tsx
  * <Field label="이메일" error={error}>

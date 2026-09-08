@@ -217,7 +217,7 @@
     @apply text-subtle mt-2 text-sm;
   }
 
-  /* 캡션 자리표시 문구 — 사진 위가 아니라 캡션 줄에 얹힌다. */
+  /* 캡션 자리표시 문구. 사진 위가 아니라 캡션 줄에 얹힌다. */
   .zenith-editor .node-imageBlock.is-empty::after {
     content: attr(data-placeholder);
     @apply text-subtle pointer-events-none absolute bottom-0 left-0 text-sm;

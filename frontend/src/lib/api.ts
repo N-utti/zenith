@@ -63,7 +63,7 @@ let refreshing: Promise<boolean> | null = null
 
 /**
  * 탭마다 따로 refresh 하면 둘 다 같은 refresh 토큰을 쓰고, 서버는 두 번째를 재사용(탈취)으로 보고
- * 세션을 통째로 닫는다. 같은 오리진의 탭이 공유하는 잠금으로 줄을 세운다 — 잠금을 얻었을 때는
+ * 세션을 통째로 닫는다. 같은 오리진의 탭이 공유하는 잠금으로 줄을 세운다. 잠금을 얻었을 때는
  * 앞선 탭이 바꿔 둔 최신 쿠키가 이미 브라우저에 있다.
  */
 async function withCrossTabLock<T>(task: () => Promise<T>): Promise<T> {
@@ -89,7 +89,7 @@ function refreshSession(): Promise<boolean> {
  * 데스크탑 셸에서는 `httpUrl`이 사내 서버 주소를 앞에 붙인다.
  *
  * 04 §1: access 는 15분이다. 만료(AUTH_EXPIRED)면 refresh 로 조용히 연장하고 원 요청을 한 번 다시
- * 보낸다(TC-AUTH-02). 그래도 401 이면 진짜 만료 — 호출한 쪽이 로그인 화면으로 보낸다.
+ * 보낸다(TC-AUTH-02). 그래도 401 이면 진짜 만료. 호출한 쪽이 로그인 화면으로 보낸다.
  */
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   let res = await send(path, init)

@@ -48,7 +48,7 @@ export function useDragAutoScroll(ref: RefObject<HTMLElement | null>) {
       const fromBottom = box.bottom - event.clientY
 
       // 반응 구간은 본문 영역을 EDGE만큼 넓힌 데까지다. 이보다 멀리(툴바 위,
-      // 창 밖) 나가면 멈춰야 한다 — 안 그러면 손을 떼기 전까지 계속 흐른다.
+      // 창 밖) 나가면 멈춰야 한다. 안 그러면 손을 떼기 전까지 계속 흐른다.
       const inRange =
         event.clientX >= box.left &&
         event.clientX <= box.right &&

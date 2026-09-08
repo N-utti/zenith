@@ -12,7 +12,7 @@ import { ROLE_LABEL, type Role } from '@/types'
  * 열람 권한이 없을 때. 05 "상태·엣지 케이스"가 요구하는 **전용 403 화면**이다.
  *
  * 목록에서는 마스킹으로 막지만 주소를 직접 치고 들어올 수 있다. 그때 빈 화면이나
- * 일반 오류를 보여주면 "고장"으로 읽힌다 — 막혔다는 사실과 이유를 밝힌다.
+ * 일반 오류를 보여주면 "고장"으로 읽힌다. 막혔다는 사실과 이유를 밝힌다.
  */
 function Forbidden({ requiredRole }: { requiredRole?: Role }) {
   return (

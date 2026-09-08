@@ -21,7 +21,7 @@ export interface Team {
 
 /**
  * 서버 `GET /me` 응답 그대로 (04-API §1 + 조직 `team`).
- * 아바타 색·직함은 서버에 없다 — 색은 `lib/avatar.ts` 가 id 로 만들고, 직함 자리는 등급 라벨이 대신한다.
+ * 아바타 색·직함은 서버에 없다. 색은 `lib/avatar.ts` 가 id 로 만들고, 직함 자리는 등급 라벨이 대신한다.
  */
 export interface User {
   id: string

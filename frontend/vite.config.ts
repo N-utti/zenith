@@ -33,7 +33,7 @@ export default defineConfig(({ mode }) => {
           rewrite: (path) => path.replace(/^\/api\/chat/, '/chat'),
         },
         // 문서 공동편집(04 §4.2). 앱은 항상 /api/yjs/{docId} 로 붙는다. 문서 id 는 REST 가 준 것이라
-        // 릴레이도 같은 곳이어야 한다 — MSW 문서면 개발 릴레이(:1234, /collab), 실제 백엔드 문서면 백엔드.
+        // 릴레이도 같은 곳이어야 한다. MSW 문서면 개발 릴레이(:1234, /collab), 실제 백엔드 문서면 백엔드.
         '/api/yjs': mswEnabled
           ? { target: 'ws://localhost:1234', ws: true, rewrite: (path) => path.replace(/^\/api\/yjs/, '/collab') }
           : { target: apiTarget, ws: true },

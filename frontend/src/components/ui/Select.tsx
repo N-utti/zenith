@@ -12,7 +12,7 @@ export interface SelectOption {
 /**
  * 네이티브 `<select>`. 폼 안에서 값을 고를 때 쓴다.
  *
- * `Dropdown`(components/ui/Dropdown.tsx)과 역할이 다르다 — 이쪽은 **폼 값**이라
+ * `Dropdown`(components/ui/Dropdown.tsx)과 역할이 다르다. 이쪽은 **폼 값**이라
  * 라벨·필수·에러가 `Field`로 붙고 모바일에서 OS 기본 피커가 뜬다. `Dropdown`은
  * 툴바처럼 폼 밖에서 현재 값을 보여주며 바꾸는 자리에 쓴다.
  */

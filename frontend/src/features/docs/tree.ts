@@ -8,7 +8,7 @@ export interface TreeNode {
 /**
  * 평평한 목록을 `parentId`로 접어 트리로 만든다.
  *
- * 부모를 잃은 문서(권한 밖이거나 삭제된 부모)는 최상위로 올린다 — 트리에서
+ * 부모를 잃은 문서(권한 밖이거나 삭제된 부모)는 최상위로 올린다. 트리에서
  * 사라지면 열 방법이 없어진다.
  */
 export function buildTree(docs: DocSummary[]): TreeNode[] {

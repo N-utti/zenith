@@ -38,7 +38,7 @@ export function useImageUpload(editor: Editor | null) {
 
       const tooBig = files.find((file) => file.size > MAX_IMAGE_BYTES)
       if (tooBig) {
-        setError(`${tooBig.name} — 10MB 이하 이미지만 올릴 수 있습니다.`)
+        setError(`${tooBig.name}: 10MB 이하 이미지만 올릴 수 있습니다.`)
         return
       }
 

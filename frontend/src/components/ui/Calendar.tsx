@@ -8,7 +8,7 @@ const WEEKDAYS = ['월', '화', '수', '목', '금', '토', '일']
 
 export interface CalendarDay {
   date: Date
-  /** `2026-08-31` — 서버 키와 같은 형식이라 상태 조회에 그대로 쓴다. */
+  /** `2026-08-31`. 서버 키와 같은 형식이라 상태 조회에 그대로 쓴다. */
   iso: string
   /** 보고 있는 달의 날짜인가. 앞뒤 주를 메우는 이웃 달 날짜면 false */
   inMonth: boolean
@@ -17,11 +17,11 @@ export interface CalendarDay {
 }
 
 /**
- * 월 캘린더 — **그리드와 날짜 계산만** 맡는다.
+ * 월 캘린더. **그리드와 날짜 계산만** 맡는다.
  *
  * 셀 안에 무엇을 그릴지는 `renderDay`가 정한다. 근태(SCR-ATT-01)는 상태 색을 칠하고
  * 휴가 신청(SCR-ATT-02)은 기간을 고르는데, 둘의 공통은 "그 달의 날짜 배치"뿐이다.
- * 여기에 상태나 선택을 넣으면 한쪽 화면 전용 부품이 된다 — `MaskedRow`와 같은 이유다.
+ * 여기에 상태나 선택을 넣으면 한쪽 화면 전용 부품이 된다. `MaskedRow`와 같은 이유다.
  *
  * 라이브러리를 쓰지 않은 이유: 필요한 계산이 `monthMatrix` 하나이고, 한국 공휴일은
  * 어떤 라이브러리도 주지 않아 어차피 데이터를 직접 넣어야 한다. 날짜 선택 UI용
@@ -45,7 +45,7 @@ export function Calendar({
   onMonthChange?: (month: string) => void
   renderDay: (day: CalendarDay) => ReactNode
   weekStartsOn?: 0 | 1
-  /** 월 이동 옆에 붙는 것 — 범례, "오늘" 버튼 등 */
+  /** 월 이동 옆에 붙는 것. 범례, "오늘" 버튼 등 */
   actions?: ReactNode
   className?: string
 }) {
@@ -129,7 +129,7 @@ function MonthButton({
 
 /**
  * 셀 안의 날짜 숫자. `renderDay`가 매번 다시 짜지 않도록 기본 모양을 준다.
- * 이웃 달은 흐리게, 오늘은 채운 원으로 — 셋을 색만으로 구분하면 흑백 인쇄에서 사라진다.
+ * 이웃 달은 흐리게, 오늘은 채운 원으로. 셋을 색만으로 구분하면 흑백 인쇄에서 사라진다.
  */
 export function CalendarDayNumber({ day }: { day: CalendarDay }) {
   return (

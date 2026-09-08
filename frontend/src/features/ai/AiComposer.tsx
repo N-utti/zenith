@@ -38,7 +38,7 @@ export function AiComposer({
   return (
     <div className="shrink-0 px-5 pb-5">
       <div className="mx-auto max-w-3xl">
-        {/* 템플릿 자동작성 — 누르면 컴포저에 프롬프트를 채운다 */}
+        {/* 템플릿 자동작성. 누르면 컴포저에 프롬프트를 채운다 */}
         <div className="mb-3 flex flex-wrap items-center gap-2">
           <span className="text-subtle text-[11.5px] font-bold">템플릿으로 자동작성</span>
           {templates.map((template) => (

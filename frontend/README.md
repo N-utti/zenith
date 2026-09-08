@@ -9,13 +9,13 @@ Zenith 웹 프론트엔드. React 19 · Vite · TypeScript · Tailwind v4.
 ```bash
 npm install
 npm run dev        # http://localhost:5173
-npm run server     # 다른 터미널 — 공동편집·채팅 서버
+npm run server     # 다른 터미널. 공동편집·채팅 서버
 ```
 
 | 스크립트 | 설명 |
 | --- | --- |
 | `npm run dev` | 개발 서버 (MSW 켜짐) |
-| `npm run server` | 개발용 실시간 서버 — 문서 공동편집 + 채팅. **채팅은 이게 없으면 아예 동작하지 않는다** |
+| `npm run server` | 개발용 실시간 서버. 문서 공동편집 + 채팅. **채팅은 이게 없으면 아예 동작하지 않는다** |
 | `npm run build` | 타입체크 + 프로덕션 빌드 (`dist/`) |
 | `npm run typecheck` | 타입만 검사 |
 | `npm run lint` | ESLint |
@@ -27,9 +27,10 @@ npm run server     # 다른 터미널 — 공동편집·채팅 서버
 
 | 이메일 | 역할 |
 | --- | --- |
-| `sujin@zenith.co.kr` | member (사원) |
-| `donghyun@zenith.co.kr` | lead (팀장) |
-| `jaeho@zenith.co.kr` | exec (임원) |
+| `sungwoon@zenith.co.kr` | member (사원) · 정성운 |
+| `chulsung@zenith.co.kr` | exec (임원) · 김철성 대표 |
+
+조직도에 팀장 직급이 없어 lead 계정은 없다. 전체 13명(팀 5개 + 임원 5명)은 `src/mocks/users.json` 에 있다. 개발 채팅 서버도 같은 파일을 읽는다.
 
 역할 체계는 [근태 모듈 설계서 §3](https://app.notion.com/p/3aea471660468172aea1c46d2b11addf)을 따른다.
 
@@ -47,7 +48,7 @@ MSW가 꺼지고 `/api` 요청이 vite 프록시를 통해 `http://localhost:800
 
 [04 · API 명세서 §1](https://app.notion.com/p/3aaa4716604681a6bba4e0367463e8eb) 그대로다.
 로그인은 `POST /api/auth/login` → `204 + Set-Cookie`, 프로필은 `GET /api/me`.
-브라우저는 토큰을 갖지 않는다 — `access`(15분)·`refresh`(14일)는 HttpOnly 쿠키라 JS 가 읽을 수 없고,
+브라우저는 토큰을 갖지 않는다. `access`(15분)·`refresh`(14일)는 HttpOnly 쿠키라 JS 가 읽을 수 없고,
 `csrf` 하나만 읽어 상태 변경 요청에 `X-CSRF-Token` 헤더로 되돌려 보낸다(11 §4.3).
 
 - `AuthProvider` 는 마운트 때 **항상** `GET /me` 를 부른다. 200 이면 로그인, 401 이면 익명. 로그인 여부의 판정자는 서버뿐이다.
@@ -72,7 +73,7 @@ src/
 ├─ lib/           api(fetch 래퍼 · 쿠키 세션 · CSRF) · avatar · queryClient · theme · datetime · cn
 ├─ mocks/         MSW 핸들러 · 목 사용자 · 공지·문서 목 데이터
 ├─ pages/         화면별 컴포넌트
-├─ styles/        index.css — 디자인 토큰
+├─ styles/        index.css. 디자인 토큰
 └─ types/         Role · User 등 공용 타입
 
 scripts/            개발 서버 (백엔드 대역)
@@ -114,15 +115,15 @@ Pretendard가 필요하면 self-host 후 `--font-sans` 스택 맨 앞에 넣는�
 결정했다(출입문 단말 미연동, 앱 출퇴근 버튼 없음, 전 직원 주 5일 09~18시 고정 근무 전제).
 근태는 휴가·연차와 예외 근무(재택·외근·출장·연장) 신청·승인만 다루는 모듈이 된다.
 
-v0.2 전제로 만들어진 구현을 전부 걷어냈다 — `features/attendance/`(출퇴근 위젯 · API · 타입),
+v0.2 전제로 만들어진 구현을 전부 걷어냈다. `features/attendance/`(출퇴근 위젯 · API · 타입),
 팀 주 52시간 경보 카드(`TeamAlertsCard`), `lib/useNow.ts`, MSW 근태 핸들러와 목 데이터.
 근태 화면(`/attendance`)은 v0.3 기준 자리표시자로 남아 있고, 사이드바 메뉴도 그대로다.
 
 되살릴 일이 있다면 삭제 직전 커밋(`c4ed480`)에 있다. 다만 경보 카드는 근무시간 실측에 기대는
-화면이라 그대로 복구하면 안 된다 — 설계서 §5.3의 **승인된 연장근로 신고분 집계**로 다시
+화면이라 그대로 복구하면 안 된다. 설계서 §5.3의 **승인된 연장근로 신고분 집계**로 다시
 만들어야 하고, 화면에 "신고 기준" 라벨을 병기해야 한다(실측처럼 보이면 안 된다).
 
-목 엔드포인트 — 백엔드는 같은 스키마로 응답하면 된다. 근태 API는 설계서 §9로 재정의됐고
+목 엔드포인트. 백엔드는 같은 스키마로 응답하면 된다. 근태 API는 설계서 §9로 재정의됐고
 아직 목이 없다.
 
 ```
@@ -142,7 +143,7 @@ POST  /api/documents/:id/versions   { snapshot, label? }
 ## 문서 본문은 서버에 없다
 
 본문의 원천은 **Y.Doc**이다. 서버(MSW)는 목록·검색이 볼 제목과 수정시각, 그리고
-버전 스냅샷만 투영해 들고 있다. 실제 백엔드도 같은 모양이 된다 — Yjs 업데이트를
+버전 스냅샷만 투영해 들고 있다. 실제 백엔드도 같은 모양이 된다. Yjs 업데이트를
 보관하고 제목만 별도로 둔다.
 
 > MSW 저장소는 메모리에만 있다. **새로고침하면 버전 기록·댓글이 초기화된다.**
@@ -156,7 +157,7 @@ Y.Doc ──┬─ WebSocket              다른 사람 · 다른 브라우저 �
         └─ IndexeddbPersistence   오프라인 영속
 ```
 
-### 실행 — 터미널 두 개가 필요하다
+### 실행: 터미널 두 개가 필요하다
 
 ```bash
 npm run dev      # 앱
@@ -165,8 +166,8 @@ npm run server   # 공동편집·채팅 서버 (http://localhost:1234)
 
 **서버를 안 켜면 다른 브라우저·다른 PC와 동기화되지 않는다.** 같은 브라우저의
 탭끼리는 BroadcastChannel로 붙으므로 서버 없이도 되는 것처럼 보이는데, 이게 착시다.
-그래서 에디터 헤더에 연결 상태를 항상 띄운다 — 서버가 없으면
-**"오프라인 편집 중 — 이 브라우저에만 저장됩니다"** 가 뜬다. 편집 자체는 계속되고
+그래서 에디터 헤더에 연결 상태를 항상 띄운다. 서버가 없으면
+**"오프라인 편집 중. 이 브라우저에만 저장됩니다"** 가 뜬다. 편집 자체는 계속되고
 IndexedDB에 남는다.
 
 ### 공동편집 확인하는 법
@@ -178,13 +179,13 @@ IndexedDB에 남는다.
 ### 백엔드가 구현해야 할 것
 
 `scripts/collab.js`가 그 명세다. y-websocket 프로토콜(바이너리, 첫 varuint가
-메시지 종류 — `0` sync, `1` awareness)이고, 경로 마지막 세그먼트가 문서 ID다.
+메시지 종류. `0` sync, `1` awareness)이고, 경로 마지막 세그먼트가 문서 ID다.
 서버는 문서마다 Y.Doc을 들고 받은 업데이트를 적용·중계한다.
 
-이 개발 서버는 메모리에만 보관한다. **실제 백엔드는 Y.Doc 상태를 영속화해야 한다** —
+이 개발 서버는 메모리에만 보관한다. **실제 백엔드는 Y.Doc 상태를 영속화해야 한다**.
 설계상 문서 본문의 원천이 그 상태다.
 
-앱은 개발 서버 포트에 직접 붙지 않는다. 항상 같은 오리진의 `/api/yjs/{docId}` 로 붙는다 —
+앱은 개발 서버 포트에 직접 붙지 않는다. 항상 같은 오리진의 `/api/yjs/{docId}` 로 붙는다.
 백엔드 릴레이의 경로 그대로다(04 §4.2, 쿠키 핸드셰이크 인증). MSW 모드에서만 vite 가 이 경로를
 개발 릴레이의 `/collab` 으로 넘기고, `VITE_DISABLE_MSW=true` 면 백엔드로 간다(`vite.config.ts`).
 
@@ -212,24 +213,24 @@ POST  /api/chat/channels/:id/read         읽음 처리
 WS    /api/chat/ws                        message · typing · read 이벤트
 ```
 
-전송은 REST로 하고 **화면 반영은 전부 WebSocket이 한다** — 내가 보낸 메시지도
+전송은 REST로 하고 **화면 반영은 전부 WebSocket이 한다**. 내가 보낸 메시지도
 서버를 한 바퀴 돌아 같은 경로로 돌아온다. 낙관적 추가를 하지 않으므로 다른 탭·다른
 사람과 순서가 어긋나지 않는다.
 
-> 인증은 MSW 로그인이 심는 `zenith.mock.session` 쿠키로 한다 — 실제 백엔드가 HttpOnly 쿠키의
+> 인증은 MSW 로그인이 심는 `zenith.mock.session` 쿠키로 한다. 실제 백엔드가 HttpOnly 쿠키의
 > JWT 에서 사용자를 꺼내는 것과 같은 자리다. 채널 멤버가 아닌 요청은 403이어야 한다.
 > 대화는 메모리에만 있어 서버를 끄면 사라진다.
 
 ## 버전 기록과 되돌리기
 
 편집이 5초간 멎으면 스냅샷을 남긴다. 같은 사람이 이어서 편집하는 동안은 서버가
-3분 단위로 하나로 접는다 — 접지 않으면 타이핑을 멈출 때마다 버전이 쌓여 기록을
+3분 단위로 하나로 접는다. 접지 않으면 타이핑을 멈출 때마다 버전이 쌓여 기록을
 읽을 수 없다. 되돌리기처럼 이유가 분명한 버전에는 라벨이 붙고, 라벨이 붙으면 접히지 않는다.
 
 **Yjs 스냅샷은 내용 사본이 아니라 시점 표식이다.** 실제 내용은 Y.Doc이 들고 있는
 이력에서 되살린다. 그래서 서버가 보관하는 스냅샷은 작지만, 대신 두 가지가 전제된다.
 
-- **`gc: false`** — 클라이언트(`useCollabSession.ts`)와 서버(`scripts/collab.js`)
+- **`gc: false`**. 클라이언트(`useCollabSession.ts`)와 서버(`scripts/collab.js`)
   **양쪽 모두**. 한쪽이라도 삭제 내용을 수거하면 과거 버전을 복원할 수 없다.
   대신 문서가 계속 커진다. 15명 규모 위키에서는 감수할 만한 비용으로 봤다.
 - 복원은 **클라이언트에서** 한다. 서버는 스냅샷만 들고 있고 이력은 Y.Doc에 있다.

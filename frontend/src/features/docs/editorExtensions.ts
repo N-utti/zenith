@@ -15,7 +15,7 @@ type BuildOptions = Pick<CollabSession, 'doc' | 'provider'> & {
   user: { name: string; color: string }
 }
 
-/** 커서를 올려 둔 빈 줄에만 안내를 띄운다 — 노션처럼 조용하게. */
+/** 커서를 올려 둔 빈 줄에만 안내를 띄운다. 노션처럼 조용하게. */
 function placeholderFor({ node }: { node: { type: { name: string }; attrs: Record<string, unknown> } }) {
   if (node.type.name === 'heading') return `제목 ${node.attrs.level}`
   if (node.type.name === 'imageBlock') return '사진 설명 (선택)'
@@ -40,7 +40,7 @@ export function buildDocExtensions({ doc, provider, user }: BuildOptions): Exten
       },
     }),
 
-    // 서식 확장 — 툴바·버블 메뉴가 쓰는 것들.
+    // 서식 확장. 툴바·버블 메뉴가 쓰는 것들.
     TextStyleKit.configure({ backgroundColor: false, fontFamily: false, fontSize: false, lineHeight: false }),
     Highlight.configure({ multicolor: true }),
     TextAlign.configure({ types: ['heading', 'paragraph'] }),
