@@ -9,40 +9,31 @@ import { Textarea } from '@/components/ui/Textarea'
 import { useToast } from '@/components/ui/ToastContext'
 import { ApiError } from '@/lib/api'
 import { toISODate } from '@/lib/datetime'
-import {
-  useRequestArrangement,
-  useRequestCorrection,
-  useRequestOvertime,
-  type ExceptionKind,
-} from './api'
+import { useRequestArrangement, useRequestOvertime } from './api'
 import { formatMinutes } from './attendanceDays'
 import { overtimeMinutes } from './overtimeMinutes'
-import { ATTENDANCE_STATUS_LABEL, type ArrangementKind, type AttendanceStatus } from './types'
+import type { ArrangementKind } from './types'
 
 /** 폼에서 고르는 종류. 재택·외근·출장은 각각 한 항목이고 연장·정정이 뒤에 온다. */
-type FormKind = ArrangementKind | 'overtime' | 'correction'
+type FormKind = ArrangementKind | 'overtime'
 
 const KIND_OPTIONS: Array<{ value: FormKind; label: string }> = [
   { value: 'remote', label: '재택' },
   { value: 'field', label: '외근' },
   { value: 'trip', label: '출장' },
   { value: 'overtime', label: '연장근로' },
-  { value: 'correction', label: '근태 정정' },
 ]
-
-/** 정정으로 바꿀 수 있는 상태. 휴가·반차는 휴가 신청으로, 휴일·결근은 관리자 몫이라 뺐다. */
-const CORRECTION_STATUSES: AttendanceStatus[] = ['normal', 'remote', 'field', 'trip']
 
 /**
  * 예외 근무 신청 폼(05 SCR-ATT-03). 종류에 따라 입력이 바뀐다.
- * 재택·외근·출장은 기간, 연장근로는 일자·시각, 정정은 일자·바꿀 상태. 사유는 전부 필수(10 §7).
+ * 재택·외근·출장은 기간, 연장근로는 일자·시각. 사유는 전부 필수(10 §7).
+ * 사후 신고인 근태 정정은 여기 없다. 내 근태 캘린더 옆(`CorrectionRequestModal`)에 있다.
  * 열릴 때마다 마운트된다(호출부가 `open &&` 로 건다).
  */
 export function ExceptionRequestModal({ onClose }: { onClose: () => void }) {
   const toast = useToast()
   const arrangement = useRequestArrangement()
   const overtime = useRequestOvertime()
-  const correction = useRequestCorrection()
   const today = toISODate(new Date())
 
   const [kind, setKind] = useState<FormKind>('remote')
@@ -50,7 +41,6 @@ export function ExceptionRequestModal({ onClose }: { onClose: () => void }) {
   const [end, setEnd] = useState(today)
   const [startTime, setStartTime] = useState('18:00')
   const [endTime, setEndTime] = useState('20:00')
-  const [afterStatus, setAfterStatus] = useState<AttendanceStatus>('remote')
   const [reason, setReason] = useState('')
   const [error, setError] = useState<string | null>(null)
 
@@ -64,7 +54,7 @@ export function ExceptionRequestModal({ onClose }: { onClose: () => void }) {
   const timeError = startTimeError ?? endTimeError
   const preview = kind === 'overtime' && !timeError ? overtimeMinutes(startTime, endTime) : null
   const noOvertime = !!preview && preview.minutes === 0
-  const pending = arrangement.isPending || overtime.isPending || correction.isPending
+  const pending = arrangement.isPending || overtime.isPending
   const canSubmit =
     !startError && !endError && !timeError && !noOvertime && reason.trim().length > 0 && !pending
 
@@ -85,7 +75,7 @@ export function ExceptionRequestModal({ onClose }: { onClose: () => void }) {
     const body = { onSuccess: done, onError: fail }
     if (isArrangement) {
       arrangement.mutate({ kind, start_date: start, end_date: end, reason: reason.trim() }, body)
-    } else if (kind === 'overtime') {
+    } else {
       overtime.mutate(
         {
           work_date: start,
@@ -95,24 +85,12 @@ export function ExceptionRequestModal({ onClose }: { onClose: () => void }) {
         },
         body,
       )
-    } else {
-      correction.mutate(
-        {
-          work_date: start,
-          after: { status: afterStatus },
-          reason: reason.trim(),
-        },
-        body,
-      )
     }
   }
 
-  const exceptionKind: ExceptionKind = isArrangement ? 'arrangement' : kind
-  const description = {
-    arrangement: '사전 등록입니다. 승인되면 정상 근무로 집계됩니다.',
-    overtime: '소정 종업(18:00) 이후 구간만 인정됩니다. 승인된 신고분만 집계에 들어갑니다.',
-    correction: '승인되면 그날 상태가 바뀌고 이전 값은 이력에 남습니다.',
-  }[exceptionKind]
+  const description = isArrangement
+    ? '사전 등록입니다. 승인되면 정상 근무로 집계됩니다.'
+    : '소정 종업(18:00) 이후 구간만 인정됩니다. 승인된 신고분만 집계에 들어갑니다.'
 
   return (
     <Modal
@@ -150,7 +128,7 @@ export function ExceptionRequestModal({ onClose }: { onClose: () => void }) {
                 {...slot}
                 type="date"
                 value={start}
-                // 연장근로·정정은 지난 근무일에 대한 신고다. 미래 날짜를 받으면 목록 조회 범위 밖으로 삼켜진다.
+                // 연장근로는 지난 근무일에 대한 신고다. 미래 날짜를 받으면 목록 조회 범위 밖으로 삼켜진다.
                 max={isArrangement ? undefined : today}
                 onChange={(e) => setStart(e.target.value)}
               />
@@ -192,21 +170,6 @@ export function ExceptionRequestModal({ onClose }: { onClose: () => void }) {
                 )}
               </Field>
             </>
-          )}
-          {kind === 'correction' && (
-            <Field label="바꿀 상태" required>
-              {(slot) => (
-                <Select
-                  {...slot}
-                  value={afterStatus}
-                  onChange={(e) => setAfterStatus(e.target.value as AttendanceStatus)}
-                  options={CORRECTION_STATUSES.map((s) => ({
-                    value: s,
-                    label: ATTENDANCE_STATUS_LABEL[s],
-                  }))}
-                />
-              )}
-            </Field>
           )}
         </div>
 
