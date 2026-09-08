@@ -85,7 +85,7 @@ export function LoginPage() {
         {MSW_ENABLED && (
           <div className="border-line bg-surface mt-4 rounded-xl border p-4">
             <p className="text-subtle mb-2 text-xs font-semibold">
-              목(mock) 계정 — 비밀번호 <code className="font-mono">zenith1234</code>
+              목(mock) 계정. 비밀번호 <code className="font-mono">zenith1234</code>
             </p>
             <div className="space-y-1">
               {DEMO_ACCOUNTS.map((account) => (

@@ -10,7 +10,7 @@ import { cn } from '@/lib/cn'
  * 등급 배지, 고정 열)을 추측으로 맞추게 된다. 세 화면이 붙고 나서 반복이 보이면
  * 그때 데이터 주도 래퍼를 이 위에 얹는다.
  *
- * `<table>` 시맨틱은 유지한다 — div 그리드로 만들면 스크린리더가 행·열 관계를 잃는다.
+ * `<table>` 시맨틱은 유지한다. div 그리드로 만들면 스크린리더가 행·열 관계를 잃는다.
  */
 export function Table({ className, children }: { className?: string; children: ReactNode }) {
   return (

@@ -26,7 +26,7 @@ export function DocEditorPage() {
     )
   }
 
-  // 상단 경로 줄은 DocWorkspace가 그린다 — 편집자 표시가 협업 세션을 필요로 해서다.
+  // 상단 경로 줄은 DocWorkspace가 그린다. 편집자 표시가 협업 세션을 필요로 해서다.
   // docId가 바뀌면 협업 세션을 통째로 새로 연다.
   return (
     <div className="flex h-full flex-col">

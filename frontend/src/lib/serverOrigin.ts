@@ -1,14 +1,14 @@
 /**
  * 앱이 붙을 서버 오리진.
  *
- * 브라우저에서는 빈 문자열이다 — 같은 오리진으로 내보내면 개발에서는 vite 프록시가,
+ * 브라우저에서는 빈 문자열이다. 같은 오리진으로 내보내면 개발에서는 vite 프록시가,
  * 운영에서는 역방향 프록시가 받는다. 지금까지의 동작 그대로다.
  *
  * 데스크탑 셸(Tauri)은 다르다. 화면이 `tauri://localhost`에서 뜨므로 `/api`로 보낸
  * 요청이 사내 서버가 아니라 셸 자신에게 간다. 그래서 셸 빌드는 서버 주소를 명시해야 한다.
  *
- *   1) localStorage `zenith.serverOrigin` — 설치 후 현장에서 서버를 옮겼을 때의 탈출구
- *   2) 빌드 시 `VITE_SERVER_ORIGIN`      — 사내 배포본에 박아 두는 기본값
+ *   1) localStorage `zenith.serverOrigin`. 설치 후 현장에서 서버를 옮겼을 때의 탈출구
+ *   2) 빌드 시 `VITE_SERVER_ORIGIN`     . 사내 배포본에 박아 두는 기본값
  *   3) 둘 다 없으면 같은 오리진 (= 브라우저 동작)
  */
 
@@ -42,7 +42,7 @@ export function httpUrl(path: string): string {
 }
 
 /**
- * WebSocket URL. 오리진이 비어 있으면 지금 페이지의 오리진을 쓴다 —
+ * WebSocket URL. 오리진이 비어 있으면 지금 페이지의 오리진을 쓴다.
  * `location.host`를 직접 조립하던 자리를 이 함수가 대신한다.
  */
 export function wsUrl(path: string): string {

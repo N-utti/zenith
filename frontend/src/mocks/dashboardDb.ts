@@ -10,7 +10,7 @@ function minutesAgo(minutes: number): string {
 export const MENTIONS: Mention[] = [
   {
     id: 'm-1',
-    actorName: '박동현',
+    actorName: '정성운',
     actorHue: 155,
     body: '예산 표에 근거 자료 링크 걸어주세요',
     mentionsMe: true,

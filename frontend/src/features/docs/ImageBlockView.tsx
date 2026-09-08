@@ -44,7 +44,7 @@ export function ImageBlockView({ node, updateAttributes, selected, editor }: Nod
         <span className="relative inline-block max-w-full align-bottom">
           <img
             // 문서에 저장된 src는 `/api/files/{id}` 상대경로다. 서버 주소는 저장하지
-            // 않는다 — 서버가 옮겨 가면 저장된 문서가 전부 깨지기 때문이다. 대신
+            // 않는다. 서버가 옮겨 가면 저장된 문서가 전부 깨지기 때문이다. 대신
             // 화면에 그릴 때만 오리진을 붙인다(데스크탑 셸에서만 값이 붙는다).
             src={src?.startsWith('/') ? httpUrl(src) : src}
             alt={alt ?? ''}

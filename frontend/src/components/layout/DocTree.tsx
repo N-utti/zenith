@@ -69,7 +69,7 @@ function TreeRow({
   )
 }
 
-/** 1b 셸의 '워크스페이스' 섹션 — 사이드바에 문서를 계층으로 보여준다. */
+/** 1b 셸의 '워크스페이스' 섹션. 사이드바에 문서를 계층으로 보여준다. */
 export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
   const { docId } = useParams()
   const { data, isPending } = useDocs('')

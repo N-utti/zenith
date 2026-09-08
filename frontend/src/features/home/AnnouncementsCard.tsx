@@ -54,7 +54,7 @@ export function AnnouncementsCard() {
                   </>
                 )
 
-                // 권한 밖 글은 자리만 남기고 링크를 걸지 않는다 — 본문은 서버가 403으로 막는다.
+                // 권한 밖 글은 자리만 남기고 링크를 걸지 않는다. 본문은 서버가 403으로 막는다.
                 return (
                   <li key={item.id}>
                     <MaskedRow

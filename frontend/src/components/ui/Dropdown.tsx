@@ -17,7 +17,7 @@ export interface DropdownOption {
  * 값 하나를 고르는 작은 드롭다운. `UserMenu`의 특화 구현을 일반화한 것으로,
  * 모델 선택·지식 소스 선택처럼 "버튼에 현재 값이 보이는" 자리에 쓴다.
  *
- * 포커스 트랩은 없다 — 공용 `Modal`이 생길 때 그쪽 규약을 따라간다.
+ * 포커스 트랩은 없다. 공용 `Modal`이 생길 때 그쪽 규약을 따라간다.
  */
 export function Dropdown({
   value,

@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "제니스(Zenith) 데스크탑 셸 — Tauri 2 (Windows)",
+  "description": "제니스(Zenith) 데스크탑 셸: Tauri 2 (Windows)",
   "scripts": {
     "dev": "tauri dev",
     "build": "tauri build",

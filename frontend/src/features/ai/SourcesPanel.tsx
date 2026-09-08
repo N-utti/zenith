@@ -45,7 +45,7 @@ export function ExcludedNote({ count }: { count: number }) {
 /**
  * 우측 근거 문서 패널. `lg` 미만에서는 숨고, 대신 답변 아래 인라인 목록이 나온다.
  *
- * 마지막 assistant 답변의 근거만 보여준다 — 대화 전체를 쌓으면 어느 문장의 근거인지 잃는다.
+ * 마지막 assistant 답변의 근거만 보여준다. 대화 전체를 쌓으면 어느 문장의 근거인지 잃는다.
  */
 export function SourcesPanel({ messages }: { messages: AiMessage[] }) {
   const last = [...messages].reverse().find((m) => m.role === 'assistant')

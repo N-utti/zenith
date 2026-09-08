@@ -80,7 +80,7 @@ const SEED_ANSWER =
   '신규 입사자는 입사 첫날 사양에 맞춰 노트북을 지급받습니다. 개발 직군은 고사양, 그 외 직군은 표준 사양이 기본이며[[1]], 반납은 퇴사 시 총무팀에 하도록 규정되어 있습니다[[2]].'
 
 /**
- * 대화는 사용자별로 따로 쌓인다. 실제 서버도 같은 모양이 된다 —
+ * 대화는 사용자별로 따로 쌓인다. 실제 서버도 같은 모양이 된다.
  * 근거 필터가 사용자 등급에 걸리므로 대화를 공유할 수 없다.
  */
 const conversations = new Map<string, AiMessage[]>()
@@ -111,7 +111,7 @@ export function listConversation(user: User): AiMessage[] {
   const existing = conversations.get(user.id)
   if (existing) return existing
 
-  // 화면을 처음 열었을 때 빈 채로 두지 않는다 — 각주·근거 패널이 무엇인지 보여야 한다.
+  // 화면을 처음 열었을 때 빈 채로 두지 않는다. 각주·근거 패널이 무엇인지 보여야 한다.
   const seeded: AiMessage[] = [
     {
       id: 'm-seed-1',
@@ -162,7 +162,7 @@ export function ask(user: User, prompt: string): AiMessage[] {
 }
 
 /**
- * 문서 안 인라인 AI. 위키 RAG가 아니라 **열려 있는 문서 본문**을 근거로 쓴다 —
+ * 문서 안 인라인 AI. 위키 RAG가 아니라 **열려 있는 문서 본문**을 근거로 쓴다.
  * 그래서 근거 패널이 없고, 대신 "근거: 이 문서 본문"이라고 밝힌다.
  */
 export function inlineDraft(action: string, prompt: string, docText: string): string {
@@ -184,7 +184,7 @@ export function inlineDraft(action: string, prompt: string, docText: string): st
       return head ? `[EN] ${head}` : 'There is nothing to translate yet.'
     default:
       return prompt
-        ? `${prompt} — 요청하신 내용을 이 문서 본문을 근거로 정리했습니다.`
+        ? `${prompt}. 요청하신 내용을 이 문서 본문을 근거로 정리했습니다.`
         : '무엇을 도와드릴까요?'
   }
 }

@@ -55,7 +55,7 @@ export function ChatPage() {
                 className="text-warning ml-auto flex items-center gap-1.5 text-xs"
               >
                 <WifiOff className="size-3.5" />
-                연결 끊김 — 새 메시지가 오지 않습니다
+                연결 끊김. 새 메시지가 오지 않습니다
               </span>
             )}
           </header>

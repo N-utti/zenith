@@ -1,7 +1,7 @@
 /**
  * 데스크탑 셸(Tauri) 연동.
  *
- * 프론트엔드는 Tauri npm 패키지에 의존하지 않는다 — 같은 코드가 브라우저에서도
+ * 프론트엔드는 Tauri npm 패키지에 의존하지 않는다. 같은 코드가 브라우저에서도
  * 그대로 돌아야 하기 때문이다. 대신 셸이 `withGlobalTauri`로 노출하는
  * `window.__TAURI__` 전역만 쓰고, 없으면 아무 일도 하지 않는다.
  */
@@ -75,7 +75,7 @@ function ensurePermission(tauri: TauriGlobal): Promise<boolean> {
 /**
  * OS 알림(Windows 토스트)을 띄운다.
  *
- * 브라우저에서는 아무 일도 하지 않는다 — 웹에서도 알림을 띄우려면 별도로
+ * 브라우저에서는 아무 일도 하지 않는다. 웹에서도 알림을 띄우려면 별도로
  * Web Notification API를 붙여야 하고, 그건 권한 UX가 완전히 다르다.
  *
  * 알림이 실패해도 부르는 쪽은 알 필요가 없다. 채팅 수신이 알림 때문에

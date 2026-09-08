@@ -14,18 +14,24 @@
  *   POST /channels/:id/read           읽음 처리
  *   WS   /ws                          message · typing · read 이벤트
  *
- * 인증은 MSW 로그인이 심는 세션 쿠키(zenith.mock.session=<userId>)로만 한다 — 실제 백엔드가
+ * 인증은 MSW 로그인이 심는 세션 쿠키(zenith.mock.session=<userId>)로만 한다. 실제 백엔드가
  * HttpOnly 쿠키의 JWT 에서 사용자를 꺼내는 것과 같은 자리다. URL·본문의 userId 는 보지 않는다
  * (11 §7.5). 채널 멤버가 아닌 사용자의 요청은 403이어야 한다.
  *
  * 메모리에만 보관한다. 서버를 끄면 대화가 사라진다.
  */
 
-const USERS = {
-  'u-1': { id: 'u-1', name: '김수진', hue: 275 },
-  'u-2': { id: 'u-2', name: '박동현', hue: 155 },
-  'u-3': { id: 'u-3', name: '최재호', hue: 25 },
+import users from '../src/mocks/users.json' with { type: 'json' }
+
+/** src/lib/avatar.ts 의 hueOf 와 같은 식. 채팅 아바타 색이 다른 화면과 같아야 한다. */
+function hueOf(id) {
+  let hash = 0
+  for (const ch of id) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0
+  return hash % 360
 }
+
+/** 명단은 MSW 와 같은 users.json. u-1 진수연(사원) · u-2 정성운(사원) · u-3 홍성완(임원)이 시드 대화에 등장한다. */
+const USERS = Object.fromEntries(users.map((u) => [u.id, { id: u.id, name: u.name, hue: hueOf(u.id) }]))
 
 const ALL = Object.keys(USERS)
 
@@ -89,7 +95,7 @@ function markRead(userId, channelId) {
   reads.get(userId).set(channelId, new Date().toISOString())
 }
 
-/** DM 이름은 보는 사람에 따라 다르다 — 상대의 이름이다. */
+/** DM 이름은 보는 사람에 따라 다르다. 상대의 이름이다. */
 function channelName(channel, viewerId) {
   if (channel.kind === 'channel') return channel.name
   const other = channel.memberIds.find((id) => id !== viewerId) ?? viewerId

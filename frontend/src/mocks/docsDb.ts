@@ -7,7 +7,7 @@ function minutesAgo(minutes: number): string {
 }
 
 /**
- * 문서 메타. 본문은 여기 없다 — Y.Doc(IndexedDB)에 있다.
+ * 문서 메타. 본문은 여기 없다: Y.Doc(IndexedDB)에 있다.
  *
  * 실제 서버도 같은 모양이 된다. 본문은 Yjs 업데이트로 보관하고, 목록·검색용
  * 제목과 수정시각만 별도 테이블에 투영해 둔다.
@@ -17,7 +17,7 @@ export const DOCS: DocSummary[] = [
     id: 'd-0',
     title: '회사 위키',
     updatedAt: minutesAgo(40),
-    editorName: '박동현',
+    editorName: '정성운',
     editorHue: 155,
     parentId: null,
   },
@@ -25,7 +25,7 @@ export const DOCS: DocSummary[] = [
     id: 'd-1',
     title: '2026 하반기 제품 로드맵',
     updatedAt: minutesAgo(12),
-    editorName: '박동현',
+    editorName: '정성운',
     editorHue: 155,
     parentId: 'd-0',
   },
@@ -33,7 +33,7 @@ export const DOCS: DocSummary[] = [
     id: 'd-2',
     title: '근태 모듈 설계서 v0.3 리뷰 노트',
     updatedAt: minutesAgo(95),
-    editorName: '김수진',
+    editorName: '진수연',
     editorHue: 275,
     parentId: null,
   },
@@ -57,7 +57,7 @@ export const DOCS: DocSummary[] = [
     id: 'd-5',
     title: '휴가·연차 정책 확인 메모',
     updatedAt: minutesAgo(2900),
-    editorName: '김수진',
+    editorName: '진수연',
     editorHue: 275,
     parentId: 'd-2',
   },
@@ -70,10 +70,10 @@ export const DOC_SEEDS: Record<string, string> = {
     <p>흩어진 업무 대화와 문서를 사내 서버 하나로 모은다. 외부 SaaS 구독과 데이터 유출 경로를 함께 없앤다.</p>
     <h2>마일스톤</h2>
     <ul>
-      <li><strong>M1 코어</strong> — 인증, 문서 CRUD, 실시간 공동편집, 댓글</li>
-      <li><strong>M2 커뮤니케이션</strong> — 채팅, 알림, 홈 대시보드, 통합검색</li>
-      <li><strong>M3 AI</strong> — 로컬 LLM, 위키 RAG, 인라인 AI</li>
-      <li><strong>M4 마감</strong> — 등급별 게시판, 앱 패키징, 파일럿</li>
+      <li><strong>M1 코어</strong>: 인증, 문서 CRUD, 실시간 공동편집, 댓글</li>
+      <li><strong>M2 커뮤니케이션</strong>: 채팅, 알림, 홈 대시보드, 통합검색</li>
+      <li><strong>M3 AI</strong>: 로컬 LLM, 위키 RAG, 인라인 AI</li>
+      <li><strong>M4 마감</strong>: 등급별 게시판, 앱 패키징, 파일럿</li>
     </ul>
     <blockquote><p>근태는 아직 로드맵에 자리가 없다. 순개발량 약 14일 추정.</p></blockquote>
   `,
@@ -81,19 +81,19 @@ export const DOC_SEEDS: Record<string, string> = {
     <p>설계서 v0.3에서 바뀐 전제를 정리한다.</p>
     <h2>출퇴근 시각을 기록하지 않는다</h2>
     <p>출입 단말을 연동하지 않고 앱 출퇴근 버튼도 두지 않는다. 전 직원이 <strong>주 5일 09~18시 고정 근무</strong>이므로 평일의 기본 상태는 "정상 근무 8시간"이라는 상수다.</p>
-    <p>그래서 근태가 기록하는 것은 예외뿐이다 — 휴가·재택·외근·출장·연장근로를 신청하고 팀장이 승인한다.</p>
+    <p>그래서 근태가 기록하는 것은 예외뿐이다: 휴가·재택·외근·출장·연장근로를 신청하고 팀장이 승인한다.</p>
     <h2>확인이 필요한 것</h2>
     <ol>
-      <li>실근로시간을 기록하지 않으면 주 52시간을 명목값으로만 볼 수 있음 — 노무사 확인 필요</li>
+      <li>실근로시간을 기록하지 않으면 주 52시간을 명목값으로만 볼 수 있음: 노무사 확인 필요</li>
       <li>취업규칙상 시업·종업 시각이 09~18시와 맞는지</li>
-      <li>팀 개념이 없어 lead의 조회 범위를 정할 수 없음 — teams 테이블 선행 필요</li>
+      <li>팀 개념이 없어 lead의 조회 범위를 정할 수 없음: teams 테이블 선행 필요</li>
     </ol>
   `,
   'd-3': `
     <h2>진행 상황</h2>
     <ul>
       <li>프론트엔드 스캐폴딩 완료. 앱 셸과 홈 대시보드 동작</li>
-      <li>백엔드 미착수 — 목 API로 선행 개발 중</li>
+      <li>백엔드 미착수: 목 API로 선행 개발 중</li>
     </ul>
     <h2>논의</h2>
     <p>Yjs 커서 동기화에서 간헐적 이슈. 재현 조건 확인 필요.</p>
@@ -109,9 +109,9 @@ export const DOC_SEEDS: Record<string, string> = {
   'd-5': `
     <p>연차 산정을 붙이기 전에 인사 확인이 필요한 항목들.</p>
     <ul>
-      <li>부여 기준 — 입사일 기준인가, 회계연도(1/1) 일괄인가</li>
-      <li>반차 운영 단위 — 오전/오후 반차만인가, 시간 단위도 쓰는가</li>
-      <li>결근 확정 절차 — 누가 언제 입력하는가 (출근율·연차에 직결)</li>
+      <li>부여 기준: 입사일 기준인가, 회계연도(1/1) 일괄인가</li>
+      <li>반차 운영 단위: 오전/오후 반차만인가, 시간 단위도 쓰는가</li>
+      <li>결근 확정 절차: 누가 언제 입력하는가 (출근율·연차에 직결)</li>
     </ul>
     <p>부여 기준이 정해져야 <code>leave_balances.grant_basis</code>의 기본값을 잡을 수 있다.</p>
   `,
@@ -122,7 +122,7 @@ const comments: Record<string, DocComment[]> = {
     {
       id: 'cm-1',
       authorId: 'u-2',
-      authorName: '박동현',
+      authorName: '정성운',
       authorHue: 155,
       body: '퇴근 미기록을 결근으로 보지 않는다는 부분, 노무사 검토 때 꼭 짚어야 합니다.',
       createdAt: minutesAgo(240),
@@ -130,7 +130,7 @@ const comments: Record<string, DocComment[]> = {
     {
       id: 'cm-2',
       authorId: 'u-1',
-      authorName: '김수진',
+      authorName: '진수연',
       authorHue: 275,
       body: '동의합니다. 홈 위젯에도 "미확정"으로 표기하도록 반영해 뒀어요.',
       createdAt: minutesAgo(180),

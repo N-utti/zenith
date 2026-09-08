@@ -4,7 +4,7 @@ import { Bold, Code, Italic, Strikethrough, Underline } from 'lucide-react'
 import { BlockMenu, ColorMenu, LinkMenu, ToolButton, ToolDivider } from './editorControls'
 import { useFormatState } from './editorFormats'
 
-/** 글자를 선택하면 그 자리에 뜨는 서식 막대 — 노션의 선택 메뉴와 같은 역할. */
+/** 글자를 선택하면 그 자리에 뜨는 서식 막대. 노션의 선택 메뉴와 같은 역할. */
 export function EditorBubbleMenu({ editor }: { editor: Editor }) {
   const state = useFormatState(editor)
 

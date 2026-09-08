@@ -4,7 +4,7 @@ import type { ChatChannel, ChatMessage } from './types'
 
 /**
  * 채팅만 MSW를 거치지 않고 개발 서버로 간다 (vite 프록시). 누구인지는 URL·본문이 아니라
- * 세션 쿠키가 말한다(11 §7.5) — 개발 릴레이(scripts/chat.js)도 실제 백엔드도 쿠키만 본다.
+ * 세션 쿠키가 말한다(11 §7.5). 개발 릴레이(scripts/chat.js)도 실제 백엔드도 쿠키만 본다.
  */
 export const chatKeys = {
   channels: ['chat', 'channels'] as const,

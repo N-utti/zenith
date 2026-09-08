@@ -36,7 +36,7 @@ function PresenceBar({ session }: { session: CollabSession }) {
         className="text-warning flex items-center gap-1.5 text-xs"
       >
         <WifiOff className="size-3.5" />
-        오프라인 편집 중 — 이 브라우저에만 저장됩니다
+        오프라인 편집 중. 이 브라우저에만 저장됩니다
       </p>
     )
   }
@@ -183,7 +183,7 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
   }, [doc, meta.title])
 
   // 편집이 멎으면 목록·검색이 볼 사본(제목·수정시각)을 갱신하고 버전을 남긴다.
-  // 버전은 서버가 합쳐 준다 — 같은 사람이 이어서 편집하는 동안은 하나로 접힌다.
+  // 버전은 서버가 합쳐 준다. 같은 사람이 이어서 편집하는 동안은 하나로 접힌다.
   useEffect(() => {
     let metaTimer: number | undefined
     let versionTimer: number | undefined

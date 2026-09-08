@@ -1,38 +1,30 @@
-import type { User } from '@/types'
+import type { Role, Team, User } from '@/types'
+import users from './users.json'
 
-const PRODUCT_TEAM = { id: 'team-product', name: '프로덕트팀' }
-const MANAGEMENT_TEAM = { id: 'team-management', name: '경영지원팀' }
-
-/** 서버 `GET /me` 와 같은 모양(04 §1 + team). 아바타 색은 서버가 주지 않는다 — lib/avatar 가 id 로 만든다. */
-export const MOCK_USERS: User[] = [
-  {
-    id: 'u-1',
-    name: '김수진',
-    email: 'sujin@zenith.co.kr',
-    role: 'member',
-    avatar: null,
-    team: PRODUCT_TEAM,
-  },
-  {
-    id: 'u-2',
-    name: '박동현',
-    email: 'donghyun@zenith.co.kr',
-    role: 'lead',
-    avatar: null,
-    team: PRODUCT_TEAM,
-  },
-  {
-    id: 'u-3',
-    name: '최재호',
-    email: 'jaeho@zenith.co.kr',
-    role: 'exec',
-    avatar: null,
-    team: MANAGEMENT_TEAM,
-  },
-]
+/** 실제 조직도 기준 팀. 임원은 팀이 없다(`team: null`). */
+export const MOCK_TEAMS: Record<string, Team> = {
+  dev: { id: 'team-dev', name: '개발팀' },
+  infra: { id: 'team-infra', name: '인프라 유치팀' },
+  fund: { id: 'team-fund', name: '펀드팀' },
+  research: { id: 'team-research', name: '디지털 리서치팀' },
+  accounting: { id: 'team-accounting', name: '회계팀' },
+}
 
 /**
- * 목 세션 쿠키. 실제 서버의 HttpOnly `access` 대신 사용자 id 를 그대로 담는다 — 개발 편의.
+ * 서버 `GET /me` 와 같은 모양(04 §1 + team). 명단은 users.json. 개발 채팅 서버(scripts/chat.js)도 같은 파일을 읽는다.
+ * 조직도에 팀장 직급이 없어 lead 는 두지 않는다(사원·임원뿐). 아바타 색은 서버가 주지 않는다. lib/avatar 가 id 로 만든다.
+ */
+export const MOCK_USERS: User[] = users.map((u) => ({
+  id: u.id,
+  name: u.name,
+  email: u.email,
+  role: u.role as Role,
+  avatar: null,
+  team: u.team ? MOCK_TEAMS[u.team] : null,
+}))
+
+/**
+ * 목 세션 쿠키. 실제 서버의 HttpOnly `access` 대신 사용자 id 를 그대로 담는다. 개발 편의.
  * 개발 채팅 서버(scripts/dev-server.js)도 핸드셰이크의 이 쿠키로 사용자를 알아본다.
  *
  * MSW 2 의 핸들러는 페이지 안에서 돈다. 가로챈 요청의 Cookie 헤더는 JS 에 보이지 않고, 목 응답의

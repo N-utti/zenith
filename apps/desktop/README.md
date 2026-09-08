@@ -1,10 +1,10 @@
-# 🖥 apps/desktop — Windows 데스크탑 앱 (Tauri 2)
+# 🖥 apps/desktop: Windows 데스크탑 앱 (Tauri 2)
 
-`frontend/`의 웹앱을 그대로 감싸는 **셸**이다. 업무 로직은 하나도 여기 없다 —
+`frontend/`의 웹앱을 그대로 감싸는 **셸**이다. 업무 로직은 하나도 여기 없다.
 화면은 웹앱, 데이터는 사내 서버. Windows·Android·iOS가 같은 화면을 공유하는 구조라
 셸에 기능을 넣으면 셸마다 다시 만들어야 한다. 넣기 전에 웹앱에서 못 하는 일인지 확인할 것.
 
-산출물은 **`.msi`** — 사내 배포용 (성공 기준 참조).
+산출물은 **`.msi`**. 사내 배포용 (성공 기준 참조).
 
 ---
 
@@ -37,7 +37,7 @@ npm run dev      # = tauri dev
 채팅·공동편집까지 보려면 다른 터미널에서 릴레이도 함께 띄운다.
 
 ```powershell
-cd frontend && npm run server    # :1234 — 채팅 + Yjs 릴레이
+cd frontend && npm run server    # :1234. 채팅 + Yjs 릴레이
 ```
 
 > vite 포트는 `strictPort`로 5173에 고정돼 있다. 셸의 `devUrl`이 이 번호를 보고 있어서,
@@ -58,13 +58,13 @@ npm run build    # = tauri build → src-tauri/target/release/bundle/msi/*.msi
 프로덕션 빌드에서는 MSW 목이 통째로 사라지고, 셸 화면은 `tauri://localhost`에서 뜬다.
 그래서 `/api` 상대경로는 사내 서버가 아니라 **셸 자신에게** 간다. 서버 오리진을 박아야 한다.
 
-`frontend/.env.production` (커밋되지 않는다 — `frontend/.env.example` 참고):
+`frontend/.env.production` (커밋되지 않는다. `frontend/.env.example` 참고):
 
 ```
 VITE_SERVER_ORIGIN=https://zenith.example.co.kr
 ```
 
-설치 후에 서버가 옮겨 갔다면 재빌드 없이도 바꿀 수 있다 —
+설치 후에 서버가 옮겨 갔다면 재빌드 없이도 바꿀 수 있다.
 개발자 도구 콘솔에서 `localStorage.setItem('zenith.serverOrigin', 'https://새주소')` 후 재시작.
 (빌드 기본값보다 이 값이 우선한다. `frontend/src/lib/serverOrigin.ts`)
 
@@ -105,7 +105,7 @@ apps/desktop/
 새 채팅이 오면 토스트를 띄운다. 조건은 두 가지다.
 
 - 내가 보낸 메시지가 아닐 것
-- **창을 보고 있지 않을 것** (`document.hasFocus()`) — 화면에 이미 보이는데 토스트까지 겹치면 방해다
+- **창을 보고 있지 않을 것** (`document.hasFocus()`). 화면에 이미 보이는데 토스트까지 겹치면 방해다
 
 제목은 `#개발 · 박동현`, DM이면 상대 이름만. 구현은 `useChatSocket.ts`의 `notifyIncoming`이다.
 
@@ -129,7 +129,7 @@ Windows 토스트는 발신 앱이 **AppUserModelID(AUMID)** 로 등록돼 있�
 > dev에서는 첫 토스트만 내용이 정확한 채로 "Windows PowerShell" 이름으로 떴고 이후 3회는
 > 표시되지 않았다. 설치본 AUMID로 토스트를 직접 쏘면 발신 앱이 "Zenith", 아이콘도 제니스
 > 마크로 정상 표시된다. `HKCU\Software\Classes\AppUserModelId\…`를 손으로 등록하는 것은
-> 소용없다 — 바로가기가 나르는 값이 이기기 때문이다.
+> 소용없다. 바로가기가 나르는 값이 이기기 때문이다.
 
 **알림을 검증하려면 `.msi`를 설치한 뒤 테스트할 것.** 개발 중에는 알림 로직 자체
 (조건 판정·제목·본문)를 화면 안 배지로 확인하는 편이 빠르다.
@@ -167,8 +167,8 @@ npm run icons
 
 ## 아직 안 한 것
 
-- **코드 서명** — 서명 없는 `.msi`는 SmartScreen 경고가 뜬다. 사내 배포라도 인증서가 필요하다.
-- **자동 업데이트** — `tauri-plugin-updater` 미적용. 지금은 `.msi` 재배포.
-- **딥링크·트레이 아이콘·작업표시줄 배지** — 요구사항 확정 전.
-- **알림 범위** — 채팅뿐이다. 멘션·댓글·결재 알림은 `받은 알림`(M2) 설계가 정해진 뒤에 붙인다.
+- **코드 서명**. 서명 없는 `.msi`는 SmartScreen 경고가 뜬다. 사내 배포라도 인증서가 필요하다.
+- **자동 업데이트**. `tauri-plugin-updater` 미적용. 지금은 `.msi` 재배포.
+- **딥링크·트레이 아이콘·작업표시줄 배지**. 요구사항 확정 전.
+- **알림 범위**. 채팅뿐이다. 멘션·댓글·결재 알림은 `받은 알림`(M2) 설계가 정해진 뒤에 붙인다.
   알림 클릭 시 해당 채널로 이동하는 것도 아직 없다.

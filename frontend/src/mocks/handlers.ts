@@ -100,7 +100,7 @@ export const handlers = [
     authed((user, request) => {
       const boardId = new URL(request.url).pathname.split('/')[3]
       if (!BOARD_DEFS.some((board) => board.id === boardId)) return notFound()
-      // 권한 밖 게시판이어도 목록 자체는 준다 — 행이 전부 마스킹돼 나갈 뿐이다.
+      // 권한 밖 게시판이어도 목록 자체는 준다. 행이 전부 마스킹돼 나갈 뿐이다.
       return HttpResponse.json({ items: listPosts(user, boardId) })
     }),
   ),
@@ -131,7 +131,7 @@ export const handlers = [
     const board = BOARD_DEFS.find((b) => b.id === boardId)
     if (!board) return notFound()
 
-    // 05 FR-BRD-02 — 열람할 수 있는 게시판에만 글을 쓸 수 있다.
+    // 05 FR-BRD-02. 열람할 수 있는 게시판에만 글을 쓸 수 있다.
     if (!canRead(user, board.minRole)) {
       return HttpResponse.json({ detail: '이 게시판에 글을 쓸 수 없습니다.' }, { status: 403 })
     }

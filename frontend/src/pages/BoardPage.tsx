@@ -41,7 +41,7 @@ export function BoardPage() {
             : '이 게시판의 글은 제목만 보이고 본문은 열 수 없습니다.'
         }
         actions={
-          // FR-BRD-02 — 열람할 수 있는 게시판에만 글쓰기 버튼이 보인다.
+          // FR-BRD-02. 열람할 수 있는 게시판에만 글쓰기 버튼이 보인다.
           board?.allowed && (
             <Button onClick={() => setComposing(true)}>
               <Plus className="size-4" />
@@ -87,7 +87,7 @@ function PostTable({ boardId, badge }: { boardId: string; badge: string }) {
           data.items.map((post) => (
             <TR key={post.id} muted={post.masked}>
               <TD>
-                {/* 마스킹된 행은 링크가 아니다 — 클릭해도 갈 곳이 없어야 한다. */}
+                {/* 마스킹된 행은 링크가 아니다. 클릭해도 갈 곳이 없어야 한다. */}
                 <MaskedRow
                   masked={post.masked}
                   to={post.masked ? undefined : `/board/${boardId}/${post.id}`}
