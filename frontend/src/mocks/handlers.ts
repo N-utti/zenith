@@ -25,6 +25,7 @@ import {
   touchDoc,
 } from './docsDb'
 import { readFile, saveFile } from './filesDb'
+import { cancelLeave, createLeave, LEAVE_TYPES, leaveBalance, listLeaves } from './leavesDb'
 
 function authenticate(): User | undefined {
   // 세션은 쿠키다(04 §1). 핸들러는 페이지 안에서 돌므로 document.cookie 를 그대로 읽는다.
@@ -158,6 +159,41 @@ export const handlers = [
   ),
 
   http.get('/api/tasks/today', authed(() => HttpResponse.json({ items: TODAY_TASKS }))),
+
+  // ── 근태 · 휴가 (04 §10.2) ────────────────────────────────
+  // 백엔드는 501 스텁. 목록 응답의 `{items}` 감싸기와 항목 모양은 프론트 가정(PR 본문).
+  http.get('/api/leave-types', authed(() => HttpResponse.json({ items: LEAVE_TYPES }))),
+  http.get('/api/leaves/balance', authed((user) => HttpResponse.json(leaveBalance(user)))),
+  http.get('/api/leaves', authed((user) => HttpResponse.json({ items: listLeaves(user) }))),
+
+  http.post('/api/leaves', async ({ request }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    const input = (await request.json()) as Parameters<typeof createLeave>[1]
+    await delay(400)
+    const result = createLeave(user, input)
+    if ('error' in result) {
+      return HttpResponse.json({ detail: result.error, code: result.code }, { status: result.status })
+    }
+    return HttpResponse.json(result.leave, { status: 201 })
+  }),
+
+  http.post('/api/leaves/:leaveId/cancel', async ({ params }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    await delay(300)
+    const result = cancelLeave(user, String(params.leaveId))
+    if (result === 'not_found') {
+      return HttpResponse.json({ detail: '휴가 신청을 찾을 수 없습니다.', code: 'NOT_FOUND' }, { status: 404 })
+    }
+    if (result === 'conflict') {
+      return HttpResponse.json(
+        { detail: '이미 처리된 신청은 취소할 수 없습니다.', code: 'LEAVE_DECIDED' },
+        { status: 409 },
+      )
+    }
+    return HttpResponse.json(result)
+  }),
 
   // ── AI 어시스턴트 (04 §8) ─────────────────────────────────
   http.get('/api/ai/models', authed(() => HttpResponse.json(AI_MODELS))),

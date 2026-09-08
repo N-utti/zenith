@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, type ReactNode } from 'react'
+import { useEffect, useEffectEvent, useId, useRef, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import { cn } from '@/lib/cn'
@@ -49,6 +49,10 @@ export function Modal({
   const titleId = useId()
   const descId = useId()
 
+  // 호출부의 onClose 는 대개 매 렌더 새로 만들어지는 화살표 함수다. 그걸 이펙트 의존성에 두면
+  // 입력 한 글자마다 이펙트가 다시 돌아 포커스가 첫 요소(닫기 버튼)로 튄다. 이펙트 이벤트로 최신 것만 본다.
+  const requestClose = useEffectEvent(() => onClose())
+
   useEffect(() => {
     if (!open) return
 
@@ -66,7 +70,7 @@ export function Modal({
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault()
-        return onClose()
+        return requestClose()
       }
       if (e.key !== 'Tab' || !panel) return
 
@@ -88,7 +92,7 @@ export function Modal({
       document.body.style.overflow = overflow
       opener?.focus()
     }
-  }, [open, onClose])
+  }, [open])
 
   if (!open) return null
 
