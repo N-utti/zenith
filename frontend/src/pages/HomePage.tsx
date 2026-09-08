@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router'
 import { Plus } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { AnnouncementsCard } from '@/features/home/AnnouncementsCard'
+import { CalendarCard } from '@/features/home/CalendarCard'
 import { ContinueWorkCard } from '@/features/home/ContinueWorkCard'
 import { MentionsCard } from '@/features/home/MentionsCard'
 import { TodayTasksCard } from '@/features/home/TodayTasksCard'
@@ -69,6 +70,7 @@ export function HomePage() {
 
       <div className="mt-7 grid gap-6 lg:grid-cols-[1.5fr_1fr]">
         <div className="flex flex-col gap-6">
+          <CalendarCard />
           <ContinueWorkCard />
           <MentionsCard />
         </div>

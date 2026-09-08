@@ -1,11 +1,14 @@
 import type {
   LeaveBalance,
+  LeaveOnCalendar,
   LeaveRequest,
   LeaveRequestInput,
   LeaveType,
 } from '@/features/attendance/types'
 import { leaveDays } from '@/features/attendance/leaveDays'
+import { toISODate } from '@/lib/datetime'
 import type { User } from '@/types'
+import { MOCK_USERS } from './db'
 
 /**
  * 10 근태 설계서 §4.1 `leave_types` 시드. 무급 휴가(`unpaid`)는 뺐다. 직원이 폼에서 고르는
@@ -13,8 +16,20 @@ import type { User } from '@/types'
  */
 export const LEAVE_TYPES: LeaveType[] = [
   { code: 'annual', name: '연차', paid: true, deduct_days: 1, unit: 'day' },
-  { code: 'half_am', name: '오전 반차', paid: true, deduct_days: 0.5, unit: 'half' },
-  { code: 'half_pm', name: '오후 반차', paid: true, deduct_days: 0.5, unit: 'half' },
+  {
+    code: 'half_am',
+    name: '오전 반차',
+    paid: true,
+    deduct_days: 0.5,
+    unit: 'half',
+  },
+  {
+    code: 'half_pm',
+    name: '오후 반차',
+    paid: true,
+    deduct_days: 0.5,
+    unit: 'half',
+  },
   { code: 'sick', name: '병가', paid: true, deduct_days: 0, unit: 'day' },
   { code: 'family', name: '경조사', paid: true, deduct_days: 0, unit: 'day' },
   { code: 'official', name: '공가', paid: true, deduct_days: 0, unit: 'day' },
@@ -26,6 +41,50 @@ const GRANTED = 15
 
 const requests = new Map<string, LeaveRequest[]>()
 let seq = 1
+
+/** 오늘에서 n일 뒤의 평일. 주말에 걸리면 다음 월요일. 목 휴가가 토·일에 찍히면 버그처럼 보인다. */
+function workday(offset: number): string {
+  const date = new Date()
+  date.setDate(date.getDate() + offset)
+  while (date.getDay() === 0 || date.getDay() === 6) date.setDate(date.getDate() + 1)
+  return toISODate(date)
+}
+
+/**
+ * 홈 캘린더(전 직원 휴가)가 비어 보이지 않게 오늘 언저리에 깔아 두는 남의 휴가.
+ * 기본 시드(아래 `listFor`)에 얹히므로 이 사람으로 로그인해도 근태 화면의 데모 데이터는 그대로다.
+ */
+const EXTRA_SEEDS: Array<
+  [userId: string, type: string, start: string, end: string, status: LeaveRequest['status']]
+> = [
+  ['u-6', 'annual', workday(2), workday(3), 'approved'],
+  ['u-5', 'half_am', workday(-1), workday(-1), 'approved'],
+  ['u-7', 'annual', workday(8), workday(12), 'approved'],
+  ['u-3', 'official', workday(1), workday(1), 'approved'],
+  ['u-8', 'annual', workday(-6), workday(-5), 'approved'],
+  ['u-9', 'sick', workday(5), workday(5), 'pending'],
+]
+
+function extraSeeds(user: User): LeaveRequest[] {
+  return EXTRA_SEEDS.filter(([id]) => id === user.id).map(([, type_code, start, end, status]) => ({
+    id: `lv-${seq++}`,
+    type_code,
+    start_date: start,
+    end_date: end,
+    days: leaveDays(
+      LEAVE_TYPES.find((t) => t.code === type_code) ?? {
+        unit: 'day',
+        deduct_days: 0,
+      },
+      start,
+      end,
+    ),
+    reason: '',
+    status,
+    created_at: new Date(Date.now() - 5 * 86_400_000).toISOString(),
+    decided_at: status === 'pending' ? null : new Date(Date.now() - 4 * 86_400_000).toISOString(),
+  }))
+}
 
 function listFor(user: User): LeaveRequest[] {
   let list = requests.get(user.id)
@@ -54,6 +113,7 @@ function listFor(user: User): LeaveRequest[] {
         created_at: new Date(Date.now() - 3_600_000).toISOString(),
         decided_at: null,
       },
+      ...extraSeeds(user),
     ]
     requests.set(user.id, list)
   }
@@ -79,7 +139,22 @@ export function listLeaves(user: User): LeaveRequest[] {
   return [...listFor(user)].sort((a, b) => b.start_date.localeCompare(a.start_date))
 }
 
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
+/** 기간이 겹치는 전 직원의 승인 휴가. 전 직원을 훑어야 아직 근태 화면을 안 연 사람의 것도 나온다. */
+export function listLeavesInRange(from: string, to: string): LeaveOnCalendar[] {
+  return MOCK_USERS.flatMap((user) =>
+    listFor(user)
+      .filter((r) => r.status === 'approved' && r.start_date <= to && r.end_date >= from)
+      .map((r) => ({
+        id: r.id,
+        user: { id: user.id, name: user.name },
+        type_code: r.type_code,
+        start_date: r.start_date,
+        end_date: r.end_date,
+      })),
+  )
+}
+
+export const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
 
 export function createLeave(
   user: User,
@@ -90,7 +165,11 @@ export function createLeave(
   const start = input.start_date
   const end = type.unit === 'half' ? start : input.end_date
   if (!ISO_DATE.test(start) || !ISO_DATE.test(end) || end < start) {
-    return { error: '기간이 올바르지 않습니다.', status: 422, code: 'VALIDATION' }
+    return {
+      error: '기간이 올바르지 않습니다.',
+      status: 422,
+      code: 'VALIDATION',
+    }
   }
   // 사유는 차감 없는 휴가(병가·경조사·공가)에만 필수. 연차·반차는 받지 않는다.
   if (type.deduct_days === 0 && !input.reason?.trim()) {
@@ -99,7 +178,11 @@ export function createLeave(
   const days = leaveDays(type, start, end)
   if (days > leaveBalance(user).remaining) {
     // 04 §10.2: 잔여 부족 422. code 는 04 에 없어 프론트 가정(PR 본문).
-    return { error: '잔여 연차가 부족합니다.', status: 422, code: 'LEAVE_INSUFFICIENT' }
+    return {
+      error: '잔여 연차가 부족합니다.',
+      status: 422,
+      code: 'LEAVE_INSUFFICIENT',
+    }
   }
   const leave: LeaveRequest = {
     id: `lv-${seq++}`,

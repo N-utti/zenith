@@ -33,6 +33,19 @@ export interface LeaveRequest {
   decided_at: string | null
 }
 
+/**
+ * 전사 캘린더(홈)에 오르는 휴가. "누가 언제 어떤 휴가" 넷뿐이다.
+ * 사유·신청 시각은 본인과 결재선의 것이라 전 직원에게 보내지 않고, 승인된 것만 온다(대기분은 서버가 거른다).
+ * 04 §10.2 에 없는 응답(PR 본문).
+ */
+export interface LeaveOnCalendar {
+  id: string
+  user: { id: string; name: string }
+  type_code: string
+  start_date: string
+  end_date: string
+}
+
 export interface LeaveBalance {
   year: number
   granted: number
