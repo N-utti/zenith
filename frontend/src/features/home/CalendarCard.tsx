@@ -32,6 +32,12 @@ const WEEK_STARTS_ON = 1
 export function CalendarCard() {
   const [month, setMonth] = useState(currentMonth)
   const [selected, setSelected] = useState<string | null>(null)
+  // 범례를 눌러 종류별로 끈다. 휴가만 보거나 내 일정만 보거나.
+  const [show, setShow] = useState<Record<CalendarItem['kind'], boolean>>({
+    leave: true,
+    event: true,
+  })
+  const toggle = (kind: CalendarItem['kind']) => setShow((s) => ({ ...s, [kind]: !s[kind] }))
 
   // 보이는 칸(이웃 달 포함) 전체를 한 번에 묻는다. 달력에 빈 칸이 없어야 한다.
   const weeks = monthMatrix(month, WEEK_STARTS_ON)
@@ -46,7 +52,12 @@ export function CalendarCard() {
   const isError = leaves.isError || events.isError
   const isPending = leaves.isPending || events.isPending
 
-  const days = itemsByDay(leaves.data?.items ?? [], events.data?.items ?? [], typeName, range)
+  const days = itemsByDay(
+    (show.leave && leaves.data?.items) || [],
+    (show.event && events.data?.items) || [],
+    typeName,
+    range,
+  )
 
   return (
     <HomeSection title="캘린더" to="/attendance" linkLabel="근태">
@@ -56,7 +67,7 @@ export function CalendarCard() {
           month={month}
           onMonthChange={setMonth}
           weekStartsOn={WEEK_STARTS_ON}
-          actions={<Legend />}
+          actions={<Legend show={show} onToggle={toggle} />}
           // 격자는 그대로 두고 흐리게만 한다. 뼈대까지 갈아 끼우면 달력이 한 번 튄다.
           className={cn(isPending && 'animate-pulse opacity-60')}
           renderDay={(day) => {
@@ -116,17 +127,37 @@ export function CalendarCard() {
   )
 }
 
-function Legend() {
+const LEGEND: Array<[CalendarItem['kind'], string]> = [
+  ['leave', '휴가'],
+  ['event', '내 일정'],
+]
+
+/** 범례이자 토글. 끈 종류는 흐리게. */
+function Legend({
+  show,
+  onToggle,
+}: {
+  show: Record<CalendarItem['kind'], boolean>
+  onToggle: (kind: CalendarItem['kind']) => void
+}) {
   return (
-    <ul className="text-subtle flex items-center gap-3 text-xs">
-      <li className="flex items-center gap-1">
-        <span className={cn('size-2.5 rounded-sm', TONE.leave)} />
-        휴가
-      </li>
-      <li className="flex items-center gap-1">
-        <span className={cn('size-2.5 rounded-sm', TONE.event)} />내 일정
-      </li>
-    </ul>
+    <div className="flex items-center gap-1">
+      {LEGEND.map(([kind, label]) => (
+        <button
+          key={kind}
+          type="button"
+          aria-pressed={show[kind]}
+          onClick={() => onToggle(kind)}
+          className={cn(
+            'text-subtle hover:bg-surface-hover hover:text-fg flex items-center gap-1 rounded-md px-1.5 py-1 text-xs transition-colors',
+            !show[kind] && 'opacity-50',
+          )}
+        >
+          <span className={cn('size-2.5 rounded-sm', TONE[kind])} />
+          {label}
+        </button>
+      ))}
+    </div>
   )
 }
 

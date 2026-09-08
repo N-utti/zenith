@@ -116,6 +116,15 @@
     @apply outline-accent outline-2 outline-offset-2;
   }
 
+  /* 클릭 가능한 것은 전부 손 모양. Tailwind v4 가 button 기본 커서를 화살표로 바꿨다. */
+  button:not(:disabled),
+  [role='button']:not([aria-disabled='true']),
+  a[href],
+  summary,
+  label[for] {
+    cursor: pointer;
+  }
+
   /* 스크롤바를 앱 톤에 맞춘다 (Windows 데스크톱 앱에서 특히 티가 난다). */
   * {
     scrollbar-width: thin;
