@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useLocation } from 'react-router'
 import { RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
@@ -8,6 +9,7 @@ import { AiHistoryPanel } from '@/features/ai/AiHistoryPanel'
 import { Conversation } from '@/features/ai/Conversation'
 import { SourcesPanel } from '@/features/ai/SourcesPanel'
 import { useAiModels, useAsk } from '@/features/ai/api'
+import type { AskState } from '@/features/ai/types'
 import { resetThread, useThread } from '@/features/ai/store'
 
 /**
@@ -28,19 +30,33 @@ export function AiPage() {
   const { messages } = useThread()
   const ask = useAsk()
   const toast = useToast()
-  const [seed, setSeed] = useState<string | null>(null)
+  // 컴포저를 채울 글과 리마운트 열쇠. 같은 글을 두 번 채워도 열쇠(횟수)가 바뀌어 리마운트된다.
+  const [seed, setSeed] = useState({ text: '', n: 0 })
+  const fill = (text: string) => setSeed((s) => ({ text, n: s.n + 1 }))
   const [confirmReset, setConfirmReset] = useState(false)
+
+  // 팔레트에서 넘어온 검색어를 한 번만 컴포저에 채운다. 이미 /ai 에 있을 때 또 넘어와도
+  // location.key 가 바뀌므로 다시 채워진다(이전 렌더 기억 패턴, effect 아님).
+  const location = useLocation()
+  const asked = (location.state as AskState | null)?.ask
+  const [askedKey, setAskedKey] = useState<string | null>(null)
+  if (asked && location.key !== askedKey) {
+    setAskedKey(location.key)
+    fill(asked)
+  }
 
   // 질문은 붙었는데 첫 토큰이 아직 안 왔을 때만 "생성 중" 을 보여준다. 그 뒤로는 말풍선이 자란다.
   const generating = ask.isPending && messages.at(-1)?.role === 'user'
 
   return (
     <div className="flex h-full">
-      <AiHistoryPanel messages={messages} onPick={(question) => setSeed(question)} />
+      <AiHistoryPanel messages={messages} onPick={fill} />
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="border-line bg-surface flex h-13 shrink-0 items-center gap-2.5 border-b px-5 py-2.5">
-          <h1 className="text-fg shrink-0 text-[15.5px] font-bold whitespace-nowrap">AI 어시스턴트</h1>
+          <h1 className="text-fg shrink-0 text-[15.5px] font-bold whitespace-nowrap">
+            AI 어시스턴트
+          </h1>
           <span className="text-subtle hidden text-xs sm:inline">사내 위키 기반 답변</span>
           <ProviderBadge />
           {messages.length > 0 && (
@@ -67,14 +83,11 @@ export function AiPage() {
         )}
 
         <AiComposer
-          key={seed ?? 'composer'}
+          key={seed.n}
           models={models ?? []}
-          initialText={seed ?? ''}
+          initialText={seed.text}
           disabled={ask.isPending}
-          onSend={(prompt, scope) => {
-            setSeed(null)
-            ask.mutate({ prompt, scope })
-          }}
+          onSend={(prompt, scope) => ask.mutate({ prompt, scope })}
         />
       </div>
 

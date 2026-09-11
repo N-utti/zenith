@@ -38,6 +38,9 @@ export interface AiTemplate {
   prompt: string
 }
 
+/** ⌘K 팔레트가 `navigate('/ai', { state })` 로 실어 보내는 검색어. 컴포저에 채우기만 하고 보내지는 않는다. */
+export type AskState = { ask: string }
+
 /** `POST /ai/chat` 의 `scope`. 04 는 문자열 하나만 정했고 어휘는 아직 없다(PR 본문에 제안). */
 export interface AiScope {
   id: string
