@@ -36,4 +36,4 @@ uv run pytest            # Postgres 가 있으면 zenith_test 로 DB 테스트�
 - Python 3.13 · ruff line-length 100(`E501` 무시 — 한글 폭 문제) · 한국어 주석·docstring · 타입 힌트.
 - `alembic.ini` 에 **한글 주석 금지** — Windows 에서 configparser 가 cp949 로 읽어 깨진다. 한글은 `env.py`·마이그레이션 파일에.
 - 포트가 겹치는 PC 는 `ZENITH_DB_PORT`·`uvicorn --port` 로 비킨다. 개인 환경 값은 `.env`(미커밋)에만.
-- Redis·MinIO 는 compose 에 있지만 코드가 아직 안 쓴다. 쓰기 시작할 때 `config.py` 의 자리표시자를 그대로 쓴다.
+- Redis 는 compose 에 있지만 코드가 아직 안 쓴다. 쓰기 시작할 때 `config.py` 의 자리표시자를 그대로 쓴다. MinIO 는 `app/storage.py` 뒤에서만(첨부) — 첨부 테스트는 MinIO 가 없으면 skip 된다(compose 의 `minio` 를 띄울 것).

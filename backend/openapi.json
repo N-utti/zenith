@@ -1142,19 +1142,108 @@
         "tags": [
           "chat"
         ],
-        "summary": "multipart 업로드 → MinIO, {url, name, size}",
-        "operationId": "stub_api_channels__id__attachments_post",
+        "summary": "multipart `file` 업로드 → MinIO. 10MB 초과·빈 파일 422. {url, name, size} 를 msg op 의 attachments[] 에 그대로 넣는다",
+        "operationId": "upload_attachment_api_channels__id__attachments_post",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_attachment_api_channels__id__attachments_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttachmentOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/channels/{id}/attachments/{file_id}/{name}": {
+      "get": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "첨부 내려받기 — 채널 멤버만. 이미지(png·jpeg·gif·webp)는 inline, 나머지는 attachment",
+        "operationId": "download_attachment_api_channels__id__attachments__file_id___name__get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          },
+          {
+            "name": "file_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "File Id"
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
-              "application/json": {
-                "schema": {}
-              }
+              "application/octet-stream": {}
             }
           },
-          "501": {
-            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
           }
         }
       }
@@ -2631,6 +2720,35 @@
   },
   "components": {
     "schemas": {
+      "AttachmentOut": {
+        "properties": {
+          "url": {
+            "type": "string",
+            "maxLength": 2000,
+            "title": "Url"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "size": {
+            "type": "integer",
+            "maximum": 10485760.0,
+            "minimum": 0.0,
+            "title": "Size"
+          }
+        },
+        "type": "object",
+        "required": [
+          "url",
+          "name",
+          "size"
+        ],
+        "title": "AttachmentOut",
+        "description": "업로드 응답이자 messages.attachments[] 항목(03 §2.3 JSONB)."
+      },
       "AuditOut": {
         "properties": {
           "id": {
@@ -2775,6 +2893,20 @@
           "allowed"
         ],
         "title": "BoardOut"
+      },
+      "Body_upload_attachment_api_channels__id__attachments_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_attachment_api_channels__id__attachments_post"
       },
       "ChannelCreateIn": {
         "properties": {
@@ -3618,7 +3750,9 @@
           "attachments": {
             "anyOf": [
               {
-                "items": {},
+                "items": {
+                  "$ref": "#/components/schemas/AttachmentOut"
+                },
                 "type": "array"
               },
               {

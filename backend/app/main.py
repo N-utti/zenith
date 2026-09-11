@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.config import settings
 from app.deps import csrf_guard
@@ -17,6 +18,10 @@ from app.routers import (
     me,
     search,
 )
+
+MAX_BODY_BYTES = (
+    12 * 1024 * 1024
+)  # 첨부 상한(routers/channels.py MAX_ATTACHMENT_BYTES) + multipart 여유
 
 
 def create_app() -> FastAPI:
@@ -40,6 +45,20 @@ def create_app() -> FastAPI:
             allow_methods=["*"],
             allow_headers=["*"],
         )
+
+    @app.middleware("http")
+    async def body_limit(request, call_next):
+        # FastAPI 는 인증·CSRF 의존성보다 먼저 multipart 본문을 다 받아 둔다(임시 파일) — 로그인 없이도 디스크를
+        # 채울 수 있으므로 라우팅 전에 길이부터 본다. 첨부 10MB(FR-CHT-04) + multipart 봉투 여유.
+        # ponytail: Content-Length 만 본다. chunked 전송은 못 막는다 — Caddy 가 붙으면 request_body max_size 로.
+        length = request.headers.get("content-length", "")
+        if length.isdigit() and int(length) > MAX_BODY_BYTES:
+            return JSONResponse(
+                {"detail": "요청 본문이 너무 큽니다(첨부는 10MB 이하).", "code": "VALIDATION"},
+                status_code=422,
+                headers={"Cache-Control": "no-store"},
+            )
+        return await call_next(request)
 
     @app.middleware("http")
     async def no_store(request, call_next):

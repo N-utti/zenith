@@ -29,7 +29,14 @@ from typing import Annotated, Literal
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.encoders import jsonable_encoder
-from pydantic import BaseModel, Field, StringConstraints, TypeAdapter, ValidationError
+from pydantic import (
+    BaseModel,
+    Field,
+    StringConstraints,
+    TypeAdapter,
+    ValidationError,
+    model_validator,
+)
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -38,6 +45,7 @@ from app.db import session_scope
 from app.deps import _own_origin, authenticate, origin_allowed
 from app.errors import ApiError
 from app.models import ChannelMember, Document, Message, Notification, User
+from app.routers.channels import MAX_ATTACHMENTS, AttachmentOut, parse_attachment_url
 
 log = logging.getLogger("zenith.ws")
 
@@ -48,7 +56,7 @@ MENTION = re.compile(r"@(\S+)")
 
 SOCKETS: dict[uuid.UUID, set[WebSocket]] = {}  # 사용자 → 열린 소켓들(탭마다 하나)
 
-Body = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=10_000)]
+Body = Annotated[str, StringConstraints(strip_whitespace=True, max_length=10_000)]
 
 
 class SubOp(BaseModel):
@@ -59,8 +67,16 @@ class SubOp(BaseModel):
 class MsgOp(BaseModel):
     op: Literal["msg"]
     channel_id: uuid.UUID
-    body: Body
+    body: Body = ""  # 첨부만 보낼 때는 비어도 된다
     doc_ref: uuid.UUID | None = None  # 문서 카드 (FR-DOC-07)
+    # POST /channels/{id}/attachments 의 응답을 그대로 (FR-CHT-04). url 이 이 채널의 것인지는 _handle 이 대조한다
+    attachments: list[AttachmentOut] | None = Field(default=None, max_length=MAX_ATTACHMENTS)
+
+    @model_validator(mode="after")
+    def _body_or_attachments(self) -> "MsgOp":
+        if not self.body and not self.attachments:
+            raise ValueError("본문이나 첨부 중 하나는 있어야 한다.")
+        return self
 
 
 class ReadOp(BaseModel):
@@ -207,11 +223,30 @@ async def _handle(ws: WebSocket, user: User, op: SubOp | MsgOp | ReadOp | Typing
                         ),
                     )
                     return
+            # 남의 채널에 올린 파일(멤버였다가 빠졌거나 URL 을 손으로 만든 경우)을 여기에 끼우면 다운로드가 열린다 —
+            # 다운로드도 멤버십을 보지만, 메시지에는 이 채널의 URL 만 남긴다. 표시 이름도 URL 의 것과 같아야
+            # 한다(report.png 를 "연봉계약서.pdf" 로 보이게 못 한다). size 는 표시용 — 존재 확인은 다운로드 때 404.
+            if op.attachments and any(
+                parse_attachment_url(a.url, op.channel_id) != a.name for a in op.attachments
+            ):
+                await _send(
+                    ws,
+                    _dumps(
+                        _error(
+                            "VALIDATION",
+                            "이 채널에 올린 첨부가 아닙니다.",
+                            channel_id=op.channel_id,
+                        )
+                    ),
+                )
+                return
+            attachments = [a.model_dump() for a in op.attachments] if op.attachments else None
             message = Message(
                 channel_id=op.channel_id,
                 author_id=user.id,
                 body=op.body,
                 doc_ref=op.doc_ref,
+                attachments=attachments,
                 created_at=now,
             )
             db.add(message)
@@ -254,7 +289,7 @@ async def _handle(ws: WebSocket, user: User, op: SubOp | MsgOp | ReadOp | Typing
                             "author": {"id": user.id, "name": user.name},
                             "body": op.body,
                             "doc_ref": op.doc_ref,
-                            "attachments": None,
+                            "attachments": attachments,
                             "created_at": now,
                         },
                     },
