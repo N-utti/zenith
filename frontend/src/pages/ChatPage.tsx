@@ -33,8 +33,11 @@ export function ChatPage() {
   }, [channelId, latestId, markRead])
 
   return (
-    <div className="flex h-full flex-col md:flex-row">
-      <ChannelList />
+    <div className="flex h-full flex-col">
+      {/* 방을 못 정한 동안(안 고름 · 목록 로딩 중 · 없는 id): 모바일은 목록, 데스크톱은 안내(방 목록은
+          전역 사이드바). 정해지면 둘 다 방. channelId 가 아니라 channel 로 가르는 이유는 딥링크로
+          들어온 모바일이 목록 응답 전이나 잘못된 id 에서 빈 화면이 되지 않게 하려는 것. */}
+      {!channel && <ChannelList />}
 
       {channelId && channel ? (
         <div className="flex min-h-0 flex-1 flex-col">
@@ -73,7 +76,7 @@ export function ChatPage() {
           />
         </div>
       ) : (
-        <div className="grid flex-1 place-items-center p-8">
+        <div className="hidden flex-1 place-items-center p-8 md:grid">
           <div className="text-center">
             <MessagesSquare className="text-subtle mx-auto size-8" />
             <p className="text-fg mt-3 text-sm font-medium">채널을 선택하세요</p>
