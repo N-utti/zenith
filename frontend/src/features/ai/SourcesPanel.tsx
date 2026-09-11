@@ -1,15 +1,46 @@
+import { useEffect, useRef } from 'react'
 import { Link } from 'react-router'
 import { FileText, ShieldCheck } from 'lucide-react'
-import type { AiMessage, Citation } from './types'
+import { cn } from '@/lib/cn'
+import type { AiMessage, Citation, CitationFocus } from './types'
 
-export function SourceCard({ source }: { source: Citation }) {
+export function SourceCard({
+  source,
+  activeTick,
+}: {
+  source: Citation
+  /** 눌린 각주의 클릭 일련번호. 값이 있으면 이 카드가 켜진다. */
+  activeTick?: number
+}) {
+  const active = activeTick !== undefined
+  const ref = useRef<HTMLAnchorElement>(null)
+  // 각주를 누르면 그 카드로 스크롤하고 포커스를 옮긴다(키보드·스크린리더도 이동을 안다).
+  // 숨겨진(display:none) 카드에서는 아무 일도 없다.
+  useEffect(() => {
+    if (activeTick === undefined) return
+    ref.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    ref.current?.focus({ preventScroll: true })
+  }, [activeTick])
+
   return (
     <Link
+      ref={ref}
       to={`/docs/${source.doc_id}`}
-      className="border-line bg-surface hover:border-line-strong block rounded-xl border p-3.5 transition-colors"
+      aria-current={active || undefined}
+      className={cn(
+        'bg-surface block rounded-xl border p-3.5 transition-colors',
+        active ? 'border-accent' : 'border-line hover:border-line-strong',
+      )}
     >
       <div className="flex items-center gap-2">
-        <span className="bg-sunken text-muted rounded px-1.5 text-[11px] font-bold">{source.n}</span>
+        <span
+          className={cn(
+            'rounded px-1.5 text-[11px] font-bold',
+            active ? 'bg-accent-soft text-accent' : 'bg-sunken text-muted',
+          )}
+        >
+          {source.n}
+        </span>
         <span className="text-fg min-w-0 flex-1 truncate text-[13px] font-semibold">
           {source.title}
         </span>
@@ -34,11 +65,21 @@ export function ExcludedNote() {
 /**
  * 우측 근거 문서 패널. `lg` 미만에서는 숨고, 대신 답변 아래 인라인 목록이 나온다.
  *
- * 마지막 assistant 답변의 근거만 보여준다. 대화 전체를 쌓으면 어느 문장의 근거인지 잃는다.
+ * 한 답변의 근거만 보여준다. 대화 전체를 쌓으면 어느 문장의 근거인지 잃는다.
+ * 기본은 마지막 답변이고, 예전 답변의 각주를 누르면 그 답변으로 바뀐다.
  */
-export function SourcesPanel({ messages }: { messages: AiMessage[] }) {
-  const last = [...messages].reverse().find((m) => m.role === 'assistant')
-  const sources = last?.citations ?? []
+export function SourcesPanel({
+  messages,
+  focus,
+}: {
+  messages: AiMessage[]
+  focus: CitationFocus | null
+}) {
+  const shown =
+    (focus && messages.find((m) => m.id === focus.messageId)) ??
+    [...messages].reverse().find((m) => m.role === 'assistant')
+  const sources = shown?.citations ?? []
+  const activeFocus = shown && focus?.messageId === shown.id ? focus : null
 
   return (
     <aside className="border-line bg-canvas hidden w-72 shrink-0 flex-col border-l lg:flex">
@@ -60,7 +101,10 @@ export function SourcesPanel({ messages }: { messages: AiMessage[] }) {
             <ul className="space-y-3.5">
               {sources.map((source) => (
                 <li key={source.n}>
-                  <SourceCard source={source} />
+                  <SourceCard
+                    source={source}
+                    activeTick={activeFocus?.n === source.n ? activeFocus.tick : undefined}
+                  />
                 </li>
               ))}
             </ul>

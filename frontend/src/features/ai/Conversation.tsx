@@ -5,20 +5,39 @@ import { cn } from '@/lib/cn'
 import { useToast } from '@/components/ui/ToastContext'
 import { useFeedback } from './api'
 import { ExcludedNote, SourceCard } from './SourcesPanel'
-import type { AiMessage } from './types'
+import type { AiMessage, CitationFocus } from './types'
 
-/** 본문의 `[[1]]` 표식을 각주 배지로 바꾼다. */
-function withCitations(body: string) {
-  return body.split(/(\[\[\d+\]\])/g).map((part, i) => {
+/**
+ * 본문의 `[[1]]` 표식을 각주로 바꾼다. 근거 목록에 있는 번호는 버튼이 되어 누르면 같은 번호의
+ * 근거 카드가 켜진다(05 SCR-06). 근거가 아직 안 왔거나(스트리밍 중) 없는 번호는 배지로만 둔다.
+ */
+function withCitations(message: AiMessage, activeN: number | null, onCite: (n: number) => void) {
+  const badge = 'ml-0.5 rounded px-1 py-0.5 align-super text-[11px] font-bold'
+  return message.body.split(/(\[\[\d+\]\])/g).map((part, i) => {
     const match = /^\[\[(\d+)\]\]$/.exec(part)
     if (!match) return <Fragment key={i}>{part}</Fragment>
+    const n = Number(match[1])
+    if (!message.citations?.some((c) => c.n === n)) {
+      return (
+        <sup key={i} className={cn(badge, 'bg-sunken text-muted')}>
+          {n}
+        </sup>
+      )
+    }
     return (
-      <sup
+      <button
         key={i}
-        className="bg-sunken text-muted ml-0.5 rounded px-1 py-0.5 text-[11px] font-bold"
+        type="button"
+        onClick={() => onCite(n)}
+        aria-label={`근거 ${n} 보기`}
+        className={cn(
+          badge,
+          'cursor-pointer transition-colors',
+          n === activeN ? 'bg-accent-soft text-accent' : 'bg-sunken text-muted hover:text-fg',
+        )}
       >
-        {match[1]}
-      </sup>
+        {n}
+      </button>
     )
   })
 }
@@ -63,7 +82,11 @@ function AnswerActions({ id, body }: { id: string; body: string }) {
         disabled={feedback.isPending}
         aria-pressed={helpful}
         // 누르는 순간(active)부터 파랗고, 눌린 상태는 호버·전송 중 반투명보다 우선한다.
-        className={cn(item, 'active:text-accent', helpful && 'text-accent hover:text-accent disabled:opacity-100')}
+        className={cn(
+          item,
+          'active:text-accent',
+          helpful && 'text-accent hover:text-accent disabled:opacity-100',
+        )}
       >
         <ThumbsUp className={cn('size-3.5', helpful && 'fill-current')} />
         도움돼요
@@ -106,12 +129,17 @@ export function Conversation({
   messages,
   generating,
   streaming,
+  focus,
+  onCite,
 }: {
   messages: AiMessage[]
   /** 질문은 갔는데 첫 토큰이 아직 안 왔다. */
   generating: boolean
   /** 답변이 자라는 중. 마지막 말풍선의 액션은 다 받은 뒤에 보인다. */
   streaming: boolean
+  /** 눌린 각주. 같은 답변의 같은 번호만 켜진다. */
+  focus: CitationFocus | null
+  onCite: (focus: Omit<CitationFocus, 'tick'>) => void
 }) {
   const endRef = useRef<HTMLDivElement>(null)
 
@@ -139,11 +167,11 @@ export function Conversation({
               <div className="min-w-0 flex-1">
                 <p className="text-fg text-[13px] font-semibold">AI 어시스턴트</p>
                 <p className="text-fg mt-1.5 text-sm leading-[1.75]">
-                  {withCitations(message.body)}
+                  {withCitations(message, focus?.messageId === message.id ? focus.n : null, (n) =>
+                    onCite({ messageId: message.id, n }),
+                  )}
                 </p>
-                {message.error && (
-                  <p className="text-danger mt-2 text-xs">{message.error}</p>
-                )}
+                {message.error && <p className="text-danger mt-2 text-xs">{message.error}</p>}
                 {!message.error && !(streaming && index === messages.length - 1) && (
                   <AnswerActions id={message.id} body={message.body} />
                 )}
@@ -157,7 +185,14 @@ export function Conversation({
                     <ul className="space-y-2">
                       {message.citations?.map((source) => (
                         <li key={source.n}>
-                          <SourceCard source={source} />
+                          <SourceCard
+                            source={source}
+                            activeTick={
+                              focus?.messageId === message.id && focus.n === source.n
+                                ? focus.tick
+                                : undefined
+                            }
+                          />
                         </li>
                       ))}
                     </ul>

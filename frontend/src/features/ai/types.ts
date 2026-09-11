@@ -31,6 +31,14 @@ export interface AiMessage {
   error?: string
 }
 
+/** 사용자가 누른 각주. 답변 본문의 `[[n]]` 과 근거 카드가 같은 짝으로 켜진다. */
+export interface CitationFocus {
+  messageId: string
+  n: number
+  /** 클릭 일련번호. 같은 각주를 다시 눌러도 카드로 다시 이동하게 한다. */
+  tick: number
+}
+
 /** 컴포저에 프롬프트를 채워 주는 자동작성 템플릿. */
 export interface AiTemplate {
   id: string
