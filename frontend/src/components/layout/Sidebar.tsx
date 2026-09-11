@@ -1,10 +1,11 @@
 import type { ReactNode } from 'react'
 import { NavLink, useLocation } from 'react-router'
-import { X } from 'lucide-react'
+import { AtSign, X } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { SECONDARY_NAV, TOP_NAV, type NavItem } from '@/app/navigation'
 import { useBoards } from '@/features/board/api'
 import { useChannels } from '@/features/chat/api'
+import type { ChatChannel } from '@/features/chat/types'
 import { Button } from '@/components/ui/Button'
 import { MaskedRow } from '@/components/ui/MaskedRow'
 import { DocTree } from './DocTree'
@@ -36,30 +37,45 @@ function NavRow({ item, onNavigate }: { item: NavItem; onNavigate?: () => void }
   )
 }
 
+function ChannelRow({ channel, onNavigate }: { channel: ChatChannel; onNavigate?: () => void }) {
+  return (
+    <NavLink
+      to={`/chat/${channel.id}`}
+      onClick={onNavigate}
+      className={({ isActive }) => cn(ROW, isActive ? ROW_ACTIVE : ROW_IDLE)}
+    >
+      {channel.kind === 'channel' ? (
+        <span className="text-subtle shrink-0">#</span>
+      ) : (
+        <AtSign className="text-subtle size-4 shrink-0" />
+      )}
+      <span className="truncate">{channel.name}</span>
+      {channel.unread > 0 && (
+        <span className="bg-muted text-surface ml-auto shrink-0 rounded-full px-1.5 text-[11px] font-bold">
+          {channel.unread}
+        </span>
+      )}
+    </NavLink>
+  )
+}
+
 function ChannelSection({ onNavigate }: { onNavigate?: () => void }) {
   // 채팅은 MSW가 아니라 개발 서버로 간다. 안 떠 있으면 섹션을 통째로 접는다.
+  // 데스크톱 채팅 화면에는 방 목록이 따로 없다. 이 섹션이 곧 방 목록이라 DM 도 여기 둔다.
   const { data } = useChannels()
   const channels = (data?.items ?? []).filter((channel) => channel.kind === 'channel')
-  if (channels.length === 0) return null
+  const dms = (data?.items ?? []).filter((channel) => channel.kind === 'dm')
+  if (channels.length === 0 && dms.length === 0) return null
 
   return (
     <>
-      <SectionLabel>채널</SectionLabel>
+      {channels.length > 0 && <SectionLabel>채널</SectionLabel>}
       {channels.map((channel) => (
-        <NavLink
-          key={channel.id}
-          to={`/chat/${channel.id}`}
-          onClick={onNavigate}
-          className={({ isActive }) => cn(ROW, isActive ? ROW_ACTIVE : ROW_IDLE)}
-        >
-          <span className="text-subtle shrink-0">#</span>
-          <span className="truncate">{channel.name}</span>
-          {channel.unread > 0 && (
-            <span className="bg-muted text-surface ml-auto shrink-0 rounded-full px-1.5 text-[11px] font-bold">
-              {channel.unread}
-            </span>
-          )}
-        </NavLink>
+        <ChannelRow key={channel.id} channel={channel} onNavigate={onNavigate} />
+      ))}
+      {dms.length > 0 && <SectionLabel>다이렉트 메시지</SectionLabel>}
+      {dms.map((channel) => (
+        <ChannelRow key={channel.id} channel={channel} onNavigate={onNavigate} />
       ))}
     </>
   )
@@ -125,7 +141,7 @@ export function Sidebar({
   onClose,
 }: {
   open: boolean
-  /** 데스크톱에서 접힘. AI·채팅처럼 화면 안에 패널이 하나 더 있을 때 자리를 내준다. */
+  /** 데스크톱에서 접힘. AI 처럼 화면 안에 패널이 하나 더 있을 때 자리를 내준다. */
   collapsed: boolean
   onClose: () => void
 }) {

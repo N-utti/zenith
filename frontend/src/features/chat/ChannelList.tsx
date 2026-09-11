@@ -47,6 +47,10 @@ function Row({ channel }: { channel: ChatChannel }) {
   )
 }
 
+/**
+ * 모바일 전용 방 목록. 데스크톱은 전역 사이드바(`layout/Sidebar`)의 채널·DM 섹션이 방 목록이라
+ * 같은 목록을 두 번 그리지 않는다. 모바일은 사이드바가 서랍이라 방을 고르기 전 화면에 이게 필요하다.
+ */
 export function ChannelList() {
   const { data, isPending, isError } = useChannels()
 
@@ -54,7 +58,7 @@ export function ChannelList() {
   const dms = data?.items.filter((c) => c.kind === 'dm') ?? []
 
   return (
-    <nav className="border-line bg-surface flex w-full shrink-0 flex-col overflow-y-auto border-b md:w-64 md:border-r md:border-b-0">
+    <nav className="bg-surface flex min-h-0 w-full flex-1 flex-col overflow-y-auto md:hidden">
       {isPending && (
         <div className="grid place-items-center py-8">
           <Spinner />
