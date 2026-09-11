@@ -1,8 +1,11 @@
+import { useMemo } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
+import { toISODate } from '@/lib/datetime'
 import type {
   Arrangement,
   ArrangementInput,
+  ArrangementKind,
   ArrangementOnCalendar,
   AttendanceMonth,
   Correction,
@@ -114,6 +117,22 @@ export function useAllArrangements(from: string, to: string) {
         `/attendance/arrangements?scope=all&from=${from}&to=${to}`,
       ),
   })
+}
+
+/**
+ * 오늘 재택·외근·출장 중인 사람의 id → 종류. 채팅 DM 행 옆에 "재택" 같은 근무 상태를 붙일 때 쓴다.
+ * 같은 사람이 겹치면 먼저 온 것 하나만 남는다(승인된 예외 근무는 하루에 하나가 정상).
+ * 날짜는 렌더 때 계산한다. 자정을 넘겨도 재렌더 전에는 어제 키로 남지만 채팅 갱신이 잦아 곧 바뀐다.
+ */
+export function useTodayArrangementKinds() {
+  const today = toISODate(new Date())
+  const { data } = useAllArrangements(today, today)
+  return useMemo(() => {
+    const map = new Map<string, ArrangementKind>()
+    for (const item of data?.items ?? [])
+      if (!map.has(item.user.id)) map.set(item.user.id, item.kind)
+    return map
+  }, [data])
 }
 
 /** 내 연장근로 목록과 누계. `from`·`to` 는 ISO 날짜(양끝 포함). */

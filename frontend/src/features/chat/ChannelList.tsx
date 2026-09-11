@@ -5,6 +5,7 @@ import { cn } from '@/lib/cn'
 import { formatRelative } from '@/lib/datetime'
 import { useChannels } from './api'
 import type { ChatChannel } from './types'
+import { WorkStatus } from './WorkStatus'
 
 function Row({ channel }: { channel: ChatChannel }) {
   const Icon = channel.kind === 'channel' ? Hash : AtSign
@@ -21,13 +22,16 @@ function Row({ channel }: { channel: ChatChannel }) {
     >
       <Icon className="text-subtle size-4 shrink-0" />
       <div className="min-w-0 flex-1">
-        <p
-          className={cn(
-            'truncate text-sm',
-            channel.unread > 0 ? 'text-fg font-semibold' : 'text-muted',
-          )}
-        >
-          {channel.name}
+        <p className="flex items-center gap-1.5">
+          <span
+            className={cn(
+              'min-w-0 truncate text-sm',
+              channel.unread > 0 ? 'text-fg font-semibold' : 'text-muted',
+            )}
+          >
+            {channel.name}
+          </span>
+          <WorkStatus channel={channel} />
         </p>
         {channel.lastMessage && (
           <p className="text-subtle truncate text-xs">{channel.lastMessage}</p>

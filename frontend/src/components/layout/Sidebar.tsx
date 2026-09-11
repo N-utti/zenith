@@ -5,6 +5,7 @@ import { cn } from '@/lib/cn'
 import { SECONDARY_NAV, TOP_NAV, type NavItem } from '@/app/navigation'
 import { useBoards } from '@/features/board/api'
 import { useChannels } from '@/features/chat/api'
+import { WorkStatus } from '@/features/chat/WorkStatus'
 import type { ChatChannel } from '@/features/chat/types'
 import { Button } from '@/components/ui/Button'
 import { MaskedRow } from '@/components/ui/MaskedRow'
@@ -50,6 +51,7 @@ function ChannelRow({ channel, onNavigate }: { channel: ChatChannel; onNavigate?
         <AtSign className="text-subtle size-4 shrink-0" />
       )}
       <span className="truncate">{channel.name}</span>
+      <WorkStatus channel={channel} />
       {channel.unread > 0 && (
         <span className="bg-muted text-surface ml-auto shrink-0 rounded-full px-1.5 text-[11px] font-bold">
           {channel.unread}
