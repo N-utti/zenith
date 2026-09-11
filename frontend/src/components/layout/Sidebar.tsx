@@ -119,12 +119,32 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   )
 }
 
-export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function Sidebar({
+  open,
+  collapsed,
+  onClose,
+}: {
+  open: boolean
+  /** 데스크톱에서 접힘. AI·채팅처럼 화면 안에 패널이 하나 더 있을 때 자리를 내준다. */
+  collapsed: boolean
+  onClose: () => void
+}) {
   return (
     <>
-      {/* 데스크톱: 항상 고정. 폭 270px은 12·UI 청사진 1b 셸 치수다. */}
-      <aside className="border-line bg-sunken hidden w-[270px] shrink-0 border-r md:block">
-        <SidebarContent />
+      {/* 데스크톱: 고정. 폭 270px은 12·UI 청사진 1b 셸 치수다. 접으면 폭을 0 으로 밀어 넣는다(아이콘 레일 없음).
+          안쪽은 폭을 고정해 줄어드는 동안 내용이 찌그러지지 않고, 마운트를 유지해 문서 트리의 펼침이 남는다.
+          접힌 동안은 inert 로 탭 이동에서도 뺀다. */}
+      <aside
+        inert={collapsed}
+        className={cn(
+          'border-line bg-sunken hidden shrink-0 overflow-hidden md:block',
+          'motion-safe:transition-[width,border-color] motion-safe:duration-200 motion-safe:ease-out',
+          collapsed ? 'w-0 border-r border-transparent' : 'w-[270px] border-r',
+        )}
+      >
+        <div className="h-full w-[270px]">
+          <SidebarContent />
+        </div>
       </aside>
 
       {/* 모바일: 왼쪽 서랍 */}
