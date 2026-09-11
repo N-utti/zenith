@@ -41,6 +41,8 @@ const CHANNELS = [
   { id: 'c-dev', kind: 'channel', name: '개발', memberIds: ALL },
   { id: 'c-random', kind: 'channel', name: '잡담', memberIds: ALL },
   { id: 'dm-u1-u2', kind: 'dm', memberIds: ['u-1', 'u-2'] },
+  // u-5 안재호는 MSW 근태 시드에서 오늘 재택이다. DM 행의 근무 상태 표시를 보여 주는 용도.
+  { id: 'dm-u2-u5', kind: 'dm', memberIds: ['u-2', 'u-5'] },
 ]
 
 const minutesAgo = (m) => new Date(Date.now() - m * 60_000).toISOString()
@@ -80,6 +82,10 @@ const messages = new Map([
   [
     'dm-u1-u2',
     [makeMessage('dm-u1-u2', 'u-2', '내일 스탠드업 30분 당길 수 있을까요?', minutesAgo(38))],
+  ],
+  [
+    'dm-u2-u5',
+    [makeMessage('dm-u2-u5', 'u-5', '오늘 재택이라 펀드 보고서는 메일로 드릴게요.', minutesAgo(140))],
   ],
 ])
 
