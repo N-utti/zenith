@@ -1,4 +1,4 @@
-import { Moon, PanelLeft, Search, Sun } from 'lucide-react'
+import { Moon, PanelLeft, PanelLeftClose, PanelLeftOpen, Search, Sun } from 'lucide-react'
 import { Link } from 'react-router'
 import { Button } from '@/components/ui/Button'
 import { ZenithMark } from '@/components/ui/ZenithMark'
@@ -7,9 +7,13 @@ import { UserMenu } from './UserMenu'
 
 export function Header({
   onOpenSidebar,
+  collapsed,
+  onToggleCollapsed,
   onOpenCommandPalette,
 }: {
   onOpenSidebar: () => void
+  collapsed: boolean
+  onToggleCollapsed: () => void
   onOpenCommandPalette: () => void
 }) {
   const { theme, toggle } = useTheme()
@@ -25,6 +29,22 @@ export function Header({
         className="px-2 md:hidden"
       >
         <PanelLeft className="size-4.5" />
+      </Button>
+      {/* 데스크톱: 같은 자리의 버튼이 서랍이 아니라 고정 사이드바를 접고 편다. */}
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={onToggleCollapsed}
+        aria-label={collapsed ? '사이드바 펴기' : '사이드바 접기'}
+        aria-expanded={!collapsed}
+        title={collapsed ? '사이드바 펴기' : '사이드바 접기'}
+        className="hidden px-2 md:inline-flex"
+      >
+        {collapsed ? (
+          <PanelLeftOpen className="size-4.5" />
+        ) : (
+          <PanelLeftClose className="size-4.5" />
+        )}
       </Button>
 
       <Link to="/" className="flex shrink-0 items-center gap-1.5">
