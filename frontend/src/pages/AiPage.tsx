@@ -9,7 +9,7 @@ import { AiHistoryPanel } from '@/features/ai/AiHistoryPanel'
 import { Conversation } from '@/features/ai/Conversation'
 import { SourcesPanel } from '@/features/ai/SourcesPanel'
 import { useAiModels, useAsk } from '@/features/ai/api'
-import type { AskState } from '@/features/ai/types'
+import type { AskState, CitationFocus } from '@/features/ai/types'
 import { resetThread, useThread } from '@/features/ai/store'
 
 /**
@@ -34,6 +34,10 @@ export function AiPage() {
   const [seed, setSeed] = useState({ text: '', n: 0 })
   const fill = (text: string) => setSeed((s) => ({ text, n: s.n + 1 }))
   const [confirmReset, setConfirmReset] = useState(false)
+  // 눌린 각주. 새 질문을 보내면 지운다. 근거 패널이 예전 답변에 머물지 않게.
+  const [focus, setFocus] = useState<CitationFocus | null>(null)
+  const cite = (next: Omit<CitationFocus, 'tick'>) =>
+    setFocus((prev) => ({ ...next, tick: (prev?.tick ?? 0) + 1 }))
 
   // 팔레트에서 넘어온 검색어를 한 번만 컴포저에 채운다. 이미 /ai 에 있을 때 또 넘어와도
   // location.key 가 바뀌므로 다시 채워진다(이전 렌더 기억 패턴, effect 아님).
@@ -74,7 +78,13 @@ export function AiPage() {
           )}
         </header>
 
-        <Conversation messages={messages} generating={generating} streaming={ask.isPending} />
+        <Conversation
+          messages={messages}
+          generating={generating}
+          streaming={ask.isPending}
+          focus={focus}
+          onCite={cite}
+        />
 
         {ask.isError && (
           <p className="text-danger px-5 pb-2 text-center text-xs">
@@ -87,11 +97,14 @@ export function AiPage() {
           models={models ?? []}
           initialText={seed.text}
           disabled={ask.isPending}
-          onSend={(prompt, scope) => ask.mutate({ prompt, scope })}
+          onSend={(prompt, scope) => {
+            setFocus(null)
+            ask.mutate({ prompt, scope })
+          }}
         />
       </div>
 
-      <SourcesPanel messages={messages} />
+      <SourcesPanel messages={messages} focus={focus} />
 
       {/* 되돌릴 수 없는 동작이라 확인을 받는다. §4.2가 지목한 Modal의 첫 소비처다. */}
       <Modal
@@ -110,6 +123,7 @@ export function AiPage() {
               size="sm"
               onClick={() => {
                 resetThread()
+                setFocus(null)
                 setConfirmReset(false)
                 toast.success('대화를 지웠습니다.')
               }}
