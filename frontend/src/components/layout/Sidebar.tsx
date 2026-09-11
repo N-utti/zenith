@@ -50,8 +50,7 @@ function ChannelRow({ channel, onNavigate }: { channel: ChatChannel; onNavigate?
       ) : (
         <AtSign className="text-subtle size-4 shrink-0" />
       )}
-      {/* 태그는 글자가 작아 세로 가운데로 두면 이름보다 떠 보인다. 밑선으로 맞춘다. */}
-      <span className="flex min-w-0 items-baseline gap-1.5">
+      <span className="flex min-w-0 items-center gap-1.5">
         <span className="truncate">{channel.name}</span>
         <WorkStatus channel={channel} />
       </span>
