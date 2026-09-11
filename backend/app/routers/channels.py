@@ -5,27 +5,79 @@
 DM 은 하나만 둔다. 멤버 아닌 채널은 없는 채널과 같은 403 + 감사(소켓과 같은 판정).
 """
 
+import re
 import uuid
 from datetime import datetime
 from typing import Annotated
+from urllib.parse import quote, unquote
 
-from fastapi import APIRouter, Depends, Query, Request
-from pydantic import BaseModel, ConfigDict, StringConstraints, model_validator
+from fastapi import APIRouter, Depends, Query, Request, UploadFile
+from fastapi.responses import Response
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 from sqlalchemy import func, select, tuple_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app import audit
+from app import audit, storage
 from app.db import get_db
 from app.deps import current_user
 from app.errors import ApiError
 from app.models import Channel, ChannelMember, Message, User, Workspace
 from app.paging import decode_cursor, encode_cursor
-from app.stubs import register_stubs
 
 router = APIRouter(tags=["chat"], dependencies=[Depends(current_user)])
 
 NonBlank = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
+
+# ── 첨부 (FR-CHT-04) ──────────────────────────────────────────────────────
+MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024  # FR-CHT-04 · TC-CHT-04
+MAX_ATTACHMENTS = 10  # 메시지 하나에
+# 브라우저가 인라인으로 그려도 스크립트가 돌지 않는 형식만 inline. SVG·HTML 은 같은 오리진에서 XSS 가 되므로 내려받기로.
+INLINE_TYPES = frozenset({"image/png", "image/jpeg", "image/gif", "image/webp"})
+
+
+class AttachmentOut(BaseModel):
+    """업로드 응답이자 messages.attachments[] 항목(03 §2.3 JSONB)."""
+
+    url: str = Field(
+        max_length=2000
+    )  # 한글 이름은 quote 로 글자당 9자 — 200자 이름이면 1900자 남짓
+    name: str = Field(min_length=1, max_length=200)
+    size: int = Field(ge=0, le=MAX_ATTACHMENT_BYTES)
+
+
+def attachment_key(channel_id: uuid.UUID, file_id: uuid.UUID, name: str) -> str:
+    return f"channels/{channel_id}/{file_id}/{name}"
+
+
+def attachment_url(channel_id: uuid.UUID, file_id: uuid.UUID, name: str) -> str:
+    return f"/api/channels/{channel_id}/attachments/{file_id}/{quote(name, safe='')}"
+
+
+def parse_attachment_url(url: str, channel_id: uuid.UUID) -> str | None:
+    """이 채널의 업로드 URL 이면 그 파일명, 아니면 None — 소켓 `msg` op 가 첨부를 끼울 때 대조한다.
+
+    채널 id 가 경로에 있어 남의 채널 파일을 메시지에 끼울 수 없고, 파일명은 업로드 때 정해진 것과 같아야 한다."""
+    prefix = f"/api/channels/{channel_id}/attachments/"
+    if not url.startswith(prefix):
+        return None
+    rest = url[len(prefix) :].split("/")
+    if len(rest) != 2 or not rest[1]:
+        return None
+    try:
+        uuid.UUID(rest[0])
+    except ValueError:
+        return None
+    return unquote(rest[1])
+
+
+def _safe_name(filename: str | None) -> str:
+    # 경로 구분자·제어문자를 벗기고 basename 만. 키와 Content-Disposition 에 그대로 쓴다.
+    name = "".join(
+        c if c.isprintable() and c not in "/\\" else "_" for c in (filename or "").strip()
+    ).strip(". ")
+    # MinIO 는 경로 조각 하나를 파일시스템 이름(255바이트)으로 쓴다 — 글자가 아니라 바이트로 자른다
+    return name.encode()[:200].decode("utf-8", "ignore").strip(". ") or "file"
 
 
 class Person(BaseModel):
@@ -43,7 +95,7 @@ class MessageOut(BaseModel):
     author: Person
     body: str
     doc_ref: uuid.UUID | None
-    attachments: list | None
+    attachments: list[AttachmentOut] | None
     created_at: datetime
 
 
@@ -318,11 +370,68 @@ async def list_messages(
     )
 
 
-register_stubs(
-    router,
-    [
-        # ponytail: FR-CHT-04(S) — MinIO 연결과 함께. compose 의 minio 는 아직 코드가 안 쓴다.
-        # 구현할 때 _require_member 필수 — 남의 채널에 파일을 붙이면 안 된다.
-        ("POST", "/channels/{id}/attachments", "multipart 업로드 → MinIO, {url, name, size}"),
-    ],
+@router.post(
+    "/channels/{id}/attachments",
+    status_code=201,
+    response_model=AttachmentOut,
+    summary="multipart `file` 업로드 → MinIO. 10MB 초과·빈 파일 422. {url, name, size} 를 msg op 의 attachments[] 에 그대로 넣는다",
 )
+async def upload_attachment(
+    id: uuid.UUID,
+    file: UploadFile,
+    request: Request,
+    user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_db),
+) -> AttachmentOut:
+    await _require_member(db, request, user, id)
+    # FastAPI 는 의존성(인증·CSRF)보다 먼저 multipart 를 다 받아 둔다(1MB 넘으면 임시 파일) — 거대한 본문은
+    # main.py 의 body_limit 미들웨어가 Content-Length 로 먼저 끊는다. 여기서는 상한 + 1 바이트만 읽어 판정.
+    # ponytail: 사용자별 쿼터·레이트리밋·메시지에 안 실린 오브젝트 정리가 없다 — 멤버가 10MB 를 반복 올리면
+    # minio 볼륨이 찬다(15명 사내). 필요해지면 사용자별 일일 카운터 + 미참조 오브젝트 정리 배치.
+    data = await file.read(MAX_ATTACHMENT_BYTES + 1)
+    if len(data) > MAX_ATTACHMENT_BYTES:
+        raise ApiError(422, "VALIDATION", "10MB 이하 파일만 올릴 수 있습니다.")
+    if not data:
+        raise ApiError(422, "VALIDATION", "빈 파일입니다.")
+    name = _safe_name(file.filename)
+    file_id = uuid.uuid4()
+    # multipart 헤더 값을 그대로 저장·반사하므로 토큰/토큰 모양만 받는다 — 나머지는 octet-stream
+    content_type = (file.content_type or "").split(";")[0].strip().lower()
+    if not re.fullmatch(r"[\w.+-]+/[\w.+-]+", content_type):
+        content_type = "application/octet-stream"
+    await storage.put(attachment_key(id, file_id, name), data, content_type)
+    return AttachmentOut(url=attachment_url(id, file_id, name), name=name, size=len(data))
+
+
+@router.get(
+    "/channels/{id}/attachments/{file_id}/{name}",
+    summary="첨부 내려받기 — 채널 멤버만. 이미지(png·jpeg·gif·webp)는 inline, 나머지는 attachment",
+    response_class=Response,
+    responses={200: {"content": {"application/octet-stream": {}}}},
+)
+async def download_attachment(
+    id: uuid.UUID,
+    file_id: uuid.UUID,
+    name: str,
+    request: Request,
+    user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    await _require_member(db, request, user, id)
+    # 이름을 다시 정규화하지 않는다 — 서버가 발급한 URL 만 통하고(`..a.png` 같은 별칭 없음) 저장된 이름 그대로 내려간다
+    found = await storage.get(attachment_key(id, file_id, name))
+    if found is None:
+        raise ApiError(404, "NOT_FOUND", "없는 첨부입니다.")
+    data, content_type = found
+    disposition = "inline" if content_type in INLINE_TYPES else "attachment"
+    return Response(
+        data,
+        media_type=content_type,
+        headers={
+            # RFC 6266 — 한글 파일명은 filename* 로. 브라우저에서 스크립트가 돌 수 있는 형식은 내려받기만.
+            "Content-Disposition": f"{disposition}; filename*=UTF-8''{quote(name, safe='')}",
+            "X-Content-Type-Options": "nosniff",
+            # 키에 랜덤 file_id 가 있어 불변 — 인라인 이미지가 스크롤마다 MinIO 를 다시 타지 않게(main.py 의 no-store 는 setdefault)
+            "Cache-Control": "private, max-age=86400",
+        },
+    )

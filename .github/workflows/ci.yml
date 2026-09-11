@@ -49,7 +49,7 @@ jobs:
               - '.github/workflows/ci.yml'
 
   backend:
-    name: 백엔드 — ruff · pytest(pgvector PG) · openapi 최신성
+    name: 백엔드 — ruff · pytest(pgvector PG · MinIO) · openapi 최신성
     needs: changes
     if: ${{ needs.changes.outputs.backend == 'true' }}
     runs-on: ubuntu-latest
@@ -82,7 +82,15 @@ jobs:
         run: uv sync --locked
       - name: ruff
         run: uv run ruff check .
-      - name: pytest (DB 테스트 skip 없이)
+      # services: 는 command 를 못 넘겨 minio/minio(server 인자 필수)를 못 띄운다 — 스텝에서 직접 띄운다.
+      # tests/test_attachments.py 가 이 컨테이너를 쓴다(없으면 skip — 로컬은 compose 의 minio).
+      # CI 환경변수(GitHub 가 기본 설정)가 있으면 첨부 테스트는 skip 대신 fail — 조용히 건너뛰지 않는다.
+      - name: MinIO (첨부 테스트)
+        run: |
+          docker run -d --name minio -p 9000:9000 -e MINIO_ROOT_USER=zenith -e MINIO_ROOT_PASSWORD=zenith-minio minio/minio server /data
+          for i in $(seq 1 30); do curl -sf http://localhost:9000/minio/health/live && break; sleep 1; done
+          curl -sf http://localhost:9000/minio/health/live
+      - name: pytest (DB·MinIO 테스트 skip 없이)
         run: uv run pytest -q -rs
 
   frontend:

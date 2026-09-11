@@ -16,6 +16,8 @@ dependencies = [
   "pwdlib[argon2]>=0.2",
   "anthropic>=1.0",
   "pycrdt>=0.14.4",
+  "minio>=7.2",
+  "python-multipart>=0.0.20",
 ]
 
 [build-system]
