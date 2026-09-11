@@ -22,7 +22,7 @@ function Row({ channel }: { channel: ChatChannel }) {
     >
       <Icon className="text-subtle size-4 shrink-0" />
       <div className="min-w-0 flex-1">
-        <p className="flex items-center gap-1.5">
+        <p className="flex items-baseline gap-1.5">
           <span
             className={cn(
               'min-w-0 truncate text-sm',
