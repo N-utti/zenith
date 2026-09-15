@@ -1,5 +1,6 @@
 import type {
   Arrangement,
+  AttendanceGrid,
   ArrangementInput,
   ArrangementOnCalendar,
   AttendanceDay,
@@ -372,6 +373,21 @@ export function attendanceMonth(user: User, month: string): AttendanceMonth {
       overtime_minutes: days.reduce((sum, d) => sum + d.overtime_minutes, 0),
       night_minutes: days.reduce((sum, d) => sum + d.night_minutes, 0),
     },
+  }
+}
+
+/** 전 직원의 한 달(전사 근태 탭). 권한 판정은 핸들러가 한다. */
+export function companyAttendance(month: string): AttendanceGrid {
+  return {
+    month,
+    items: MOCK_USERS.map((user) => {
+      const { days, summary } = attendanceMonth(user, month)
+      return {
+        user: { id: user.id, name: user.name, role: user.role, team: user.team },
+        days,
+        summary,
+      }
+    }),
   }
 }
 

@@ -7,33 +7,17 @@ import { SkeletonRows } from '@/components/ui/Skeleton'
 import { cn } from '@/lib/cn'
 import { currentMonth, formatISODate, toISODate } from '@/lib/datetime'
 import { useLeaveBalance, useMyAttendance } from './api'
-import { cellStatus, formatMinutes, indexByDate, type CellStatus } from './attendanceDays'
+import { AttendanceLegend } from './AttendanceLegend'
+import {
+  cellStatus,
+  formatMinutes,
+  indexByDate,
+  STATUS_TONE,
+  type CellStatus,
+} from './attendanceDays'
 import { CorrectionRequestModal } from './CorrectionRequestModal'
 import { Stat } from './Stat'
 import { ATTENDANCE_STATUS_LABEL, type AttendanceDay } from './types'
-
-/**
- * 05 상태 색상 규약: 휴가·반차 파랑(accent) / 재택·외근·출장 청록(info) / 휴일 연회색 / 결근 빨강.
- * 정상은 칠하지 않는다. 평일의 기본값이 정상이라(10 §1.2) 색을 주면 달력 전체가 회색이 된다.
- * 칩 색은 `Badge` 의 accent·danger, 홈 캘린더의 휴가 칩과 같다.
- */
-const TONE: Partial<Record<CellStatus, string>> = {
-  leave: 'bg-accent-soft text-accent',
-  half_leave: 'bg-accent-soft text-accent',
-  remote: 'bg-info/12 text-info',
-  field: 'bg-info/12 text-info',
-  trip: 'bg-info/12 text-info',
-  holiday: 'bg-sunken text-subtle',
-  absent: 'bg-danger/12 text-danger',
-}
-
-/** 범례 견본(단색). 칩과 같은 계열이되 진하게 해서 작은 네모로도 구분된다. */
-const LEGEND: Array<[label: string, solid: string]> = [
-  ['휴가·반차', 'bg-accent'],
-  ['재택·외근·출장', 'bg-info'],
-  ['휴일', 'bg-line-strong'],
-  ['결근', 'bg-danger'],
-]
 
 /**
  * 05 SCR-ATT-01: 월 집계 + 잔여 연차 + 상태 색 캘린더 + 근태 정정.
@@ -92,7 +76,7 @@ export function MyAttendanceSection() {
           month={month}
           onMonthChange={setMonth}
           // 좁은 화면에서는 범례가 월 제목을 두 줄로 밀어낸다. 그때는 격자 아래로 내린다.
-          actions={<Legend className="hidden sm:flex" />}
+          actions={<AttendanceLegend className="hidden sm:flex" />}
           className={cn(attendance.isPending && 'animate-pulse opacity-60')}
           renderDay={(day) => (
             <DayCell
@@ -104,7 +88,7 @@ export function MyAttendanceSection() {
             />
           )}
         />
-        <Legend className="mt-3 flex sm:hidden" />
+        <AttendanceLegend className="mt-3 flex sm:hidden" />
         {attendance.data && attendance.data.days.length === 0 && (
           <p className="text-subtle mt-3 text-center text-xs">이 달의 근무 달력이 아직 없습니다.</p>
         )}
@@ -129,7 +113,7 @@ function DayCell({
   /** 있으면 칸이 버튼이 되어 그 날짜로 정정 폼을 연다. */
   onCorrect?: (iso: string) => void
 }) {
-  const tone = TONE[status]
+  const tone = STATUS_TONE[status]
   const label = status === 'none' ? null : ATTENDANCE_STATUS_LABEL[status]
   const overtime =
     row && row.overtime_minutes > 0 ? `+${formatMinutes(row.overtime_minutes)}` : null
@@ -183,18 +167,5 @@ function DayCell({
     >
       {content}
     </button>
-  )
-}
-
-function Legend({ className }: { className?: string }) {
-  return (
-    <div className={cn('text-subtle flex-wrap items-center gap-x-3 gap-y-1 text-xs', className)}>
-      {LEGEND.map(([label, solid]) => (
-        <span key={label} className="flex items-center gap-1">
-          <span className={cn('size-2.5 rounded-sm', solid)} />
-          {label}
-        </span>
-      ))}
-    </div>
   )
 }
