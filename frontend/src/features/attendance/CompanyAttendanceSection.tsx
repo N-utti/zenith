@@ -143,17 +143,17 @@ export function CompanyAttendanceSection() {
 
 function GridRow({ row, days }: { row: AttendanceGridRow; days: GridDay[] }) {
   const byDate = indexByDate(row.days)
-  // 소속은 툴팁으로만. "디지털 리서치팀"까지 적으면 이름 열이 날짜 31칸보다 더 자리를 먹는다(사용자 지적, 2026-09-15).
-  // 임원은 팀이 없다(조직도). 그 외에 팀이 비면 등급을 소속인 양 쓰지 않는다.
+  // 임원은 팀이 없다(조직도). 그 외에 팀이 비면 등급을 소속인 양 쓰지 않고 그냥 이름만.
+  // 이름 열이 내용 폭으로 고정돼 있어 팀명을 넣어도 딱 그만큼만 넓어진다(2026-09-15).
   const team = row.user.team?.name ?? (row.user.role === 'exec' ? ROLE_LABEL.exec : '')
   return (
     <tr className="border-line border-t">
       <th
         scope="row"
-        title={team ? `${row.user.name} · ${team}` : undefined}
         className="bg-surface text-fg border-line sticky left-0 z-10 w-px border-r px-2 py-1.5 text-left font-medium whitespace-nowrap"
       >
         {row.user.name}
+        {team && <span className="text-subtle ml-1.5 font-normal">{team}</span>}
       </th>
       {days.map((d) => {
         const status = cellStatus(byDate, {
