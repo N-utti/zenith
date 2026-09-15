@@ -7,18 +7,12 @@ import { SkeletonRows } from '@/components/ui/Skeleton'
 import { Table, TableEmpty, TBody, TD, TH, THead, TR } from '@/components/ui/Table'
 import { useToast } from '@/components/ui/ToastContext'
 import { ApiError } from '@/lib/api'
-import { formatDateTime, formatRelative, toISODate } from '@/lib/datetime'
+import { formatDateTime, formatRelative } from '@/lib/datetime'
 import { useCancelLeave, useLeaveBalance, useLeaveTypes, useMyLeaves } from './api'
+import { expiringSoon } from './leaveBalance'
 import { LeaveRequestModal } from './LeaveRequestModal'
 import { Stat } from './Stat'
-import { LEAVE_STATUS_LABEL, REQUEST_STATUS_TONE, type LeaveBalance } from './types'
-
-/** 소멸 60일 전부터 경고한다(FR-ATT-23 의 D-60 시점). 날짜는 ISO 문자열끼리 비교한다. 파싱하면 시간대에 밀린다. */
-function expiringSoon(balance: LeaveBalance): boolean {
-  const today = toISODate(new Date())
-  const limit = toISODate(new Date(Date.now() + 60 * 86_400_000))
-  return balance.remaining > 0 && balance.expires_on >= today && balance.expires_on <= limit
-}
+import { LEAVE_STATUS_LABEL, REQUEST_STATUS_TONE } from './types'
 
 /** 05 SCR-ATT-02: 잔여 요약 + 신청 버튼 + 내 휴가 목록 + 소멸 예정 경고. */
 export function LeaveSection() {

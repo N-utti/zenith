@@ -4,6 +4,7 @@ import { PageHeader } from '@/components/ui/PageHeader'
 import { PlaceholderPanel } from '@/components/ui/PlaceholderPanel'
 import { Tabs } from '@/components/ui/Tabs'
 import { ExceptionSection } from '@/features/attendance/ExceptionSection'
+import { LeaveAdminSection } from '@/features/attendance/LeaveAdminSection'
 import { LeaveSection } from '@/features/attendance/LeaveSection'
 import { MyAttendanceSection } from '@/features/attendance/MyAttendanceSection'
 import { useCurrentUser } from '@/features/auth/AuthContext'
@@ -15,10 +16,13 @@ const TABS = [
   { key: 'leave', label: '휴가' },
   { key: 'exception', label: '예외 근무' },
 ]
+/** 연차 관리(전사 잔여·사용촉진 대상)는 임원만(10 §3). 숨김은 편의이고 차단은 서버 403. */
+const EXEC_TABS = [...TABS, { key: 'leave-admin', label: '연차 관리' }]
 
 export function AttendancePage() {
   const user = useCurrentUser()
   const canSeeOthers = ROLE_RANK[user.role] >= ROLE_RANK.lead
+  const isExec = ROLE_RANK[user.role] >= ROLE_RANK.exec
   // 탭은 URL 에 둔다(`?tab=leave`). 알림에서 휴가 탭으로 바로 들어오고, 새로고침해도 그 자리다.
   const [params, setParams] = useSearchParams()
   const tab = params.get('tab') ?? 'me'
@@ -34,7 +38,7 @@ export function AttendancePage() {
         }
       />
       <Tabs
-        items={TABS}
+        items={isExec ? EXEC_TABS : TABS}
         value={tab}
         // 다른 파라미터는 남기고 `tab` 만 바꾼다. 화살표로 탭을 옮길 때마다 히스토리가 쌓이지 않게 replace.
         onChange={(key) =>
@@ -51,6 +55,8 @@ export function AttendancePage() {
         {(key) =>
           key === 'leave' ? (
             <LeaveSection />
+          ) : key === 'leave-admin' ? (
+            <LeaveAdminSection />
           ) : key === 'exception' ? (
             <ExceptionSection />
           ) : (

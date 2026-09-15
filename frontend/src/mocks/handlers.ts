@@ -54,6 +54,7 @@ import {
   createLeave,
   LEAVE_TYPES,
   leaveBalance,
+  listBalances,
   listLeaves,
   listLeavesInRange,
 } from './leavesDb'
@@ -352,6 +353,19 @@ export const handlers = [
   // 백엔드는 501 스텁. 목록 응답의 `{items}` 감싸기와 항목 모양은 프론트 가정(PR 본문).
   http.get('/api/leave-types', authed(() => HttpResponse.json({ items: LEAVE_TYPES }))),
   http.get('/api/leaves/balance', authed((user) => HttpResponse.json(leaveBalance(user)))),
+  // 04 에 없는 확장(연차 관리 탭). 전사 잔여는 임원만(10 §3), 그 외 403.
+  http.get(
+    '/api/leaves/balances',
+    authed((user) => {
+      if (user.role !== 'exec') {
+        return HttpResponse.json(
+          { detail: '전사 연차 현황은 임원만 볼 수 있습니다.', code: 'FORBIDDEN' },
+          { status: 403 },
+        )
+      }
+      return HttpResponse.json({ items: listBalances() })
+    }),
+  ),
   http.get(
     '/api/leaves',
     authed((user, request) => {

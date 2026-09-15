@@ -1,5 +1,6 @@
 import type {
   LeaveBalance,
+  LeaveBalanceRow,
   LeaveOnCalendar,
   LeaveRequest,
   LeaveRequestInput,
@@ -49,6 +50,12 @@ function workday(offset: number): string {
   while (date.getDay() === 0 || date.getDay() === 6) date.setDate(date.getDate() + 1)
   return toISODate(date)
 }
+
+/**
+ * 입사일 기준 부여자 한 명. 소멸일이 연말이 아니라 곧이라 연차 관리 탭의 사용촉진 대상 표시가 보인다.
+ * 실제 기준(I5)은 미결이고 목에서 두 기준이 섞여 있어도 잔여 계산은 같다.
+ */
+const HIRE_DATE_BASIS: Record<string, string> = { 'u-7': workday(40) }
 
 /**
  * 홈 캘린더(전 직원 휴가)가 비어 보이지 않게 오늘 언저리에 깔아 두는 남의 휴가.
@@ -125,14 +132,23 @@ export function leaveBalance(user: User): LeaveBalance {
   const used = listFor(user)
     .filter((r) => r.status === 'approved' || r.status === 'pending')
     .reduce((sum, r) => sum + r.days, 0)
+  const hireBasis = HIRE_DATE_BASIS[user.id]
   return {
     year: YEAR,
     granted: GRANTED,
     used,
     remaining: GRANTED - used,
-    expires_on: `${YEAR}-12-31`,
-    grant_basis: 'fiscal_year',
+    expires_on: hireBasis ?? `${YEAR}-12-31`,
+    grant_basis: hireBasis ? 'hire_date' : 'fiscal_year',
   }
+}
+
+/** 전 직원의 연차 잔여(연차 관리 탭). 권한 판정은 핸들러가 한다. */
+export function listBalances(): LeaveBalanceRow[] {
+  return MOCK_USERS.map((user) => ({
+    user: { id: user.id, name: user.name, role: user.role, team: user.team },
+    ...leaveBalance(user),
+  }))
 }
 
 export function listLeaves(user: User): LeaveRequest[] {

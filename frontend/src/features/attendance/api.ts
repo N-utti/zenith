@@ -11,6 +11,7 @@ import type {
   Correction,
   CorrectionInput,
   LeaveBalance,
+  LeaveBalanceRow,
   LeaveOnCalendar,
   LeaveRequest,
   LeaveRequestInput,
@@ -34,6 +35,14 @@ export function useLeaveBalance() {
   return useQuery({
     queryKey: balanceKey,
     queryFn: () => api<LeaveBalance>('/leaves/balance'),
+  })
+}
+
+/** 전 직원의 연차 잔여(연차 관리 탭). `/leaves/balances` 는 04 에 없는 프론트 확장(PR 본문). 임원 외 403. */
+export function useAllLeaveBalances() {
+  return useQuery({
+    queryKey: ['leaves', 'balances'],
+    queryFn: () => api<{ items: LeaveBalanceRow[] }>('/leaves/balances'),
   })
 }
 
