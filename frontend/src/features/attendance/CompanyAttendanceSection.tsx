@@ -84,10 +84,11 @@ export function CompanyAttendanceSection() {
           <caption className="sr-only">{formatMonth(month)} 전사 근태</caption>
           <thead className="bg-sunken">
             <tr>
-              {/* 이름 열은 가로로 굴러도 고정. 31칸을 넘기다 보면 누구 줄인지 잊는다. */}
+              {/* 이름 열은 가로로 굴러도 고정. 31칸을 넘기다 보면 누구 줄인지 잊는다.
+                  너비 1px + 줄바꿈 금지 = 내용만큼만. 안 그러면 w-full 의 남는 폭을 이름 열도 나눠 갖는다. */}
               <th
                 scope="col"
-                className="bg-sunken text-muted border-line sticky left-0 z-10 border-r px-3 py-2 text-left font-semibold"
+                className="bg-sunken text-muted border-line sticky left-0 z-10 w-px border-r px-2 py-2 text-left font-semibold"
               >
                 이름
               </th>
@@ -105,9 +106,10 @@ export function CompanyAttendanceSection() {
                   <div className="text-[10px]">{WEEKDAY[d.weekday]}</div>
                 </th>
               ))}
+              {/* 연장 열도 내용만큼만. 남는 폭은 전부 날짜 칸으로. */}
               <th
                 scope="col"
-                className="text-muted px-3 py-2 text-right font-semibold whitespace-nowrap"
+                className="text-muted w-px px-2 py-2 text-right font-semibold whitespace-nowrap"
               >
                 연장
                 {/* 실근로시간을 재지 않는다. 신고분만 담긴 값이라 라벨 없이는 실측처럼 읽힌다(10 §5.3). */}
@@ -149,7 +151,7 @@ function GridRow({ row, days }: { row: AttendanceGridRow; days: GridDay[] }) {
       <th
         scope="row"
         title={team ? `${row.user.name} · ${team}` : undefined}
-        className="bg-surface text-fg border-line sticky left-0 z-10 border-r px-3 py-1.5 text-left font-medium whitespace-nowrap"
+        className="bg-surface text-fg border-line sticky left-0 z-10 w-px border-r px-2 py-1.5 text-left font-medium whitespace-nowrap"
       >
         {row.user.name}
       </th>
@@ -185,7 +187,7 @@ function GridRow({ row, days }: { row: AttendanceGridRow; days: GridDay[] }) {
           </td>
         )
       })}
-      <td className="text-muted px-3 py-1.5 text-right whitespace-nowrap tabular-nums">
+      <td className="text-muted w-px px-2 py-1.5 text-right whitespace-nowrap tabular-nums">
         {row.summary.overtime_minutes > 0 ? formatMinutes(row.summary.overtime_minutes) : '-'}
       </td>
     </tr>
