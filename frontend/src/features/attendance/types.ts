@@ -127,6 +127,22 @@ export interface AttendanceMonth {
   }
 }
 
+/**
+ * 전사 근태 그리드 한 행(임원). 사람마다 `GET /attendance/me` 와 같은 달력·집계에 누구인지가 붙는다.
+ * 04 §10.5 `GET /attendance/team?month=&team_id=` 를 `team_id` 없이 부르면 전사(exec 전용)로 가정한 프론트 확장(PR 본문).
+ * 이 회사에는 팀장이 없어(조직도) 팀 단위 조회는 쓰지 않는다.
+ */
+export interface AttendanceGridRow {
+  user: { id: string; name: string; role: Role; team: Team | null }
+  days: AttendanceDay[]
+  summary: AttendanceMonth['summary']
+}
+
+export interface AttendanceGrid {
+  month: string
+  items: AttendanceGridRow[]
+}
+
 // ── 예외 근무 (04 §10.3 · 10 §9.3) ─────────────────────────────
 
 /** 신청 상태는 휴가와 같다(10 §4.1 세 신청 테이블 모두 pending|approved|rejected|canceled). */

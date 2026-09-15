@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { toISODate } from '@/lib/datetime'
 import type {
@@ -7,6 +7,7 @@ import type {
   ArrangementInput,
   ArrangementKind,
   ArrangementOnCalendar,
+  AttendanceGrid,
   AttendanceMonth,
   Correction,
   CorrectionInput,
@@ -99,6 +100,16 @@ export function useMyAttendance(month: string) {
   return useQuery({
     queryKey: ['attendance', 'me', month],
     queryFn: () => api<AttendanceMonth>(`/attendance/me?month=${month}`),
+  })
+}
+
+/** 전 직원 × 일자 근태(전사 근태 탭). `team_id` 없는 호출은 전사로 가정한 프론트 확장, 임원 외 403. */
+export function useCompanyAttendance(month: string) {
+  return useQuery({
+    queryKey: ['attendance', 'company', month],
+    queryFn: () => api<AttendanceGrid>(`/attendance/team?month=${month}`),
+    // 달을 넘길 때 13줄이 통째로 사라졌다 다시 생기지 않게 이전 달 표를 붙들고 있는다.
+    placeholderData: keepPreviousData,
   })
 }
 

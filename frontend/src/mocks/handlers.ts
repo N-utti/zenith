@@ -26,6 +26,7 @@ import {
 } from './docsDb'
 import {
   attendanceMonth,
+  companyAttendance,
   cancelException,
   createArrangement,
   createCorrection,
@@ -266,6 +267,24 @@ export const handlers = [
         return HttpResponse.json({ detail: 'month 는 YYYY-MM 형식입니다.', code: 'VALIDATION' }, { status: 422 })
       }
       return HttpResponse.json(attendanceMonth(user, month))
+    }),
+  ),
+
+  // 04 §10.5 의 팀 그리드를 `team_id` 없이 부르면 전사. 팀장이 없는 조직이라 팀 단위는 안 쓴다. 임원 외 403(10 §3).
+  http.get(
+    '/api/attendance/team',
+    authed((user, request) => {
+      if (user.role !== 'exec') {
+        return HttpResponse.json(
+          { detail: '전사 근태는 임원만 볼 수 있습니다.', code: 'FORBIDDEN' },
+          { status: 403 },
+        )
+      }
+      const month = new URL(request.url).searchParams.get('month') ?? ''
+      if (!MONTH.test(month)) {
+        return HttpResponse.json({ detail: 'month 는 YYYY-MM 형식입니다.', code: 'VALIDATION' }, { status: 422 })
+      }
+      return HttpResponse.json(companyAttendance(month))
     }),
   ),
 

@@ -3,6 +3,7 @@ import { Clock } from 'lucide-react'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { PlaceholderPanel } from '@/components/ui/PlaceholderPanel'
 import { Tabs } from '@/components/ui/Tabs'
+import { CompanyAttendanceSection } from '@/features/attendance/CompanyAttendanceSection'
 import { ExceptionSection } from '@/features/attendance/ExceptionSection'
 import { LeaveAdminSection } from '@/features/attendance/LeaveAdminSection'
 import { LeaveSection } from '@/features/attendance/LeaveSection'
@@ -16,8 +17,15 @@ const TABS = [
   { key: 'leave', label: '휴가' },
   { key: 'exception', label: '예외 근무' },
 ]
-/** 연차 관리(전사 잔여·사용촉진 대상)는 임원만(10 §3). 숨김은 편의이고 차단은 서버 403. */
-const EXEC_TABS = [...TABS, { key: 'leave-admin', label: '연차 관리' }]
+/**
+ * 전사 근태(직원 × 일자 그리드)와 연차 관리(전사 잔여·사용촉진 대상)는 임원만(10 §3). 숨김은 편의이고 차단은 서버 403.
+ * 05 의 "팀 근태 현황"은 팀장 대상이지만 이 회사에는 팀장이 없어(조직도) 전사 단위로 두었다(2026-09-15 결정).
+ */
+const EXEC_TABS = [
+  ...TABS,
+  { key: 'company', label: '전사 근태' },
+  { key: 'leave-admin', label: '연차 관리' },
+]
 
 export function AttendancePage() {
   const user = useCurrentUser()
@@ -55,6 +63,8 @@ export function AttendancePage() {
         {(key) =>
           key === 'leave' ? (
             <LeaveSection />
+          ) : key === 'company' ? (
+            <CompanyAttendanceSection />
           ) : key === 'leave-admin' ? (
             <LeaveAdminSection />
           ) : key === 'exception' ? (
@@ -67,7 +77,7 @@ export function AttendancePage() {
                 milestone="일정 미확정 (설계서 §12)"
                 items={[
                   '신청 승인 흐름(전자결재 편입, 설계서 13)',
-                  canSeeOthers ? '팀원 근태 조회 · 신청 승인/반려' : '연차 사용촉진 안내',
+                  canSeeOthers ? '신청 승인/반려' : '연차 사용촉진 안내',
                 ]}
               />
             </div>

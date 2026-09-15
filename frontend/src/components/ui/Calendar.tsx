@@ -56,20 +56,7 @@ export function Calendar({
 
   return (
     <div className={className}>
-      <div className="mb-3 flex items-center gap-2">
-        {onMonthChange && (
-          <div className="flex items-center gap-0.5">
-            <MonthButton label="이전 달" onClick={() => onMonthChange(shiftMonth(month, -1))}>
-              <ChevronLeft className="size-4" />
-            </MonthButton>
-            <MonthButton label="다음 달" onClick={() => onMonthChange(shiftMonth(month, 1))}>
-              <ChevronRight className="size-4" />
-            </MonthButton>
-          </div>
-        )}
-        <h2 className="text-fg text-base font-semibold">{formatMonth(month)}</h2>
-        {actions && <div className="ml-auto flex items-center gap-2">{actions}</div>}
-      </div>
+      <MonthHeader month={month} onMonthChange={onMonthChange} actions={actions} />
 
       <div className="border-line bg-line overflow-hidden rounded-lg border">
         <div className="grid grid-cols-7 gap-px">
@@ -102,6 +89,34 @@ export function Calendar({
           })}
         </div>
       </div>
+    </div>
+  )
+}
+
+/** 월 이동 + 월 제목 줄. 캘린더와 전사 근태 그리드처럼 "한 달"을 보는 화면이 같이 쓴다. */
+export function MonthHeader({
+  month,
+  onMonthChange,
+  actions,
+}: {
+  month: string
+  onMonthChange?: (month: string) => void
+  actions?: ReactNode
+}) {
+  return (
+    <div className="mb-3 flex items-center gap-2">
+      {onMonthChange && (
+        <div className="flex items-center gap-0.5">
+          <MonthButton label="이전 달" onClick={() => onMonthChange(shiftMonth(month, -1))}>
+            <ChevronLeft className="size-4" />
+          </MonthButton>
+          <MonthButton label="다음 달" onClick={() => onMonthChange(shiftMonth(month, 1))}>
+            <ChevronRight className="size-4" />
+          </MonthButton>
+        </div>
+      )}
+      <h2 className="text-fg text-base font-semibold">{formatMonth(month)}</h2>
+      {actions && <div className="ml-auto flex items-center gap-2">{actions}</div>}
     </div>
   )
 }
