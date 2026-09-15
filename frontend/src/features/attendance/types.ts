@@ -1,4 +1,5 @@
 /** 04 §10.2 휴가 계약. 항목 모양은 10 근태 설계서 §4.1 `leave_types`·`leave_requests`·`leave_balances`. */
+import type { Role, Team } from '@/types'
 
 export type LeaveStatus = 'pending' | 'approved' | 'rejected' | 'canceled'
 
@@ -62,6 +63,14 @@ export interface LeaveBalance {
   remaining: number
   expires_on: string
   grant_basis: 'hire_date' | 'fiscal_year'
+}
+
+/**
+ * 전사 연차 현황 한 행(연차 관리 탭, 임원). 잔여 계산은 `LeaveBalance` 와 같고 누구 것인지만 붙는다.
+ * 04 §10.2 의 `/leaves/balance` 는 본인 것만이라 `GET /leaves/balances` 는 프론트 확장(PR 본문). 임원 외 403.
+ */
+export interface LeaveBalanceRow extends LeaveBalance {
+  user: { id: string; name: string; role: Role; team: Team | null }
 }
 
 export interface LeaveRequestInput {
