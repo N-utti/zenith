@@ -69,7 +69,8 @@ export function CompanyAttendanceSection() {
         onMonthChange={setMonth}
         actions={<AttendanceLegend className="hidden sm:flex" />}
       />
-      {/* 31칸은 반드시 가로로 구른다. 안에 포커스 받을 요소가 없으니 영역 자체가 받아야 키보드로도 넘긴다. */}
+      {/* 본문 폭(최대 1152px)에 31칸이 들어가게 칸 최소폭을 두지 않는다. 좁은 창에서만 구르고,
+          안에 포커스 받을 요소가 없으니 그때는 영역 자체가 받아야 키보드로도 넘긴다. */}
       <div
         tabIndex={0}
         role="region"
@@ -96,7 +97,7 @@ export function CompanyAttendanceSection() {
                   scope="col"
                   title={formatISODate(d.iso)}
                   className={cn(
-                    'min-w-7 px-0.5 py-1.5 text-center font-normal tabular-nums',
+                    'px-0.5 py-1.5 text-center font-normal tabular-nums',
                     d.weekday === 0 || d.weekday === 6 ? 'text-subtle' : 'text-muted',
                   )}
                 >
