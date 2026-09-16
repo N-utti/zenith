@@ -15,7 +15,8 @@ import { useCloseMonth, useReopenMonth, useYearClosings } from './api'
 /**
  * 월 마감(임원, FR-ATT-15 · 10 §5.5). 한 해의 열두 달을 표로 놓고 행마다 마감·해제한다.
  * 마감하면 그 달의 휴가·예외 근무·정정 신청이 409 로 막히고, 해제는 사유를 받는다.
- * 표에는 마지막 해제만 보인다. 한 달을 여러 번 여닫는 일은 드물고 전체 이력은 서버 감사 로그 몫이다.
+ * 해제는 드물어 열을 따로 두지 않고, 해제된 적 있는 달의 마감 칸에만 마지막 해제를 한 줄 붙인다.
+ * 전체 이력은 서버 감사 로그 몫이다.
  * 리포트 내보내기·결근 확정은 아직 없다.
  */
 export function MonthClosingSection() {
@@ -47,16 +48,15 @@ export function MonthClosingSection() {
             <TH>달</TH>
             <TH>상태</TH>
             <TH>마감</TH>
-            <TH>최근 해제</TH>
             <TH className="text-right">
               <span className="sr-only">동작</span>
             </TH>
           </tr>
         </THead>
         <TBody>
-          {closings.isPending && <TableEmpty colSpan={5}>불러오는 중</TableEmpty>}
+          {closings.isPending && <TableEmpty colSpan={4}>불러오는 중</TableEmpty>}
           {closings.isError && (
-            <TableEmpty colSpan={5}>
+            <TableEmpty colSpan={4}>
               {closings.error instanceof ApiError
                 ? closings.error.message
                 : '마감 상태를 불러오지 못했습니다.'}
@@ -77,23 +77,20 @@ export function MonthClosingSection() {
                     </Badge>
                   )}
                 </TD>
-                <TD className="text-muted text-sm whitespace-nowrap">
-                  {c.status === 'closed' && c.closed_at
-                    ? `${formatDateTime(c.closed_at)} · ${c.closed_by?.name ?? ''}`
-                    : '-'}
-                </TD>
                 <TD className="text-muted text-sm">
-                  {reopen ? (
-                    <>
-                      <span className="whitespace-nowrap">
-                        {formatDateTime(reopen.at)} · {reopen.by.name}
-                      </span>
-                      {reopen.reason && (
-                        <span className="text-subtle block text-xs">{reopen.reason}</span>
-                      )}
-                    </>
+                  {c.status === 'closed' && c.closed_at ? (
+                    <span className="whitespace-nowrap">
+                      {formatDateTime(c.closed_at)} · {c.closed_by?.name ?? ''}
+                    </span>
                   ) : (
-                    '-'
+                    !reopen && '-'
+                  )}
+                  {/* 해제는 드문 일이라 열을 따로 두지 않는다. 해제된 적 있는 달에만 한 줄 붙인다. */}
+                  {reopen && (
+                    <span className="text-subtle block text-xs">
+                      {formatDateTime(reopen.at)} {reopen.by.name} 해제
+                      {reopen.reason && ` · ${reopen.reason}`}
+                    </span>
                   )}
                 </TD>
                 <TD className="text-right">
