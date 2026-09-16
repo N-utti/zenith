@@ -1,5 +1,5 @@
 import { EditorContent, useEditor } from '@tiptap/react'
-import StarterKit from '@tiptap/starter-kit'
+import { docContentExtensions } from './editorExtensions'
 import { History, RotateCcw, X } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { formatDay, formatTime } from '@/lib/datetime'
@@ -28,7 +28,7 @@ export function VersionPreview({
   const editor = useEditor(
     {
       editable: false,
-      extensions: [StarterKit.configure({ undoRedo: false })],
+      extensions: docContentExtensions(),
       content: content.json,
       editorProps: { attributes: { class: 'zenith-editor outline-none' } },
     },
@@ -44,8 +44,7 @@ export function VersionPreview({
           <span className="text-muted"> {version.authorName} 편집 · 읽기 전용</span>
         </p>
         <Button size="sm" onClick={onRestore} disabled={restoring}>
-          <RotateCcw className="size-4" />
-          이 버전으로 되돌리기
+          <RotateCcw className="size-4" />이 버전으로 되돌리기
         </Button>
         <Button variant="ghost" size="sm" onClick={onClose} aria-label="미리보기 닫기">
           <X className="size-4" />

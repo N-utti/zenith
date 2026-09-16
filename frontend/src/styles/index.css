@@ -179,6 +179,29 @@
     @apply bg-transparent p-0 text-inherit;
   }
 
+  /* 표. tiptap 이 div.tableWrapper 로 감싼다. 폭이 넘치면 표만 가로로 구른다(편집기 판 전체가 밀리지 않게). */
+  .zenith-editor .tableWrapper {
+    @apply overflow-x-auto;
+  }
+  .zenith-editor table {
+    @apply border-line w-full border-collapse border text-sm;
+  }
+  .zenith-editor th,
+  .zenith-editor td {
+    @apply border-line relative min-w-16 border px-3 py-1.5 text-left align-top;
+  }
+  .zenith-editor th {
+    @apply bg-sunken font-semibold;
+  }
+  .zenith-editor td > *,
+  .zenith-editor th > * {
+    @apply m-0;
+  }
+  .zenith-editor .selectedCell::after {
+    content: '';
+    @apply bg-accent/10 pointer-events-none absolute inset-0;
+  }
+
   .zenith-editor hr {
     @apply border-line my-8 border-t;
   }
