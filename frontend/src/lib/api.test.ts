@@ -88,15 +88,6 @@ describe('api()', () => {
     expect(calledUrls().filter((url) => url.endsWith('/auth/refresh'))).toHaveLength(1)
   })
 
-  it('JSON 이 아닌 본문(CSV)은 문자열 그대로 돌려준다', async () => {
-    fetchMock.mockImplementation(
-      async () => new Response('a,b\r\n', { status: 200, headers: { 'Content-Type': 'text/csv' } }),
-    )
-    await expect(api<string>('/attendance/report?month=2026-09&format=csv')).resolves.toBe(
-      'a,b\r\n',
-    )
-  })
-
   it('에러 본문의 detail 을 메시지로, 없으면 상태 코드를 쓴다', async () => {
     fetchMock.mockResolvedValueOnce(reply(500))
     await expect(api('/x')).rejects.toMatchObject({

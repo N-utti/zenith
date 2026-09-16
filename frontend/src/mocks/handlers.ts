@@ -50,7 +50,6 @@ import {
 } from './approvalsDb'
 import { readFile, saveFile } from './filesDb'
 import { closeMonth, getClosing, listClosings, reopenMonth } from './closingsDb'
-import { attendanceReportCsv } from './attendanceReport'
 import { createEvent, deleteEvent, listEvents } from './eventsDb'
 import {
   cancelLeave,
@@ -315,33 +314,6 @@ export const handlers = [
         )
       }
       return HttpResponse.json(companyAttendance(month))
-    }),
-  ),
-
-  // 월 리포트 CSV(10 §9.5). 임원만. 전사 그리드와 같은 데이터를 표로 편 것.
-  http.get(
-    '/api/attendance/report',
-    authed((user, request) => {
-      if (user.role !== 'exec') {
-        return HttpResponse.json(
-          { detail: '리포트는 임원만 내려받을 수 있습니다.', code: 'FORBIDDEN' },
-          { status: 403 },
-        )
-      }
-      const params = new URL(request.url).searchParams
-      const month = params.get('month') ?? ''
-      if (!MONTH.test(month) || params.get('format') !== 'csv') {
-        return HttpResponse.json(
-          { detail: 'month 는 YYYY-MM, format 은 csv 입니다.', code: 'VALIDATION' },
-          { status: 422 },
-        )
-      }
-      return new HttpResponse(attendanceReportCsv(companyAttendance(month)), {
-        headers: {
-          'Content-Type': 'text/csv; charset=utf-8',
-          'Content-Disposition': `attachment; filename="attendance-${month}.csv"`,
-        },
-      })
     }),
   ),
 

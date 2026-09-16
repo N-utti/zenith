@@ -4,20 +4,21 @@ import { Card } from '@/components/ui/Card'
 import { TableEmpty } from '@/components/ui/Table'
 import { ApiError } from '@/lib/api'
 import { cn } from '@/lib/cn'
-import { currentMonth, formatISODate, formatMonth, toISODate } from '@/lib/datetime'
+import { currentMonth, formatISODate, formatMonth } from '@/lib/datetime'
 import { ROLE_LABEL } from '@/types'
 import { useCompanyAttendance } from './api'
 import { AttendanceLegend } from './AttendanceLegend'
 import {
   cellStatus,
+  daysOf,
   formatMinutes,
   indexByDate,
   STATUS_TONE,
+  WEEKDAY,
   type CellStatus,
+  type GridDay,
 } from './attendanceDays'
 import { ATTENDANCE_STATUS_LABEL, type AttendanceGridRow } from './types'
-
-const WEEKDAY = ['일', '월', '화', '수', '목', '금', '토']
 
 /**
  * 칸이 좁아 한 글자만. 정상은 비우고, 주말·휴일은 글자 없이 옅은 회색만 깐다.
@@ -30,22 +31,6 @@ const SHORT: Partial<Record<CellStatus, string>> = {
   field: '외',
   trip: '출',
   absent: '결',
-}
-
-interface GridDay {
-  iso: string
-  day: number
-  weekday: number
-}
-
-/** `2026-09` 의 날짜 전부. 요일은 열 머리에 쓴다. */
-function daysOf(month: string): GridDay[] {
-  const [year, m] = month.split('-').map(Number)
-  const last = new Date(year, m, 0).getDate()
-  return Array.from({ length: last }, (_, i) => {
-    const date = new Date(year, m - 1, i + 1)
-    return { iso: toISODate(date), day: i + 1, weekday: date.getDay() }
-  })
 }
 
 /**

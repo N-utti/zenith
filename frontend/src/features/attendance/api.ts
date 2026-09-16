@@ -1,7 +1,9 @@
 import { useMemo } from 'react'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
-import { downloadText } from '@/lib/download'
+import { downloadBytes } from '@/lib/download'
+import { buildXlsx } from '@/lib/xlsx'
+import { REPORT_FIXED_COLS, reportRows } from './report'
 import { toISODate } from '@/lib/datetime'
 import type {
   Arrangement,
@@ -109,7 +111,7 @@ export function useMyAttendance(month: string) {
 export function useCompanyAttendance(month: string) {
   return useQuery({
     queryKey: ['attendance', 'company', month],
-    queryFn: () => api<AttendanceGrid>(`/attendance/team?month=${month}`),
+    queryFn: () => api<AttendanceGrid>(`/attendance/team?month=${encodeURIComponent(month)}`),
     // 달을 넘길 때 13줄이 통째로 사라졌다 다시 생기지 않게 이전 달 표를 붙들고 있는다.
     placeholderData: keepPreviousData,
   })
@@ -296,17 +298,21 @@ export function useReopenMonth() {
   })
 }
 
-/** 월 리포트 CSV(10 §9.5, 임원). 서버가 준 본문을 그대로 파일로 내려받는다. */
+/**
+ * 월 리포트 xlsx(FR-ATT-15, 임원). 전사 그리드(`/attendance/team`)를 받아 브라우저가 만든다.
+ * 열 고정·열 너비 같은 서식이 필요해 CSV 로는 안 된다(report.ts).
+ */
 export function useDownloadReport() {
   return useMutation({
     mutationFn: async (month: string) => {
-      const csv = await api<string>(
-        `/attendance/report?month=${encodeURIComponent(month)}&format=csv`,
-        {
-          headers: { Accept: 'text/csv' },
-        },
+      // 캐시를 안 쓴다. 내려받는 파일은 그 순간의 서버 값이어야 한다.
+      const grid = await api<AttendanceGrid>(`/attendance/team?month=${encodeURIComponent(month)}`)
+      const bytes = buildXlsx(reportRows(grid), { sheet: month, freezeCols: REPORT_FIXED_COLS })
+      downloadBytes(
+        `attendance-${month}.xlsx`,
+        bytes,
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       )
-      downloadText(`attendance-${month}.csv`, csv)
     },
   })
 }

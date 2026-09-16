@@ -59,10 +59,7 @@ async function send(path: string, init: RequestInit): Promise<Response> {
 async function read(res: Response): Promise<unknown> {
   if (res.status === 204) return undefined
   const text = await res.text()
-  if (!text) return undefined
-  // CSV 같은 JSON 아닌 본문(근태 리포트)은 문자열 그대로. 오류 본문은 언제나 JSON 이다(04 §0).
-  const type = res.headers.get('Content-Type') ?? ''
-  return type && !type.includes('json') ? text : JSON.parse(text)
+  return text ? JSON.parse(text) : undefined
 }
 
 let refreshing: Promise<boolean> | null = null
