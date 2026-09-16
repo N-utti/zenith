@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest'
 import { currentMonth, shiftMonth } from '@/lib/datetime'
 import { MOCK_USERS } from './db'
-import { closeMonth, getClosing, isClosedRange, reopenMonth } from './closingsDb'
+import { closeMonth, getClosing, isClosedRange, listClosings, reopenMonth } from './closingsDb'
 
 const exec = MOCK_USERS.find((u) => u.role === 'exec')!
 const twoAgo = shiftMonth(currentMonth(), -2)
@@ -23,4 +23,6 @@ it('마감하면 그 달 날짜가 잠기고, 사유를 적어 해제하면 이�
 it('오지 않은 달은 마감할 수 없고, 지난달은 마감된 채로 시작한다', () => {
   expect(closeMonth(exec, shiftMonth(currentMonth(), 1))).toMatchObject({ status: 422 })
   expect(getClosing(shiftMonth(currentMonth(), -1)).status).toBe('closed')
+  expect(listClosings(2030).map((c) => c.month)).toHaveLength(12)
+  expect(listClosings(2030)[11].month).toBe('2030-12')
 })

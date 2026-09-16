@@ -49,7 +49,7 @@ import {
   updateDraft,
 } from './approvalsDb'
 import { readFile, saveFile } from './filesDb'
-import { closeMonth, getClosing, reopenMonth } from './closingsDb'
+import { closeMonth, getClosing, listClosings, reopenMonth } from './closingsDb'
 import { createEvent, deleteEvent, listEvents } from './eventsDb'
 import {
   cancelLeave,
@@ -319,6 +319,17 @@ export const handlers = [
 
   // ── 근태 · 월 마감 (10 §9.5) ─────────────────────────────
   // 조회 경로는 프론트 확장(PR 본문). 마감 여부는 비밀이 아니라 전원 조회, 마감·해제만 임원(10 §3).
+  http.get('/api/attendance/closings', ({ request }) => {
+    if (!authenticate()) return unauthorized()
+    const year = Number(new URL(request.url).searchParams.get('year'))
+    if (!Number.isInteger(year) || year < 2000 || year > 2100) {
+      return HttpResponse.json(
+        { detail: 'year 는 네 자리 연도입니다.', code: 'VALIDATION' },
+        { status: 422 },
+      )
+    }
+    return HttpResponse.json({ items: listClosings(year) })
+  }),
   http.get('/api/attendance/closings/:month', ({ params }) => {
     if (!authenticate()) return unauthorized()
     const month = String(params.month)

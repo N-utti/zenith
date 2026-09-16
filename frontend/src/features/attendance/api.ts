@@ -246,6 +246,7 @@ export function useCancelException() {
 // ── 월 마감 (10 §9.5) ──────────────────────────────────────────
 
 const closingKey = (month: string) => ['attendance', 'closing', month] as const
+const yearClosingsKey = (year: number) => ['attendance', 'closings', year] as const
 
 export function useMonthClosing(month: string) {
   return useQuery({
@@ -254,10 +255,26 @@ export function useMonthClosing(month: string) {
   })
 }
 
-/** 응답이 곧 그 달의 새 상태다. 내 근태·근태 관리 탭이 같은 키를 읽어 배지가 같이 바뀐다. 집계는 안 바뀌니 더 무효화하지 않는다. */
+/** 한 해 열두 달의 마감 상태(근태 관리 탭). `GET /attendance/closings?year=` 도 프론트 확장. */
+export function useYearClosings(year: number) {
+  return useQuery({
+    queryKey: yearClosingsKey(year),
+    queryFn: () => api<{ items: MonthClosing[] }>(`/attendance/closings?year=${year}`),
+    placeholderData: keepPreviousData,
+  })
+}
+
+/** 응답이 곧 그 달의 새 상태다. 달 하나와 그 해 목록 두 캐시에 바로 넣는다. 집계는 안 바뀌니 더 무효화하지 않는다. */
 function useSetClosing() {
   const qc = useQueryClient()
-  return (item: MonthClosing) => qc.setQueryData(closingKey(item.month), item)
+  return (item: MonthClosing) => {
+    qc.setQueryData(closingKey(item.month), item)
+    qc.setQueryData(
+      yearClosingsKey(Number(item.month.slice(0, 4))),
+      (prev?: { items: MonthClosing[] }) =>
+        prev && { items: prev.items.map((c) => (c.month === item.month ? item : c)) },
+    )
+  }
 }
 
 export function useCloseMonth() {
