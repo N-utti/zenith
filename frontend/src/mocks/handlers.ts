@@ -49,6 +49,7 @@ import {
   updateDraft,
 } from './approvalsDb'
 import { readFile, saveFile } from './filesDb'
+import { closeMonth, getClosing, reopenMonth } from './closingsDb'
 import { createEvent, deleteEvent, listEvents } from './eventsDb'
 import {
   cancelLeave,
@@ -70,10 +71,14 @@ const MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 
 const unauthorized = () =>
   HttpResponse.json({ detail: '로그인이 필요합니다.', code: 'AUTH_REQUIRED' }, { status: 401 })
-const notFound = () => HttpResponse.json({ detail: '문서를 찾을 수 없습니다.', code: 'NOT_FOUND' }, { status: 404 })
+const notFound = () =>
+  HttpResponse.json({ detail: '문서를 찾을 수 없습니다.', code: 'NOT_FOUND' }, { status: 404 })
 
 /** 결재 목의 결과 → 응답. 실패는 `{error, status, code}` 모양(13 §9 의 403·404·409·422). */
-function approvalResponse(result: { error: string; status: number; code: string } | object, ok = 200) {
+function approvalResponse(
+  result: { error: string; status: number; code: string } | object,
+  ok = 200,
+) {
   if ('error' in result) {
     return HttpResponse.json({ detail: result.error, code: result.code }, { status: result.status })
   }
@@ -118,7 +123,10 @@ export const handlers = [
     return new HttpResponse(null, { status: 204 })
   }),
 
-  http.get('/api/me', authed((user) => HttpResponse.json(user))),
+  http.get(
+    '/api/me',
+    authed((user) => HttpResponse.json(user)),
+  ),
 
   http.post('/api/auth/logout', () => {
     clearMockSession()
@@ -126,7 +134,10 @@ export const handlers = [
   }),
 
   // ── 게시판 ────────────────────────────────────────────────
-  http.get('/api/boards', authed((user) => HttpResponse.json({ items: listBoards(user) }))),
+  http.get(
+    '/api/boards',
+    authed((user) => HttpResponse.json({ items: listBoards(user) })),
+  ),
 
   http.get(
     '/api/boards/:boardId/posts',
@@ -199,16 +210,25 @@ export const handlers = [
     }),
   ),
 
-  http.get('/api/tasks/today', authed(() => HttpResponse.json({ items: TODAY_TASKS }))),
+  http.get(
+    '/api/tasks/today',
+    authed(() => HttpResponse.json({ items: TODAY_TASKS })),
+  ),
 
   // ── 전자결재 (13 §9) ──────────────────────────────────────
-  http.get('/api/approval-types', authed(() => HttpResponse.json({ items: APPROVAL_TYPES }))),
+  http.get(
+    '/api/approval-types',
+    authed(() => HttpResponse.json({ items: APPROVAL_TYPES })),
+  ),
   http.get(
     '/api/approvals',
     authed((user, request) => {
       const box = new URL(request.url).searchParams.get('box') ?? 'inbox'
       if (!['inbox', 'sent', 'reference', 'draft'].includes(box)) {
-        return HttpResponse.json({ detail: 'box 가 올바르지 않습니다.', code: 'VALIDATION' }, { status: 422 })
+        return HttpResponse.json(
+          { detail: 'box 가 올바르지 않습니다.', code: 'VALIDATION' },
+          { status: 422 },
+        )
       }
       return HttpResponse.json({ items: listApprovals(user, box as 'inbox'), next_cursor: null })
     }),
@@ -227,10 +247,13 @@ export const handlers = [
     await delay(300)
     return approvalResponse(updateDraft(user, String(params.id), input))
   }),
-  http.get('/api/approvals/:id', authed((user, request) => {
-    const id = new URL(request.url).pathname.split('/').pop() ?? ''
-    return approvalResponse(getApproval(user, id))
-  })),
+  http.get(
+    '/api/approvals/:id',
+    authed((user, request) => {
+      const id = new URL(request.url).pathname.split('/').pop() ?? ''
+      return approvalResponse(getApproval(user, id))
+    }),
+  ),
   http.post('/api/approvals/:id/submit', async ({ params }) => {
     const user = authenticate()
     if (!user) return unauthorized()
@@ -264,7 +287,10 @@ export const handlers = [
     authed((user, request) => {
       const month = new URL(request.url).searchParams.get('month') ?? ''
       if (!MONTH.test(month)) {
-        return HttpResponse.json({ detail: 'month 는 YYYY-MM 형식입니다.', code: 'VALIDATION' }, { status: 422 })
+        return HttpResponse.json(
+          { detail: 'month 는 YYYY-MM 형식입니다.', code: 'VALIDATION' },
+          { status: 422 },
+        )
       }
       return HttpResponse.json(attendanceMonth(user, month))
     }),
@@ -282,11 +308,80 @@ export const handlers = [
       }
       const month = new URL(request.url).searchParams.get('month') ?? ''
       if (!MONTH.test(month)) {
-        return HttpResponse.json({ detail: 'month 는 YYYY-MM 형식입니다.', code: 'VALIDATION' }, { status: 422 })
+        return HttpResponse.json(
+          { detail: 'month 는 YYYY-MM 형식입니다.', code: 'VALIDATION' },
+          { status: 422 },
+        )
       }
       return HttpResponse.json(companyAttendance(month))
     }),
   ),
+
+  // ── 근태 · 월 마감 (10 §9.5) ─────────────────────────────
+  // 조회 경로는 프론트 확장(PR 본문). 마감 여부는 비밀이 아니라 전원 조회, 마감·해제만 임원(10 §3).
+  http.get('/api/attendance/closings/:month', ({ params }) => {
+    if (!authenticate()) return unauthorized()
+    const month = String(params.month)
+    if (!MONTH.test(month)) {
+      return HttpResponse.json(
+        { detail: 'month 는 YYYY-MM 형식입니다.', code: 'VALIDATION' },
+        { status: 422 },
+      )
+    }
+    return HttpResponse.json(getClosing(month))
+  }),
+  http.post('/api/attendance/close', async ({ request }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    if (user.role !== 'exec') {
+      return HttpResponse.json(
+        { detail: '월 마감은 임원만 할 수 있습니다.', code: 'FORBIDDEN' },
+        { status: 403 },
+      )
+    }
+    const { month } = (await request.json()) as { month?: string }
+    if (!month || !MONTH.test(month)) {
+      return HttpResponse.json(
+        { detail: 'month 는 YYYY-MM 형식입니다.', code: 'VALIDATION' },
+        { status: 422 },
+      )
+    }
+    await delay(400)
+    const result = closeMonth(user, month)
+    if ('error' in result) {
+      return HttpResponse.json(
+        { detail: result.error, code: result.code },
+        { status: result.status },
+      )
+    }
+    return HttpResponse.json(result.item)
+  }),
+  http.post('/api/attendance/reopen', async ({ request }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    if (user.role !== 'exec') {
+      return HttpResponse.json(
+        { detail: '마감 해제는 임원만 할 수 있습니다.', code: 'FORBIDDEN' },
+        { status: 403 },
+      )
+    }
+    const { month, reason } = (await request.json()) as { month?: string; reason?: string }
+    if (!month || !MONTH.test(month)) {
+      return HttpResponse.json(
+        { detail: 'month 는 YYYY-MM 형식입니다.', code: 'VALIDATION' },
+        { status: 422 },
+      )
+    }
+    await delay(400)
+    const result = reopenMonth(user, month, reason ?? '')
+    if ('error' in result) {
+      return HttpResponse.json(
+        { detail: result.error, code: result.code },
+        { status: result.status },
+      )
+    }
+    return HttpResponse.json(result.item)
+  }),
 
   // ── 근태 · 예외 근무 (04 §10.3) ───────────────────────────
   http.get(
@@ -309,7 +404,10 @@ export const handlers = [
     await delay(400)
     const result = createArrangement(user, input)
     if ('error' in result) {
-      return HttpResponse.json({ detail: result.error, code: result.code }, { status: result.status })
+      return HttpResponse.json(
+        { detail: result.error, code: result.code },
+        { status: result.status },
+      )
     }
     return HttpResponse.json(result.item, { status: 201 })
   }),
@@ -329,7 +427,10 @@ export const handlers = [
     await delay(400)
     const result = createOvertime(user, input)
     if ('error' in result) {
-      return HttpResponse.json({ detail: result.error, code: result.code }, { status: result.status })
+      return HttpResponse.json(
+        { detail: result.error, code: result.code },
+        { status: result.status },
+      )
     }
     return HttpResponse.json(result.item, { status: 201 })
   }),
@@ -344,7 +445,10 @@ export const handlers = [
     await delay(400)
     const result = createCorrection(user, input)
     if ('error' in result) {
-      return HttpResponse.json({ detail: result.error, code: result.code }, { status: result.status })
+      return HttpResponse.json(
+        { detail: result.error, code: result.code },
+        { status: result.status },
+      )
     }
     return HttpResponse.json(result.item, { status: 201 })
   }),
@@ -357,7 +461,10 @@ export const handlers = [
     await delay(300)
     const result = cancelException(user, store as ExceptionStore, String(params.id))
     if (result === 'not_found') {
-      return HttpResponse.json({ detail: '신청을 찾을 수 없습니다.', code: 'NOT_FOUND' }, { status: 404 })
+      return HttpResponse.json(
+        { detail: '신청을 찾을 수 없습니다.', code: 'NOT_FOUND' },
+        { status: 404 },
+      )
     }
     if (result === 'conflict') {
       return HttpResponse.json(
@@ -370,8 +477,14 @@ export const handlers = [
 
   // ── 근태 · 휴가 (04 §10.2) ────────────────────────────────
   // 백엔드는 501 스텁. 목록 응답의 `{items}` 감싸기와 항목 모양은 프론트 가정(PR 본문).
-  http.get('/api/leave-types', authed(() => HttpResponse.json({ items: LEAVE_TYPES }))),
-  http.get('/api/leaves/balance', authed((user) => HttpResponse.json(leaveBalance(user)))),
+  http.get(
+    '/api/leave-types',
+    authed(() => HttpResponse.json({ items: LEAVE_TYPES })),
+  ),
+  http.get(
+    '/api/leaves/balance',
+    authed((user) => HttpResponse.json(leaveBalance(user))),
+  ),
   // 04 에 없는 확장(연차 관리 탭). 전사 잔여는 임원만(10 §3), 그 외 403.
   http.get(
     '/api/leaves/balances',
@@ -406,7 +519,10 @@ export const handlers = [
     await delay(400)
     const result = createLeave(user, input)
     if ('error' in result) {
-      return HttpResponse.json({ detail: result.error, code: result.code }, { status: result.status })
+      return HttpResponse.json(
+        { detail: result.error, code: result.code },
+        { status: result.status },
+      )
     }
     return HttpResponse.json(result.leave, { status: 201 })
   }),
@@ -417,7 +533,10 @@ export const handlers = [
     await delay(300)
     const result = cancelLeave(user, String(params.leaveId))
     if (result === 'not_found') {
-      return HttpResponse.json({ detail: '휴가 신청을 찾을 수 없습니다.', code: 'NOT_FOUND' }, { status: 404 })
+      return HttpResponse.json(
+        { detail: '휴가 신청을 찾을 수 없습니다.', code: 'NOT_FOUND' },
+        { status: 404 },
+      )
     }
     if (result === 'conflict') {
       return HttpResponse.json(
@@ -455,13 +574,19 @@ export const handlers = [
     const user = authenticate()
     if (!user) return unauthorized()
     if (!deleteEvent(user, String(params.eventId))) {
-      return HttpResponse.json({ detail: '일정을 찾을 수 없습니다.', code: 'NOT_FOUND' }, { status: 404 })
+      return HttpResponse.json(
+        { detail: '일정을 찾을 수 없습니다.', code: 'NOT_FOUND' },
+        { status: 404 },
+      )
     }
     return new HttpResponse(null, { status: 204 })
   }),
 
   // ── AI 어시스턴트 (04 §8) ─────────────────────────────────
-  http.get('/api/ai/models', authed(() => HttpResponse.json(AI_MODELS))),
+  http.get(
+    '/api/ai/models',
+    authed(() => HttpResponse.json(AI_MODELS)),
+  ),
 
   // SSE: token → citations → done. 실제 서버(routers/ai.py)와 같은 프레임 모양.
   http.post('/api/ai/chat', async ({ request }) => {
@@ -472,7 +597,13 @@ export const handlers = [
       // 실제 서버(errors.py)의 422 detail 은 Pydantic 오류 배열이다. 문자열이 아니다.
       return HttpResponse.json(
         {
-          detail: [{ loc: ['body', 'message'], msg: 'String should have at least 1 character', type: 'string_too_short' }],
+          detail: [
+            {
+              loc: ['body', 'message'],
+              msg: 'String should have at least 1 character',
+              type: 'string_too_short',
+            },
+          ],
           code: 'VALIDATION',
         },
         { status: 422 },
@@ -493,7 +624,10 @@ data: ${JSON.stringify(data)}
           await delay(300)
           controller.enqueue(
             encoder.encode(
-              frame('error', { detail: 'AI 요청이 몰려 있습니다. 잠시 후 다시 시도해 주세요.', code: 'AI_RATE_LIMITED' }),
+              frame('error', {
+                detail: 'AI 요청이 몰려 있습니다. 잠시 후 다시 시도해 주세요.',
+                code: 'AI_RATE_LIMITED',
+              }),
             ),
           )
           controller.close()
@@ -515,10 +649,17 @@ data: ${JSON.stringify(data)}
   // 04 §8 feedback. 응답은 04 에 없다. 204 는 프론트 가정(PR 본문).
   http.post('/api/ai/feedback', async ({ request }) => {
     if (!authenticate()) return unauthorized()
-    const { message_id, value } = (await request.json()) as { message_id?: unknown; value?: unknown }
+    const { message_id, value } = (await request.json()) as {
+      message_id?: unknown
+      value?: unknown
+    }
     const bad =
       typeof message_id !== 'string' || !message_id
-        ? { loc: ['body', 'message_id'], msg: 'Input should be a valid string', type: 'string_type' }
+        ? {
+            loc: ['body', 'message_id'],
+            msg: 'Input should be a valid string',
+            type: 'string_type',
+          }
         : value !== 1 && value !== -1
           ? { loc: ['body', 'value'], msg: 'Input should be 1 or -1', type: 'literal_error' }
           : null
@@ -534,14 +675,25 @@ data: ${JSON.stringify(data)}
     // 실제 서버는 Pydantic 검증(422)이 핸들러(404)보다 먼저다.
     if (!(DOC_ACTIONS as readonly string[]).includes(action ?? '')) {
       return HttpResponse.json(
-        { detail: [{ loc: ['body', 'action'], msg: 'Input should be one of the allowed actions', type: 'enum' }], code: 'VALIDATION' },
+        {
+          detail: [
+            {
+              loc: ['body', 'action'],
+              msg: 'Input should be one of the allowed actions',
+              type: 'enum',
+            },
+          ],
+          code: 'VALIDATION',
+        },
         { status: 422 },
       )
     }
     const doc = doc_id ? findDoc(doc_id) : undefined
     if (!doc) return notFound()
     await delay(700)
-    return HttpResponse.json({ draft: docActionDraft(action as (typeof DOC_ACTIONS)[number], doc.title) })
+    return HttpResponse.json({
+      draft: docActionDraft(action as (typeof DOC_ACTIONS)[number], doc.title),
+    })
   }),
 
   http.patch('/api/tasks/:taskId', async ({ request, params }) => {
@@ -570,7 +722,10 @@ data: ${JSON.stringify(data)}
     }),
   ),
 
-  http.post('/api/documents', authed((user) => HttpResponse.json(createDoc(user), { status: 201 }))),
+  http.post(
+    '/api/documents',
+    authed((user) => HttpResponse.json(createDoc(user), { status: 201 })),
+  ),
 
   http.get('/api/documents/:docId', ({ params }) => {
     if (!authenticate()) return unauthorized()
