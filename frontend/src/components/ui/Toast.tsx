@@ -22,7 +22,10 @@ const api: ToastApi = {
 
 /** sonner 의 CSS 변수를 시맨틱 토큰으로 덮는다. 라이트·다크는 토큰이 알아서 바뀐다. */
 const TOASTER_STYLE = {
-  '--width': '384px',
+  // 가장 긴 문구("비밀번호를 바꿨습니다. 다른 기기의 로그인은 모두 해제됩니다.")가 한 줄에 들어가는 폭.
+  // 본문 366px + 아이콘·여백·닫기 버튼 57px = 423px. 나머지 17px 은 폰트 폴백으로 글자가 조금
+  // 넓어져도 줄이 넘어가지 않게 두는 여유다. 600px 미만에서는 sonner 가 화면 폭을 쓰므로 모바일과 무관하다.
+  '--width': '440px',
   // 커맨드 팔레트·모달(z-50)보다 아래. 알림이 입력을 가리면 안 된다.
   // sonner 의 `--z-index` 는 토스트끼리의 순서만 정하고, 컨테이너 자체는 CSS 에 999999999 로 박혀 있다.
   // 인라인 style 은 같은 엘리먼트에 얹히므로 그 규칙을 이긴다.
@@ -58,6 +61,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         offset={{ top: 62 }}
         mobileOffset={{ top: 62, left: 16, right: 16 }}
         closeButton
+        // 날짜·이름이 들어가 길어지는 문구(회사 휴일 등록 등)는 폭을 넘길 수 있다. 그때 한글이
+        // 글자 중간에서 끊기지 않게 어절 단위로 넘긴다.
+        toastOptions={{ classNames: { title: 'break-keep' } }}
         icons={{
           success: <Check className="text-success size-4" />,
           error: <AlertTriangle className="text-danger size-4" />,
