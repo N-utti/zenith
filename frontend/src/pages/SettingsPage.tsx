@@ -12,10 +12,18 @@ import { useCurrentUser } from '@/features/auth/AuthContext'
 import { api, ApiError } from '@/lib/api'
 import { hueOf } from '@/lib/avatar'
 import { useTheme } from '@/lib/theme'
+import { DEMO_PASSWORD, MSW_ENABLED } from '@/mocks/accounts'
 import { ROLE_LABEL } from '@/types'
 
 /** 서버 `PasswordIn.new_password` 의 min_length(backend/app/config.py `password_min_length`)와 같은 값. */
 const PASSWORD_MIN = 8
+
+/**
+ * 개발 목(mock) 모드에서만 세 칸을 미리 채운다. 토스트를 보려고 매번 같은 값을 세 번 타이핑하지 않게.
+ * 로그인 화면의 목 계정 버튼과 같은 편의다. 실제 서버에 붙이면(`VITE_DISABLE_MSW=true`) 빈 칸이고,
+ * 검증도 요청도 그대로 돈다. 칸을 고쳐 넣으면 불일치·400 경로도 여전히 확인할 수 있다.
+ */
+const SEED = MSW_ENABLED ? DEMO_PASSWORD : ''
 
 /** 서버에 보내기 전에 잡을 수 있는 오류. 어느 칸이 틀렸는지 알 수 있으니 그 칸에 붙인다. 현재 비밀번호는 서버만 안다. */
 function passwordFormError(next: string, confirm: string) {
@@ -27,9 +35,9 @@ function passwordFormError(next: string, confirm: string) {
 
 function PasswordSection() {
   const toast = useToast()
-  const [current, setCurrent] = useState('')
-  const [next, setNext] = useState('')
-  const [confirm, setConfirm] = useState('')
+  const [current, setCurrent] = useState(SEED)
+  const [next, setNext] = useState(SEED)
+  const [confirm, setConfirm] = useState(SEED)
   const [currentError, setCurrentError] = useState<string | null>(null)
   const [nextError, setNextError] = useState<string | null>(null)
   const [confirmError, setConfirmError] = useState<string | null>(null)
@@ -49,9 +57,10 @@ function PasswordSection() {
         method: 'POST',
         body: JSON.stringify({ current_password: current, new_password: next }),
       })
-      setCurrent('')
-      setNext('')
-      setConfirm('')
+      // 실제 서버에서는 빈 칸으로 돌아간다. 목 모드에서는 바로 한 번 더 눌러 볼 수 있게 다시 채운다.
+      setCurrent(SEED)
+      setNext(SEED)
+      setConfirm(SEED)
       // 서버가 이 세션만 남기고 나머지를 끊는다(backend/README §1 확장). 다른 기기에서 놀라지 않게 알린다.
       toast.success('비밀번호를 바꿨습니다. 다른 기기의 로그인은 모두 해제됩니다.')
     } catch (err) {
