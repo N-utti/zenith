@@ -11,7 +11,7 @@
 | `api` | `../backend/Dockerfile` | FastAPI. 기동 때 `alembic upgrade head` 를 먼저 돌리고 uvicorn 을 띄운다. 호스트 포트 없음 — caddy 로만 들어온다 |
 | `db` | `pgvector/pgvector:pg16` | 문서·채팅·권한 + 벡터(RAG) |
 | `redis` | `redis:7-alpine` | presence · 안 읽음 · WS 팬아웃 (아직 코드가 안 씀) |
-| `minio` | `minio/minio` | 채팅 첨부(`app/storage.py`) |
+| `minio` | `quay.io/minio/minio:RELEASE…` | 채팅 첨부(`app/storage.py`). Docker Hub 의 `minio/minio` 는 pull 이 거부돼 quay 태그로 고정 |
 | `backup` | `pgvector/pgvector:pg16` | 24시간마다 `pg_dump -Fc` → `ZENITH_BACKUP_DIR`(기본 `./backups`), 14일 지난 덤프 삭제 |
 
 ```sh

@@ -87,7 +87,7 @@ jobs:
       # CI 환경변수(GitHub 가 기본 설정)가 있으면 첨부 테스트는 skip 대신 fail — 조용히 건너뛰지 않는다.
       - name: MinIO (첨부 테스트)
         run: |
-          docker run -d --name minio -p 9000:9000 -e MINIO_ROOT_USER=zenith -e MINIO_ROOT_PASSWORD=zenith-minio minio/minio server /data
+          docker run -d --name minio -p 9000:9000 -e MINIO_ROOT_USER=zenith -e MINIO_ROOT_PASSWORD=zenith-minio quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z server /data
           for i in $(seq 1 30); do curl -sf http://localhost:9000/minio/health/live && break; sleep 1; done
           curl -sf http://localhost:9000/minio/health/live
       - name: pytest (DB·MinIO 테스트 skip 없이)
