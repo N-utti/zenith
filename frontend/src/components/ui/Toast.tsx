@@ -1,7 +1,6 @@
 import type { CSSProperties, ReactNode } from 'react'
 import { AlertTriangle, Check, Info } from 'lucide-react'
 import { Toaster, toast } from 'sonner'
-import 'sonner/dist/styles.css'
 import { useTheme } from '@/lib/theme'
 import { ToastContext, type ToastApi } from './ToastContext'
 
@@ -25,7 +24,9 @@ const api: ToastApi = {
 const TOASTER_STYLE = {
   '--width': '384px',
   // 커맨드 팔레트·모달(z-50)보다 아래. 알림이 입력을 가리면 안 된다.
-  '--z-index': '40',
+  // sonner 의 `--z-index` 는 토스트끼리의 순서만 정하고, 컨테이너 자체는 CSS 에 999999999 로 박혀 있다.
+  // 인라인 style 은 같은 엘리먼트에 얹히므로 그 규칙을 이긴다.
+  zIndex: 40,
   '--normal-bg': 'var(--zenith-surface)',
   '--normal-text': 'var(--zenith-fg)',
   '--normal-border': 'var(--zenith-line)',
