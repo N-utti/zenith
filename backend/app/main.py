@@ -19,6 +19,7 @@ from app.routers import (
     boards,
     channels,
     docs,
+    files,
     me,
     search,
 )
@@ -112,7 +113,19 @@ def create_app() -> FastAPI:
     async def metrics_text() -> str:
         return metrics.render()
 
-    for module in (auth, me, docs, channels, boards, search, ai, attendance, approvals, admin):
+    for module in (
+        auth,
+        me,
+        docs,
+        files,
+        channels,
+        boards,
+        search,
+        ai,
+        attendance,
+        approvals,
+        admin,
+    ):
         api.include_router(module.router)
     app.include_router(api)
     yjs.register(app)  # WebSocket — OpenAPI 밖 (04 §4.2)

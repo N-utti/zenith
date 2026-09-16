@@ -71,15 +71,6 @@ def parse_attachment_url(url: str, channel_id: uuid.UUID) -> str | None:
     return unquote(rest[1])
 
 
-def _safe_name(filename: str | None) -> str:
-    # 경로 구분자·제어문자를 벗기고 basename 만. 키와 Content-Disposition 에 그대로 쓴다.
-    name = "".join(
-        c if c.isprintable() and c not in "/\\" else "_" for c in (filename or "").strip()
-    ).strip(". ")
-    # MinIO 는 경로 조각 하나를 파일시스템 이름(255바이트)으로 쓴다 — 글자가 아니라 바이트로 자른다
-    return name.encode()[:200].decode("utf-8", "ignore").strip(". ") or "file"
-
-
 class Person(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -393,7 +384,7 @@ async def upload_attachment(
         raise ApiError(422, "VALIDATION", "10MB 이하 파일만 올릴 수 있습니다.")
     if not data:
         raise ApiError(422, "VALIDATION", "빈 파일입니다.")
-    name = _safe_name(file.filename)
+    name = storage.safe_name(file.filename)
     file_id = uuid.uuid4()
     # multipart 헤더 값을 그대로 저장·반사하므로 토큰/토큰 모양만 받는다 — 나머지는 octet-stream
     content_type = (file.content_type or "").split(";")[0].strip().lower()

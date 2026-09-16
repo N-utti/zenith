@@ -1024,6 +1024,86 @@
         }
       }
     },
+    "/api/files": {
+      "post": {
+        "tags": [
+          "files"
+        ],
+        "summary": "문서 이미지 업로드 — multipart `file`(png·jpeg·gif·webp, 10MB, 하루 200장) → MinIO. 04 에 없던 경로",
+        "operationId": "upload_file_api_files_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_file_api_files_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/files/{id}": {
+      "get": {
+        "tags": [
+          "files"
+        ],
+        "summary": "문서 이미지 — 로그인한 사람 누구나(문서에 열람 등급 없음). <img src> 가 쿠키로 인증된다",
+        "operationId": "download_file_api_files__id__get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "image/*": {}
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/channels": {
       "get": {
         "tags": [
@@ -2929,6 +3009,20 @@
         ],
         "title": "Body_upload_attachment_api_channels__id__attachments_post"
       },
+      "Body_upload_file_api_files_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_file_api_files_post"
+      },
       "ChannelCreateIn": {
         "properties": {
           "name": {
@@ -3288,6 +3382,35 @@
         },
         "type": "object",
         "title": "DocPatchIn"
+      },
+      "FileOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "size": {
+            "type": "integer",
+            "title": "Size"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "url",
+          "name",
+          "size"
+        ],
+        "title": "FileOut"
       },
       "FolderCreateIn": {
         "properties": {

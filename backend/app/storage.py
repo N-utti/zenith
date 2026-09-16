@@ -1,7 +1,8 @@
-"""MinIO(S3) 오브젝트 저장소 — 채팅 첨부(FR-CHT-04). ARCHITECTURE §7 의 minio 컨테이너와 짝.
+"""MinIO(S3) 오브젝트 저장소 — 채팅 첨부(routers/channels.py)·문서 이미지(routers/files.py). ARCHITECTURE §7 의 minio 와 짝.
 
 클라이언트는 동기(minio-py)라 스레드로 넘긴다. 버킷은 프로세스에서 처음 쓸 때 한 번 확인·생성한다.
-브라우저는 MinIO 에 직접 붙지 않는다 — 업로드·다운로드 모두 API 를 지나며 채널 멤버십을 검사한다(routers/channels.py).
+브라우저는 MinIO 에 직접 붙지 않는다 — 업로드·다운로드 모두 API 를 지나고, 권한 판정은 호출한 라우터가 한다
+(채널 첨부 = 멤버십, 문서 이미지 = 로그인만). 여기는 키·바이트만 안다.
 MinIO 에 붙지 못하면 503 `STORAGE_UNAVAILABLE` — 스택트레이스 대신 안내 문구.
 """
 
@@ -76,3 +77,12 @@ async def put(key: str, data: bytes, content_type: str) -> None:
 
 async def get(key: str) -> tuple[bytes, str] | None:
     return await _call(_get_sync, key)
+
+
+def safe_name(filename: str | None) -> str:
+    """경로 구분자·제어문자를 벗기고 basename 만. 오브젝트 키와 Content-Disposition 에 그대로 쓴다."""
+    name = "".join(
+        c if c.isprintable() and c not in "/\\" else "_" for c in (filename or "").strip()
+    ).strip(". ")
+    # MinIO 는 경로 조각 하나를 파일시스템 이름(255바이트)으로 쓴다 — 글자가 아니라 바이트로 자른다
+    return name.encode()[:200].decode("utf-8", "ignore").strip(". ") or "file"
