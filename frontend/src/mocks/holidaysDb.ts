@@ -6,6 +6,7 @@ import { isClosedRange } from './closingsDb'
  * 공휴일·회사 휴일(10 §6.1 `holidays`, §9.6 `/admin/holidays`). 근무 달력의 유일한 입력이다.
  * attendanceDb 가 근무일을 셀 때 여기를 본다. 그래서 여기서 바꾸면 근태 달력이 바로 따라온다(§6.2 재생성).
  * 마감된 달의 날짜는 넣고 빼지 못한다(§6.2 "마감됨: 자동 변경하지 않는다").
+ * 법정 공휴일은 화면에서 다루지 않는다(2026-09-16). 지우려 하면 403: 원천이 서버다.
  *
  * ponytail: 임시공휴일 지정 때 승인된 연차를 자동 취소·반환하는 §6.2 두 번째 행은 목에 없다. 서버 몫이다.
  */
@@ -71,7 +72,11 @@ export function addHoliday(input: HolidayInput): { item: Holiday } | Failure {
 }
 
 export function removeHoliday(date: string): 'ok' | 'not_found' | Failure {
-  if (!holidays.has(date)) return 'not_found'
+  const found = holidays.get(date)
+  if (!found) return 'not_found'
+  if (found.kind === 'public') {
+    return { error: '법정 공휴일은 여기서 지울 수 없습니다.', status: 403, code: 'FORBIDDEN' }
+  }
   if (isClosedRange(date)) return HOLIDAY_MONTH_CLOSED
   holidays.delete(date)
   return 'ok'
