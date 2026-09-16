@@ -50,6 +50,7 @@ import {
 } from './approvalsDb'
 import { readFile, saveFile } from './filesDb'
 import { closeMonth, getClosing, listClosings, reopenMonth } from './closingsDb'
+import { addHoliday, listHolidays, removeHoliday } from './holidaysDb'
 import { createEvent, deleteEvent, listEvents } from './eventsDb'
 import {
   cancelLeave,
@@ -316,6 +317,73 @@ export const handlers = [
       return HttpResponse.json(companyAttendance(month))
     }),
   ),
+
+  // ── 근태 · 공휴일·회사 휴일 (10 §9.6, 임원) ─────────────
+  // `?year=` 와 DELETE 는 프론트 확장(PR 본문). 바꾸면 근무 달력이 바로 따라온다(§6.2).
+  http.get(
+    '/api/admin/holidays',
+    authed((user, request) => {
+      if (user.role !== 'exec') {
+        return HttpResponse.json(
+          { detail: '휴일 설정은 임원만 볼 수 있습니다.', code: 'FORBIDDEN' },
+          { status: 403 },
+        )
+      }
+      const year = Number(new URL(request.url).searchParams.get('year'))
+      if (!Number.isInteger(year) || year < 2000 || year > 2100) {
+        return HttpResponse.json(
+          { detail: 'year 는 네 자리 연도입니다.', code: 'VALIDATION' },
+          { status: 422 },
+        )
+      }
+      return HttpResponse.json({ items: listHolidays(year) })
+    }),
+  ),
+  http.post('/api/admin/holidays', async ({ request }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    if (user.role !== 'exec') {
+      return HttpResponse.json(
+        { detail: '휴일 설정은 임원만 할 수 있습니다.', code: 'FORBIDDEN' },
+        { status: 403 },
+      )
+    }
+    const input = (await request.json()) as Parameters<typeof addHoliday>[0]
+    await delay(300)
+    const result = addHoliday(input)
+    if ('error' in result) {
+      return HttpResponse.json(
+        { detail: result.error, code: result.code },
+        { status: result.status },
+      )
+    }
+    return HttpResponse.json(result.item, { status: 201 })
+  }),
+  http.delete('/api/admin/holidays/:date', async ({ params }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    if (user.role !== 'exec') {
+      return HttpResponse.json(
+        { detail: '휴일 설정은 임원만 할 수 있습니다.', code: 'FORBIDDEN' },
+        { status: 403 },
+      )
+    }
+    await delay(300)
+    const result = removeHoliday(String(params.date))
+    if (result === 'not_found') {
+      return HttpResponse.json(
+        { detail: '등록되지 않은 휴일입니다.', code: 'NOT_FOUND' },
+        { status: 404 },
+      )
+    }
+    if (result !== 'ok') {
+      return HttpResponse.json(
+        { detail: result.error, code: result.code },
+        { status: result.status },
+      )
+    }
+    return new HttpResponse(null, { status: 204 })
+  }),
 
   // ── 근태 · 월 마감 (10 §9.5) ─────────────────────────────
   // 조회 경로는 프론트 확장(PR 본문). 마감 여부는 비밀이 아니라 전원 조회, 마감·해제만 임원(10 §3).

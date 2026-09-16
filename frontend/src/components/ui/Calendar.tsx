@@ -121,6 +121,32 @@ export function MonthHeader({
   )
 }
 
+/** 연도 이동 + 연도 제목 줄. 월 마감·휴일 설정처럼 "한 해"를 보는 화면이 같이 쓴다. 2000~2100 안. */
+export function YearHeader({
+  year,
+  onYearChange,
+  actions,
+}: {
+  year: number
+  onYearChange: (year: number) => void
+  actions?: ReactNode
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <div className="flex items-center gap-0.5">
+        <MonthButton label="이전 해" onClick={() => onYearChange(Math.max(2000, year - 1))}>
+          <ChevronLeft className="size-4" />
+        </MonthButton>
+        <MonthButton label="다음 해" onClick={() => onYearChange(Math.min(2100, year + 1))}>
+          <ChevronRight className="size-4" />
+        </MonthButton>
+      </div>
+      <h2 className="text-fg text-base font-semibold">{year}년</h2>
+      {actions && <div className="ml-auto flex items-center gap-2">{actions}</div>}
+    </div>
+  )
+}
+
 function MonthButton({
   label,
   onClick,
