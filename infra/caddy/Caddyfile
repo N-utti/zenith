@@ -16,10 +16,11 @@
 		# CSP 는 **Report-Only** 로 먼저 — 아무것도 막지 않고 브라우저 콘솔에 "[Report Only]" 위반만 찍는다(2026-09-16).
 		# 프론트(진수연)가 화면을 돌며 콘솔이 조용한 걸 확인하면 헤더 이름을 Content-Security-Policy 로 바꾼다(infra/README).
 		# 규칙의 근거: 프론트는 외부 리소스가 없다(CDN 금지, 루트 CLAUDE.md). script 의 sha256 은 index.html 의 테마 FOUC
-		# 인라인 스크립트(Vite 가 그대로 둔다) — 그 스크립트를 고치면 해시도 바꾼다(frontend/index.html 을 빌드해 sha256).
-		# style 'unsafe-inline' 은 React style={} 속성 때문(8 파일). img data: 는 Checkbox 의 svg 배경, blob: 은 업로드 미리보기.
-		# connect 'self' 가 같은 오리진 wss(/api/ws·/api/yjs)와 SSE(/api/ai/chat)를 덮는다.
-		Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self' 'sha256-pXtRwkv0BBv+7eAnfWu9UUpDtAWk26v1VRy+Z7ujGfQ='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+		# 인라인 스크립트(Vite 가 바이트 그대로 둔다) — 그 스크립트를 고치면 해시도 바꾼다. 개행은 .gitattributes 가 LF 로 고정
+		# (CRLF 로 빌드하면 해시가 어긋난다). style 'unsafe-inline' 은 React style={} 속성 때문(8 파일). img data: 는 Checkbox
+		# 의 svg 배경. connect 'self' 가 같은 오리진 wss(/api/ws·/api/yjs)와 SSE(/api/ai/chat)를 덮는다. font·worker 는
+		# default 'self' 로 충분(외부 폰트·워커 없음) — blob: 미리보기가 생기면 그때 img-src 에 더한다.
+		Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self' 'sha256-pXtRwkv0BBv+7eAnfWu9UUpDtAWk26v1VRy+Z7ujGfQ='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
 	}
 
 	# /api/metrics 는 인증이 없다 — 스크레이퍼는 compose 안에서 api:8000 을 직접 긁고, 바깥에는 없는 경로다.

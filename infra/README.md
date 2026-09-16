@@ -46,7 +46,7 @@ docker compose cp caddy:/data/caddy/pki/authorities/local/root.crt ./zenith-root
 ### CSP
 
 `Caddyfile` 이 `Content-Security-Policy-Report-Only` 를 붙인다(2026-09-16) — **아무것도 막지 않는다**. 브라우저 devtools 콘솔에 `[Report Only]` 로 위반만 찍힌다(report-uri 는 두지 않았다 — 15명 규모에서 콘솔 확인이면 된다).
-승격 절차: (1) 프론트가 로그인·문서 편집·채팅 첨부(이미지 미리보기)·AI 답변·⌘K 를 한 바퀴 돌며 콘솔에 CSP 위반이 없는지 본다, (2) 위반이 있으면 규칙을 고친다(정당한 리소스) 또는 코드를 고친다(인라인 스크립트 등), (3) 헤더 이름에서 `-Report-Only` 를 뗀다. `script-src` 의 sha256 은 `frontend/index.html` 의 인라인 테마 스크립트 해시라 그 스크립트를 고치면 해시를 다시 뽑는다(`docker compose exec caddy cat /srv/index.html` 의 `<script>…</script>` 안쪽 바이트를 sha256 → base64) — 스크립트를 외부 파일로 빼면 해시가 필요 없어진다(프론트 제안).
+승격 절차: (1) 프론트가 로그인·문서 편집·채팅 첨부(이미지 미리보기)·AI 답변·⌘K 를 한 바퀴 돌며 콘솔에 CSP 위반이 없는지 본다, (2) 위반이 있으면 규칙을 고친다(정당한 리소스) 또는 코드를 고친다(인라인 스크립트 등), (3) 헤더 이름에서 `-Report-Only` 를 뗀다. `script-src` 의 sha256 은 `frontend/index.html` 의 인라인 테마 스크립트 해시라 그 스크립트를 고치면 해시를 다시 뽑는다(`docker compose exec caddy cat /srv/index.html` 의 `<script>…</script>` 안쪽 **바이트 그대로**(개행 포함) sha256 → base64. 개행은 `.gitattributes` 가 LF 로 고정한다 — Windows 에서 CRLF 로 빌드하면 해시가 어긋나 거짓 위반이 찍힌다) — 스크립트를 외부 파일로 빼면 해시가 필요 없어진다(프론트 제안).
 - api 는 `COOKIE_SECURE=true` 가 기본이다. caddy 없이 api 에 평문 http 로 붙는 실험에서만 `ZENITH_COOKIE_SECURE=false`.
 
 ### 백업 · 복구
