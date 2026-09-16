@@ -4,6 +4,7 @@ import { Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { api } from '@/lib/api'
 import { OPEN_INLINE_AI_EVENT } from './editorBlocks'
+import { parseMarkdownTable, tableToHtml } from './markdownTable'
 
 /** 04 §8 `POST /ai/doc-action` 의 `action`. 자유 프롬프트는 계약에 없다. */
 type DocAction = 'summarize' | 'continue' | 'polish' | 'translate' | 'table'
@@ -119,16 +120,22 @@ export function InlineAiPopover({ editor, docId }: { editor: Editor; docId: stri
     if (draft) applyRef.current?.focus()
   }, [draft])
 
-  /** 삽입: 커서 자리에 / 아래에 추가: 그 블록 다음 줄에. */
+  // "표로 정리" 초안은 마크다운 표로 온다. 미리보기도 삽입도 실제 표로(05 SCR-03, FR-AI-09).
+  const table = draft ? parseMarkdownTable(draft) : null
+
+  /** 삽입: 커서 자리에 / 아래에 추가: 커서가 든 최상위 블록 다음에. */
   const apply = (mode: 'inline' | 'below') => {
     if (!draft) return
-    const at = insertAt.current ?? editor.state.selection.from
-    const chain = editor.chain().focus()
-    if (mode === 'below') {
-      chain.setTextSelection(at).createParagraphNear().insertContent(draft).run()
-    } else {
-      chain.insertContentAt(at, draft).run()
-    }
+    const content = table ? tableToHtml(table) : draft
+    // 응답을 기다리는 동안 남의 편집으로 문서가 줄면 저장해 둔 좌표가 밖으로 나간다. 문서 끝으로 가둔다.
+    // ponytail: 상대 좌표(Y.RelativePosition)로 들면 정확해진다. 어긋난 삽입이 문제가 되면 그때.
+    const at = Math.min(
+      insertAt.current ?? editor.state.selection.from,
+      editor.state.doc.content.size,
+    )
+    const $at = editor.state.doc.resolve(at)
+    const target = mode === 'below' && $at.depth > 0 ? $at.after(1) : at
+    editor.chain().focus().insertContentAt(target, content).run()
     close()
   }
 
@@ -189,7 +196,35 @@ export function InlineAiPopover({ editor, docId }: { editor: Editor; docId: stri
         <>
           <div className="bg-canvas px-4 py-3.5">
             <p className="text-subtle mb-2 text-[11px] font-bold">생성된 초안</p>
-            <p className="text-fg text-sm leading-[1.75] whitespace-pre-wrap">{draft}</p>
+            {table ? (
+              <div className="overflow-x-auto">
+                <table className="border-line w-full border-collapse border text-xs">
+                  <tbody>
+                    {table.map((row, r) => (
+                      <tr key={r}>
+                        {row.map((cell, c) =>
+                          r === 0 ? (
+                            <th
+                              key={c}
+                              scope="col"
+                              className="border-line bg-sunken border px-2 py-1 text-left font-semibold"
+                            >
+                              {cell}
+                            </th>
+                          ) : (
+                            <td key={c} className="border-line border px-2 py-1 align-top">
+                              {cell}
+                            </td>
+                          ),
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="text-fg text-sm leading-[1.75] whitespace-pre-wrap">{draft}</p>
+            )}
             <p className="text-subtle mt-2.5 flex items-center gap-1.5 text-[11px]">
               <span className="bg-success size-1.5 rounded-full" />
               Claude API · 사내 서버 경유 · 근거: 이 문서 본문
@@ -203,7 +238,11 @@ export function InlineAiPopover({ editor, docId }: { editor: Editor; docId: stri
             <Button variant="secondary" size="sm" onClick={() => apply('below')}>
               아래에 추가
             </Button>
-            <Button variant="secondary" size="sm" onClick={() => lastAction && void generate(lastAction)}>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => lastAction && void generate(lastAction)}
+            >
               다시 생성
             </Button>
             <button

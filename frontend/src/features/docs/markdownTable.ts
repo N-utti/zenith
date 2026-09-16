@@ -1,0 +1,45 @@
+/**
+ * AI 가 "표로 정리" 로 돌려주는 초안에서 마크다운 표(`| a | b |` 줄과 `| --- |` 구분선)를 찾아
+ * 행 배열로 푼다. 표가 없으면 null. 앞뒤에 안내 문장이 붙어 있어도 `|` 로 시작·끝나는 연속 구간만 본다.
+ * 첫 줄이 머리글, 둘째 줄의 구분선은 버린다(FR-AI-09: 실제 표 블록으로 삽입).
+ *
+ * 열 수가 머리글과 다른 행이 있으면 표로 보지 않는다(null). 셀 안의 `\|` 는 안 다루는데,
+ * 그런 표는 열 수가 어긋나 null 로 떨어져 텍스트로 들어간다. 조용히 깨진 표를 만들지 않는다.
+ * 정렬 콜론(`:---:`)은 구분선으로 인정하되 정렬 자체는 버린다.
+ */
+export function parseMarkdownTable(text: string): string[][] | null {
+  const lines = text
+    .replace(/\r/g, '')
+    .split('\n')
+    .map((l) => l.trim())
+  const isRow = (l: string) => l.length > 1 && l.startsWith('|') && l.endsWith('|')
+  const start = lines.findIndex(isRow)
+  if (start < 0) return null
+  const block: string[] = []
+  for (let i = start; i < lines.length && isRow(lines[i]); i++) block.push(lines[i])
+  if (block.length < 2) return null
+  const rows = block.map((l) =>
+    l
+      .slice(1, -1)
+      .split('|')
+      .map((c) => c.trim()),
+  )
+  if (!rows[1].every((c) => /^:?-+:?$/.test(c))) return null
+  rows.splice(1, 1)
+  const width = rows[0].length
+  if (rows.some((r) => r.length !== width)) return null
+  return rows
+}
+
+/** 텍스트 자리에만 넣으므로 따옴표는 안 바꾼다. 속성 자리에 쓰게 되면 그때 추가. */
+function escapeHtml(text: string): string {
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
+/** tiptap 표 확장이 그대로 읽는 HTML. 첫 행은 머리글 셀. */
+export function tableToHtml(rows: string[][]): string {
+  const tr = (cells: string[], tag: 'th' | 'td') =>
+    `<tr>${cells.map((c) => `<${tag}>${escapeHtml(c)}</${tag}>`).join('')}</tr>`
+  const [head, ...body] = rows
+  return `<table><tbody>${tr(head, 'th')}${body.map((r) => tr(r, 'td')).join('')}</tbody></table>`
+}
