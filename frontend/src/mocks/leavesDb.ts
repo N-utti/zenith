@@ -1,3 +1,4 @@
+import { isClosedRange, MONTH_CLOSED } from './closingsDb'
 import type {
   LeaveBalance,
   LeaveBalanceRow,
@@ -191,6 +192,8 @@ export function createLeave(
   if (type.deduct_days === 0 && !input.reason?.trim()) {
     return { error: '사유를 입력해 주세요.', status: 422, code: 'VALIDATION' }
   }
+  // 마감된 달에는 신청할 수 없다(10 §5.5, TC-ATT-16).
+  if (isClosedRange(start, end)) return MONTH_CLOSED
   const days = leaveDays(type, start, end)
   if (days > leaveBalance(user).remaining) {
     // 04 §10.2: 잔여 부족 422. code 는 04 에 없어 프론트 가정(PR 본문).

@@ -220,3 +220,24 @@ export interface CorrectionInput {
   after: { status?: AttendanceStatus; note?: string }
   reason: string
 }
+
+// ── 월 마감 (10 §5.5 · §9.5) ────────────────────────────────
+
+/**
+ * 한 달의 마감 상태와 마감·해제 이력(최신순). 10 §9.5 는 `POST /attendance/close`·`/reopen` 만 두고
+ * 조회 경로가 없어 `GET /attendance/closings/{month}` 는 프론트 확장(PR 본문). 조회는 전원, 마감·해제는 임원.
+ * `status` 가 `closed` 면 `closed_at`·`closed_by` 는 항상 있다(서버 계약으로 적을 것).
+ */
+export interface MonthClosing {
+  month: string
+  status: 'open' | 'closed'
+  closed_at: string | null
+  closed_by: { id: string; name: string } | null
+  history: {
+    action: 'close' | 'reopen'
+    at: string
+    by: { id: string; name: string }
+    /** 해제에만. 감사 로그에도 남는다. */
+    reason?: string
+  }[]
+}

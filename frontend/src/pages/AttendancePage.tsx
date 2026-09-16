@@ -7,6 +7,7 @@ import { CompanyAttendanceSection } from '@/features/attendance/CompanyAttendanc
 import { ExceptionSection } from '@/features/attendance/ExceptionSection'
 import { LeaveAdminSection } from '@/features/attendance/LeaveAdminSection'
 import { LeaveSection } from '@/features/attendance/LeaveSection'
+import { MonthClosingSection } from '@/features/attendance/MonthClosingSection'
 import { MyAttendanceSection } from '@/features/attendance/MyAttendanceSection'
 import { useCurrentUser } from '@/features/auth/AuthContext'
 import { ROLE_RANK } from '@/types'
@@ -25,6 +26,8 @@ const EXEC_TABS = [
   ...TABS,
   { key: 'company', label: '전사 근태' },
   { key: 'leave-admin', label: '연차 관리' },
+  // 근태 관리(05 SCR-ATT-06 상당): 지금은 월 마감만. 리포트 내보내기·결근 확정은 뒤에 붙는다.
+  { key: 'admin', label: '근태 관리' },
 ]
 
 export function AttendancePage() {
@@ -67,6 +70,8 @@ export function AttendancePage() {
             <CompanyAttendanceSection />
           ) : key === 'leave-admin' ? (
             <LeaveAdminSection />
+          ) : key === 'admin' ? (
+            <MonthClosingSection />
           ) : key === 'exception' ? (
             <ExceptionSection />
           ) : (

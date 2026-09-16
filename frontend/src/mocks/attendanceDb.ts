@@ -17,6 +17,7 @@ import type { User } from '@/types'
 import { DEMO_ACCOUNTS } from './accounts'
 import { MOCK_USERS } from './db'
 import { ISO_DATE, LEAVE_TYPES, listLeaves } from './leavesDb'
+import { isClosedRange, MONTH_CLOSED } from './closingsDb'
 
 /**
  * 공휴일 시드(10 §6.1 `holidays`). 실제로는 exec 가 연초에 등록한다(SCR-ATT-07).
@@ -149,6 +150,7 @@ export function createArrangement(
     return invalid('기간이 올바르지 않습니다.')
   }
   if (!input.reason?.trim()) return invalid('사유를 입력해 주세요.')
+  if (isClosedRange(input.start_date, input.end_date)) return MONTH_CLOSED
   const item = arrangement(
     input.kind,
     input.start_date,
@@ -223,6 +225,7 @@ export function createOvertime(user: User, input: OvertimeInput): { item: Overti
   if (overtimeMinutes(input.start_time, input.end_time).minutes === 0) {
     return invalid('소정 종업 시각(18:00) 이후 구간이 없습니다.')
   }
+  if (isClosedRange(input.work_date)) return MONTH_CLOSED
   const item = overtime(
     input.work_date,
     input.start_time,
@@ -259,6 +262,7 @@ export function createCorrection(
   if (!input.after || (!input.after.status && !input.after.note))
     return invalid('바꿀 내용이 없습니다.')
   if (!input.reason?.trim()) return invalid('사유를 입력해 주세요.')
+  if (isClosedRange(input.work_date)) return MONTH_CLOSED
   const item: Correction = {
     id: `cr-${seq++}`,
     work_date: input.work_date,

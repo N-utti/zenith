@@ -17,6 +17,7 @@ import type {
   LeaveRequest,
   LeaveRequestInput,
   LeaveType,
+  MonthClosing,
   Overtime,
   OvertimeInput,
 } from './types'
@@ -239,5 +240,40 @@ export function useCancelException() {
         method: 'POST',
       }),
     onSuccess: refetch,
+  })
+}
+
+// ── 월 마감 (10 §9.5) ──────────────────────────────────────────
+
+const closingKey = (month: string) => ['attendance', 'closing', month] as const
+
+export function useMonthClosing(month: string) {
+  return useQuery({
+    queryKey: closingKey(month),
+    queryFn: () => api<MonthClosing>(`/attendance/closings/${month}`),
+  })
+}
+
+/** 응답이 곧 그 달의 새 상태다. 내 근태·근태 관리 탭이 같은 키를 읽어 배지가 같이 바뀐다. 집계는 안 바뀌니 더 무효화하지 않는다. */
+function useSetClosing() {
+  const qc = useQueryClient()
+  return (item: MonthClosing) => qc.setQueryData(closingKey(item.month), item)
+}
+
+export function useCloseMonth() {
+  const set = useSetClosing()
+  return useMutation({
+    mutationFn: (month: string) =>
+      api<MonthClosing>('/attendance/close', { method: 'POST', body: JSON.stringify({ month }) }),
+    onSuccess: set,
+  })
+}
+
+export function useReopenMonth() {
+  const set = useSetClosing()
+  return useMutation({
+    mutationFn: (input: { month: string; reason: string }) =>
+      api<MonthClosing>('/attendance/reopen', { method: 'POST', body: JSON.stringify(input) }),
+    onSuccess: set,
   })
 }

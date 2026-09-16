@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { FilePen } from 'lucide-react'
+import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Calendar, CalendarDayNumber, type CalendarDay } from '@/components/ui/Calendar'
 import { Card } from '@/components/ui/Card'
 import { SkeletonRows } from '@/components/ui/Skeleton'
 import { cn } from '@/lib/cn'
 import { currentMonth, formatISODate, toISODate } from '@/lib/datetime'
-import { useLeaveBalance, useMyAttendance } from './api'
+import { useLeaveBalance, useMonthClosing, useMyAttendance } from './api'
 import { AttendanceLegend } from './AttendanceLegend'
 import {
   cellStatus,
@@ -30,6 +31,8 @@ export function MyAttendanceSection() {
   const [correcting, setCorrecting] = useState<string | null>(null)
   const attendance = useMyAttendance(month)
   const balance = useLeaveBalance()
+  // 마감된 달은 정정을 받지 않는다(10 §5.5). 칸을 눌러 폼을 채운 뒤에야 409 를 보지 않게 미리 막는다.
+  const closed = useMonthClosing(month).data?.status === 'closed'
   const today = toISODate(new Date())
   const byDate = indexByDate(attendance.data?.days ?? [])
   const summary = attendance.data?.summary
@@ -76,7 +79,12 @@ export function MyAttendanceSection() {
           month={month}
           onMonthChange={setMonth}
           // 좁은 화면에서는 범례가 월 제목을 두 줄로 밀어낸다. 그때는 격자 아래로 내린다.
-          actions={<AttendanceLegend className="hidden sm:flex" />}
+          actions={
+            <>
+              {closed && <Badge tone="success">마감됨</Badge>}
+              <AttendanceLegend className="hidden sm:flex" />
+            </>
+          }
           className={cn(attendance.isPending && 'animate-pulse opacity-60')}
           renderDay={(day) => (
             <DayCell
@@ -84,7 +92,9 @@ export function MyAttendanceSection() {
               row={byDate.get(day.iso)}
               status={cellStatus(byDate, day)}
               // 정정할 수 있는 날은 지난 근무일뿐. 주말·휴일·미래는 누를 게 없다.
-              onCorrect={byDate.has(day.iso) && day.iso <= today ? setCorrecting : undefined}
+              onCorrect={
+                byDate.has(day.iso) && day.iso <= today && !closed ? setCorrecting : undefined
+              }
             />
           )}
         />
