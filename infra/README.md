@@ -56,4 +56,4 @@ MinIO 의 첨부 파일(`miniodata` 볼륨)은 이 백업에 없다 — 볼륨�
 - ~~**caddy** · **web**~~ → 2026-09-16 붙였다(위).
 - ~~**yjs** — y-websocket 릴레이~~ → 필요 없어졌다(2026-09-07). 릴레이는 `api` 안에 있다(`/api/yjs/{doc_id}`, pycrdt). 그래서 `api` 는 **worker 1개**로 띄운다. 개발 중 프론트는 `frontend/scripts/dev-server.js` 대신 vite `/collab` 프록시를 `/api/yjs` 로 돌리면 된다.
 - **ollama** — ARCHITECTURE §7은 Mac mini 네이티브 실행이었으나, AI는 Claude API로 가기로 했다(2026-09-04). 되돌리면 `OLLAMA_URL` 만 추가하면 된다.
-- 모니터링(`/metrics`), 네이티브 셸(Tauri/Capacitor)의 교차 오리진 쿠키 검증(`CORS_ORIGINS`, 11 I6).
+- ~~모니터링(`/metrics`)~~ → 2026-09-16 api 가 `GET /api/metrics`(Prometheus 텍스트)를 낸다. caddy 는 이 경로를 바깥에 404 로 막으므로 스크레이퍼는 compose 안에서 `api:8000/api/metrics` 를 긁는다 — Prometheus 컨테이너 자체는 파일럿 때 필요하면. 네이티브 셸(Tauri/Capacitor)의 교차 오리진 쿠키 검증(`CORS_ORIGINS`, 11 I6).

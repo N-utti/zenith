@@ -1,6 +1,7 @@
 """04-API 명세서(및 13 §9)의 경로가 전부 OpenAPI에 있어야 한다 — docs/README "계약의 강제"."""
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -18,6 +19,7 @@ CONTRACT_PATHS = {
     "/api/me",
     "/api/me/password",
     "/api/healthz",
+    "/api/metrics",
     "/api/admin/users",
     "/api/admin/users/{user_id}",
     "/api/admin/audit",
@@ -112,6 +114,28 @@ async def test_healthz(client: AsyncClient) -> None:
     r = await client.get("/api/healthz")
     assert r.status_code == 200
     assert r.json() == {"status": "ok"}
+
+
+async def test_metrics_is_prometheus_text(app: FastAPI, client: AsyncClient) -> None:
+    """04 §9 /metrics — 요청 수 counter 와 소켓·방·풀 gauge. 인증 없이 열린다(바깥은 caddy 가 막는다)."""
+    await client.get("/api/healthz")
+    r = await client.get("/api/metrics")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("text/plain")
+    assert 'zenith_http_requests_total{method="GET",status="200"}' in r.text
+    # 소켓·방 수는 다른 테스트의 전역 상태라 값이 아니라 모양만 본다
+    for name in ("zenith_ws_connections", "zenith_yjs_rooms", "zenith_db_pool_max"):
+        assert re.search(rf"^{name} \d+$", r.text, re.M), name
+    assert "process_start_time_seconds " in r.text
+
+    # 미처리 예외의 500 은 바깥 ServerErrorMiddleware 가 만든다 — 그것도 센다
+    async def boom() -> None:
+        raise RuntimeError("일부러")
+
+    app.add_api_route("/api/boom", boom)
+    with pytest.raises(RuntimeError):
+        await client.get("/api/boom")
+    assert 'status="500"' in (await client.get("/api/metrics")).text
 
 
 async def test_stub_returns_501_with_error_shape(client: AsyncClient, member) -> None:

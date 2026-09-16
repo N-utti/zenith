@@ -31,6 +31,27 @@
         }
       }
     },
+    "/api/metrics": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "프로메테우스 텍스트 (04 §9) — 인증 없음, caddy 가 바깥에서 막는다(compose 안 스크레이퍼용)",
+        "operationId": "metrics_text_api_metrics_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/auth/login": {
       "post": {
         "tags": [
