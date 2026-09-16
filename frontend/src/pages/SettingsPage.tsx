@@ -1,12 +1,118 @@
+import { useState, type FormEvent } from 'react'
 import { Moon, Sun } from 'lucide-react'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { Avatar } from '@/components/ui/Avatar'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
+import { Field } from '@/components/ui/Field'
+import { Input } from '@/components/ui/Input'
+import { Spinner } from '@/components/ui/Spinner'
+import { useToast } from '@/components/ui/ToastContext'
 import { useCurrentUser } from '@/features/auth/AuthContext'
+import { api, ApiError } from '@/lib/api'
 import { hueOf } from '@/lib/avatar'
 import { useTheme } from '@/lib/theme'
 import { ROLE_LABEL } from '@/types'
+
+/** 서버 `PasswordIn.new_password` 의 min_length(backend/app/config.py `password_min_length`)와 같은 값. */
+const PASSWORD_MIN = 8
+
+/** 서버에 보내기 전에 잡을 수 있는 오류. 어느 칸이 틀렸는지 알 수 있으니 그 칸에 붙인다. 현재 비밀번호는 서버만 안다. */
+function passwordFormError(next: string, confirm: string) {
+  return {
+    next: next.length < PASSWORD_MIN ? `새 비밀번호는 ${PASSWORD_MIN}자 이상이어야 합니다.` : null,
+    confirm: next !== confirm ? '새 비밀번호와 다릅니다.' : null,
+  }
+}
+
+function PasswordSection() {
+  const toast = useToast()
+  const [current, setCurrent] = useState('')
+  const [next, setNext] = useState('')
+  const [confirm, setConfirm] = useState('')
+  const [currentError, setCurrentError] = useState<string | null>(null)
+  const [nextError, setNextError] = useState<string | null>(null)
+  const [confirmError, setConfirmError] = useState<string | null>(null)
+  const [pending, setPending] = useState(false)
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault()
+    setCurrentError(null)
+    const error = passwordFormError(next, confirm)
+    setNextError(error.next)
+    setConfirmError(error.confirm)
+    if (error.next || error.confirm) return
+
+    setPending(true)
+    try {
+      await api<void>('/me/password', {
+        method: 'POST',
+        body: JSON.stringify({ current_password: current, new_password: next }),
+      })
+      setCurrent('')
+      setNext('')
+      setConfirm('')
+      // 서버가 이 세션만 남기고 나머지를 끊는다(backend/README §1 확장). 다른 기기에서 놀라지 않게 알린다.
+      toast.success('비밀번호를 바꿨습니다. 다른 기기의 로그인은 모두 해제됩니다.')
+    } catch (err) {
+      if (err instanceof ApiError && err.code === 'PASSWORD_MISMATCH') setCurrentError(err.message)
+      else toast.error(err instanceof ApiError ? err.message : '비밀번호를 바꾸지 못했습니다.')
+    } finally {
+      setPending(false)
+    }
+  }
+
+  return (
+    <section className="border-line bg-surface mt-4 rounded-xl border p-6">
+      <h2 className="text-fg mb-1 text-sm font-semibold">비밀번호</h2>
+      <p className="text-muted mb-4 text-sm">
+        바꾸면 지금 쓰는 기기만 남고 다른 기기는 다시 로그인해야 합니다.
+      </p>
+      <form onSubmit={submit} className="max-w-sm space-y-4">
+        <Field label="현재 비밀번호" required error={currentError}>
+          {(slot) => (
+            <Input
+              {...slot}
+              type="password"
+              required
+              autoComplete="current-password"
+              value={current}
+              onChange={(e) => setCurrent(e.target.value)}
+            />
+          )}
+        </Field>
+        <Field label="새 비밀번호" required hint={`${PASSWORD_MIN}자 이상`} error={nextError}>
+          {(slot) => (
+            <Input
+              {...slot}
+              type="password"
+              required
+              minLength={PASSWORD_MIN}
+              autoComplete="new-password"
+              value={next}
+              onChange={(e) => setNext(e.target.value)}
+            />
+          )}
+        </Field>
+        <Field label="새 비밀번호 확인" required error={confirmError}>
+          {(slot) => (
+            <Input
+              {...slot}
+              type="password"
+              required
+              autoComplete="new-password"
+              value={confirm}
+              onChange={(e) => setConfirm(e.target.value)}
+            />
+          )}
+        </Field>
+        <Button type="submit" size="sm" disabled={pending}>
+          {pending ? <Spinner className="border-t-on-accent" /> : '비밀번호 변경'}
+        </Button>
+      </form>
+    </section>
+  )
+}
 
 export function SettingsPage() {
   const user = useCurrentUser()
@@ -30,6 +136,8 @@ export function SettingsPage() {
           </div>
         </div>
       </section>
+
+      <PasswordSection />
 
       <section className="border-line bg-surface mt-4 rounded-xl border p-6">
         <h2 className="text-fg mb-1 text-sm font-semibold">화면</h2>

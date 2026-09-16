@@ -134,6 +134,29 @@ export const handlers = [
     return new HttpResponse(null, { status: 204 })
   }),
 
+  // backend/README §1 확장. 성공 시 204, 현재 비밀번호 불일치는 400 PASSWORD_MISMATCH.
+  // ponytail: 목은 비밀번호를 실제로 바꾸지 않는다. 데모 계정 전부가 DEMO_PASSWORD 하나를 쓴다.
+  http.post('/api/me/password', async ({ request }) => {
+    if (!authenticate()) return unauthorized()
+    const { current_password, new_password } = (await request.json()) as {
+      current_password: string
+      new_password: string
+    }
+    if (current_password !== DEMO_PASSWORD) {
+      return HttpResponse.json(
+        { detail: '현재 비밀번호가 올바르지 않습니다.', code: 'PASSWORD_MISMATCH' },
+        { status: 400 },
+      )
+    }
+    if (new_password.length < 8) {
+      return HttpResponse.json(
+        { detail: [{ msg: 'String should have at least 8 characters' }], code: 'VALIDATION' },
+        { status: 422 },
+      )
+    }
+    return new HttpResponse(null, { status: 204 })
+  }),
+
   // ── 게시판 ────────────────────────────────────────────────
   http.get(
     '/api/boards',

@@ -5,6 +5,34 @@ import { cn } from '@/lib/cn'
 import { useDocs } from '@/features/docs/api'
 import { ancestorsOf, buildTree, type TreeNode } from '@/features/docs/tree'
 
+const EXPANDED_KEY = 'zenith.docTreeExpanded'
+
+/**
+ * 사용자가 직접 펼친 노드 id. AppLayout 이 bleed 유무로 두 벌이라 에디터를 열고 닫을 때마다
+ * 트리가 다시 마운트되고, 컴포넌트 상태만으로는 그때마다 접혀 버린다(12 §10). 사이드바 접힘과
+ * 같은 방식으로 브라우저에 남긴다.
+ */
+const expandedIds = readExpanded()
+
+function readExpanded(): Set<string> {
+  try {
+    const raw: unknown = JSON.parse(localStorage.getItem(EXPANDED_KEY) ?? '[]')
+    return new Set(Array.isArray(raw) ? raw.filter((id) => typeof id === 'string') : [])
+  } catch {
+    return new Set()
+  }
+}
+
+function rememberExpanded(id: string, expanded: boolean) {
+  if (expanded) expandedIds.add(id)
+  else expandedIds.delete(id)
+  try {
+    localStorage.setItem(EXPANDED_KEY, JSON.stringify([...expandedIds]))
+  } catch {
+    // 저장 못 해도 이번 마운트의 펼침은 유지된다.
+  }
+}
+
 function TreeRow({
   node,
   depth,
@@ -17,8 +45,16 @@ function TreeRow({
   openPath: Set<string>
   onNavigate?: () => void
 }) {
-  const [expanded, setExpanded] = useState(() => openPath.has(node.doc.id))
+  // 열려 있는 문서까지의 경로는 기억과 무관하게 항상 펼친다. 접어 둔 폴더 안의 문서를 검색으로 열어도 보여야 한다.
+  const [expanded, setExpanded] = useState(
+    () => openPath.has(node.doc.id) || expandedIds.has(node.doc.id),
+  )
   const hasChildren = node.children.length > 0
+  const toggle = () => {
+    const next = !expanded
+    setExpanded(next)
+    rememberExpanded(node.doc.id, next)
+  }
 
   return (
     <>
@@ -26,7 +62,7 @@ function TreeRow({
         {hasChildren ? (
           <button
             type="button"
-            onClick={() => setExpanded((v) => !v)}
+            onClick={toggle}
             aria-label={expanded ? '접기' : '펼치기'}
             aria-expanded={expanded}
             className="text-subtle hover:text-fg grid size-5 shrink-0 cursor-pointer place-items-center rounded transition-colors"
