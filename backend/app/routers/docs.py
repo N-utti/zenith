@@ -8,6 +8,7 @@
 import asyncio
 import base64
 import binascii
+import logging
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
@@ -18,7 +19,7 @@ from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import audit
-from app.db import get_db
+from app.db import get_db, session_scope
 from app.deps import current_user
 from app.errors import ApiError
 from app.models import (
@@ -36,9 +37,13 @@ from app.models import (
 from app.realtime import chat, yjs
 
 router = APIRouter(tags=["docs"], dependencies=[Depends(current_user)])
+log = logging.getLogger("zenith.docs")
 
 # 같은 사람이 이어서 편집하는 동안의 무명 스냅샷은 하나로 접는다(frontend/README "버전 기록").
 VERSION_COALESCE = timedelta(minutes=3)
+# 휴지통 보관 기간(04 §3 DELETE). 지나면 purge_loop 가 영구 삭제한다.
+TRASH_RETENTION = timedelta(days=30)
+PURGE_INTERVAL_SECONDS = 3600
 # 공백만 있는 제목·본문·라벨은 422. 앞뒤 공백은 잘라 저장한다.
 NonBlank = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
 LongText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=10_000)]
@@ -349,9 +354,7 @@ async def delete_doc(
     if not hard:
         if doc.deleted_at is None:
             doc.deleted_at = _now()
-            doc.updated_by = (
-                user.id
-            )  # 누가 휴지통에 넣었나. 30일 자동 삭제 배치가 붙으면 감사 이벤트로
+            doc.updated_by = user.id  # 누가 휴지통에 넣었나. 30일 뒤 purge_trash 가 지운다
             await db.commit()
         return Response(status_code=204)
     if ROLE_RANK.get(user.role, 0) < ROLE_RANK["exec"]:
@@ -365,11 +368,7 @@ async def delete_doc(
         )
         await db.commit()
         raise ApiError(403, "FORBIDDEN", "영구 삭제는 관리자만 할 수 있습니다.")
-    for model in (DocVersion, DocComment, DocChunk):
-        await db.execute(delete(model).where(model.doc_id == doc.id))
-    await db.execute(update(Message).where(Message.doc_ref == doc.id).values(doc_ref=None))
-    await db.delete(doc)
-    await yjs.close_room(doc.id)  # 접속 중인 편집자는 4404 로 끊는다
+    await _purge(db, doc)
     audit.record(
         db,
         "docs.hard_deleted",
@@ -380,6 +379,48 @@ async def delete_doc(
     )
     await db.commit()
     return Response(status_code=204)
+
+
+async def _purge(db: AsyncSession, doc: Document) -> None:
+    """버전·댓글·색인까지 지우고 채팅 문서 카드는 참조만 푼다. 감사 기록·commit 은 호출한 쪽이.
+    documents 를 참조하는 테이블이 늘면 여기와 test_hard_delete_cascades 를 같이 고친다."""
+    for model in (DocVersion, DocComment, DocChunk):
+        await db.execute(delete(model).where(model.doc_id == doc.id))
+    await db.execute(update(Message).where(Message.doc_ref == doc.id).values(doc_ref=None))
+    await db.delete(doc)
+    await yjs.close_room(doc.id)  # 접속 중인 편집자는 4404 로 끊는다
+
+
+async def purge_trash(db: AsyncSession, *, now: datetime | None = None) -> int:
+    """휴지통에 TRASH_RETENTION 넘게 있던 문서를 영구 삭제한다(04 §3 DELETE "휴지통 이동(30일)").
+    exec 의 ?hard=1 과 같은 캐스케이드, 감사는 actor 없는 `docs.purged`. 지운 수를 돌려준다.
+    ponytail: SELECT 와 commit 사이에 untrash 되면 그 문서도 지워진다 — 창은 배치 한 번 길이, 15명 규모에서 감수."""
+    cutoff = (now or _now()) - TRASH_RETENTION
+    rows = await db.execute(select(Document).where(Document.deleted_at <= cutoff))
+    docs = list(rows.scalars())
+    for doc in docs:
+        await _purge(db, doc)
+        audit.record(
+            db,
+            "docs.purged",
+            target_id=doc.id,
+            detail={"title": doc.title, "deleted_at": doc.deleted_at.isoformat()},
+        )
+    await db.commit()
+    return len(docs)
+
+
+async def purge_loop() -> None:
+    """main.py lifespan 이 띄우는 배치. 한 시간마다 한 번 — 30일 기한에 시 단위 오차면 충분하다.
+    ponytail: worker 1개 전제(yjs 방과 같은 이유)라 프로세스 안 루프로 둔다. worker 가 늘면 compose 의
+    backup 처럼 별도 서비스로 빼거나 advisory lock 을 건다."""
+    while True:
+        try:
+            async with session_scope() as db:
+                await purge_trash(db)
+        except Exception:  # 배치 하나 실패로 서버가 죽거나 루프가 멈추면 안 된다
+            log.exception("휴지통 비우기 실패")
+        await asyncio.sleep(PURGE_INTERVAL_SECONDS)
 
 
 @router.post(
