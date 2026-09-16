@@ -90,7 +90,9 @@ function ToastViewport({
       // 모바일: 하단 탭바(56px)와 iOS 홈 인디케이터를 피한다.
       // 데스크톱: 헤더(50px) 바로 아래 가운데. 본문이 가운데(max-w-6xl)에 모여 있어 오른쪽 아래 구석은
       // 넓은 모니터·듀얼 모니터에서 시선 밖이라 놓친다.
-      className="pointer-events-none fixed inset-x-0 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-50 flex flex-col items-center gap-2 px-4 md:top-[62px] md:bottom-auto"
+      // z-40: 커맨드 팔레트·모달(z-50)보다 아래. 알림이 입력을 가리면 안 된다.
+      // 최신 토스트는 기준점 쪽에 온다. 모바일은 아래 기준이라 배열 순서 그대로, 데스크톱은 위 기준이라 뒤집는다.
+      className="pointer-events-none fixed inset-x-0 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-40 flex flex-col items-center gap-2 px-4 md:top-[62px] md:bottom-auto md:flex-col-reverse"
     >
       <ToastList toasts={polite} live="polite" onDismiss={onDismiss} />
       <ToastList toasts={assertive} live="assertive" onDismiss={onDismiss} />
