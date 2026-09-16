@@ -1,0 +1,44 @@
+# 제니스 리버스 프록시 · TLS · 정적 파일 (ARCHITECTURE §7). compose 가 이 파일을 /etc/caddy/Caddyfile 로 마운트한다.
+# 사이트 주소는 ZENITH_SITE (기본 localhost). 바꾸면 `docker compose restart caddy`.
+{$ZENITH_SITE:localhost} {
+	# Caddy 자체 CA 로 서명한다. 루트 인증서는 볼륨 caddy_data 의 caddy/pki/authorities/local/root.crt
+	# (`docker compose cp caddy:/data/caddy/pki/authorities/local/root.crt .`) — 사내 PC·앱의 신뢰 저장소에 배포한다.
+	# 이미 사내 CA 가 있으면 인증서·키를 마운트하고 이 줄을 `tls /certs/cert.pem /certs/key.pem` 으로 바꾼다(infra/README "TLS").
+	tls internal
+	encode zstd gzip
+
+	header {
+		# 첨부 내려받기가 같은 오리진이다 — 브라우저가 형식을 추측하지 않게. 프레임 삽입(클릭재킹)은 막는다.
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "same-origin"
+		# HSTS·CSP 는 아직 없다: HSTS 는 사내 CA 결정 뒤(인증서가 깨지면 우회가 막힌다), CSP 는 프론트 번들과 합의 후.
+	}
+
+	handle /api/* {
+		# FastAPI 는 인증 전에 multipart 를 다 받아 둔다 — backend/app/main.py 의 body_limit 는 Content-Length 만
+		# 보므로 chunked 전송은 여기서 자른다(같은 값 12MiB = 첨부 10MB + 봉투). 초과는 caddy 의 413 평문이다.
+		request_body {
+			max_size 12MiB
+		}
+		# WebSocket(/api/ws · /api/yjs) 업그레이드는 reverse_proxy 가 알아서 한다. Host 는 바꾸지 않는다.
+		# api 의 CSRF·WS Origin 대조가 X-Forwarded-Proto/Host 를 믿는다(backend/app/deps.py _own_origin) — caddy 2.7+ 는
+		# 미신뢰 피어가 보낸 X-Forwarded-* 를 버리지만, 버전·trusted_proxies 설정과 무관하게 caddy 가 본 Host 로 못박는다.
+		reverse_proxy api:8000 {
+			header_up X-Forwarded-Host {host}
+		}
+	}
+
+	# Vite 산출물. /assets/* 는 해시 파일명이라 영구 캐시, 그 외(index.html 과 SPA 폴백)는 매번 확인 — 새 빌드가 바로 보이게.
+	handle /assets/* {
+		root * /srv
+		header Cache-Control "public, max-age=31536000, immutable"
+		file_server
+	}
+	handle {
+		root * /srv
+		header Cache-Control "no-cache"
+		try_files {path} /index.html
+		file_server
+	}
+}

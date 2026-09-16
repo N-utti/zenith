@@ -50,7 +50,7 @@ def create_app() -> FastAPI:
     async def body_limit(request, call_next):
         # FastAPI 는 인증·CSRF 의존성보다 먼저 multipart 본문을 다 받아 둔다(임시 파일) — 로그인 없이도 디스크를
         # 채울 수 있으므로 라우팅 전에 길이부터 본다. 첨부 10MB(FR-CHT-04) + multipart 봉투 여유.
-        # ponytail: Content-Length 만 본다. chunked 전송은 못 막는다 — Caddy 가 붙으면 request_body max_size 로.
+        # ponytail: Content-Length 만 본다. chunked 전송은 caddy 가 먼저 자른다(infra/caddy/Caddyfile request_body 12MB).
         length = request.headers.get("content-length", "")
         if length.isdigit() and int(length) > MAX_BODY_BYTES:
             return JSONResponse(
