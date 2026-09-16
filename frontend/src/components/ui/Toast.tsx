@@ -75,14 +75,24 @@ export function ToastProvider({ children }: { children: ReactNode }) {
  * polite와 assertive를 나눈 이유: 성공은 하던 일을 끊지 않고 뒤에 읽혀야 하고,
  * 실패는 지금 끊고 읽혀야 한다.
  */
-function ToastViewport({ toasts, onDismiss }: { toasts: Toast[]; onDismiss: (id: number) => void }) {
+function ToastViewport({
+  toasts,
+  onDismiss,
+}: {
+  toasts: Toast[]
+  onDismiss: (id: number) => void
+}) {
   const polite = toasts.filter((toast) => toast.tone !== 'error')
   const assertive = toasts.filter((toast) => toast.tone === 'error')
 
   return createPortal(
     <div
-      // 모바일 하단 탭바(56px)와 iOS 홈 인디케이터를 피한다. md 이상에는 탭바가 없다.
-      className="pointer-events-none fixed inset-x-0 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-50 flex flex-col items-center gap-2 px-4 md:bottom-6 md:left-auto md:items-end md:pr-6"
+      // 모바일: 하단 탭바(56px)와 iOS 홈 인디케이터를 피한다.
+      // 데스크톱: 헤더(50px) 바로 아래 가운데. 본문이 가운데(max-w-6xl)에 모여 있어 오른쪽 아래 구석은
+      // 넓은 모니터·듀얼 모니터에서 시선 밖이라 놓친다.
+      // z-40: 커맨드 팔레트·모달(z-50)보다 아래. 알림이 입력을 가리면 안 된다.
+      // 최신 토스트는 기준점 쪽에 온다. 모바일은 아래 기준이라 배열 순서 그대로, 데스크톱은 위 기준이라 뒤집는다.
+      className="pointer-events-none fixed inset-x-0 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-40 flex flex-col items-center gap-2 px-4 md:top-[62px] md:bottom-auto md:flex-col-reverse"
     >
       <ToastList toasts={polite} live="polite" onDismiss={onDismiss} />
       <ToastList toasts={assertive} live="assertive" onDismiss={onDismiss} />
