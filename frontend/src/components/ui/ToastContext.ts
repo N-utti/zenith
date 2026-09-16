@@ -1,7 +1,5 @@
 import { createContext, use } from 'react'
 
-export type ToastTone = 'success' | 'error' | 'info'
-
 export interface ToastApi {
   success: (message: string) => void
   error: (message: string) => void
