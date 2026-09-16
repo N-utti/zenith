@@ -41,6 +41,7 @@ Thumbs.db
 data/
 models/
 minio-data/
+infra/backups/
 *.gguf
 
 # 에이전트 로컬 상태

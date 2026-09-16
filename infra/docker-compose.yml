@@ -1,22 +1,43 @@
-# ARCHITECTURE §7 골격 중 지금 있는 것: db · redis · minio · api.
-# caddy(TLS·리버스 프록시) · web(정적) · yjs(공동편집) 는 각 구성요소가 생길 때 붙인다.
-# ollama 는 compose 밖(Mac mini)이었으나 2026-09-04 결정으로 AI는 Claude API — backend/README 참조.
+# ARCHITECTURE §7 골격: caddy(TLS·리버스 프록시·정적 web) · api · db · redis · minio · backup(일일 pg_dump).
+# yjs 컨테이너는 없다(릴레이가 api 안). ollama 는 2026-09-04 결정으로 없다(AI 는 Claude API) — backend/README 참조.
 #
-#   docker compose up -d db              # 개발: DB만
-#   docker compose up -d --build         # 전부 (api 이미지 빌드)
+#   docker compose up -d db              # 개발: DB만 (api 는 uv 로, 프론트는 vite 로)
+#   docker compose up -d --build         # 전부 — https://localhost 로 접속 (api·web 이미지 빌드)
 #
-# 이 PC처럼 5432/8000 이 다른 프로젝트에 잡혀 있으면 호스트 포트만 바꾼다:
-#   ZENITH_DB_PORT=5434 ZENITH_API_PORT=8010 docker compose up -d
+# 이 PC처럼 5432 가 다른 프로젝트에 잡혀 있으면 호스트 포트만 바꾼다:
+#   ZENITH_DB_PORT=5434 docker compose up -d
+# db·redis·minio 의 호스트 포트는 127.0.0.1 에만 묶인다(개발 PC 에서 psql·콘솔용) — 사내망의 다른 PC 에서는 안 보인다.
+# 비밀번호 기본값(zenith)은 개발용이다. 서버에서는 ZENITH_DB_PASSWORD·ZENITH_MINIO_PASSWORD 를 바꾼다(infra/README).
 
 services:
+  caddy:
+    # 프론트 빌드(Vite dist)를 이미지에 넣고 file_server 로 내보내며 /api/* 를 api 로 넘긴다. 라우팅은 caddy/Caddyfile.
+    build:
+      context: ..
+      dockerfile: infra/caddy/Dockerfile
+    restart: unless-stopped
+    environment:
+      # 인증서의 사이트 이름. 사내 DNS 이름이나 IP 로 바꾼다(브라우저 주소창과 같아야 한다).
+      ZENITH_SITE: ${ZENITH_SITE:-localhost}
+    ports:
+      - "${ZENITH_HTTP_PORT:-80}:80"
+      - "${ZENITH_HTTPS_PORT:-443}:443"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+
   db:
     image: pgvector/pgvector:pg16
+    restart: unless-stopped
     environment:
       POSTGRES_USER: zenith
-      POSTGRES_PASSWORD: zenith
+      POSTGRES_PASSWORD: ${ZENITH_DB_PASSWORD:-zenith}
       POSTGRES_DB: zenith
     ports:
-      - "${ZENITH_DB_PORT:-5432}:5432"
+      - "127.0.0.1:${ZENITH_DB_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -27,39 +48,76 @@ services:
 
   redis:
     image: redis:7-alpine
+    restart: unless-stopped
     ports:
-      - "${ZENITH_REDIS_PORT:-6379}:6379"
+      - "127.0.0.1:${ZENITH_REDIS_PORT:-6379}:6379"
 
   minio:
-    image: minio/minio
+    # 다이제스트 고정(RELEASE.2025-09-07T16-13-09Z) — latest 는 pull 시점마다 다른 바이너리이고, Docker Hub 에는
+    # 이 릴리스의 태그가 없다. 올릴 때는 `docker pull minio/minio && docker images --digests` 로 새 다이제스트를 의도적으로.
+    image: minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
+    restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: zenith
-      MINIO_ROOT_PASSWORD: zenith-minio
+      MINIO_ROOT_PASSWORD: ${ZENITH_MINIO_PASSWORD:-zenith-minio}
     ports:
-      - "${ZENITH_MINIO_PORT:-9000}:9000"
-      - "${ZENITH_MINIO_CONSOLE_PORT:-9001}:9001"
+      - "127.0.0.1:${ZENITH_MINIO_PORT:-9000}:9000"
+      - "127.0.0.1:${ZENITH_MINIO_CONSOLE_PORT:-9001}:9001"
     volumes:
       - miniodata:/data
 
   api:
     build: ../backend
+    restart: unless-stopped
     env_file:
       - path: ../backend/.env
         required: false
     environment:
-      DATABASE_URL: postgresql+asyncpg://zenith:zenith@db:5432/zenith
+      DATABASE_URL: postgresql+asyncpg://zenith:${ZENITH_DB_PASSWORD:-zenith}@db:5432/zenith
       REDIS_URL: redis://redis:6379/0
       MINIO_ENDPOINT: minio:9000
-      # caddy(TLS)가 아직 없어 api 는 평문 http 다. Secure 쿠키는 http 에서 브라우저가 버린다 → TLS 붙이면 true.
-      COOKIE_SECURE: ${ZENITH_COOKIE_SECURE:-false}
+      MINIO_SECRET_KEY: ${ZENITH_MINIO_PASSWORD:-zenith-minio}
+      # caddy 가 TLS 를 끝내므로 Secure 쿠키. caddy 없이 api 에 평문 http 로 붙는 실험에서만 false.
+      COOKIE_SECURE: ${ZENITH_COOKIE_SECURE:-true}
       # JWT_SECRET 은 backend/.env 로 넣는다 (기본값 없음 — 비어 있으면 api 가 뜨지 않는다).
     # 기동 때 스키마를 최신으로 올린다. 실패하면 uvicorn 을 띄우지 않는다.
     command: >
       sh -c "uv run --no-dev alembic upgrade head
       && uv run --no-dev uvicorn app.main:app --host 0.0.0.0 --port 8000 --ws-max-size 1048576"
-    ports:
-      - "${ZENITH_API_PORT:-8000}:8000"
+    # 호스트 포트를 열지 않는다 — 브라우저는 caddy(https)로만 들어온다. 평문 http 의 api 는 Secure 쿠키를 못 심는다.
+    depends_on:
+      db:
+        condition: service_healthy
+
+  backup:
+    # 일일 pg_dump(custom 포맷, 14일 지난 것 삭제) → 호스트 ZENITH_BACKUP_DIR(기본 ./backups). 복구는 infra/README.
+    # ponytail: sleep 루프다 — 컨테이너가 뜬 시각 기준 24시간마다. 새벽 고정이 필요하면 호스트 cron 으로.
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      PGHOST: db
+      PGUSER: zenith
+      PGPASSWORD: ${ZENITH_DB_PASSWORD:-zenith}
+      PGDATABASE: zenith
+      TZ: Asia/Seoul
+    # 덤프에는 전 계정(해시)·전 문서·채팅이 들어 있다 — umask 077 로 0600. 임시 이름에 쓰고 성공해야 날짜 이름으로 옮긴다
+    # (잘린 파일이 정상 백업처럼 남지 않게). 실패는 로그에 남긴다(조용히 14일 뒤 백업 0 이 되지 않게).
+    entrypoint:
+      - sh
+      - -c
+      - |
+        umask 077
+        while :; do
+          if pg_dump -Fc -f /backups/.partial.dump && mv /backups/.partial.dump /backups/zenith-$$(date +%F).dump; then
+            find /backups -name 'zenith-*.dump' -mtime +14 -delete
+          else
+            echo "backup FAILED $$(date -Is)" >&2
+          fi
+          sleep 86400
+        done
+    volumes:
+      - ${ZENITH_BACKUP_DIR:-./backups}:/backups
     depends_on:
       db:
         condition: service_healthy
@@ -67,3 +125,5 @@ services:
 volumes:
   pgdata:
   miniodata:
+  caddy_data:
+  caddy_config:

@@ -1,0 +1,10 @@
+# infra/caddy/Dockerfile 의 빌드 컨텍스트(레포 루트)용 — frontend 소스만 보낸다.
+# backend 이미지는 컨텍스트가 backend/ 라 backend/.dockerignore 를 쓴다.
+*
+!frontend
+frontend/node_modules
+frontend/dist
+# Vite 는 VITE_* 를 번들에 인라인한다 — 개인 .env 가 이미지에 박히지 않게.
+frontend/.env*
+!frontend/.env.example
+frontend/.omc
