@@ -83,7 +83,16 @@ export function InlineAiPopover({ editor, docId }: { editor: Editor; docId: stri
       if (e.key === 'Escape') {
         e.preventDefault()
         close()
+        return
       }
+      // 방향키로도 칩·버튼 사이를 오간다(Tab 과 같은 순서, 끝에서 처음으로 이어짐).
+      const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key]
+      if (!step || !ref.current || e.altKey || e.ctrlKey || e.metaKey) return
+      const items = [...ref.current.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')]
+      const index = items.indexOf(document.activeElement as HTMLButtonElement)
+      if (index < 0) return
+      e.preventDefault()
+      items[(index + step + items.length) % items.length].focus()
     }
     const onPointerDown = (e: PointerEvent) => {
       if (!ref.current?.contains(e.target as Node)) close()
