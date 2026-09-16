@@ -1,6 +1,7 @@
 """04-API §3 문서 트리·문서 — FR-DOC-03~05 · TC-DOC-05·06·07 · TC-AUTH-04. 전부 실 Postgres."""
 
 import base64
+import uuid
 from datetime import UTC, datetime, timedelta
 
 from httpx import AsyncClient
@@ -8,9 +9,11 @@ from sqlalchemy import select
 
 from app import audit
 from app.models import (
+    AuditEvent,
     Channel,
     DocChunk,
     DocComment,
+    Document,
     DocVersion,
     Folder,
     Message,
@@ -18,6 +21,7 @@ from app.models import (
     User,
     Workspace,
 )
+from app.routers.docs import purge_trash
 
 from .conftest import Users, csrf, login
 
@@ -405,3 +409,34 @@ async def test_comments_and_mentions(client: AsyncClient, users: Users, app_db) 
             headers=csrf(client),
         )
     ).status_code == 404
+
+
+async def test_purge_trash_after_30_days(client: AsyncClient, users: Users, app_db) -> None:
+    """04 §3 DELETE — 휴지통 30일. 기한 지난 문서만 캐스케이드로 지우고 감사 `docs.purged` 를 남긴다."""
+    root = await _root(app_db)
+    await login(client, "sujin@zenith.co.kr")
+    old = await _doc(client, root.id, "오래된 것")
+    fresh = await _doc(client, root.id, "며칠 된 것")
+    live = await _doc(client, root.id, "살아 있는 것")
+    await client.post(f"/api/docs/{old['id']}/comments", json={"body": "c"}, headers=csrf(client))
+    for d in (old, fresh):
+        assert (
+            await client.delete(f"/api/docs/{d['id']}", headers=csrf(client))
+        ).status_code == 204
+    now = datetime.now(UTC)
+    old_row = await app_db.get(Document, uuid.UUID(old["id"]))
+    old_row.deleted_at = now - timedelta(days=31)
+    (await app_db.get(Document, uuid.UUID(fresh["id"]))).deleted_at = now - timedelta(days=29)
+    await app_db.flush()
+
+    assert await purge_trash(app_db, now=now) == 1
+    assert (await client.get(f"/api/docs/{old['id']}")).status_code == 404
+    rows = (await app_db.execute(select(DocComment).where(DocComment.doc_id == old["id"]))).all()
+    assert rows == []
+    assert (await client.get(f"/api/docs/{fresh['id']}")).status_code == 200
+    assert (await client.get(f"/api/docs/{live['id']}")).status_code == 200
+    ev = (
+        await app_db.execute(select(AuditEvent).where(AuditEvent.kind == "docs.purged"))
+    ).scalar_one()
+    assert (ev.actor_id, str(ev.target_id)) == (None, old["id"])
+    assert await purge_trash(app_db, now=now) == 0  # 두 번 돌려도 더 지울 게 없다

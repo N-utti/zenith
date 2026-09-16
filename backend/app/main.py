@@ -1,3 +1,6 @@
+import asyncio
+import contextlib
+
 from fastapi import APIRouter, Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -24,6 +27,18 @@ MAX_BODY_BYTES = (
 )  # 첨부 상한(routers/channels.py MAX_ATTACHMENT_BYTES) + multipart 여유
 
 
+@contextlib.asynccontextmanager
+async def lifespan(app: FastAPI):
+    # 휴지통 30일 비우기(04 §3). 테스트의 ASGITransport 는 lifespan 을 돌리지 않는다 — purge_trash 를 직접 부른다.
+    task = asyncio.create_task(docs.purge_loop())
+    try:
+        yield
+    finally:
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task  # 돌던 배치의 세션 정리까지 기다린다
+
+
 def create_app() -> FastAPI:
     app = FastAPI(
         title="Zenith API",
@@ -32,6 +47,7 @@ def create_app() -> FastAPI:
         docs_url="/api/docs",
         openapi_url="/api/openapi.json",
         redoc_url=None,
+        lifespan=lifespan,
     )
     install_error_handlers(app)
     if "*" in settings.cors_origins:
