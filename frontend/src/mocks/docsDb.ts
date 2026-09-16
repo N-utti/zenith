@@ -1,6 +1,7 @@
 import { hueOf } from '@/lib/avatar'
 import type { DocComment, DocSummary, DocVersion } from '@/features/docs/types'
 import type { User } from '@/types'
+import { uuid } from '@/features/ai/store'
 
 function minutesAgo(minutes: number): string {
   return new Date(Date.now() - minutes * 60_000).toISOString()
@@ -152,7 +153,9 @@ export function findDoc(id: string): DocSummary | undefined {
 
 export function createDoc(user: User): DocSummary {
   const doc: DocSummary = {
-    id: `d-${nextId++}`,
+    // 새로고침해도 겹치지 않아야 한다. 브라우저 IndexedDB 가 문서 id 로 본문을 남기므로
+    // 카운터를 쓰면 두 번째로 만든 문서에 이전 본문이 뜬다.
+    id: `d-${uuid()}`,
     title: '제목 없는 문서',
     updatedAt: new Date().toISOString(),
     editorName: user.name,

@@ -1,9 +1,12 @@
 import { Fragment, useEffect, useRef } from 'react'
 import { Check, Copy, FilePlus2, Sparkles, ThumbsUp } from 'lucide-react'
 import { useState } from 'react'
+import { useNavigate } from 'react-router'
 import { cn } from '@/lib/cn'
 import { useToast } from '@/components/ui/ToastContext'
+import { useCreateDoc } from '@/features/docs/api'
 import { useFeedback } from './api'
+import { answerToSeed } from './saveAsDoc'
 import { ExcludedNote, SourceCard } from './SourcesPanel'
 import type { AiMessage, CitationFocus } from './types'
 
@@ -42,11 +45,31 @@ function withCitations(message: AiMessage, activeN: number | null, onCite: (n: n
   })
 }
 
-function AnswerActions({ id, body }: { id: string; body: string }) {
+function AnswerActions({
+  id,
+  body,
+  question,
+}: {
+  id: string
+  body: string
+  /** 이 답변을 부른 질문. 문서로 저장할 때 제목이 된다. */
+  question: string | undefined
+}) {
   const [copied, setCopied] = useState(false)
   const [helpful, setHelpful] = useState(false)
   const feedback = useFeedback()
+  const createDoc = useCreateDoc()
+  const navigate = useNavigate()
   const toast = useToast()
+
+  /** 빈 문서를 만들고 초안을 라우터 state 로 실어 편집기로 간다. 본문은 편집기가 Y.Doc 에 심는다. */
+  const saveAsDoc = () => {
+    if (createDoc.isPending) return
+    createDoc.mutate(undefined, {
+      onSuccess: (doc) => void navigate(`/docs/${doc.id}`, { state: answerToSeed(body, question) }),
+      onError: () => toast.error('문서를 만들지 못했습니다.'),
+    })
+  }
 
   /** 켤 때만 1 을 보낸다. -1 은 "도움 안 됨" 이지 철회가 아니라, 끄기는 화면 표시만 되돌린다. */
   const toggleHelpful = () => {
@@ -95,9 +118,9 @@ function AnswerActions({ id, body }: { id: string; body: string }) {
         {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
         {copied ? '복사됨' : '복사'}
       </button>
-      <button type="button" className={item} title="M3에서 문서 저장까지 연결됩니다">
+      <button type="button" onClick={saveAsDoc} disabled={createDoc.isPending} className={item}>
         <FilePlus2 className="size-3.5" />
-        문서로 저장
+        {createDoc.isPending ? '저장 중…' : '문서로 저장'}
       </button>
     </div>
   )
@@ -173,7 +196,13 @@ export function Conversation({
                 </p>
                 {message.error && <p className="text-danger mt-2 text-xs">{message.error}</p>}
                 {!message.error && !(streaming && index === messages.length - 1) && (
-                  <AnswerActions id={message.id} body={message.body} />
+                  <AnswerActions
+                    id={message.id}
+                    body={message.body}
+                    question={
+                      messages[index - 1]?.role === 'user' ? messages[index - 1].body : undefined
+                    }
+                  />
                 )}
 
                 {/* lg 미만에는 우측 근거 패널이 없다. 따라갈 수 없는 각주를 남기지 않는다. */}
