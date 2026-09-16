@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
+import { downloadText } from '@/lib/download'
 import { toISODate } from '@/lib/datetime'
 import type {
   Arrangement,
@@ -292,5 +293,20 @@ export function useReopenMonth() {
     mutationFn: (input: { month: string; reason: string }) =>
       api<MonthClosing>('/attendance/reopen', { method: 'POST', body: JSON.stringify(input) }),
     onSuccess: set,
+  })
+}
+
+/** 월 리포트 CSV(10 §9.5, 임원). 서버가 준 본문을 그대로 파일로 내려받는다. */
+export function useDownloadReport() {
+  return useMutation({
+    mutationFn: async (month: string) => {
+      const csv = await api<string>(
+        `/attendance/report?month=${encodeURIComponent(month)}&format=csv`,
+        {
+          headers: { Accept: 'text/csv' },
+        },
+      )
+      downloadText(`attendance-${month}.csv`, csv)
+    },
   })
 }

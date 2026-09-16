@@ -31,7 +31,7 @@ afterEach(() => {
 
 describe('api()', () => {
   it('쿠키를 싣고, 상태 변경 요청에만 csrf 쿠키를 X-CSRF-Token 으로 되돌린다', async () => {
-    fetchMock.mockImplementation(async () => reply(200, { ok: true }))  // 응답 본문은 한 번만 읽힌다
+    fetchMock.mockImplementation(async () => reply(200, { ok: true })) // 응답 본문은 한 번만 읽힌다
     await api('/me')
     await api('/auth/logout', { method: 'POST' })
     expect(initOf(0)?.credentials).toBe('include')
@@ -88,6 +88,15 @@ describe('api()', () => {
     expect(calledUrls().filter((url) => url.endsWith('/auth/refresh'))).toHaveLength(1)
   })
 
+  it('JSON 이 아닌 본문(CSV)은 문자열 그대로 돌려준다', async () => {
+    fetchMock.mockImplementation(
+      async () => new Response('a,b\r\n', { status: 200, headers: { 'Content-Type': 'text/csv' } }),
+    )
+    await expect(api<string>('/attendance/report?month=2026-09&format=csv')).resolves.toBe(
+      'a,b\r\n',
+    )
+  })
+
   it('에러 본문의 detail 을 메시지로, 없으면 상태 코드를 쓴다', async () => {
     fetchMock.mockResolvedValueOnce(reply(500))
     await expect(api('/x')).rejects.toMatchObject({
@@ -120,7 +129,11 @@ describe('apiEvents()', () => {
 
   it('프레임을 event·data 로 자르고, chunk 경계에 걸린 프레임도 이어 붙인다 (04 §8)', async () => {
     fetchMock.mockImplementation(async () =>
-      sse('event: token\ndata: {"text":"안녕"}\n\nevent: tok', 'en\ndata: {"text":"하세요"}\n\n', 'event: citations\ndata: []\n\nevent: done\ndata: {}\n\n'),
+      sse(
+        'event: token\ndata: {"text":"안녕"}\n\nevent: tok',
+        'en\ndata: {"text":"하세요"}\n\n',
+        'event: citations\ndata: []\n\nevent: done\ndata: {}\n\n',
+      ),
     )
     await expect(collect('/ai/chat')).resolves.toEqual([
       { event: 'token', data: { text: '안녕' } },
@@ -142,7 +155,9 @@ describe('apiEvents()', () => {
   })
 
   it('스트림이 아닌 에러 응답은 ApiError 로 던진다', async () => {
-    fetchMock.mockResolvedValueOnce(reply(422, { detail: '질문을 입력해 주세요.', code: 'VALIDATION' }))
+    fetchMock.mockResolvedValueOnce(
+      reply(422, { detail: '질문을 입력해 주세요.', code: 'VALIDATION' }),
+    )
     await expect(collect('/ai/chat')).rejects.toMatchObject({ status: 422, code: 'VALIDATION' })
   })
 })
@@ -153,7 +168,11 @@ describe('apiEvents() 마무리', () => {
       new Response(
         new ReadableStream({
           start(controller) {
-            controller.enqueue(new TextEncoder().encode('event: token' + String.fromCharCode(10) + 'data: {"text":"끝"}'))
+            controller.enqueue(
+              new TextEncoder().encode(
+                'event: token' + String.fromCharCode(10) + 'data: {"text":"끝"}',
+              ),
+            )
             controller.close()
           },
         }),
