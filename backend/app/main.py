@@ -3,8 +3,9 @@ import contextlib
 
 from fastapi import APIRouter, Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 
+from app import metrics
 from app.config import settings
 from app.deps import csrf_guard
 from app.errors import install_error_handlers
@@ -79,9 +80,19 @@ def create_app() -> FastAPI:
     @app.middleware("http")
     async def no_store(request, call_next):
         # 쿠키로 인증하는 개인화 응답이라 공유 캐시가 휴리스틱으로 담지 않게. 직접 만든 Response 에도 붙는다.
-        response = await call_next(request)
-        if request.url.path.startswith("/api/"):
+        path = request.url.path
+        counted = path.startswith("/api/") and path != "/api/metrics"  # 스크레이프 자신은 안 센다
+        try:
+            response = await call_next(request)
+        except Exception:
+            # 미처리 예외는 바깥 ServerErrorMiddleware 가 500 으로 만든다 — 여기서 세지 않으면 5xx 가 영원히 0 이다.
+            if counted:
+                metrics.observe(request.method, 500)
+            raise
+        if path.startswith("/api/"):
             response.headers.setdefault("Cache-Control", "no-store")
+        if counted:
+            metrics.observe(request.method, response.status_code)
         return response
 
     # 모든 계약 경로는 /api 아래에 있다 — vite 프록시(/api → :8000)·Caddy 라우팅과 짝.
@@ -91,6 +102,15 @@ def create_app() -> FastAPI:
     @api.get("/healthz", tags=["admin"], summary="헬스체크 (04 §9)")
     async def healthz() -> dict[str, str]:
         return {"status": "ok"}
+
+    @api.get(
+        "/metrics",
+        tags=["admin"],
+        summary="프로메테우스 텍스트 (04 §9) — 인증 없음, caddy 가 바깥에서 막는다(compose 안 스크레이퍼용)",
+        response_class=PlainTextResponse,
+    )
+    async def metrics_text() -> str:
+        return metrics.render()
 
     for module in (auth, me, docs, channels, boards, search, ai, attendance, approvals, admin):
         api.include_router(module.router)
