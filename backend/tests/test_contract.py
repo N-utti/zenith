@@ -40,6 +40,8 @@ CONTRACT_PATHS = {
     "/api/docs/{id}/comments",
     # §3 확장 (backend/README "설계와 어긋나는 것")
     "/api/docs/{id}/untrash",
+    "/api/files",
+    "/api/files/{id}",
     # §5 채팅
     "/api/channels",
     "/api/channels/{id}/messages",

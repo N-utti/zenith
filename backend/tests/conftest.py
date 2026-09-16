@@ -1,7 +1,8 @@
 import asyncio
 import os
+import socket
 import uuid
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -18,6 +19,7 @@ import asyncpg  # noqa: E402
 from sqlalchemy.engine import make_url  # noqa: E402
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine  # noqa: E402
 
+from app import storage  # noqa: E402
 from app.config import settings  # noqa: E402
 from app.db import get_db  # noqa: E402
 from app.deps import current_user  # noqa: E402
@@ -198,3 +200,24 @@ async def login(client: AsyncClient, email: str, password: str = PASSWORD):
 def csrf(client: AsyncClient) -> dict[str, str]:
     """상태 변경 요청에 붙일 이중 제출 헤더 — 브라우저의 lib/api.ts 가 하는 일."""
     return {"X-CSRF-Token": client.cookies.get("csrf") or ""}
+
+
+@pytest.fixture
+def minio_bucket(monkeypatch) -> Iterator[str]:
+    """테스트 전용 버킷 — 끝나면 이 테스트가 만든 오브젝트를 지운다."""
+    host, _, port = settings.minio_endpoint.partition(":")
+    try:
+        socket.create_connection((host, int(port or 9000)), timeout=1).close()
+    except OSError as e:
+        if os.getenv("CI"):
+            pytest.fail(f"CI 는 MinIO 를 띄운다(ci.yml) — 붙을 수 없다: {e}")
+        pytest.skip(f"MinIO 에 붙을 수 없어 첨부 테스트를 건너뛴다: {e}")
+    bucket = "zenith-test"
+    monkeypatch.setattr(settings, "minio_bucket", bucket)
+    storage._ensured.discard(bucket)
+    storage._client.cache_clear()
+    yield bucket
+    client = storage._client()
+    if client.bucket_exists(bucket):
+        for obj in list(client.list_objects(bucket, recursive=True)):
+            client.remove_object(bucket, obj.object_name)

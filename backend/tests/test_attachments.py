@@ -3,10 +3,7 @@
 실제 MinIO(compose 의 minio) 위에서 돈다 — 붙을 수 없으면 DB 테스트와 같이 skip. CI 는 minio 컨테이너를 띄운다.
 """
 
-import os
-import socket
 import uuid
-from collections.abc import Iterator
 
 import pytest
 from fastapi import FastAPI
@@ -15,34 +12,12 @@ from httpx_ws import aconnect_ws
 from sqlalchemy import select
 
 from app import storage
-from app.config import settings
 from app.models import AuditEvent, Message
 
 from .conftest import Users, csrf, login
 from .test_ws import WS, make_channel, recv_until, send, ws_client
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
-
-
-@pytest.fixture
-def minio_bucket(monkeypatch) -> Iterator[str]:
-    """테스트 전용 버킷 — 끝나면 이 테스트가 만든 오브젝트를 지운다."""
-    host, _, port = settings.minio_endpoint.partition(":")
-    try:
-        socket.create_connection((host, int(port or 9000)), timeout=1).close()
-    except OSError as e:
-        if os.getenv("CI"):
-            pytest.fail(f"CI 는 MinIO 를 띄운다(ci.yml) — 붙을 수 없다: {e}")
-        pytest.skip(f"MinIO 에 붙을 수 없어 첨부 테스트를 건너뛴다: {e}")
-    bucket = "zenith-test"
-    monkeypatch.setattr(settings, "minio_bucket", bucket)
-    storage._ensured.discard(bucket)
-    storage._client.cache_clear()
-    yield bucket
-    client = storage._client()
-    if client.bucket_exists(bucket):
-        for obj in list(client.list_objects(bucket, recursive=True)):
-            client.remove_object(bucket, obj.object_name)
 
 
 @pytest.fixture(autouse=True)
