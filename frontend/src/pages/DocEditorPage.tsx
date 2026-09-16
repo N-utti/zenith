@@ -1,11 +1,14 @@
-import { Link, useParams } from 'react-router'
+import { Link, useLocation, useParams } from 'react-router'
 import { Spinner } from '@/components/ui/Spinner'
 import { useDoc } from '@/features/docs/api'
 import { DocWorkspace } from '@/features/docs/DocWorkspace'
+import type { DocSeedState } from '@/features/docs/types'
 
 export function DocEditorPage() {
   const { docId = '' } = useParams()
   const { data: meta, isPending, isError } = useDoc(docId)
+  // AI 답변 "문서로 저장"이 실어 보낸 초안. 문서가 비어 있는 첫 탭에서만 심긴다(DocWorkspace onCreate).
+  const seed = useLocation().state as DocSeedState | null
 
   if (isPending) {
     return (
@@ -30,7 +33,7 @@ export function DocEditorPage() {
   // docId가 바뀌면 협업 세션을 통째로 새로 연다.
   return (
     <div className="flex h-full flex-col">
-      <DocWorkspace key={meta.id} meta={meta} />
+      <DocWorkspace key={meta.id} meta={seed?.seedHtml ? { ...meta, ...seed } : meta} />
     </div>
   )
 }
