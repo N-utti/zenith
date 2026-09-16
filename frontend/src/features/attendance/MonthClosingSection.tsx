@@ -1,7 +1,8 @@
-import { useState, type ReactNode } from 'react'
-import { ChevronLeft, ChevronRight, Download } from 'lucide-react'
+import { useState } from 'react'
+import { Download } from 'lucide-react'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
+import { YearHeader } from '@/components/ui/Calendar'
 import { Field } from '@/components/ui/Field'
 import { Modal } from '@/components/ui/Modal'
 import { Spinner } from '@/components/ui/Spinner'
@@ -36,20 +37,15 @@ export function MonthClosingSection() {
     })
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-2">
-        <div className="flex items-center gap-0.5">
-          <YearButton label="이전 해" onClick={() => setYear(Math.max(2000, year - 1))}>
-            <ChevronLeft className="size-4" />
-          </YearButton>
-          <YearButton label="다음 해" onClick={() => setYear(Math.min(2100, year + 1))}>
-            <ChevronRight className="size-4" />
-          </YearButton>
-        </div>
-        <h2 className="text-fg text-base font-semibold">{year}년</h2>
-        <p className="text-subtle ml-auto text-xs">
-          마감하면 그 달의 휴가·예외 근무·정정 신청이 막힙니다.
-        </p>
-      </div>
+      <YearHeader
+        year={year}
+        onYearChange={setYear}
+        actions={
+          <p className="text-subtle text-xs">
+            마감하면 그 달의 휴가·예외 근무·정정 신청이 막힙니다.
+          </p>
+        }
+      />
 
       <Table>
         <THead>
@@ -147,27 +143,6 @@ export function MonthClosingSection() {
         <ReopenModal month={confirm.month} onClose={() => setConfirm(null)} />
       )}
     </div>
-  )
-}
-
-function YearButton({
-  label,
-  onClick,
-  children,
-}: {
-  label: string
-  onClick: () => void
-  children: ReactNode
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label={label}
-      className="text-muted hover:bg-surface-hover hover:text-fg rounded-md p-1.5 transition-colors"
-    >
-      {children}
-    </button>
   )
 }
 

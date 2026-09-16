@@ -5,6 +5,7 @@ import { PlaceholderPanel } from '@/components/ui/PlaceholderPanel'
 import { Tabs } from '@/components/ui/Tabs'
 import { CompanyAttendanceSection } from '@/features/attendance/CompanyAttendanceSection'
 import { ExceptionSection } from '@/features/attendance/ExceptionSection'
+import { HolidaySection } from '@/features/attendance/HolidaySection'
 import { LeaveAdminSection } from '@/features/attendance/LeaveAdminSection'
 import { LeaveSection } from '@/features/attendance/LeaveSection'
 import { MonthClosingSection } from '@/features/attendance/MonthClosingSection'
@@ -28,6 +29,8 @@ const EXEC_TABS = [
   { key: 'leave-admin', label: '연차 관리' },
   // 근태 관리(05 SCR-ATT-06 상당): 지금은 월 마감만. 리포트 내보내기·결근 확정은 뒤에 붙는다.
   { key: 'admin', label: '근태 관리' },
+  // 근태 설정(05 SCR-ATT-07 상당): 공휴일·회사 휴일만. 휴가 종류·연차 부여 기준은 사용자가 뺐다(2026-09-15).
+  { key: 'settings', label: '근태 설정' },
 ]
 
 export function AttendancePage() {
@@ -72,6 +75,8 @@ export function AttendancePage() {
             <LeaveAdminSection />
           ) : key === 'admin' ? (
             <MonthClosingSection />
+          ) : key === 'settings' ? (
+            <HolidaySection />
           ) : key === 'exception' ? (
             <ExceptionSection />
           ) : (

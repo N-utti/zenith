@@ -14,6 +14,8 @@ import type {
   AttendanceMonth,
   Correction,
   CorrectionInput,
+  Holiday,
+  HolidayInput,
   LeaveBalance,
   LeaveBalanceRow,
   LeaveOnCalendar,
@@ -314,5 +316,46 @@ export function useDownloadReport() {
         'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       )
     },
+  })
+}
+
+// ── 공휴일·회사 휴일 (10 §9.6, 임원) ────────────────────────────
+
+const holidaysKey = (year: number) => ['holidays', year] as const
+
+/** `?year=` 은 프론트 확장(PR 본문). 10 §9.6 은 GET/POST 만 적었다. */
+export function useHolidays(year: number) {
+  return useQuery({
+    queryKey: holidaysKey(year),
+    queryFn: () => api<{ items: Holiday[] }>(`/admin/holidays?year=${year}`),
+    placeholderData: keepPreviousData,
+  })
+}
+
+/** 휴일이 바뀌면 근무 달력이 다시 만들어진다(10 §6.2). 근태 달력·그리드도 같이 다시 읽는다. */
+function useRefetchHolidays() {
+  const qc = useQueryClient()
+  return () => {
+    void qc.invalidateQueries({ queryKey: ['holidays'] })
+    void qc.invalidateQueries({ queryKey: ['attendance'] })
+  }
+}
+
+export function useAddHoliday() {
+  const refetch = useRefetchHolidays()
+  return useMutation({
+    mutationFn: (input: HolidayInput) =>
+      api<Holiday>('/admin/holidays', { method: 'POST', body: JSON.stringify(input) }),
+    onSuccess: refetch,
+  })
+}
+
+/** `DELETE /admin/holidays/{date}` 는 프론트 확장(PR 본문). 잘못 넣은 날을 되돌릴 길이 있어야 한다. */
+export function useRemoveHoliday() {
+  const refetch = useRefetchHolidays()
+  return useMutation({
+    mutationFn: (date: string) =>
+      api<void>(`/admin/holidays/${encodeURIComponent(date)}`, { method: 'DELETE' }),
+    onSuccess: refetch,
   })
 }

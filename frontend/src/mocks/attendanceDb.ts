@@ -18,33 +18,14 @@ import { DEMO_ACCOUNTS } from './accounts'
 import { MOCK_USERS } from './db'
 import { ISO_DATE, LEAVE_TYPES, listLeaves } from './leavesDb'
 import { isClosedRange, MONTH_CLOSED } from './closingsDb'
-
-/**
- * 공휴일 시드(10 §6.1 `holidays`). 실제로는 exec 가 연초에 등록한다(SCR-ATT-07).
- * ponytail: 올해 것만 손으로 넣었다. 다른 해를 열면 공휴일 없이 평일만 근무일이 된다.
- */
-const HOLIDAYS: Record<string, string> = {
-  '2026-01-01': '신정',
-  '2026-02-16': '설날 연휴',
-  '2026-02-17': '설날',
-  '2026-02-18': '설날 연휴',
-  '2026-03-02': '삼일절 대체공휴일',
-  '2026-05-05': '어린이날',
-  '2026-05-25': '부처님오신날 대체공휴일',
-  '2026-06-03': '지방선거',
-  '2026-08-17': '광복절 대체공휴일',
-  '2026-09-24': '추석 연휴',
-  '2026-09-25': '추석',
-  '2026-10-05': '개천절 대체공휴일',
-  '2026-10-09': '한글날',
-  '2026-12-25': '성탄절',
-}
+import { isHoliday } from './holidaysDb'
 
 /** 오늘에서 n일 뒤의 평일. `leavesDb.workday` 와 같은 규칙. */
 function workday(offset: number): string {
   const date = new Date()
   date.setDate(date.getDate() + offset)
-  while (date.getDay() === 0 || date.getDay() === 6) date.setDate(date.getDate() + 1)
+  while (date.getDay() === 0 || date.getDay() === 6 || isHoliday(toISODate(date)))
+    date.setDate(date.getDate() + 1)
   return toISODate(date)
 }
 
@@ -317,7 +298,7 @@ function workdaysOf(month: string): string[] {
     const date = new Date(year, m - 1, d)
     const weekday = date.getDay()
     const iso = toISODate(date)
-    if (weekday !== 0 && weekday !== 6 && !HOLIDAYS[iso]) days.push(iso)
+    if (weekday !== 0 && weekday !== 6 && !isHoliday(iso)) days.push(iso)
   }
   return days
 }

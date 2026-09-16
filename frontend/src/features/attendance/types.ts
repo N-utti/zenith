@@ -241,3 +241,21 @@ export interface MonthClosing {
     reason?: string
   }[]
 }
+
+// ── 공휴일·회사 휴일 (10 §6 · §9.6) ──────────────────────────
+
+export type HolidayKind = 'public' | 'company'
+
+export const HOLIDAY_KIND_LABEL: Record<HolidayKind, string> = {
+  public: '공휴일',
+  company: '회사 휴일',
+}
+
+/** `holidays` 한 행(10 §4.1). 날짜가 키다. */
+export interface Holiday {
+  date: string
+  name: string
+  kind: HolidayKind
+}
+
+export type HolidayInput = Holiday
