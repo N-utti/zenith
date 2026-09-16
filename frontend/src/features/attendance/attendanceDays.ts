@@ -1,3 +1,4 @@
+import { toISODate } from '@/lib/datetime'
 import type { AttendanceDay, AttendanceStatus } from './types'
 
 /** 캘린더 칸 하나의 상태. `none` 은 "행이 없고 휴일도 아닌 날"(주말, 달력 미생성). */
@@ -43,4 +44,22 @@ export function formatMinutes(minutes: number): string {
   const h = Math.floor(minutes / 60)
   const m = minutes % 60
   return m === 0 ? `${h}시간` : `${h}시간 ${m}분`
+}
+
+export const WEEKDAY = ['일', '월', '화', '수', '목', '금', '토']
+
+export interface GridDay {
+  iso: string
+  day: number
+  weekday: number
+}
+
+/** `2026-09` 의 날짜 전부. 전사 근태 그리드와 리포트가 같은 열을 쓴다. */
+export function daysOf(month: string): GridDay[] {
+  const [year, m] = month.split('-').map(Number)
+  const last = new Date(year, m, 0).getDate()
+  return Array.from({ length: last }, (_, i) => {
+    const date = new Date(year, m - 1, i + 1)
+    return { iso: toISODate(date), day: i + 1, weekday: date.getDay() }
+  })
 }

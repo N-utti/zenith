@@ -17,7 +17,7 @@ import { useCloseMonth, useDownloadReport, useReopenMonth, useYearClosings } fro
  * 마감하면 그 달의 휴가·예외 근무·정정 신청이 409 로 막히고, 해제는 사유를 받는다.
  * 해제는 드물어 열을 따로 두지 않고, 해제된 적 있는 달의 마감 칸에만 마지막 해제를 한 줄 붙인다.
  * 전체 이력은 서버 감사 로그 몫이다.
- * 행마다 그 달 리포트 CSV 를 내려받는다. 결근 확정은 아직 없다.
+ * 행마다 그 달 리포트(xlsx)를 내려받는다. 결근 확정은 아직 없다.
  */
 export function MonthClosingSection() {
   const [year, setYear] = useState(() => Number(currentMonth().slice(0, 4)))
@@ -109,11 +109,11 @@ export function MonthClosingSection() {
                       size="sm"
                       onClick={() => download(c.month)}
                       disabled={report.isPending && report.variables === c.month}
-                      aria-label={`${formatMonth(c.month)} 리포트 CSV 내려받기`}
+                      aria-label={`${formatMonth(c.month)} 리포트 내려받기`}
                       className="mr-1"
                     >
                       <Download className="size-4" aria-hidden="true" />
-                      CSV
+                      리포트
                     </Button>
                   )}
                   {!future &&
