@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Download } from 'lucide-react'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Field } from '@/components/ui/Field'
@@ -10,14 +10,14 @@ import { Textarea } from '@/components/ui/Textarea'
 import { useToast } from '@/components/ui/ToastContext'
 import { ApiError } from '@/lib/api'
 import { currentMonth, formatDateTime, formatMonth } from '@/lib/datetime'
-import { useCloseMonth, useReopenMonth, useYearClosings } from './api'
+import { useCloseMonth, useDownloadReport, useReopenMonth, useYearClosings } from './api'
 
 /**
  * 월 마감(임원, FR-ATT-15 · 10 §5.5). 한 해의 열두 달을 표로 놓고 행마다 마감·해제한다.
  * 마감하면 그 달의 휴가·예외 근무·정정 신청이 409 로 막히고, 해제는 사유를 받는다.
  * 해제는 드물어 열을 따로 두지 않고, 해제된 적 있는 달의 마감 칸에만 마지막 해제를 한 줄 붙인다.
  * 전체 이력은 서버 감사 로그 몫이다.
- * 리포트 내보내기·결근 확정은 아직 없다.
+ * 행마다 그 달 리포트 CSV 를 내려받는다. 결근 확정은 아직 없다.
  */
 export function MonthClosingSection() {
   const [year, setYear] = useState(() => Number(currentMonth().slice(0, 4)))
@@ -25,6 +25,15 @@ export function MonthClosingSection() {
   const [confirm, setConfirm] = useState<{ action: 'close' | 'reopen'; month: string } | null>(null)
   const now = currentMonth()
   const items = closings.data?.items ?? []
+  const toast = useToast()
+  const report = useDownloadReport()
+  const download = (month: string) =>
+    report.mutate(month, {
+      // 완료를 소리로도 알린다. 버튼이 disabled 되며 포커스가 body 로 떨어져 완료를 알 길이 없다.
+      onSuccess: () => toast.success(`${formatMonth(month)} 리포트를 내려받았습니다.`),
+      onError: (err) =>
+        toast.error(err instanceof ApiError ? err.message : '리포트를 내려받지 못했습니다.'),
+    })
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2">
@@ -94,6 +103,19 @@ export function MonthClosingSection() {
                   )}
                 </TD>
                 <TD className="text-right">
+                  {!future && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => download(c.month)}
+                      disabled={report.isPending && report.variables === c.month}
+                      aria-label={`${formatMonth(c.month)} 리포트 CSV 내려받기`}
+                      className="mr-1"
+                    >
+                      <Download className="size-4" aria-hidden="true" />
+                      CSV
+                    </Button>
+                  )}
                   {!future &&
                     (c.status === 'closed' ? (
                       <Button
