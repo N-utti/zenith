@@ -35,7 +35,18 @@ docker compose cp caddy:/data/caddy/pki/authorities/local/root.crt ./zenith-root
 ```
 
 - **자체 CA 의 대가**: 루트를 넣은 PC 는 이 서버를 CA 로 신뢰한다 — 서버(`caddy_data` 볼륨의 CA 키)가 침해되면 그 PC 의 모든 HTTPS 가 위조 가능하다(이름 제약 없음, 폐기 수단 없음). 사내 CA 가 있으면 그것을 쓰고, 없으면 배포 대상을 제니스를 쓰는 PC 로만 한정한다.
-- caddy 가 `X-Content-Type-Options`·`X-Frame-Options`·`Referrer-Policy` 를 붙인다. HSTS 는 사내 CA 결정 뒤, CSP 는 프론트 번들과 합의 후.
+- caddy 가 `X-Content-Type-Options`·`X-Frame-Options`·`Referrer-Policy` 를 붙인다. HSTS 는 사내 CA 결정 뒤. CSP 는 아래 "CSP".
+- **사내 CA 확인(IT 에 물어볼 것, 결정 전까지 `tls internal`)** — 답에 따라 갈린다:
+  1. 사내 CA(AD CS 등)가 있고 서버 인증서를 발급해 주는가? → 있으면 인증서·키를 `/certs` 로 마운트하고 `Caddyfile` 의 `tls` 줄을 `tls /certs/cert.pem /certs/key.pem` 으로. 갱신 주기(보통 1년)와 갱신 절차를 같이 받는다.
+  2. 없으면: 15명 PC 에 caddy 루트(`zenith-root.crt`)를 넣을 수단이 있는가(MDM·GPO·수동)? 위 "자체 CA 의 대가" 를 IT 가 받아들이는가?
+  3. 사이트 이름(`ZENITH_SITE`)은 사내 DNS 이름인가 IP 인가? DNS 이름이어야 인증서를 바꿔도 주소가 안 바뀐다.
+  4. 모바일(Capacitor)도 같은 루트를 신뢰해야 한다 — iOS 는 프로파일 설치, Android 는 사용자 CA 를 앱이 신뢰하도록 network_security_config 필요(프론트 몫).
+  결정 뒤: HSTS(`Strict-Transport-Security "max-age=31536000"`)를 붙인다 — 인증서가 깨지면 우회가 막히므로 사내 CA 로 안정된 뒤에.
+
+### CSP
+
+`Caddyfile` 이 `Content-Security-Policy-Report-Only` 를 붙인다(2026-09-16) — **아무것도 막지 않는다**. 브라우저 devtools 콘솔에 `[Report Only]` 로 위반만 찍힌다(report-uri 는 두지 않았다 — 15명 규모에서 콘솔 확인이면 된다).
+승격 절차: (1) 프론트가 로그인·문서 편집·채팅 첨부(이미지 미리보기)·AI 답변·⌘K 를 한 바퀴 돌며 콘솔에 CSP 위반이 없는지 본다, (2) 위반이 있으면 규칙을 고친다(정당한 리소스) 또는 코드를 고친다(인라인 스크립트 등), (3) 헤더 이름에서 `-Report-Only` 를 뗀다. `script-src` 의 sha256 은 `frontend/index.html` 의 인라인 테마 스크립트 해시라 그 스크립트를 고치면 해시를 다시 뽑는다(`docker compose exec caddy cat /srv/index.html` 의 `<script>…</script>` 안쪽 **바이트 그대로**(개행 포함) sha256 → base64. 개행은 `.gitattributes` 가 LF 로 고정한다 — Windows 에서 CRLF 로 빌드하면 해시가 어긋나 거짓 위반이 찍힌다) — 스크립트를 외부 파일로 빼면 해시가 필요 없어진다(프론트 제안).
 - api 는 `COOKIE_SECURE=true` 가 기본이다. caddy 없이 api 에 평문 http 로 붙는 실험에서만 `ZENITH_COOKIE_SECURE=false`.
 
 ### 백업 · 복구
