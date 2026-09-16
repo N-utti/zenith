@@ -8,15 +8,19 @@ import { addHoliday, isHoliday, listHolidays, removeHoliday } from './holidaysDb
 const closed = `${shiftMonth(currentMonth(), -1)}-15`
 
 it('추가하면 휴일이 되고, 중복은 409, 지우면 풀린다', () => {
-  expect(addHoliday({ date: '2031-07-17', name: '제헌절', kind: 'public' })).toHaveProperty('item')
+  expect(addHoliday({ date: '2031-07-17', name: '창립기념일', kind: 'company' })).toHaveProperty(
+    'item',
+  )
   expect(isHoliday('2031-07-17')).toBe(true)
   expect(addHoliday({ date: '2031-07-17', name: '또', kind: 'company' })).toMatchObject({
     status: 409,
   })
-  expect(listHolidays(2031).map((h) => h.name)).toEqual(['제헌절'])
+  expect(listHolidays(2031).map((h) => h.name)).toEqual(['창립기념일'])
   expect(removeHoliday('2031-07-17')).toBe('ok')
   expect(isHoliday('2031-07-17')).toBe(false)
   expect(removeHoliday('2031-07-17')).toBe('not_found')
+  // 법정 공휴일은 서버 원천. 화면에서 못 지운다.
+  expect(removeHoliday('2026-01-01')).toMatchObject({ status: 403 })
 })
 
 it('입력 검증과 마감된 달 차단', () => {
@@ -37,7 +41,7 @@ it('입력 검증과 마감된 달 차단', () => {
 it('휴일을 넣으면 그 날 근무일 행이 사라지고, 빼면 돌아온다', () => {
   const user = MOCK_USERS[0]
   const before = attendanceMonth(user, '2031-07').days.length
-  addHoliday({ date: '2031-07-17', name: '제헌절', kind: 'public' })
+  addHoliday({ date: '2031-07-17', name: '창립기념일', kind: 'company' })
   expect(attendanceMonth(user, '2031-07').days.length).toBe(before - 1)
   removeHoliday('2031-07-17')
   expect(attendanceMonth(user, '2031-07').days.length).toBe(before)
