@@ -39,6 +39,13 @@ export function getClosing(month: string): MonthClosing {
   )
 }
 
+/** 한 해 열두 달. 마감 화면이 표로 훑는다. */
+export function listClosings(year: number): MonthClosing[] {
+  return Array.from({ length: 12 }, (_, i) =>
+    getClosing(`${year}-${String(i + 1).padStart(2, '0')}`),
+  )
+}
+
 /** `start`~`end`(ISO 날짜) 기간이 마감된 달을 하나라도 지나는지. 양끝만 보면 석 달짜리 출장의 가운데 달이 샌다. */
 export function isClosedRange(start: string, end: string = start): boolean {
   const [from, to] = [start.slice(0, 7), end.slice(0, 7)]
