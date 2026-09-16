@@ -26,6 +26,8 @@ export interface AiMessage {
   /** 본문. assistant 답변은 `[[1]]` 형태의 각주 표식을 포함할 수 있다. 스트리밍 중에는 자라난다. */
   body: string
   createdAt: string
+  /** 내 질문에만. 보낼 때 고른 지식 소스. 실패한 답변을 다시 받을 때 같은 범위로 보낸다. */
+  scope?: string | null
   citations?: Citation[]
   /** 스트림 도중 서버가 `event: error` 를 보냈을 때의 사유. 받은 데까지의 본문은 남긴다. */
   error?: string

@@ -29,16 +29,28 @@ export function useAiModels() {
 /**
  * 04 §8 `POST /ai/chat`. 내 질문은 즉시 붙이고, 답변은 `token` 이 오는 대로 자라난다.
  * `citations` 는 본문이 끝난 뒤 한 번, `done` 으로 닫힌다. `error` 는 받은 데까지 남기고 사유를 단다.
+ * `resend` 는 실패한 답변을 다시 받는 것이라 내 질문 말풍선을 또 붙이지 않는다.
  */
 export function useAsk() {
   return useMutation({
-    mutationFn: async ({ prompt, scope }: { prompt: string; scope: string | null }) => {
-      appendMessage({
-        id: uuid(),
-        role: 'user',
-        body: prompt,
-        createdAt: new Date().toISOString(),
-      })
+    mutationFn: async ({
+      prompt,
+      scope,
+      resend = false,
+    }: {
+      prompt: string
+      scope: string | null
+      resend?: boolean
+    }) => {
+      if (!resend) {
+        appendMessage({
+          id: uuid(),
+          role: 'user',
+          body: prompt,
+          scope,
+          createdAt: new Date().toISOString(),
+        })
+      }
       const answerId = uuid()
       let started = false
       const events = apiEvents('/ai/chat', {
@@ -49,7 +61,12 @@ export function useAsk() {
         for await (const { event, data } of events) {
           if (!started) {
             // 첫 이벤트에서야 말풍선을 만든다. 그 전까지는 "생성 중" 표시가 자리를 지킨다.
-            appendMessage({ id: answerId, role: 'assistant', body: '', createdAt: new Date().toISOString() })
+            appendMessage({
+              id: answerId,
+              role: 'assistant',
+              body: '',
+              createdAt: new Date().toISOString(),
+            })
             started = true
           }
           if (event === 'token') {
@@ -58,14 +75,19 @@ export function useAsk() {
           } else if (event === 'citations') {
             patchMessage(answerId, { citations: Array.isArray(data) ? (data as Citation[]) : [] })
           } else if (event === 'error') {
-            patchMessage(answerId, { error: (data as { detail: string }).detail })
+            const detail = (data as { detail?: unknown }).detail
+            const reason = typeof detail === 'string' ? detail : '답변을 받지 못했습니다.'
+            patchMessage(answerId, { error: reason })
+            // 서버는 error 뒤에 done 을 보내지 않는다. 호출자에게도 실패로 알린다(재시도 버튼).
+            throw new Error(reason)
           } else if (event === 'done') {
             return
           }
         }
       } catch (error) {
-        // 답변 도중 연결이 끊긴 경우. 받은 데까지는 남기고 그 자리에 사유를 단다.
-        if (started) patchMessage(answerId, { error: '연결이 끊겨 답변이 중단됐습니다.' })
+        // 답변 도중 연결이 끊긴 경우. 받은 데까지는 남기고 그 자리에 사유를 단다(서버가 준 사유가 있으면 그대로).
+        if (started)
+          patchMessage(answerId, (m) => ({ error: m.error ?? '연결이 끊겨 답변이 중단됐습니다.' }))
         throw error
       }
     },

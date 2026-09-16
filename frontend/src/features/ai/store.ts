@@ -43,7 +43,11 @@ export function useThread(): Thread {
   )
 }
 
-/** 구독 없이 읽는다. 토큰마다 재렌더될 이유가 없는 곳(mutationFn)에서 쓴다. */
+/** 구독 없이 읽는다. 토큰마다 재렌더될 이유가 없는 곳(mutationFn·테스트)에서 쓴다. */
+export function getThread(): Thread {
+  return thread
+}
+
 export function getSessionId(): string {
   return thread.sessionId
 }
@@ -53,13 +57,21 @@ export function appendMessage(message: AiMessage) {
   emit()
 }
 
-export function patchMessage(id: string, patch: Partial<AiMessage> | ((m: AiMessage) => Partial<AiMessage>)) {
+export function patchMessage(
+  id: string,
+  patch: Partial<AiMessage> | ((m: AiMessage) => Partial<AiMessage>),
+) {
   thread = {
     ...thread,
     messages: thread.messages.map((m) =>
       m.id === id ? { ...m, ...(typeof patch === 'function' ? patch(m) : patch) } : m,
     ),
   }
+  emit()
+}
+
+export function removeMessage(id: string) {
+  thread = { ...thread, messages: thread.messages.filter((m) => m.id !== id) }
   emit()
 }
 

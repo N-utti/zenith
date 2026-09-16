@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useRef } from 'react'
-import { Check, Copy, FilePlus2, Sparkles, ThumbsUp } from 'lucide-react'
+import { Check, Copy, FilePlus2, RefreshCw, Sparkles, ThumbsUp } from 'lucide-react'
 import { useState } from 'react'
 import { useNavigate } from 'react-router'
 import { cn } from '@/lib/cn'
@@ -154,6 +154,7 @@ export function Conversation({
   streaming,
   focus,
   onCite,
+  onRetry,
 }: {
   messages: AiMessage[]
   /** 질문은 갔는데 첫 토큰이 아직 안 왔다. */
@@ -163,6 +164,8 @@ export function Conversation({
   /** 눌린 각주. 같은 답변의 같은 번호만 켜진다. */
   focus: CitationFocus | null
   onCite: (focus: Omit<CitationFocus, 'tick'>) => void
+  /** 마지막 답변이 실패했을 때 같은 질문을 다시 보낸다(05 공통 규칙 "생성 실패, 다시 시도"). */
+  onRetry: () => void
 }) {
   const endRef = useRef<HTMLDivElement>(null)
 
@@ -194,7 +197,21 @@ export function Conversation({
                     onCite({ messageId: message.id, n }),
                   )}
                 </p>
-                {message.error && <p className="text-danger mt-2 text-xs">{message.error}</p>}
+                {message.error && (
+                  <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
+                    <p className="text-danger">{message.error}</p>
+                    {index === messages.length - 1 && (
+                      <button
+                        type="button"
+                        onClick={onRetry}
+                        className="text-subtle hover:text-fg flex cursor-pointer items-center gap-1 transition-colors"
+                      >
+                        <RefreshCw className="size-3" />
+                        다시 시도
+                      </button>
+                    )}
+                  </div>
+                )}
                 {!message.error && !(streaming && index === messages.length - 1) && (
                   <AnswerActions
                     id={message.id}
