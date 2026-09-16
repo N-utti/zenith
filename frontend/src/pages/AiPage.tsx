@@ -10,7 +10,7 @@ import { Conversation } from '@/features/ai/Conversation'
 import { SourcesPanel } from '@/features/ai/SourcesPanel'
 import { useAiModels, useAsk } from '@/features/ai/api'
 import type { AskState, CitationFocus } from '@/features/ai/types'
-import { resetThread, useThread } from '@/features/ai/store'
+import { removeMessage, resetThread, useThread } from '@/features/ai/store'
 
 /**
  * 무엇이 답하는지 밝힌다. ARCHITECTURE §6(2026-09-04): 1차 공급자는 Claude API 이고 호출은 서버가 한다.
@@ -52,6 +52,20 @@ export function AiPage() {
   // 질문은 붙었는데 첫 토큰이 아직 안 왔을 때만 "생성 중" 을 보여준다. 그 뒤로는 말풍선이 자란다.
   const generating = ask.isPending && messages.at(-1)?.role === 'user'
 
+  /**
+   * 실패한 답변을 지우고 같은 질문·범위로 다시 받는다. 내 질문 말풍선은 그대로 둔다.
+   * 질문은 요청 인자가 아니라 스레드에서 찾는다. 스레드는 화면을 떠나도 남지만 요청 인자는 리마운트에 사라진다.
+   */
+  const retry = () => {
+    if (ask.isPending) return
+    const last = messages.at(-1)
+    const question = [...messages].reverse().find((m) => m.role === 'user')
+    if (!question) return
+    setFocus(null)
+    if (last?.role === 'assistant') removeMessage(last.id)
+    ask.mutate({ prompt: question.body, scope: question.scope ?? null, resend: true })
+  }
+
   return (
     <div className="flex h-full">
       <AiHistoryPanel messages={messages} onPick={fill} />
@@ -84,11 +98,21 @@ export function AiPage() {
           streaming={ask.isPending}
           focus={focus}
           onCite={cite}
+          onRetry={retry}
         />
 
-        {ask.isError && (
-          <p className="text-danger px-5 pb-2 text-center text-xs">
-            {ask.error.message || '답변을 받지 못했습니다. 다시 시도해 주세요.'}
+        {/* 첫 이벤트 전에 실패하면(HTTP 오류·연결 실패) 말풍선이 없다. 그때만 여기서 사유와 재시도를 보인다. 말풍선이 있으면 거기에 붙는다. */}
+        {ask.isError && messages.at(-1)?.role === 'user' && (
+          <p className="text-danger flex items-center justify-center gap-3 px-5 pb-2 text-xs">
+            {ask.error.message || '답변을 받지 못했습니다.'}
+            <button
+              type="button"
+              onClick={retry}
+              disabled={ask.isPending}
+              className="text-subtle hover:text-fg cursor-pointer underline underline-offset-2 transition-colors"
+            >
+              다시 시도
+            </button>
           </p>
         )}
 
