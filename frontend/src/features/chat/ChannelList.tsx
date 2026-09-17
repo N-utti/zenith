@@ -8,7 +8,8 @@ import type { ChatChannel } from './types'
 import { WorkStatus } from './WorkStatus'
 
 function Row({ channel }: { channel: ChatChannel }) {
-  const Icon = !channel.is_dm ? Hash : AtSign
+  const Icon = channel.is_dm ? AtSign : Hash
+  const last = channel.last_message
 
   return (
     <NavLink
@@ -33,9 +34,7 @@ function Row({ channel }: { channel: ChatChannel }) {
           </span>
           <WorkStatus channel={channel} />
         </p>
-        {channel.last_message && (
-          <p className="text-subtle truncate text-xs">{channel.last_message.body}</p>
-        )}
+        {last && <p className="text-subtle truncate text-xs">{last.body}</p>}
       </div>
       <div className="flex shrink-0 flex-col items-end gap-1">
         {channel.unread > 0 && (
@@ -43,9 +42,7 @@ function Row({ channel }: { channel: ChatChannel }) {
             {channel.unread}
           </span>
         )}
-        {channel.last_message?.created_at && (
-          <span className="text-subtle text-[11px]">{formatRelative(channel.last_message?.created_at)}</span>
-        )}
+        {last && <span className="text-subtle text-[11px]">{formatRelative(last.created_at)}</span>}
       </div>
     </NavLink>
   )

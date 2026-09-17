@@ -28,7 +28,10 @@ const USERS = Object.fromEntries(users.map((u) => [u.id, { id: u.id, name: u.nam
 
 const ALL = Object.keys(USERS)
 
-/** @type {{id:string, is_dm:boolean, name:string, memberIds:string[]}[]} */
+/**
+ * `memberIds` 는 릴레이 안에서만 쓴다. 밖으로는 `members`(이름까지)로 펼쳐 나간다.
+ * @type {{id:string, is_dm:boolean, name:string, memberIds:string[]}[]}
+ */
 const CHANNELS = [
   { id: 'c-notice', is_dm: false, name: '공지', memberIds: ALL },
   { id: 'c-dev', is_dm: false, name: '개발', memberIds: ALL },
@@ -43,10 +46,13 @@ const minutesAgo = (m) => new Date(Date.now() - m * 60_000).toISOString()
 let nextId = 1
 /** 백엔드 `MessageOut` 과 같은 모양(04 §5). 소켓의 `msg` 이벤트도 같은 것을 싣는다. */
 function makeMessage(channelId, authorId, body, createdAt) {
+  const author = USERS[authorId]
+  // 모르는 id 로 만들면 `author: undefined` 가 그대로 실려 화면이 메시지를 그리다 죽는다.
+  if (!author) throw new Error(`모르는 사용자: ${authorId}`)
   return {
     id: `m-${nextId++}`,
     channel_id: channelId,
-    author: USERS[authorId],
+    author,
     body,
     doc_ref: null,
     attachments: null,
@@ -110,7 +116,11 @@ function channelView(channel, viewerId) {
     id: channel.id,
     name: channelName(channel, viewerId),
     is_dm: channel.is_dm,
-    members: channel.memberIds.map((id) => USERS[id]).filter(Boolean),
+    // 백엔드는 이름순으로 준다. DM 상대를 고르는 화면이 이 순서를 그대로 그린다.
+    members: channel.memberIds
+      .map((id) => USERS[id])
+      .filter(Boolean)
+      .sort((a, b) => a.name.localeCompare(b.name)),
     // 내가 보낸 메시지는 안읽음이 아니다.
     unread: list.filter((m) => m.created_at > since && m.author.id !== viewerId).length,
     last_message: list.at(-1) ?? null,
@@ -211,10 +221,13 @@ export async function handleChatRequest(req, res, url) {
     if (!USERS[viewerId]) return json(res, 401, { detail: '알 수 없는 사용자입니다.' })
     const items = CHANNELS.filter((c) => c.memberIds.includes(viewerId))
       .map((c) => channelView(c, viewerId))
-      // 최근 대화가 위로. 대화가 없는 채널은 아래로 밀린다.
-      .sort((a, b) =>
-        (b.last_message?.created_at ?? '').localeCompare(a.last_message?.created_at ?? ''),
-      )
+      // 최근 대화가 위로. 대화가 없는 채널은 아래로 밀리고, 그 안에서는 이름순(백엔드와 같다).
+      .sort((a, b) => {
+        const at = a.last_message?.created_at ?? ''
+        const bt = b.last_message?.created_at ?? ''
+        if (at !== bt) return at < bt ? 1 : -1
+        return a.name.localeCompare(b.name)
+      })
     return json(res, 200, { items })
   }
 
@@ -230,7 +243,8 @@ export async function handleChatRequest(req, res, url) {
       }
       const limit = Number(url.searchParams.get('limit') ?? 50)
       const list = messages.get(channelId) ?? []
-      return json(res, 200, { items: list.slice(-limit) })
+      // 봉투도 백엔드와 같다(`MessagePage`). 릴레이는 전부 메모리에 있어 더 과거가 없다.
+      return json(res, 200, { items: list.slice(-limit), next_cursor: null })
     }
 
     if (req.method === 'POST') {

@@ -1,12 +1,15 @@
 import { Link } from 'react-router'
 import { Hash } from 'lucide-react'
 import { Avatar } from '@/components/ui/Avatar'
+import { useCurrentUser } from '@/features/auth/AuthContext'
+import { hueOf } from '@/lib/avatar'
 import { Card, CardEmpty } from '@/components/ui/Card'
 import { SkeletonRows } from '@/components/ui/Skeleton'
 import { useChannels } from '@/features/chat/api'
 import { HomeSection } from './HomeSection'
 
 export function UnreadChatCard() {
+  const me = useCurrentUser()
   const { data, isPending, isError } = useChannels()
   const unread = data?.items.filter((channel) => channel.unread > 0) ?? []
 
@@ -30,10 +33,16 @@ export function UnreadChatCard() {
                       (index > 0 ? ' border-line border-t' : '')
                     }
                   >
-                    {!channel.is_dm ? (
-                      <Hash className="text-subtle size-4 shrink-0" />
+                    {channel.is_dm ? (
+                      <Avatar
+                        name={channel.name}
+                        // 상대의 색. 같은 사람이 메시지 목록과 여기서 다른 색이면 안 된다.
+                        hue={hueOf(channel.members.find((m) => m.id !== me.id)?.id ?? '')}
+                        size="sm"
+                        className="size-6"
+                      />
                     ) : (
-                      <Avatar name={channel.name} hue={200} size="sm" className="size-6" />
+                      <Hash className="text-subtle size-4 shrink-0" />
                     )}
                     <span className="text-fg min-w-0 flex-1 truncate text-[13px]">
                       {channel.name}

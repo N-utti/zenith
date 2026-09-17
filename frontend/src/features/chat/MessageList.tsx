@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
-import { hueOf } from '@/lib/avatar'
 import { Avatar } from '@/components/ui/Avatar'
 import { Spinner } from '@/components/ui/Spinner'
+import { hueOf } from '@/lib/avatar'
 import { formatDay, formatTime } from '@/lib/datetime'
 import { useMessages } from './api'
 import type { ChatMessage } from './types'
