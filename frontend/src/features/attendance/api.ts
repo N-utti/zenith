@@ -102,7 +102,6 @@ export function useCancelLeave() {
   })
 }
 
-/** 내 근태 한 달(04 §10.1). `month` 는 `2026-09`. */
 /**
  * 기간 집계. 달을 넘어가는 누계를 볼 때 쓴다(연장근로·휴가는 해 단위로 관리한다).
  *
@@ -117,9 +116,12 @@ export function useAttendanceRange(from: string, to: string) {
         `/attendance/me/summary?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
       ),
     enabled: from !== '' && to !== '' && from <= to,
+    // 날짜를 고칠 때마다 키가 바뀐다. 이전 값을 두지 않으면 숫자가 사라졌다 나타난다(전사 근태와 같다).
+    placeholderData: keepPreviousData,
   })
 }
 
+/** 내 근태 한 달(04 §10.1). `month` 는 `2026-09`. */
 export function useMyAttendance(month: string) {
   return useQuery({
     queryKey: ['attendance', 'me', month],

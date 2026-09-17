@@ -131,7 +131,7 @@ export interface AttendanceMonth {
  * `GET /attendance/me/summary?from=&to=` 응답. 기간 집계다(04 §10.1).
  *
  * **응답 모양은 계약에 없다**(경로만 스텁으로 있다). 달 조회와 같은 집계 키를 쓰고 날짜 범위를
- * 되돌려 준다고 가정했다. 일자 배열은 싣지 않는다 — 기간이 길면 그게 응답의 대부분이 되는데
+ * 되돌려 준다고 가정했다. 일자 배열은 싣지 않는다. 기간이 길면 그게 응답의 대부분이 되는데
  * 화면은 합계만 그린다.
  */
 export interface AttendanceRange {

@@ -64,7 +64,6 @@ import {
   listCorrections,
   listOvertime,
   MONTH,
-  RANGE_MAX_DAYS,
   type ExceptionStore,
 } from './attendanceDb'
 import {
@@ -100,6 +99,9 @@ function authenticate(): User | undefined {
   // 세션은 쿠키다(04 §1). 핸들러는 페이지 안에서 돌므로 document.cookie 를 그대로 읽는다.
   return userFromCookie(document.cookie)
 }
+
+/** 기간 집계가 한 번에 훑는 최대 길이. 목이 달마다 근무일을 만들어 내서 무한정 늘릴 수 없다. */
+const RANGE_MAX_DAYS = 366
 
 /** 사내망 파일 업로드 상한. 실제 서버(FastAPI)도 같은 값을 강제해야 한다. */
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024

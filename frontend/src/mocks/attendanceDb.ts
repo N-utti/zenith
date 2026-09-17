@@ -362,9 +362,6 @@ export function attendanceMonth(user: User, month: string): AttendanceMonth {
   }
 }
 
-/** 기간 집계가 한 번에 훑는 최대 길이. 목이 달마다 근무일을 만들어서 무한정 늘릴 수 없다. */
-export const RANGE_MAX_DAYS = 366
-
 /**
  * 기간 집계(`GET /attendance/me/summary`). 달 조회를 구간만큼 돌려 합친다.
  *
