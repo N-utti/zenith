@@ -31,6 +31,28 @@ const userById = (id: string) => MOCK_USERS.find((u) => u.id === id)
  */
 const APPROVER_IDS = ['u-11', 'u-12']
 
+/**
+ * 참조 단계. 결재 차례가 아니라서 **대기 사슬에 넣지 않는다**(`status: 'skipped'`).
+ *
+ * 넣으면 `decide` 가 첫 대기 단계로 참조자를 집어 결재가 거기서 멈춘다. 화면은 이 줄을 상태가
+ * 아니라 역할로 읽어 "참조" 로 그린다. 서버가 참조 단계에 어떤 상태를 줄지는 계약에 없다(가정).
+ */
+function referenceSteps(ids: string[], from: number): ApprovalStep[] {
+  return ids
+    .map(userById)
+    .filter((u): u is User => !!u)
+    .map((u, i) => ({
+      step_no: from + i,
+      approver: person(u),
+      acted_by: null,
+      role: 'reference' as const,
+      status: 'skipped' as const,
+      comment: null,
+      acted_at: null,
+      version: 1,
+    }))
+}
+
 function buildSteps(drafter: User): ApprovalStep[] {
   // 임원 기안은 결재선이 없다(13 §5.2). 아랫사람에게 결재를 받지 않는다.
   if (drafter.role === 'exec') return []
@@ -106,7 +128,8 @@ function create(drafter: User, input: DraftInput, at = now()): Stored {
     amount: input.subject.amount,
     related: input.subject.related,
     subject: input.subject,
-    steps: [],
+    // 참조자는 기안 때 정해진다. 상신 전에도 문서에 남아 있어야 임시저장을 다시 열었을 때 보인다.
+    steps: referenceSteps(input.references ?? [], 1),
   }
   docs.push(doc)
   return doc
@@ -114,7 +137,10 @@ function create(drafter: User, input: DraftInput, at = now()): Stored {
 
 function submit(doc: Stored, at = now()) {
   const drafter = userById(doc.drafter_id)
-  doc.steps = drafter ? buildSteps(drafter) : []
+  // 결재선은 상신할 때 서버가 만든다(13 §4.2.2). 기안 때 고른 참조자는 그 뒤에 붙는다.
+  const references = doc.steps.filter((s) => s.role === 'reference').map((s) => s.approver.id)
+  const approvers = drafter ? buildSteps(drafter) : []
+  doc.steps = [...approvers, ...referenceSteps(references, approvers.length + 1)]
   doc.submitted_at = at
   if (doc.steps.length === 0) {
     // 대표 기안: 결재선 없음 → 즉시 확정. 문서와 이력은 남는다.
@@ -178,7 +204,11 @@ export function listApprovals(user: User, box: ApprovalBox): ApprovalListItem[] 
     if (box === 'draft') return d.drafter_id === user.id && d.status === 'draft'
     if (box === 'sent') return d.drafter_id === user.id && d.status !== 'draft'
     if (box === 'inbox') return d.status === 'pending' && d.waiting_on?.id === user.id
-    return d.steps.some((s) => s.role === 'reference' && s.approver.id === user.id)
+    // 상신하기 전에는 참조자에게 보이지 않는다. 기안자가 아직 고쳐 쓰는 중이다.
+    return (
+      d.status !== 'draft' &&
+      d.steps.some((s) => s.role === 'reference' && s.approver.id === user.id)
+    )
   })
   return mine
     .sort((a, b) => (b.submitted_at ?? b.created_at).localeCompare(a.submitted_at ?? a.created_at))
@@ -229,6 +259,7 @@ export function updateDraft(user: User, id: string, input: DraftInput): Approval
   doc.subject = input.subject
   doc.amount = input.subject.amount
   doc.related = input.subject.related
+  if (input.references) doc.steps = referenceSteps(input.references, 1)
   return expose(doc)
 }
 

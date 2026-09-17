@@ -138,4 +138,12 @@ export interface DraftInput {
   type_code: 'general'
   title: string
   subject: GeneralSubject
+  /**
+   * 참조자(13 FR-APV-16). 결재는 안 하지만 문서를 볼 사람들의 id 다.
+   *
+   * **계약에 없어서 정한 모양이다.** 백엔드 스텁 요약은 `{type_code, title, subject, steps?}`
+   * 인데, `steps` 는 결재선 전체를 덮어쓰는 자리로 읽힌다. 결재선은 서버가 만들고(13 §5.2)
+   * 기안자는 참조자만 더하므로, 그 둘을 한 칸에 섞지 않았다.
+   */
+  references?: string[]
 }

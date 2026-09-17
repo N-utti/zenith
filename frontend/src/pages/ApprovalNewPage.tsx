@@ -16,6 +16,10 @@ import {
   useUpdateDraft,
 } from '@/features/approvals/api'
 import { useMyArrangements } from '@/features/attendance/api'
+import { useColleagues } from '@/features/chat/people'
+import { Avatar } from '@/components/ui/Avatar'
+import { hueOf } from '@/lib/avatar'
+import { cn } from '@/lib/cn'
 import { useCurrentUser } from '@/features/auth/AuthContext'
 import { ApiError } from '@/lib/api'
 
@@ -53,6 +57,9 @@ export function ApprovalNewPage() {
   const [amount, setAmount] = useState<string | null>(null)
   const [body, setBody] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  /** 고른 참조자. 임시저장을 열면 저장돼 있던 것으로 시작한다. */
+  const [references, setReferences] = useState<string[] | null>(null)
+  const { people } = useColleagues()
   // 상신이 실패해도 방금 만든 임시저장을 잃지 않는다. 다음 시도는 새로 만들지 않고 이것을 고친다.
   const [createdId, setCreatedId] = useState<string | null>(null)
 
@@ -83,6 +90,16 @@ export function ApprovalNewPage() {
     seed?.subject.body ??
     (trip ? `출장 기간: ${tripPeriod}\n출장 목적: ${trip.reason}\n\n지출 내역:\n- ` : '')
   const related = seed?.related ?? (trip ? { type: 'arrangement' as const, id: trip.id } : null)
+  // 임시저장에는 참조자가 결재선에 섞여 저장돼 있다. 역할로 갈라 낸다.
+  const savedReferences =
+    seed?.steps.filter((step) => step.role === 'reference').map((step) => step.approver.id) ?? []
+  const referenceIds = references ?? savedReferences
+  const toggleReference = (id: string) =>
+    setReferences(
+      referenceIds.includes(id)
+        ? referenceIds.filter((each) => each !== id)
+        : [...referenceIds, id],
+    )
 
   const amountNumber = amountValue.trim() === '' ? null : Number(amountValue.replace(/,/g, ''))
   const amountError =
@@ -96,6 +113,7 @@ export function ApprovalNewPage() {
     type_code: 'general' as const,
     title: titleValue.trim(),
     subject: { body: bodyValue, amount: amountNumber, related },
+    references: referenceIds,
   }
   const fail = (err: unknown) =>
     setError(err instanceof ApiError ? err.message : '저장하지 못했습니다.')
@@ -170,6 +188,38 @@ export function ApprovalNewPage() {
                 value={amountValue}
                 onChange={(e) => setAmount(e.target.value)}
               />
+            )}
+          </Field>
+          <Field
+            label="참조"
+            hint="결재는 하지 않지만 문서를 볼 사람입니다. 상신하면 참조함에 들어갑니다."
+          >
+            {() => (
+              <div className="flex flex-wrap gap-1.5">
+                {people.length === 0 && (
+                  <p className="text-subtle text-sm">고를 수 있는 사람이 없습니다.</p>
+                )}
+                {people.map((each) => {
+                  const picked = referenceIds.includes(each.id)
+                  return (
+                    <button
+                      key={each.id}
+                      type="button"
+                      aria-pressed={picked}
+                      onClick={() => toggleReference(each.id)}
+                      className={cn(
+                        'flex cursor-pointer items-center gap-1.5 rounded-full border py-1 pr-2.5 pl-1 text-xs transition-colors',
+                        picked
+                          ? 'border-accent bg-accent-soft text-accent'
+                          : 'border-line text-muted hover:bg-surface-hover',
+                      )}
+                    >
+                      <Avatar name={each.name} hue={hueOf(each.id)} size="sm" />
+                      {each.name}
+                    </button>
+                  )
+                })}
+              </div>
             )}
           </Field>
           <Field label="본문" required>

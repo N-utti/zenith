@@ -1,7 +1,10 @@
-import { Check, Clock, Minus, X } from 'lucide-react'
+import { Check, Clock, Eye, Minus, X } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { formatDateTime } from '@/lib/datetime'
 import type { ApprovalStep, StepStatus } from './types'
+
+/** 참조 단계. 결재 차례가 아니므로 상태와 상관없이 이 모양으로 그린다. */
+const REFERENCE = { label: '참조', icon: Eye, tone: 'bg-sunken text-subtle' }
 
 const STATUS: Record<StepStatus, { label: string; icon: typeof Check; tone: string }> = {
   waiting: { label: '대기', icon: Clock, tone: 'bg-accent-soft text-accent' },
@@ -32,9 +35,11 @@ export function StepTimeline({
   return (
     <ol className="space-y-3">
       {steps.map((step) => {
-        const meta = STATUS[step.status]
+        // 참조는 결재 차례가 아니다. 상태로 읽으면 "대기" 나 "생략" 으로 보여 무슨 일인지
+        // 알 수 없다. 역할이 참조면 상태를 안 본다.
+        const meta = step.role === 'reference' ? REFERENCE : STATUS[step.status]
         const Icon = meta.icon
-        const isCurrent = step.step_no === currentStep
+        const isCurrent = step.role === 'approve' && step.step_no === currentStep
         return (
           <li key={step.step_no} className="flex gap-3">
             <span

@@ -7,11 +7,10 @@ import { Input } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
 import { Spinner } from '@/components/ui/Spinner'
 import { useToast } from '@/components/ui/ToastContext'
-import { useCurrentUser } from '@/features/auth/AuthContext'
 import { ApiError } from '@/lib/api'
 import { hueOf } from '@/lib/avatar'
 import { useChannels, useCreateChannel } from './api'
-import type { Person } from './types'
+import { useColleagues } from './people'
 
 /** 백엔드 `ChannelCreateIn.name` 의 제약(`NonBlank`, 100자). */
 const NAME_MAX = 100
@@ -40,7 +39,6 @@ export function NewChatModal({
   /** 만들고 그 대화로 들어갈 때. 취소와 달라야 한다(모바일에서는 서랍도 같이 닫힌다). */
   onCreated: () => void
 }) {
-  const me = useCurrentUser()
   const navigate = useNavigate()
   const toast = useToast()
   const { data } = useChannels()
@@ -49,15 +47,7 @@ export function NewChatModal({
   const [name, setName] = useState('')
   const [error, setError] = useState<string | null>(null)
 
-  const people: Person[] = useMemo(() => {
-    const byId = new Map<string, Person>()
-    for (const channel of data?.items ?? []) {
-      for (const member of channel.members) {
-        if (member.id !== me.id) byId.set(member.id, member)
-      }
-    }
-    return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name))
-  }, [data, me.id])
+  const { people } = useColleagues()
 
   /** 이미 DM 이 있는 사람. 고르면 그 대화가 열린다. 사이드바에도 이미 있으니 그렇다고 알린다. */
   const talkingTo = useMemo(

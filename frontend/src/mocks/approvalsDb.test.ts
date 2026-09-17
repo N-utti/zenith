@@ -7,6 +7,7 @@ import {
   forceClose,
   listApprovals,
   submitApproval,
+  updateDraft,
 } from './approvalsDb'
 
 const member = MOCK_USERS.find((u) => u.email === 'sungwoon@zenith.co.kr')!
@@ -128,5 +129,64 @@ describe('강제 종결 (13 §9.2)', () => {
     // 끝난 문서는 또 끝낼 수 없고, 결재함에서도 빠진다.
     expect(forceClose(ceo, doc.id, '또')).toMatchObject({ code: 'NOT_PENDING' })
     expect(listApprovals(senior, 'inbox').map((d) => d.id)).not.toContain(doc.id)
+  })
+})
+
+describe('참조자 (13 FR-APV-16)', () => {
+  it('상신 전에는 참조자에게 안 보이고, 상신하면 참조함에 들어간다', () => {
+    const draft = createDraft(member, {
+      type_code: 'general',
+      title: '참조 시험',
+      subject: { body: '본문', amount: null, related: null },
+      references: [other.id],
+    })
+    if ('error' in draft) throw new Error(draft.error)
+
+    // 기안자가 아직 고쳐 쓰는 중이다.
+    expect(listApprovals(other, 'reference').map((d) => d.id)).not.toContain(draft.id)
+
+    const pending = submitApproval(member, draft.id)
+    if ('error' in pending) throw new Error(pending.error)
+    expect(listApprovals(other, 'reference').map((d) => d.id)).toContain(draft.id)
+  })
+
+  it('참조는 결재 차례를 가로채지 않는다', () => {
+    const draft = createDraft(member, {
+      type_code: 'general',
+      title: '참조가 결재를 막지 않는다',
+      subject: { body: '본문', amount: null, related: null },
+      references: [other.id],
+    })
+    if ('error' in draft) throw new Error(draft.error)
+    const pending = submitApproval(member, draft.id)
+    if ('error' in pending) throw new Error(pending.error)
+
+    // 결재선은 전무 → 대표. 참조자는 그 뒤에 붙고 대기 사슬에 들어가지 않는다.
+    expect(pending.waiting_on?.id).toBe(senior.id)
+    expect(pending.steps.map((s) => s.role)).toEqual(['approve', 'approve', 'reference'])
+    expect(pending.steps.at(-1)?.approver.id).toBe(other.id)
+
+    const done = decide(senior, pending.id, 'approve', 1, undefined)
+    if ('error' in done) throw new Error(done.error)
+    expect(done.waiting_on?.id).toBe(ceo.id)
+  })
+
+  it('임시저장을 고치면 참조자가 바뀐다', () => {
+    const draft = createDraft(member, {
+      type_code: 'general',
+      title: '참조 교체',
+      subject: { body: '본문', amount: null, related: null },
+      references: [other.id],
+    })
+    if ('error' in draft) throw new Error(draft.error)
+
+    const updated = updateDraft(member, draft.id, {
+      type_code: 'general',
+      title: '참조 교체',
+      subject: { body: '본문', amount: null, related: null },
+      references: [ceo.id],
+    })
+    if ('error' in updated) throw new Error(updated.error)
+    expect(updated.steps.map((s) => s.approver.id)).toEqual([ceo.id])
   })
 })
