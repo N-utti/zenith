@@ -36,31 +36,34 @@ export function useTodayTasks() {
   })
 }
 
+/*
+ * 체크와 삭제는 즉시 반응하고, 실패하면 **그 줄만** 되돌린다.
+ *
+ * 목록 전체를 스냅샷으로 떠 두었다가 통째로 복원하면 두 변이가 서로를 덮는다. A 를 체크하고
+ * 곧바로 B 를 지웠는데 A 만 실패하면, A 의 복원이 이미 지워진 B 를 되살린다. 한 줄짜리
+ * 변경이라 역연산이 더 짧기도 하다.
+ */
 export function useToggleTask() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ id, done }: { id: string; done: boolean }) =>
       api<TodayTask>(`/me/todos/${id}`, { method: 'PATCH', body: JSON.stringify({ done }) }),
-    // 체크는 즉시 반응해야 한다. 실패하면 이전 목록으로 되돌린다.
     onMutate: async ({ id, done }) => {
       await qc.cancelQueries({ queryKey: todosKey })
-      const previous = qc.getQueryData<{ items: TodayTask[] }>(todosKey)
       qc.setQueryData<{ items: TodayTask[] }>(todosKey, (old) =>
         old ? { items: old.items.map((t) => (t.id === id ? { ...t, done } : t)) } : old,
       )
-      return { previous }
     },
-    onError: (_error, _vars, context) => {
-      if (context?.previous) qc.setQueryData(todosKey, context.previous)
+    onError: (_error, { id, done }) => {
+      qc.setQueryData<{ items: TodayTask[] }>(todosKey, (old) =>
+        old ? { items: old.items.map((t) => (t.id === id ? { ...t, done: !done } : t)) } : old,
+      )
     },
     onSettled: () => {
       void qc.invalidateQueries({ queryKey: todosKey })
     },
   })
 }
-
-/** 백엔드 `TodoCreateIn.text` 의 제약(`NonBlank`). */
-export const TODO_TEXT_MAX = 200
 
 export function useAddTask() {
   const qc = useQueryClient()
@@ -75,17 +78,29 @@ export function useDeleteTask() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (id: string) => api<void>(`/me/todos/${id}`, { method: 'DELETE' }),
-    // 지우는 것도 즉시 반응한다. 목록에서 한 줄 사라지는 게 전부라 되돌리기도 쉽다.
     onMutate: async (id) => {
       await qc.cancelQueries({ queryKey: todosKey })
-      const previous = qc.getQueryData<{ items: TodayTask[] }>(todosKey)
+      const removed = qc
+        .getQueryData<{ items: TodayTask[] }>(todosKey)
+        ?.items.find((t) => t.id === id)
       qc.setQueryData<{ items: TodayTask[] }>(todosKey, (old) =>
         old ? { items: old.items.filter((t) => t.id !== id) } : old,
       )
-      return { previous }
+      return { removed }
     },
     onError: (_error, _id, context) => {
-      if (context?.previous) qc.setQueryData(todosKey, context.previous)
+      if (!context?.removed) return
+      // 지운 줄만 제자리로. 서버 정렬이 만든 순이라 그 기준으로 다시 끼운다.
+      const removed = context.removed
+      qc.setQueryData<{ items: TodayTask[] }>(todosKey, (old) =>
+        old
+          ? {
+              items: [...old.items, removed].sort(
+                (a, b) => a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id),
+              ),
+            }
+          : old,
+      )
     },
     onSettled: () => {
       void qc.invalidateQueries({ queryKey: todosKey })

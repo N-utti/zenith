@@ -136,7 +136,7 @@ v0.2 전제로 만들어진 구현을 전부 걷어냈다. `features/attendance/
 GET   /api/announcements?limit=        권한 밖 등급 글은 목록에서 제외 (04 에 없다. 백엔드는 /api/me/home)
 GET   /api/mentions?limit=             알림에서 파생 (04 에 없다. 백엔드는 /api/me/home 의 mentions)
 
-GET   /api/me/todos                    오늘 할 일. 안 끝난 것이 위, 그 안에서는 만든 순
+GET   /api/me/todos                    오늘 할 일. 만든 순(완료 여부는 정렬에 안 들어간다)
 POST  /api/me/todos                    { text } 추가
 PATCH /api/me/todos/:id                { text?, done? } 수정. null 은 422
 DELETE /api/me/todos/:id               삭제, 204

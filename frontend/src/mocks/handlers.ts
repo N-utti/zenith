@@ -17,6 +17,7 @@ import {
   updatePost,
 } from './boardDb'
 import { addTask, findTask, listTasks, removeTask } from './dashboardDb'
+import { TODO_TEXT_MAX } from '@/features/home/types'
 import {
   listMentions,
   listNotifications,
@@ -91,8 +92,8 @@ const MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 
 const unauthorized = () =>
   HttpResponse.json({ detail: '로그인이 필요합니다.', code: 'AUTH_REQUIRED' }, { status: 401 })
-const notFound = () =>
-  HttpResponse.json({ detail: '문서를 찾을 수 없습니다.', code: 'NOT_FOUND' }, { status: 404 })
+const notFound = (detail = '문서를 찾을 수 없습니다.') =>
+  HttpResponse.json({ detail, code: 'NOT_FOUND' }, { status: 404 })
 
 /**
  * 휴지통에 든 문서는 **읽기만** 된다. 백엔드는 수정·버전 저장·댓글 작성에서 404 다
@@ -421,8 +422,12 @@ export const handlers = [
     if (!authenticate()) return unauthorized()
     const body = await readJson<{ text?: unknown }>(request)
     if (!body) return validationError('본문이 JSON 이 아닙니다.')
-    if (typeof body.text !== 'string' || !body.text.trim() || body.text.trim().length > 200) {
-      return validationError('할 일은 1자 이상 200자 이하여야 합니다.')
+    if (
+      typeof body.text !== 'string' ||
+      !body.text.trim() ||
+      body.text.trim().length > TODO_TEXT_MAX
+    ) {
+      return validationError(`할 일은 1자 이상 ${TODO_TEXT_MAX}자 이하여야 합니다.`)
     }
     return HttpResponse.json(addTask(body.text.trim()), { status: 201 })
   }),
@@ -990,7 +995,7 @@ data: ${JSON.stringify(data)}
     if (!authenticate()) return unauthorized()
     // 남의 것도 404 다(TC-AUTH-04). 목은 사용자를 나누지 않아 없는 것만 404 가 된다.
     const task = findTask(String(params.taskId))
-    if (!task) return notFound()
+    if (!task) return notFound('없는 할 일입니다.')
 
     const body = await readJson<{ text?: unknown; done?: unknown }>(request)
     if (!body) return validationError('본문이 JSON 이 아닙니다.')
@@ -998,18 +1003,28 @@ data: ${JSON.stringify(data)}
       if (body[key] === null) return validationError(`${key} 는 null 일 수 없습니다.`)
     }
     if (body.text !== undefined) {
-      if (typeof body.text !== 'string' || !body.text.trim() || body.text.trim().length > 200) {
-        return validationError('할 일은 1자 이상 200자 이하여야 합니다.')
+      if (
+        typeof body.text !== 'string' ||
+        !body.text.trim() ||
+        body.text.trim().length > TODO_TEXT_MAX
+      ) {
+        return validationError(`할 일은 1자 이상 ${TODO_TEXT_MAX}자 이하여야 합니다.`)
       }
       task.text = body.text.trim()
     }
-    if (typeof body.done === 'boolean') task.done = body.done
+    if (body.done !== undefined) {
+      // 백엔드는 불리언이 아니면 422 다. 조용히 무시하면 목에서만 200 이 된다.
+      if (typeof body.done !== 'boolean') return validationError('done 은 불리언이어야 합니다.')
+      task.done = body.done
+    }
     return HttpResponse.json(task)
   }),
 
   http.delete('/api/me/todos/:taskId', ({ params }) => {
     if (!authenticate()) return unauthorized()
-    return removeTask(String(params.taskId)) ? new HttpResponse(null, { status: 204 }) : notFound()
+    return removeTask(String(params.taskId))
+      ? new HttpResponse(null, { status: 204 })
+      : notFound('없는 할 일입니다.')
   }),
 
   http.get(
