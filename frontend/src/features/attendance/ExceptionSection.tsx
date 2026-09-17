@@ -8,7 +8,7 @@ import { SkeletonRows } from '@/components/ui/Skeleton'
 import { Table, TableEmpty, TBody, TD, TH, THead, TR } from '@/components/ui/Table'
 import { useToast } from '@/components/ui/ToastContext'
 import { useApprovals } from '@/features/approvals/api'
-import { DOCUMENT_STATUS_LABEL, DOCUMENT_STATUS_TONE } from '@/features/approvals/types'
+import { statusLabel, statusTone } from '@/features/approvals/types'
 import { ApiError } from '@/lib/api'
 import { formatDateTime, formatRelative } from '@/lib/datetime'
 import {
@@ -202,9 +202,7 @@ export function ExceptionSection() {
                 <TD className="whitespace-nowrap">
                   {expense && (
                     <Link to={`/approvals/${expense.id}`} aria-label="출장비 결의서 보기">
-                      <Badge tone={DOCUMENT_STATUS_TONE[expense.status]}>
-                        {DOCUMENT_STATUS_LABEL[expense.status]}
-                      </Badge>
+                      <Badge tone={statusTone(expense.status)}>{statusLabel(expense.status)}</Badge>
                     </Link>
                   )}
                   {!expense && row.subKind === 'trip' && row.status !== 'canceled' && (

@@ -8,7 +8,9 @@ const STATUS: Record<StepStatus, { label: string; icon: typeof Check; tone: stri
   approved: { label: '승인', icon: Check, tone: 'bg-success/12 text-success' },
   rejected: { label: '반려', icon: X, tone: 'bg-danger/12 text-danger' },
   delegated_done: { label: '대결', icon: Check, tone: 'bg-success/12 text-success' },
-  skipped: { label: '전결 생략', icon: Minus, tone: 'bg-sunken text-subtle' },
+  // 문서가 끝나 더 받지 않은 단계. 전결로 끊긴 경우만이 아니라 반려·회수·강제 종결 뒤에도
+  // 이 상태가 되므로 "전결 생략" 이라고 못 박지 않는다. 전결 처리 자체는 `delegated_done`(대결)이다.
+  skipped: { label: '생략', icon: Minus, tone: 'bg-sunken text-subtle' },
 }
 
 /**
