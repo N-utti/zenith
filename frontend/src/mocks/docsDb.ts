@@ -285,10 +285,7 @@ const versions: Record<string, DocVersionSnapshot[]> = {}
  */
 const COALESCE_MS = 3 * 60_000
 
-/**
- * 최신순. **스냅샷은 싣지 않는다**(백엔드 `VersionMeta`). 버전이 쌓인 문서에서 목록 한 번이
- * 수십 MB 가 된다. 내용은 `/restore` 로 그 버전 하나만 준다.
- */
+/** 최신순. **스냅샷은 싣지 않는다**(백엔드 `VersionMeta`). 내용은 `/restore` 로 한 건씩. */
 export function listVersions(docId: string): DocVersion[] {
   return [...(versions[docId] ?? [])]
     .reverse()

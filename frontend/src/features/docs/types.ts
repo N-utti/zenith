@@ -55,8 +55,9 @@ export interface DocComment {
 /**
  * 버전 목록에 실리는 것. 백엔드 `VersionMeta` 와 같다.
  *
- * **스냅샷이 없다.** 버전이 쌓인 문서에서 목록 한 번이 수십 MB 가 되기 때문이다. 내용은
- * `POST /docs/{id}/restore` 로 그 버전 하나만 받는다.
+ * **스냅샷이 없다.** 한 건은 작아도 버전이 쌓인 문서에서는 목록 한 번에 전부 실리기 때문이다
+ * (`backend/app/routers/docs.py` 의 `VersionOut` 주석). 내용은 `POST /docs/{id}/restore` 로
+ * 그 버전 하나만 받는다.
  */
 export interface DocVersion {
   id: string
@@ -67,7 +68,7 @@ export interface DocVersion {
   label: string | null
 }
 
-/** 스냅샷까지 실린 버전. 백엔드 `VersionOut` — 버전 저장과 `/restore` 의 응답이다. */
+/** 스냅샷까지 실린 버전. 백엔드 `VersionOut`(버전 저장과 `/restore` 의 응답). */
 export interface DocVersionSnapshot extends DocVersion {
   /** Yjs 스냅샷(base64). 내용 사본이 아니라 시점 표식이다. */
   snapshot: string

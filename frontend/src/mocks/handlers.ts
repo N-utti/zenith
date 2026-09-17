@@ -1154,15 +1154,14 @@ data: ${JSON.stringify(data)}
     return doc ? HttpResponse.json(doc) : notFound()
   }),
 
+  // 휴지통 문서의 버전 목록은 열어 둔다(되돌리기 전에 확인할 수 있어야 한다). 없는 문서는 404.
   http.get('/api/docs/:docId/versions', ({ params }) => {
     if (!authenticate()) return unauthorized()
+    if (!findDoc(String(params.docId))) return notFound()
     return HttpResponse.json({ items: listVersions(String(params.docId)) })
   }),
 
-  /**
-   * 버전 복구. 이름과 달리 서버는 아무것도 되돌리지 않는다. 그 버전의 스냅샷만 돌려주고,
-   * 되돌리기는 클라이언트가 '앞으로 가는 편집' 한 번으로 한다.
-   */
+  /** 버전 복구. 그 버전의 스냅샷만 돌려준다. 되돌리는 일은 클라이언트가 한다. */
   http.post('/api/docs/:docId/restore', async ({ request, params }) => {
     if (!authenticate()) return unauthorized()
 
@@ -1187,14 +1186,31 @@ data: ${JSON.stringify(data)}
     const user = authenticate()
     if (!user) return unauthorized()
     // 본문 검증이 먼저다. 백엔드는 FastAPI 가 핸들러에 들어가기 전에 스키마를 본다.
-    const { snapshot, label } = (await request.json()) as { snapshot: string; label?: string }
-    if (!snapshot) {
+    const parsed = await readJson<{ snapshot?: unknown; label?: unknown }>(request)
+    if (!parsed) return validationError('본문이 JSON 이 아닙니다.')
+    const { snapshot, label } = parsed
+    // 백엔드 `VersionCreateIn`: 스냅샷은 base64 이고 8MB 이하, 라벨은 1~200자.
+    if (typeof snapshot !== 'string' || !snapshot.trim() || snapshot.length > 8_000_000) {
       return validationError('스냅샷이 없습니다.')
     }
+    if (!/^[A-Za-z0-9+/]*={0,2}$/.test(snapshot)) {
+      return validationError('snapshot 은 base64 여야 합니다.')
+    }
+    if (label !== undefined && label !== null) {
+      if (typeof label !== 'string' || !label.trim() || label.trim().length > 200) {
+        return validationError('라벨은 1자 이상 200자 이하여야 합니다.')
+      }
+    }
     if (!aliveDoc(String(params.docId))) return notFound()
-    return HttpResponse.json(addVersion(String(params.docId), user, snapshot, label), {
-      status: 201,
-    })
+    return HttpResponse.json(
+      addVersion(
+        String(params.docId),
+        user,
+        snapshot,
+        typeof label === 'string' ? label : undefined,
+      ),
+      { status: 201 },
+    )
   }),
 
   // ── 첨부 파일 ─────────────────────────────────────────────

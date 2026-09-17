@@ -11,10 +11,13 @@ import type { DocVersion } from './types'
 export function VersionPanel({
   docId,
   selectedId,
+  pendingId,
   onSelect,
 }: {
   docId: string
   selectedId: string | null
+  /** 스냅샷을 받아 오는 중인 버전. 누른 즉시 표시가 있어야 같은 행을 또 누르지 않는다. */
+  pendingId: string | null
   onSelect: (version: DocVersion | null) => void
 }) {
   const { data, isPending, isError } = useVersions(docId)
@@ -40,13 +43,16 @@ export function VersionPanel({
 
       {data?.items.map((version, index) => {
         const selected = version.id === selectedId
+        const pending = version.id === pendingId
         return (
           <button
             key={version.id}
             type="button"
+            disabled={pendingId !== null}
             onClick={() => onSelect(selected ? null : version)}
             className={cn(
               'flex w-full cursor-pointer items-start gap-2.5 rounded-lg px-3 py-2.5 text-left transition-colors',
+              'disabled:cursor-default',
               selected ? 'bg-accent-soft' : 'hover:bg-surface-hover',
             )}
           >
@@ -66,7 +72,11 @@ export function VersionPanel({
                 {formatTime(version.created_at)}
               </p>
             </div>
-            {selected && <RotateCcw className="text-accent mt-0.5 size-3.5 shrink-0" />}
+            {pending ? (
+              <Spinner className="mt-0.5 size-3.5 shrink-0" />
+            ) : (
+              selected && <RotateCcw className="text-accent mt-0.5 size-3.5 shrink-0" />
+            )}
           </button>
         )
       })}

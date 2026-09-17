@@ -20,6 +20,9 @@ export const docKeys = {
   detail: (docId: string) => ['documents', docId] as const,
   comments: (docId: string) => ['documents', docId, 'comments'] as const,
   versions: (docId: string) => ['documents', docId, 'versions'] as const,
+  /** 버전 하나의 스냅샷. 목록 키 아래에 두면 새 버전이 저장될 때마다 같이 버려진다. */
+  snapshot: (docId: string, versionId: string) =>
+    ['documents', docId, 'snapshot', versionId] as const,
   /** 홈이 limit 을 붙여 쓴다. 무효화가 limit 과 무관하게 걸리도록 여기까지만 키로 둔다. */
   recent: ['documents', 'recent'] as const,
 }
@@ -204,19 +207,26 @@ export function useVersions(docId: string) {
 }
 
 /**
- * 그 버전의 스냅샷을 받는다. 목록에는 스냅샷이 없어서(`VersionMeta`) 미리보기를 열 때마다
- * 한 건씩 받아 온다.
+ * 그 버전의 스냅샷을 받는다. 목록에는 없다(`DocVersion` 주석).
  *
- * 이름이 `restore` 지만 서버는 아무것도 되돌리지 않는다. Y.Doc 을 서버가 과거 상태로
- * 갈아끼우면 접속 중인 다른 사람과 병합돼 도로 취소되기 때문이다. 서버는 표식만 주고,
- * 되돌리기는 클라이언트가 '앞으로 가는 편집' 한 번으로 한다.
+ * 이름이 `restore` 지만 서버는 아무것도 되돌리지 않는다. 서버가 Y.Doc 을 과거 상태로
+ * 갈아끼우면 접속 중인 다른 사람과 병합돼 도로 취소된다. 되돌리기는 클라이언트가
+ * '앞으로 가는 편집' 한 번으로 한다(`DocWorkspace` 의 `restore`).
  */
 export function useVersionSnapshot(docId: string) {
+  const qc = useQueryClient()
   return useMutation({
+    // 캐시를 거친다. 스냅샷은 그 시점의 표식이라 바뀌지 않으므로, 버전을 오가며 미리보기를
+    // 열 때마다 같은 것을 다시 받을 이유가 없다. 같이 눌린 요청도 하나로 합쳐진다.
     mutationFn: (versionId: string) =>
-      api<DocVersionSnapshot>(`/docs/${docId}/restore`, {
-        method: 'POST',
-        body: JSON.stringify({ version_id: versionId }),
+      qc.fetchQuery({
+        queryKey: docKeys.snapshot(docId, versionId),
+        queryFn: () =>
+          api<DocVersionSnapshot>(`/docs/${docId}/restore`, {
+            method: 'POST',
+            body: JSON.stringify({ version_id: versionId }),
+          }),
+        staleTime: Infinity,
       }),
   })
 }
@@ -230,6 +240,9 @@ export function useSaveVersion(docId: string) {
         body: JSON.stringify(input),
       }),
     onSuccess: () => {
+      // 응답에 스냅샷이 실려 오지만 목록 캐시에 넣지 않는다. `DocVersionSnapshot` 은
+      // `DocVersion` 의 하위 타입이라 `setQueryData` 가 타입 검사를 통과하면서 목록에 스냅샷을
+      // 도로 섞어 넣는다. 이 커밋이 없애려던 상태가 캐시 안에서 되살아난다.
       void qc.invalidateQueries({ queryKey: docKeys.versions(docId) })
     },
   })
