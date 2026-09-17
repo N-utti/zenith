@@ -5,12 +5,15 @@ import { clearMockSession, MOCK_USERS, setMockSession, userFromCookie } from './
 import { AI_MODELS, answer, DOC_ACTIONS, docActionDraft } from './aiDb'
 import {
   BOARD_DEFS,
+  canEdit,
   canRead,
   createPost,
+  deletePost,
   findPost,
   listBoards,
   listPosts,
   toDetail,
+  updatePost,
 } from './boardDb'
 import { MENTIONS, TODAY_TASKS } from './dashboardDb'
 import {
@@ -195,6 +198,75 @@ export const handlers = [
     }
 
     return HttpResponse.json(toDetail(post))
+  }),
+
+  /** 글쓴이 또는 임원만. 열람조차 못 하는 등급이면 수정 권한을 따지기 전에 막는다. */
+  http.patch('/api/posts/:postId', async ({ request, params }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+
+    const post = findPost(String(params.postId))
+    if (!post) return notFound()
+    if (!canRead(user, post.minRole)) {
+      return HttpResponse.json(
+        { detail: '열람 권한이 없습니다.', requiredRole: post.minRole, code: 'FORBIDDEN' },
+        { status: 403 },
+      )
+    }
+    if (!canEdit(user, post)) {
+      return HttpResponse.json(
+        { detail: '내가 쓴 글만 수정할 수 있습니다.', code: 'FORBIDDEN' },
+        { status: 403 },
+      )
+    }
+
+    const body = (await request.json()) as { title?: string; body?: string }
+    // 백엔드 계약: 보내지 않은 값은 그대로 두고, null 로 보낸 값은 "지움" 이 아니라 422.
+    for (const key of ['title', 'body'] as const) {
+      const value = body[key]
+      if (value === null) {
+        return HttpResponse.json(
+          { detail: `${key} 는 null 일 수 없습니다.`, code: 'VALIDATION' },
+          { status: 422 },
+        )
+      }
+      if (value !== undefined && !value.trim()) {
+        return HttpResponse.json(
+          { detail: '제목과 내용을 입력해 주세요.', code: 'VALIDATION' },
+          { status: 422 },
+        )
+      }
+    }
+
+    return HttpResponse.json(
+      updatePost(post, {
+        title: body.title?.trim(),
+        body: body.body?.trim(),
+      }),
+    )
+  }),
+
+  http.delete('/api/posts/:postId', ({ params }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+
+    const post = findPost(String(params.postId))
+    if (!post) return notFound()
+    if (!canRead(user, post.minRole)) {
+      return HttpResponse.json(
+        { detail: '열람 권한이 없습니다.', requiredRole: post.minRole, code: 'FORBIDDEN' },
+        { status: 403 },
+      )
+    }
+    if (!canEdit(user, post)) {
+      return HttpResponse.json(
+        { detail: '내가 쓴 글만 지울 수 있습니다.', code: 'FORBIDDEN' },
+        { status: 403 },
+      )
+    }
+
+    deletePost(post.id)
+    return new HttpResponse(null, { status: 204 })
   }),
 
   http.post('/api/boards/:boardId/posts', async ({ request, params }) => {

@@ -53,8 +53,8 @@ export function BoardPage() {
 
       <PostTable boardId={boardId} badge={board?.badge ?? ''} />
 
-      {board?.allowed && (
-        <PostComposer board={board} open={composing} onClose={() => setComposing(false)} />
+      {board?.allowed && composing && (
+        <PostComposer board={board} open onClose={() => setComposing(false)} />
       )}
     </>
   )

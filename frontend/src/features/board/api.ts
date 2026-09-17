@@ -44,3 +44,36 @@ export function useCreatePost(boardId: string) {
     },
   })
 }
+
+/** 제목이 바뀌거나 글이 사라지면 같이 흔들리는 목록들. 홈 공지 카드도 같은 데이터를 본다. */
+function invalidateLists(qc: ReturnType<typeof useQueryClient>, boardId: string) {
+  void qc.invalidateQueries({ queryKey: ['boards', boardId, 'posts'] })
+  void qc.invalidateQueries({ queryKey: ['announcements'] })
+}
+
+export function useUpdatePost(boardId: string, postId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { title: string; body: string }) =>
+      api<BoardPostDetail>(`/posts/${postId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(input),
+      }),
+    onSuccess: (post) => {
+      qc.setQueryData(['posts', postId], post)
+      invalidateLists(qc, boardId)
+    },
+  })
+}
+
+export function useDeletePost(boardId: string, postId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => api<void>(`/posts/${postId}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      // 지운 글의 상세는 캐시에서 빼 둔다. 뒤로 가기로 돌아와도 살아 있는 것처럼 보이면 안 된다.
+      qc.removeQueries({ queryKey: ['posts', postId] })
+      invalidateLists(qc, boardId)
+    },
+  })
+}

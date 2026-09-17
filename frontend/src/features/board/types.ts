@@ -30,4 +30,12 @@ export interface BoardPost {
 
 export interface BoardPostDetail extends BoardPost {
   body: string
+  /**
+   * 수정·삭제 버튼을 띄울지 판단할 때만 쓴다. 차단은 서버의 403 이다.
+   * 사람이 아닌 이름(경영지원팀)으로 올라간 글은 `null`.
+   *
+   * 백엔드는 이 자리를 `author: {id, name} | null` 객체로 준다(routers/boards.py `PostOut`).
+   * 이 파일은 아직 `authorName` 평면 표기라 붙일 때 같이 옮긴다.
+   */
+  authorId: string | null
 }
