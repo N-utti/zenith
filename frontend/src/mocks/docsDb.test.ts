@@ -80,7 +80,7 @@ it('같은 사람의 무명 버전은 하나로 접고, 라벨이 붙으면 따�
 it('영구 삭제는 버전·댓글까지 같이 지운다', () => {
   const doc = createDoc(user, 'f-1', '영구 삭제 시험')
   addVersion(doc.id, user, 'c25hcHNob3Q=')
-  addComment(doc.id, user, '댓글 하나')
+  addComment(doc.id, user, '댓글 하나', null)
   expect(listVersions(doc.id)).toHaveLength(1)
   expect(listComments(doc.id)).toHaveLength(1)
 

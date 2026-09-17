@@ -43,14 +43,25 @@ export interface UploadedFile {
   size: number
 }
 
+/**
+ * 블록 댓글. 백엔드 `CommentOut` 과 같은 모양이다.
+ *
+ * 아바타 색은 서버가 주지 않는다. `lib/avatar.ts` 가 사람 id 로 만든다(다른 화면과 같은 규약).
+ * `block_id` 는 본문 어느 블록에 달렸는지다. 문서 전체에 단 댓글은 `null` 이다.
+ */
 export interface DocComment {
   id: string
-  authorId: string
-  authorName: string
-  authorHue: number
+  block_id: string | null
+  author: Person
   body: string
-  createdAt: string
+  created_at: string
 }
+
+/** 백엔드 `CommentCreateIn.body` 의 max_length. 최소 한 글자는 있어야 한다. */
+export const COMMENT_BODY_MAX = 10_000
+
+/** 블록 id 길이 상한(백엔드 `BlockId`). 공백을 턴 뒤 1~100자다. */
+export const BLOCK_ID_MAX = 100
 
 /**
  * 버전 목록에 실리는 것. 백엔드 `VersionMeta` 와 같다.

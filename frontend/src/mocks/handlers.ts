@@ -22,6 +22,7 @@ import {
 } from './boardDb'
 import { addTask, findTask, listTasks, removeTask } from './dashboardDb'
 import { TODO_TEXT_MAX } from '@/features/home/types'
+import { BLOCK_ID_MAX, COMMENT_BODY_MAX } from '@/features/docs/types'
 import {
   listMentionNotifications,
   listNotifications,
@@ -1423,11 +1424,22 @@ data: ${JSON.stringify(data)}
   http.post('/api/docs/:docId/comments', async ({ request, params }) => {
     const user = authenticate()
     if (!user) return unauthorized()
-    const { body } = (await request.json()) as { body: string }
-    if (!body.trim()) {
-      return validationError('내용을 입력하세요.')
+    const payload = await readJson<{ body?: unknown; block_id?: unknown }>(request)
+    const body = typeof payload?.body === 'string' ? payload.body.trim() : ''
+    if (!body) return validationError('내용을 입력하세요.')
+    // 백엔드는 공백을 턴 뒤에 길이를 본다(`LongText`). 목도 같은 기준이어야 한 글자 차이로 갈리지 않는다.
+    if (body.length > COMMENT_BODY_MAX) {
+      return validationError(`댓글은 ${COMMENT_BODY_MAX}자까지 쓸 수 있습니다.`)
     }
+    // 블록 id 도 공백을 털고 길이를 본다(백엔드 `BlockId`: 1~100자). 빈 값은 문서 전체 댓글이다.
+    const rawBlockId = typeof payload?.block_id === 'string' ? payload.block_id.trim() : ''
+    if (rawBlockId.length > BLOCK_ID_MAX) {
+      return validationError(`블록 id 는 ${BLOCK_ID_MAX}자까지입니다.`)
+    }
+    const blockId = rawBlockId || null
     if (!aliveDoc(String(params.docId))) return notFound()
-    return HttpResponse.json(addComment(String(params.docId), user, body.trim()), { status: 201 })
+    return HttpResponse.json(addComment(String(params.docId), user, body, blockId), {
+      status: 201,
+    })
   }),
 ]
