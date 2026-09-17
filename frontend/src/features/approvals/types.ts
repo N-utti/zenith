@@ -123,6 +123,13 @@ export interface ApprovalDocument extends ApprovalListItem {
   subject: GeneralSubject
   steps: ApprovalStep[]
   closed_at: string | null
+  /**
+   * 지금 이 사람이 승인·반려를 누를 수 있는가. **서버가 판정해서 준다.**
+   *
+   * 내 차례일 때와, 지금 차례인 사람이 나에게 위임했을 때(대결)가 여기 다 들어간다. 화면이
+   * 위임 목록을 따로 받아 스스로 재면 권한 판정이 UI 로 내려온다. 계약에 없어서 정한 칸이다.
+   */
+  can_decide: boolean
 }
 
 export type ApprovalBox = 'inbox' | 'sent' | 'reference' | 'draft'
@@ -149,4 +156,30 @@ export interface DraftInput {
    * 해제다. 제목·본문과 달리 이 칸만 부분 갱신인 셈이라 서버도 같이 갈라야 한다.
    */
   references?: string[]
+}
+
+/**
+ * 결재 위임(13 §4.2.3). 내가 자리를 비우는 동안 이 사람이 대신 결재한다.
+ *
+ * **계약에 없어서 정한 모양이다.** 백엔드는 결재 모듈 전체가 501 이고 위임은 경로 셋에
+ * 한 줄 요약(`위임 목록`·`위임 설정`·`위임 해제`)뿐이다. 서버가 붙을 때 여기를 맞춘다.
+ */
+export interface Delegation {
+  id: string
+  /** 대신 결재할 사람. */
+  delegate: Person
+  /** 위임 기간. `YYYY-MM-DD`, 양끝을 포함한다. */
+  start_date: string
+  end_date: string
+  /** 이 유형만 위임하면 그 코드, 모든 유형이면 `null`. */
+  type_code: ApprovalTypeCode | null
+  created_at: string
+}
+
+export interface DelegationInput {
+  delegate_id: string
+  start_date: string
+  end_date: string
+  /** 안 보내면 모든 유형이다. */
+  type_code?: ApprovalTypeCode | null
 }

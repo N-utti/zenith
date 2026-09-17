@@ -1,12 +1,16 @@
 import { describe, expect, it } from 'vitest'
+import { toISODate } from '@/lib/datetime'
 import { MOCK_USERS } from './db'
 import {
   cancelApproval,
+  createDelegation,
   createDraft,
+  deleteDelegation,
   decide,
   forceClose,
   getApproval,
   listApprovals,
+  listDelegations,
   submitApproval,
   updateDraft,
 } from './approvalsDb'
@@ -259,5 +263,154 @@ describe('참조자 검증과 겹침', () => {
 
     submitApproval(member, draft.id)
     expect(getApproval(other, draft.id)).toMatchObject({ id: draft.id })
+  })
+})
+
+describe('결재 위임 (13 §4.2.3)', () => {
+  // 목과 같은 로컬 기준으로 만든다. UTC 로 만들면 한국에서 아침마다 하루가 밀려,
+  // 목이 UTC 로 재던 시절의 버그를 테스트도 같이 놓친다.
+  const day = (offset: number) => toISODate(new Date(Date.now() + offset * 86_400_000))
+  const today = day(0)
+  const tomorrow = day(1)
+  const yesterday = day(-1)
+
+  it('자기 자신·거꾸로 된 기간·위임 못 하는 유형은 막는다', () => {
+    expect(
+      createDelegation(senior, { delegate_id: senior.id, start_date: today, end_date: tomorrow }),
+    ).toMatchObject({ code: 'VALIDATION' })
+    expect(
+      createDelegation(senior, { delegate_id: ceo.id, start_date: tomorrow, end_date: today }),
+    ).toMatchObject({ code: 'VALIDATION' })
+    // 유형마다 위임 가능 여부가 다르다. 예외 근무는 꺼져 있다.
+    expect(
+      createDelegation(senior, {
+        delegate_id: ceo.id,
+        start_date: today,
+        end_date: tomorrow,
+        type_code: 'arrangement',
+      }),
+    ).toMatchObject({ code: 'DELEGATE_NOT_ALLOWED' })
+  })
+
+  it('위임받은 사람이 결재하면 원 결재자 이름이 남고 대결로 표시된다', () => {
+    const made = createDelegation(senior, {
+      delegate_id: other.id,
+      start_date: today,
+      end_date: tomorrow,
+    })
+    if ('error' in made) throw new Error(made.error)
+
+    const doc = draftAndSubmit('위임 결재 시험')
+    expect(doc.waiting_on?.id).toBe(senior.id)
+
+    // 위임받은 사람이 대신 누른다. 차례는 여전히 전무 것이다.
+    const acted = decide(other, doc.id, 'approve', 1, undefined)
+    if ('error' in acted) throw new Error(acted.error)
+    expect(acted.steps[0]).toMatchObject({
+      approver: { id: senior.id },
+      acted_by: { id: other.id },
+      status: 'delegated_done',
+    })
+
+    // 기간이 겹치는 위임은 하나뿐이어야 한다. 누가 대신할지가 갈린다.
+    expect(
+      createDelegation(senior, {
+        delegate_id: ceo.id,
+        start_date: today,
+        end_date: tomorrow,
+      }),
+    ).toMatchObject({ code: 'CONFLICT' })
+
+    // 해제하면 다시 아무나 못 누른다.
+    const gone = deleteDelegation(senior, made.id)
+    expect(gone).toBeNull()
+    const next = draftAndSubmit('위임 해제 뒤')
+    expect(decide(other, next.id, 'approve', 1, undefined)).toMatchObject({
+      code: 'NOT_YOUR_TURN',
+    })
+  })
+
+  it('위임받은 사람의 받은 결재함에 문서가 뜨고, 열 수 있고, 처리 가능 표시가 붙는다', () => {
+    // 이 셋이 따로 놀면 위임을 걸어도 그 사람은 문서에 닿지 못한다.
+    const made = createDelegation(senior, {
+      delegate_id: other.id,
+      start_date: today,
+      end_date: tomorrow,
+    })
+    if ('error' in made) throw new Error(made.error)
+
+    const doc = draftAndSubmit('위임 도달 경로')
+    expect(listApprovals(other, 'inbox').map((d) => d.id)).toContain(doc.id)
+
+    const opened = getApproval(other, doc.id)
+    if ('error' in opened) throw new Error(opened.error)
+    expect(opened.can_decide).toBe(true)
+    // 남의 차례를 대신 누르는 것이지 그 사람이 된 것은 아니다. 다른 문서는 여전히 못 본다.
+    expect(getApproval(other, doc.id)).toMatchObject({ waiting_on: { id: senior.id } })
+
+    deleteDelegation(senior, made.id)
+    expect(listApprovals(other, 'inbox').map((d) => d.id)).not.toContain(doc.id)
+    expect(getApproval(other, doc.id)).toMatchObject({ code: 'FORBIDDEN' })
+  })
+
+  it('대신 눌러 준 문서는 그 뒤에도 볼 수 있다', () => {
+    // 누르자마자 다음 차례로 넘어가므로, 처리 자격만 보면 방금 승인한 문서를 바로 잃는다.
+    const made = createDelegation(senior, {
+      delegate_id: other.id,
+      start_date: today,
+      end_date: tomorrow,
+    })
+    if ('error' in made) throw new Error(made.error)
+
+    const doc = draftAndSubmit('대결 뒤 열람')
+    decide(other, doc.id, 'approve', 1, undefined)
+    deleteDelegation(senior, made.id)
+
+    const seen = getApproval(other, doc.id)
+    if ('error' in seen) throw new Error(seen.error)
+    expect(seen.can_decide).toBe(false)
+  })
+
+  it('대결로 승인한 뒤에는 기안자가 회수할 수 없다', () => {
+    const made = createDelegation(senior, {
+      delegate_id: other.id,
+      start_date: today,
+      end_date: tomorrow,
+    })
+    if ('error' in made) throw new Error(made.error)
+
+    const doc = draftAndSubmit('대결 뒤 회수')
+    decide(other, doc.id, 'approve', 1, undefined)
+    // 대결 승인은 `delegated_done` 이라 `approved` 만 보면 빠져나간다.
+    expect(cancelApproval(member, doc.id)).toMatchObject({ code: 'STEP_APPROVED' })
+    deleteDelegation(senior, made.id)
+  })
+
+  it('기간이 지난 위임으로는 대신 결재할 수 없다', () => {
+    const made = createDelegation(ceo, {
+      delegate_id: other.id,
+      start_date: yesterday,
+      end_date: yesterday,
+    })
+    if ('error' in made) throw new Error(made.error)
+
+    const doc = draftAndSubmit('지난 위임')
+    decide(senior, doc.id, 'approve', 1, undefined)
+    expect(decide(other, doc.id, 'approve', 1, undefined)).toMatchObject({ code: 'NOT_YOUR_TURN' })
+    deleteDelegation(ceo, made.id)
+  })
+
+  it('내가 건 위임만 보인다', () => {
+    const made = createDelegation(senior, {
+      delegate_id: other.id,
+      start_date: today,
+      end_date: tomorrow,
+    })
+    if ('error' in made) throw new Error(made.error)
+    expect(listDelegations(senior).map((d) => d.id)).toContain(made.id)
+    expect(listDelegations(other)).toHaveLength(0)
+    // 남의 위임은 해제도 못 한다.
+    expect(deleteDelegation(other, made.id)).toMatchObject({ code: 'NOT_FOUND' })
+    deleteDelegation(senior, made.id)
   })
 })

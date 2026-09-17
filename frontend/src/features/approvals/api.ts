@@ -2,6 +2,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import type {
   ApprovalBox,
+  Delegation,
+  DelegationInput,
   ApprovalDocument,
   ApprovalListItem,
   ApprovalType,
@@ -124,5 +126,33 @@ export function useForceCloseApproval() {
         body: JSON.stringify({ reason }),
       }),
     onSuccess: refetch,
+  })
+}
+
+const delegationsKey = ['approvals', 'delegations'] as const
+
+/** 내가 건 위임 목록(13 §9.3). 남의 위임은 안 보인다. */
+export function useDelegations() {
+  return useQuery({
+    queryKey: delegationsKey,
+    queryFn: () => api<{ items: Delegation[] }>('/approvals/delegations'),
+  })
+}
+
+export function useCreateDelegation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: DelegationInput) =>
+      api<Delegation>('/approvals/delegations', { method: 'POST', body: JSON.stringify(input) }),
+    // 내 받은 결재함도 달라진다(위임을 걸면 내 차례가 남에게 넘어간다). 결재 캐시를 통째로 비운다.
+    onSuccess: () => void qc.invalidateQueries({ queryKey: approvalsKey }),
+  })
+}
+
+export function useDeleteDelegation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => api<void>(`/approvals/delegations/${id}`, { method: 'DELETE' }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: approvalsKey }),
   })
 }
