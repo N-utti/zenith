@@ -370,6 +370,24 @@ export function useAddHoliday() {
   })
 }
 
+/**
+ * 근무 달력 다시 만들기(10 §6.2 `POST /admin/attendance/calendar/rebuild`).
+ *
+ * 휴일을 넣고 빼면 서버가 알아서 다시 만든다. 이건 그 자동 경로를 못 탄 경우를 위한 손잡이다.
+ * 새해 달력을 미리 깔거나, 서버 밖에서 휴일이 바뀌었을 때 쓴다.
+ */
+export function useRebuildCalendar() {
+  const refetch = useRefetchHolidays()
+  return useMutation({
+    mutationFn: (year: number) =>
+      api<{ year: number; workdays: number }>('/admin/attendance/calendar/rebuild', {
+        method: 'POST',
+        body: JSON.stringify({ year }),
+      }),
+    onSuccess: refetch,
+  })
+}
+
 /** `DELETE /admin/holidays/{date}` 는 프론트 확장(PR 본문). 잘못 넣은 날을 되돌릴 길이 있어야 한다. */
 export function useRemoveHoliday() {
   const refetch = useRefetchHolidays()

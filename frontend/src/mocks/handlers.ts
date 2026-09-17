@@ -64,6 +64,7 @@ import {
   listCorrections,
   listOvertime,
   MONTH,
+  workdaysInYear,
   type ExceptionStore,
 } from './attendanceDb'
 import {
@@ -766,6 +767,26 @@ export const handlers = [
       return HttpResponse.json({ items: listHolidays(year) })
     }),
   ),
+  // 근무 달력 재생성(10 §6.2). 휴일을 넣고 빼면 서버가 알아서 하지만, 손으로 부를 길도 열어 둔다.
+  http.post('/api/admin/attendance/calendar/rebuild', async ({ request }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    if (user.role !== 'exec') {
+      return HttpResponse.json(
+        { detail: '근무 달력은 임원만 다시 만들 수 있습니다.', code: 'FORBIDDEN' },
+        { status: 403 },
+      )
+    }
+    const body = await readJson<{ year?: unknown }>(request)
+    const year = Number(body?.year)
+    if (!Number.isInteger(year) || year < 2000 || year > 2100) {
+      return validationError('year 는 네 자리 연도입니다.')
+    }
+    // 전 직원 달력을 새로 까는 일이라 실제 서버에서도 짧지 않다.
+    await delay(600)
+    return HttpResponse.json({ year, workdays: workdaysInYear(year) })
+  }),
+
   http.post('/api/admin/holidays', async ({ request }) => {
     const user = authenticate()
     if (!user) return unauthorized()
