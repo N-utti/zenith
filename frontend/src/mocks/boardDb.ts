@@ -1,4 +1,5 @@
 import type { Board, BoardPost, BoardPostDetail } from '@/features/board/types'
+import type { HomePost } from '@/features/home/types'
 import { ROLE_RANK, type Role, type User } from '@/types'
 
 function minutesAgo(minutes: number): string {
@@ -132,9 +133,31 @@ function toListItem(user: User, post: StoredPost): BoardPost {
 export function listPosts(user: User, boardId?: string): BoardPost[] {
   return POSTS.filter((post) => !boardId || post.boardId === boardId)
     .map((post) => toListItem(user, post))
-    .sort(
-      (a, b) => Number(b.pinned) - Number(a.pinned) || b.createdAt.localeCompare(a.createdAt),
-    )
+    .sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.createdAt.localeCompare(a.createdAt))
+}
+
+/**
+ * 홈 한 벌의 공지. 백엔드 `_posts` 와 같다. 최신순만 보고 고정(`pinned`)은 안 본다.
+ * 권한 밖이면 제목을 가리고 `masked` 를 세운다. 게시판 이름·등급이 같이 실린다.
+ */
+export function homePosts(user: User, limit: number): HomePost[] {
+  return [...POSTS]
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id))
+    .slice(0, limit)
+    .map((post) => {
+      const allowed = canRead(user, post.minRole)
+      const board = BOARD_DEFS.find((b) => b.id === post.boardId)
+      return {
+        id: post.id,
+        board_id: post.boardId,
+        board_name: board?.name ?? post.boardId,
+        min_role: post.minRole,
+        title: allowed ? post.title : '＿'.repeat(6),
+        masked: !allowed,
+        author: allowed ? post.author : null,
+        created_at: post.createdAt,
+      }
+    })
 }
 
 export function findPost(id: string): StoredPost | undefined {

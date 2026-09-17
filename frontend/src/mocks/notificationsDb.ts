@@ -1,8 +1,6 @@
 import type { Notification } from '@/features/notifications/types'
-import type { Mention } from '@/features/home/types'
 import type { User } from '@/types'
 import { BOARD_DEFS, canRead, findPost } from './boardDb'
-import { hueOf } from '@/lib/avatar'
 
 // 목 데이터는 "오늘"에 붙어 있어야 화면이 자연스럽다. 고정 날짜를 쓰지 않는다.
 function minutesAgo(minutes: number): string {
@@ -128,43 +126,17 @@ export function markRead(ids: string[]): number {
   return changed
 }
 
-/**
- * 홈의 멘션 카드가 쓰는 모양. 알림에서 파생시킨다. 별도 데이터를 두면 두 벌이 되어 어긋난다
- * (게시판 공지와 같은 이유). 백엔드는 `GET /me/home` 의 `mentions` 로 알림 그대로를 주므로,
- * 그 경로를 붙일 때 이 변환은 화면 쪽으로 옮겨 간다.
- */
+/** 멘션으로 보는 종류. 백엔드 `routers/me.py` 의 `MENTION_KINDS` 와 같다. */
 const MENTION_KINDS = ['mention', 'comment', 'reply']
 
-export function listMentions(user: User, limit: number): Mention[] {
+/**
+ * 홈 한 벌의 `mentions`. **알림 그대로** 준다. 백엔드도 `NotificationOut` 을 그대로 싣는다.
+ *
+ * 허용 목록이다(백엔드 `MENTION_KINDS`). "글 알림만 빼고" 로 두면 근태·결재 알림이 붙는 순간
+ * 전부 멘션 카드로 흘러든다.
+ */
+export function listMentionNotifications(user: User, limit: number): Notification[] {
   return listNotifications(user, { limit: 50 })
-    // 허용 목록이다. 백엔드 `me.py` 의 `MENTION_KINDS` 와 같다. "글 알림만 빼고" 로 두면
-    // 근태·결재 알림이 붙는 순간 전부 멘션 카드로 흘러들어 빈 채널 링크를 만든다.
-    .filter((n) => MENTION_KINDS.includes(n.kind) && n.payload)
+    .filter((n) => MENTION_KINDS.includes(n.kind))
     .slice(0, limit)
-    .map((n) => {
-      const p = n.payload!
-      const actor = p.from ?? { id: '', name: '알 수 없음' }
-      return {
-        id: n.id,
-        actorName: actor.name,
-        actorHue: hueOf(actor.id),
-        body: p.preview ?? '',
-        // 목에는 "나를 콕 집었는가" 를 가릴 정보가 없다. 멘션 알림은 전부 나를 부른 것이다.
-        mentionsMe: true,
-        source: p.doc_id
-          ? { kind: 'doc' as const, docId: p.doc_id, docTitle: p.doc_title ?? '', via: '댓글' as const }
-          : {
-              kind: 'channel' as const,
-              channelId: p.channel_id ?? '',
-              channelName: channelName(p.channel_id),
-              via: '채널 메시지' as const,
-            },
-        createdAt: n.created_at,
-      }
-    })
-}
-
-/** 개발 릴레이(`scripts/chat.js`)의 채널 이름. 목이 릴레이를 읽을 수 없어 여기에 둔다. */
-function channelName(channelId: string | undefined): string {
-  return { 'c-1': '개발', 'c-2': '공지', 'c-3': '잡담' }[channelId ?? ''] ?? '채널'
 }

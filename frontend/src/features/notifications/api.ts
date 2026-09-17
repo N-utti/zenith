@@ -31,7 +31,7 @@ export function useMarkNotificationsRead() {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: notificationKeys.list })
       // 홈의 멘션 카드도 같은 알림을 본다.
-      void qc.invalidateQueries({ queryKey: homeKeys.mentions })
+      void qc.invalidateQueries({ queryKey: homeKeys.home })
     },
   })
 }

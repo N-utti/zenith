@@ -7,6 +7,7 @@ import type {
   DocVersionSnapshot,
   Folder,
 } from '@/features/docs/types'
+import type { RecentDoc } from '@/features/home/types'
 import type { User } from '@/types'
 import { uuid } from '@/features/ai/store'
 
@@ -166,6 +167,36 @@ export function listDocs(query: string): DocSummary[] {
   return [...matched].sort((a, b) => b.updated_at.localeCompare(a.updated_at))
 }
 
+/**
+ * 홈의 "이어서 작업". 백엔드 `RecentDoc` 과 같은 모양이다. 문서 목록의 `DocSummary` 와 달리
+ * 폴더 경로(`path`)가 실려 있다.
+ */
+export function recentDocs(user: User, limit: number): RecentDoc[] {
+  const alive = listDocs('')
+  // 내가 마지막으로 손댄 문서가 먼저다. 하나도 없으면(신입) 전사 최근으로 채운다.
+  const mine = alive.filter((doc) => doc.updated_by?.id === user.id)
+  return (mine.length > 0 ? mine : alive).slice(0, limit).map((doc) => ({
+    id: doc.id,
+    title: doc.title,
+    path: folderPath(doc.folder_id),
+    updated_at: doc.updated_at,
+    updated_by: doc.updated_by,
+  }))
+}
+
+/** 최상위부터의 폴더 이름. 고리가 있어도 멈춘다. */
+function folderPath(folderId: string): string[] {
+  const names: string[] = []
+  const seen = new Set<string>()
+  let current = findFolder(folderId)
+  while (current && !seen.has(current.id)) {
+    seen.add(current.id)
+    names.unshift(current.title)
+    current = current.parent_id ? findFolder(current.parent_id) : undefined
+  }
+  return names
+}
+
 /** 사이드바 트리 한 벌. 휴지통에 든 문서는 빼고 준다. */
 export function docTree(): DocTreeData {
   return { folders: [...FOLDERS], docs: DOCS.filter((doc) => !doc.deleted_at) }
@@ -287,14 +318,12 @@ const COALESCE_MS = 3 * 60_000
 
 /** 최신순. **스냅샷은 싣지 않는다**(백엔드 `VersionMeta`). 내용은 `/restore` 로 한 건씩. */
 export function listVersions(docId: string): DocVersion[] {
-  return [...(versions[docId] ?? [])]
-    .reverse()
-    .map((version) => ({
-      id: version.id,
-      created_at: version.created_at,
-      author: version.author,
-      label: version.label,
-    }))
+  return [...(versions[docId] ?? [])].reverse().map((version) => ({
+    id: version.id,
+    created_at: version.created_at,
+    author: version.author,
+    label: version.label,
+  }))
 }
 
 export function findVersion(docId: string, versionId: string): DocVersionSnapshot | undefined {

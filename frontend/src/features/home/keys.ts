@@ -3,8 +3,8 @@
  * 각자 문자열을 적으면 한쪽에서 이름을 바꿔도 타입 오류 없이 조용히 끊긴다.
  */
 export const homeKeys = {
-  announcements: ['announcements'] as const,
-  mentions: ['mentions'] as const,
+  /** 홈 한 벌(`GET /me/home`). 카드 다섯 개가 이 하나를 나눠 쓴다. */
+  home: ['me', 'home'] as const,
   events: ['events'] as const,
   todos: ['me', 'todos'] as const,
 }

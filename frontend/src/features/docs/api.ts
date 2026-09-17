@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, ApiError } from '@/lib/api'
 import { queryClient } from '@/lib/queryClient'
+import { homeKeys } from '@/features/home/keys'
 import { meQueryKey } from '@/features/auth/queries'
 import { defaultFolderId } from './tree'
 import type {
@@ -23,8 +24,6 @@ export const docKeys = {
   /** 버전 하나의 스냅샷. 목록 키 아래에 두면 새 버전이 저장될 때마다 같이 버려진다. */
   snapshot: (docId: string, versionId: string) =>
     ['documents', docId, 'snapshot', versionId] as const,
-  /** 홈이 limit 을 붙여 쓴다. 무효화가 limit 과 무관하게 걸리도록 여기까지만 키로 둔다. */
-  recent: ['documents', 'recent'] as const,
 }
 
 /** 사이드바 트리. 폴더와 문서를 한 번에 받는다. */
@@ -125,8 +124,9 @@ export function useTouchDoc(docId: string) {
     onSuccess: (doc) => {
       qc.setQueryData(docKeys.detail(docId), doc)
       void qc.invalidateQueries({ queryKey: ['documents', 'list'] })
-      void qc.invalidateQueries({ queryKey: docKeys.recent })
       void qc.invalidateQueries({ queryKey: docKeys.tree })
+      // 홈의 "이어서 작업" 도 같은 문서를 본다.
+      void qc.invalidateQueries({ queryKey: homeKeys.home })
     },
   })
 }
@@ -139,9 +139,10 @@ export function useTouchDoc(docId: string) {
  */
 function invalidateDocLists(qc: ReturnType<typeof useQueryClient>) {
   void qc.invalidateQueries({ queryKey: ['documents', 'list'] })
-  void qc.invalidateQueries({ queryKey: docKeys.recent })
   void qc.invalidateQueries({ queryKey: docKeys.tree })
   void qc.invalidateQueries({ queryKey: ['search'] })
+  // 홈의 "이어서 작업" 도 같은 문서를 본다.
+  void qc.invalidateQueries({ queryKey: homeKeys.home })
 }
 
 /**

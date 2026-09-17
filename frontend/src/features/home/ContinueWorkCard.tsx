@@ -8,6 +8,9 @@ import { useRecentDocs } from './api'
 const THUMBNAIL =
   'repeating-linear-gradient(45deg, var(--zenith-sunken), var(--zenith-sunken) 8px, var(--zenith-surface-hover) 8px, var(--zenith-surface-hover) 16px)'
 
+/** 카드는 넉 장만. 서버는 여덟 개까지 주지만 홈 한 화면의 밀도가 정해져 있다(12 UI 청사진). */
+const RECENT_LIMIT = 4
+
 export function ContinueWorkCard() {
   const { data, isPending, isError } = useRecentDocs()
 
@@ -16,7 +19,10 @@ export function ContinueWorkCard() {
       {isPending && (
         <div className="grid grid-cols-2 gap-3.5">
           {[0, 1, 2, 3].map((i) => (
-            <div key={i} className="border-line bg-surface h-[136px] animate-pulse rounded-xl border" />
+            <div
+              key={i}
+              className="border-line bg-surface h-[136px] animate-pulse rounded-xl border"
+            />
           ))}
         </div>
       )}
@@ -28,13 +34,13 @@ export function ContinueWorkCard() {
       )}
 
       {data &&
-        (data.items.length === 0 ? (
+        (data.length === 0 ? (
           <Card>
             <CardEmpty>최근 편집한 문서가 없습니다.</CardEmpty>
           </Card>
         ) : (
           <div className="grid grid-cols-2 gap-3.5">
-            {data.items.map((doc) => (
+            {data.slice(0, RECENT_LIMIT).map((doc) => (
               <Link
                 key={doc.id}
                 to={`/docs/${doc.id}`}
@@ -42,6 +48,9 @@ export function ContinueWorkCard() {
               >
                 <div className="h-[70px] rounded-md" style={{ background: THUMBNAIL }} />
                 <p className="text-fg mt-2.5 truncate text-[13.5px] font-semibold">{doc.title}</p>
+                {doc.path.length > 0 && (
+                  <p className="text-subtle mt-1 truncate text-[11px]">{doc.path.join(' / ')}</p>
+                )}
                 <p className="text-subtle mt-1 truncate text-[11px]">
                   {doc.updated_by?.name ?? '알 수 없음'} · {formatRelative(doc.updated_at)}
                 </p>

@@ -1,4 +1,4 @@
-import { delay, http, HttpResponse, passthrough } from 'msw'
+import { bypass, delay, http, HttpResponse, passthrough } from 'msw'
 import type { User } from '@/types'
 import { BODY_MAX, TITLE_MAX } from '@/features/board/types'
 import { DEMO_PASSWORD } from './accounts'
@@ -10,6 +10,7 @@ import {
   canRead,
   createPost,
   deletePost,
+  homePosts,
   findPost,
   listBoards,
   listPosts,
@@ -19,7 +20,7 @@ import {
 import { addTask, findTask, listTasks, removeTask } from './dashboardDb'
 import { TODO_TEXT_MAX } from '@/features/home/types'
 import {
-  listMentions,
+  listMentionNotifications,
   listNotifications,
   markRead as markNotificationsRead,
 } from './notificationsDb'
@@ -41,6 +42,7 @@ import {
   findDoc,
   listComments,
   listDocs,
+  recentDocs,
   listVersions,
   touchDoc,
 } from './docsDb'
@@ -94,6 +96,35 @@ const unauthorized = () =>
   HttpResponse.json({ detail: '로그인이 필요합니다.', code: 'AUTH_REQUIRED' }, { status: 401 })
 const notFound = (detail = '문서를 찾을 수 없습니다.') =>
   HttpResponse.json({ detail, code: 'NOT_FOUND' }, { status: 404 })
+
+/**
+ * 안 읽은 대화. 채팅은 MSW 가 아니라 개발 릴레이에 있어서 목이 그 값을 모른다.
+ * 그래서 여기서만 릴레이에 한 번 물어본다. 실제 서버는 홈 한 벌에 이미 담아서 준다.
+ *
+ * 릴레이가 안 떠 있으면 빈 목록이다. 홈의 다른 카드까지 같이 죽으면 안 된다.
+ */
+async function unreadChannels() {
+  try {
+    // `bypass` 로 이 요청이 목을 다시 타지 않게 못 박는다. 지금은 `/api/channels` 가
+    // passthrough 라 우연히 맞지만, 나중에 거기 진짜 핸들러가 들어오면 목이 목을 부른다.
+    // 릴레이가 떠 있으면서 응답하지 않으면 홈 카드 다섯 장이 전부 스켈레톤에 묶이므로 끊어 준다.
+    const res = await fetch(bypass('/api/channels'), { signal: AbortSignal.timeout(2000) })
+    if (!res.ok) return []
+    const { items } = (await res.json()) as {
+      items: { id: string; name: string; is_dm: boolean; unread: number }[]
+    }
+    return items
+      .filter((channel) => channel.unread > 0)
+      .map((channel) => ({
+        channel_id: channel.id,
+        name: channel.name,
+        is_dm: channel.is_dm,
+        count: channel.unread,
+      }))
+  } catch {
+    return []
+  }
+}
 
 /**
  * 휴지통에 든 문서는 **읽기만** 된다. 백엔드는 수정·버전 저장·댓글 작성에서 404 다
@@ -341,24 +372,24 @@ export const handlers = [
     )
   }),
 
-  // ── 홈 카드 ───────────────────────────────────────────────
-  // 공지는 게시판의 일부다. 별도 데이터를 두면 두 벌이 되어 어긋난다.
-  http.get(
-    '/api/announcements',
-    authed((user, request) => {
-      const limit = Number(new URL(request.url).searchParams.get('limit') ?? 4)
-      return HttpResponse.json({ items: listPosts(user).slice(0, limit) })
-    }),
-  ),
-
-  // 멘션 카드는 알림에서 파생된다. 공지와 같은 이유로 별도 데이터를 두지 않는다.
-  http.get(
-    '/api/mentions',
-    authed((user, request) => {
-      const limit = Number(new URL(request.url).searchParams.get('limit') ?? 3)
-      return HttpResponse.json({ items: listMentions(user, limit) })
-    }),
-  ),
+  // ── 홈 한 벌 ──────────────────────────────────────────────
+  /**
+   * 대시보드 1콜. 카드 다섯 개가 이것 하나를 나눠 쓴다.
+   *
+   * 조각을 따로 만들지 않는다. 공지는 게시판, 멘션은 알림, 할 일은 할 일 저장소에서 온다.
+   * 별도 데이터를 두면 두 벌이 되어 어긋난다.
+   */
+  http.get('/api/me/home', async () => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    return HttpResponse.json({
+      recent_docs: recentDocs(user, 8),
+      mentions: listMentionNotifications(user, 10),
+      unread: await unreadChannels(),
+      posts: homePosts(user, 3),
+      todos: listTasks().slice(0, 200),
+    })
+  }),
 
   // ── 통합검색 (⌘K) ────────────────────────────────────────
   http.get(
@@ -1028,14 +1059,6 @@ data: ${JSON.stringify(data)}
       ? new HttpResponse(null, { status: 204 })
       : notFound('없는 할 일입니다.')
   }),
-
-  http.get(
-    '/api/docs/recent',
-    authed((_user, request) => {
-      const limit = Number(new URL(request.url).searchParams.get('limit') ?? 5)
-      return HttpResponse.json({ items: listDocs('').slice(0, limit) })
-    }),
-  ),
 
   // ── 문서 트리·폴더 ────────────────────────────────────────
   http.get(
