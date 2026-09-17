@@ -49,7 +49,7 @@ export function AnnouncementsCard() {
                     <p className="text-subtle mt-1 text-[11px]">
                       {item.masked
                         ? '열람 권한 없음'
-                        : `${item.authorName} · ${formatRelative(item.createdAt)}`}
+                        : `${item.author?.name ?? '알 수 없음'} · ${formatRelative(item.createdAt)}`}
                     </p>
                   </>
                 )

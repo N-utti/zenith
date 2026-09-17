@@ -1,16 +1,20 @@
 import { delay, http, HttpResponse, passthrough } from 'msw'
 import type { User } from '@/types'
+import { BODY_MAX, TITLE_MAX } from '@/features/board/types'
 import { DEMO_PASSWORD } from './accounts'
 import { clearMockSession, MOCK_USERS, setMockSession, userFromCookie } from './db'
 import { AI_MODELS, answer, DOC_ACTIONS, docActionDraft } from './aiDb'
 import {
   BOARD_DEFS,
+  canEdit,
   canRead,
   createPost,
+  deletePost,
   findPost,
   listBoards,
   listPosts,
   toDetail,
+  updatePost,
 } from './boardDb'
 import { MENTIONS, TODAY_TASKS } from './dashboardDb'
 import {
@@ -74,6 +78,45 @@ const unauthorized = () =>
   HttpResponse.json({ detail: '로그인이 필요합니다.', code: 'AUTH_REQUIRED' }, { status: 401 })
 const notFound = () =>
   HttpResponse.json({ detail: '문서를 찾을 수 없습니다.', code: 'NOT_FOUND' }, { status: 404 })
+
+/**
+ * 권한 거부는 한 가지 문구뿐이다. 백엔드 `_deny` 도 열람 거부와 수정 거부를 구분해 주지
+ * 않는다(`app/errors.py`). "이 게시판은 내 등급 밖" 과 "내 글이 아님" 을 호출자가 가려낼
+ * 수 있으면 그 자체가 정보다.
+ */
+const forbidden = () =>
+  HttpResponse.json({ detail: '권한이 부족합니다.', code: 'FORBIDDEN' }, { status: 403 })
+
+const validationError = (detail: string) =>
+  HttpResponse.json({ detail, code: 'VALIDATION' }, { status: 422 })
+
+/** 본문이 JSON 이 아니면 500 대신 422 로 떨어뜨린다. 백엔드도 422 다. */
+async function readJson<T>(request: Request): Promise<T | null> {
+  try {
+    const parsed: unknown = await request.json()
+    return typeof parsed === 'object' && parsed !== null ? (parsed as T) : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * 글의 제목·본문 제약(`PostCreateIn`·`PostPatchIn`). 백엔드에서는 Pydantic 이 핸들러보다
+ * 먼저 돌기 때문에 권한 검사보다 앞이다. `null` 은 여기서 보지 않는다(핸들러 안쪽 검사).
+ */
+function checkPostFields(body: { title?: unknown; body?: unknown }) {
+  for (const [key, max, label] of [
+    ['title', TITLE_MAX, '제목'],
+    ['body', BODY_MAX, '내용'],
+  ] as const) {
+    const value = body[key]
+    if (value === undefined || value === null) continue
+    if (typeof value !== 'string') return validationError(`${label}은 문자열이어야 합니다.`)
+    if (!value.trim()) return validationError('제목과 내용을 입력해 주세요.')
+    if (value.trim().length > max) return validationError(`${label}은 ${max}자를 넘을 수 없습니다.`)
+  }
+  return null
+}
 
 /** 결재 목의 결과 → 응답. 실패는 `{error, status, code}` 모양(13 §9 의 403·404·409·422). */
 function approvalResponse(
@@ -189,12 +232,57 @@ export const handlers = [
     // 성공 기준: 목록은 마스킹, **본문은 403**. 제목조차 내려주지 않는다.
     if (!canRead(user, post.minRole)) {
       return HttpResponse.json(
-        { detail: '열람 권한이 없습니다.', requiredRole: post.minRole },
+        { detail: '열람 권한이 없습니다.', requiredRole: post.minRole, code: 'FORBIDDEN' },
         { status: 403 },
       )
     }
 
     return HttpResponse.json(toDetail(post))
+  }),
+
+  /**
+   * 글쓴이 또는 임원만. 백엔드와 순서까지 맞춘다.
+   *
+   * 제목·본문의 모양 검증은 백엔드에서 Pydantic 이 하고, FastAPI 는 그걸 **핸들러에
+   * 들어가기 전에** 돌린다. 그래서 권한 없는 사람이 너무 긴 제목을 보내면 403 이 아니라
+   * 422 다. `null` 검사만은 백엔드도 핸들러 안(권한 검사 뒤)에 있어서 여기서도 뒤에 남긴다.
+   */
+  http.patch('/api/posts/:postId', async ({ request, params }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+
+    const body = await readJson<{ title?: unknown; body?: unknown }>(request)
+    if (!body) return validationError('본문이 JSON 이 아닙니다.')
+    const shapeError = checkPostFields(body)
+    if (shapeError) return shapeError
+
+    const post = findPost(String(params.postId))
+    if (!post) return notFound()
+    if (!canRead(user, post.minRole) || !canEdit(user, post)) return forbidden()
+
+    // 보내지 않은 값은 그대로 둔다. null 은 "지움" 이 아니라 422 다.
+    for (const key of ['title', 'body'] as const) {
+      if (body[key] === null) return validationError(`${key} 는 null 일 수 없습니다.`)
+    }
+
+    return HttpResponse.json(
+      updatePost(post, {
+        title: typeof body.title === 'string' ? body.title.trim() : undefined,
+        body: typeof body.body === 'string' ? body.body.trim() : undefined,
+      }),
+    )
+  }),
+
+  http.delete('/api/posts/:postId', ({ params }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+
+    const post = findPost(String(params.postId))
+    if (!post) return notFound()
+    if (!canRead(user, post.minRole) || !canEdit(user, post)) return forbidden()
+
+    deletePost(post.id)
+    return new HttpResponse(null, { status: 204 })
   }),
 
   http.post('/api/boards/:boardId/posts', async ({ request, params }) => {
@@ -207,16 +295,19 @@ export const handlers = [
 
     // 05 FR-BRD-02. 열람할 수 있는 게시판에만 글을 쓸 수 있다.
     if (!canRead(user, board.minRole)) {
-      return HttpResponse.json({ detail: '이 게시판에 글을 쓸 수 없습니다.' }, { status: 403 })
+      return forbidden()
     }
 
-    const { title, body } = (await request.json()) as { title: string; body: string }
-    if (!title?.trim() || !body?.trim()) {
-      return HttpResponse.json({ detail: '제목과 내용을 입력해 주세요.' }, { status: 400 })
+    const parsed = await readJson<{ title?: unknown; body?: unknown }>(request)
+    if (!parsed) return validationError('본문이 JSON 이 아닙니다.')
+    if (typeof parsed.title !== 'string' || typeof parsed.body !== 'string') {
+      return validationError('제목과 내용을 입력해 주세요.')
     }
+    const shapeError = checkPostFields(parsed)
+    if (shapeError) return shapeError
 
     return HttpResponse.json(
-      createPost(user, boardId, { title: title.trim(), body: body.trim() }),
+      createPost(user, boardId, { title: parsed.title.trim(), body: parsed.body.trim() }),
       { status: 201 },
     )
   }),

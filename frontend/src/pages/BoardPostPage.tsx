@@ -1,11 +1,17 @@
-import { Link, useParams } from 'react-router'
-import { ChevronLeft, Lock, Pin } from 'lucide-react'
+import { useState } from 'react'
+import { Link, useNavigate, useParams } from 'react-router'
+import { ChevronLeft, Lock, Pencil, Pin, Trash2 } from 'lucide-react'
 import { Avatar } from '@/components/ui/Avatar'
+import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
+import { Modal } from '@/components/ui/Modal'
 import { Spinner } from '@/components/ui/Spinner'
+import { useToast } from '@/components/ui/ToastContext'
 import { ApiError } from '@/lib/api'
 import { formatRelative } from '@/lib/datetime'
-import { usePost } from '@/features/board/api'
+import { useBoards, useDeletePost, usePost } from '@/features/board/api'
+import { PostComposer } from '@/features/board/PostComposer'
+import { useCurrentUser } from '@/features/auth/AuthContext'
 import { ROLE_LABEL, type Role } from '@/types'
 
 /**
@@ -43,8 +49,34 @@ function Forbidden({ requiredRole }: { requiredRole?: Role }) {
 }
 
 export function BoardPostPage() {
-  const { boardId = '', postId = '' } = useParams()
+  const { postId = '' } = useParams()
   const { data: post, isPending, error } = usePost(postId)
+  const me = useCurrentUser()
+  // 무효화할 목록은 주소가 아니라 글이 실제로 속한 게시판이다. 라우트는 어긋난 게시판 id 로도
+  // 열리는데(`/board/all/p-6`), 그때 주소를 믿으면 정작 그 글이 있는 목록이 stale 로 남는다.
+  const postBoardId = post?.boardId ?? ''
+  const board = useBoards().data?.items.find((b) => b.id === postBoardId)
+  const navigate = useNavigate()
+  const toast = useToast()
+  const remove = useDeletePost(postBoardId, postId)
+  const [editing, setEditing] = useState(false)
+  const [confirming, setConfirming] = useState(false)
+
+  // 버튼을 띄울지의 판단일 뿐이다. 실제 차단은 서버가 한다(PATCH·DELETE 의 403).
+  const canEdit = Boolean(post) && (post?.author?.id === me.id || me.role === 'exec')
+
+  const confirmDelete = () =>
+    remove.mutate(undefined, {
+      onSuccess: () => {
+        setConfirming(false)
+        toast.success('글을 지웠습니다.')
+        void navigate(`/board/${postBoardId}`, { replace: true })
+      },
+      onError: (err) => {
+        setConfirming(false)
+        toast.error(err instanceof ApiError ? err.message : '글을 지우지 못했습니다.')
+      },
+    })
 
   if (isPending) {
     return (
@@ -72,7 +104,7 @@ export function BoardPostPage() {
   return (
     <>
       <Link
-        to={`/board/${boardId}`}
+        to={`/board/${postBoardId}`}
         className="text-muted hover:text-fg mb-4 inline-flex items-center gap-1 text-sm transition-colors"
       >
         <ChevronLeft className="size-4" />
@@ -80,14 +112,33 @@ export function BoardPostPage() {
       </Link>
 
       <Card className="p-6">
-        <h1 className="text-fg flex items-start gap-2 text-xl font-semibold">
-          {post.pinned && <Pin className="text-accent mt-1 size-4 shrink-0" />}
-          {post.title}
-        </h1>
+        <div className="flex items-start justify-between gap-4">
+          <h1 className="text-fg flex items-start gap-2 text-xl font-semibold">
+            {post.pinned && <Pin className="text-accent mt-1 size-4 shrink-0" />}
+            {post.title}
+          </h1>
+          {canEdit && (
+            <div className="flex shrink-0 gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setEditing(true)}
+                disabled={!board}
+              >
+                <Pencil className="size-4" />
+                수정
+              </Button>
+              <Button variant="secondary" size="sm" onClick={() => setConfirming(true)}>
+                <Trash2 className="size-4" />
+                삭제
+              </Button>
+            </div>
+          )}
+        </div>
 
         <div className="text-subtle mt-3 flex items-center gap-2 text-xs">
-          <Avatar name={post.authorName} hue={200} size="sm" />
-          {post.authorName}
+          <Avatar name={post.author?.name ?? '?'} hue={200} size="sm" />
+          {post.author?.name ?? '알 수 없음'}
           <span>·</span>
           {formatRelative(post.createdAt)}
         </div>
@@ -96,6 +147,37 @@ export function BoardPostPage() {
           <p className="text-fg text-[15px] leading-7 whitespace-pre-wrap">{post.body}</p>
         </div>
       </Card>
+
+      {board && editing && (
+        <PostComposer board={board} post={post} onClose={() => setEditing(false)} />
+      )}
+
+      <Modal
+        open={confirming}
+        onClose={() => {
+          if (!remove.isPending) setConfirming(false)
+        }}
+        title="글을 지울까요?"
+        description="지운 글은 되돌릴 수 없습니다."
+        size="sm"
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setConfirming(false)}
+              disabled={remove.isPending}
+            >
+              취소
+            </Button>
+            <Button variant="danger" size="sm" onClick={confirmDelete} disabled={remove.isPending}>
+              {remove.isPending ? <Spinner className="border-t-white" /> : '지우기'}
+            </Button>
+          </>
+        }
+      >
+        <p className="text-muted text-sm leading-relaxed">{post.title}</p>
+      </Modal>
     </>
   )
 }
