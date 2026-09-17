@@ -243,6 +243,8 @@ URL은 백엔드와 같은 `/api/channels*` · `/api/ws` 를 쓴다. MSW는 아�
 
 ```
 GET   /api/channels                       사용자별 목록 (안읽음·마지막 메시지)
+POST  /api/channels                       { name } 공개 채널(전원 멤버) 또는 { dm_user_id } DM
+                                          같은 두 사람의 DM 은 하나만. 같은 이름 채널은 409
 GET   /api/channels/:id/messages          최근 메시지
 POST  /api/channels/:id/messages          전송 (04 에 없다. 백엔드는 WS 의 msg op)
 POST  /api/channels/:id/read              읽음 처리 (04 에 없다. 백엔드는 WS 의 read op)

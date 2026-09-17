@@ -1,10 +1,11 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { NavLink, useLocation } from 'react-router'
-import { AtSign, X } from 'lucide-react'
+import { AtSign, Plus, X } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { SECONDARY_NAV, TOP_NAV, type NavItem } from '@/app/navigation'
 import { useBoards } from '@/features/board/api'
 import { useChannels } from '@/features/chat/api'
+import { NewChatModal } from '@/features/chat/NewChatModal'
 import { WorkStatus } from '@/features/chat/WorkStatus'
 import type { ChatChannel } from '@/features/chat/types'
 import { Button } from '@/components/ui/Button'
@@ -15,11 +16,27 @@ const ROW = 'flex items-center gap-2 rounded-md px-2.5 py-1.5 text-[13.5px] tran
 const ROW_IDLE = 'text-muted hover:bg-surface-hover hover:text-fg'
 const ROW_ACTIVE = 'bg-accent-soft text-accent font-semibold'
 
-function SectionLabel({ children }: { children: ReactNode }) {
+function SectionLabel({ children, action }: { children: ReactNode; action?: ReactNode }) {
   return (
-    <div className="text-subtle mt-4 mb-1.5 px-2.5 text-[11px] font-bold tracking-[0.08em]">
-      {children}
+    <div className="text-subtle mt-4 mb-1.5 flex items-center gap-1 px-2.5 text-[11px] font-bold tracking-[0.08em]">
+      <span className="flex-1">{children}</span>
+      {action}
     </div>
+  )
+}
+
+/** 구획 제목 옆의 작은 만들기 버튼. 제목 줄이 좁아 아이콘만 둔다. */
+function AddButton({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+      className="text-subtle hover:text-fg grid size-5 shrink-0 cursor-pointer place-items-center rounded transition-colors"
+    >
+      <Plus className="size-3.5" />
+    </button>
   )
 }
 
@@ -67,20 +84,37 @@ function ChannelSection({ onNavigate }: { onNavigate?: () => void }) {
   // 채팅은 MSW가 아니라 개발 서버로 간다. 안 떠 있으면 섹션을 통째로 접는다.
   // 데스크톱 채팅 화면에는 방 목록이 따로 없다. 이 섹션이 곧 방 목록이라 DM 도 여기 둔다.
   const { data } = useChannels()
+  const [creating, setCreating] = useState<'channel' | 'dm' | null>(null)
   const channels = (data?.items ?? []).filter((channel) => !channel.is_dm)
   const dms = (data?.items ?? []).filter((channel) => channel.is_dm)
-  if (channels.length === 0 && dms.length === 0) return null
+  if (data === undefined) return null
 
   return (
     <>
-      {channels.length > 0 && <SectionLabel>채널</SectionLabel>}
+      <SectionLabel action={<AddButton label="새 채널" onClick={() => setCreating('channel')} />}>
+        채널
+      </SectionLabel>
       {channels.map((channel) => (
         <ChannelRow key={channel.id} channel={channel} onNavigate={onNavigate} />
       ))}
-      {dms.length > 0 && <SectionLabel>다이렉트 메시지</SectionLabel>}
+
+      <SectionLabel action={<AddButton label="새 대화" onClick={() => setCreating('dm')} />}>
+        다이렉트 메시지
+      </SectionLabel>
+      {dms.length === 0 && <p className="text-subtle px-3 py-1 text-xs">아직 대화가 없습니다.</p>}
       {dms.map((channel) => (
         <ChannelRow key={channel.id} channel={channel} onNavigate={onNavigate} />
       ))}
+
+      {creating && (
+        <NewChatModal
+          mode={creating}
+          onClose={() => {
+            setCreating(null)
+            onNavigate?.()
+          }}
+        />
+      )}
     </>
   )
 }

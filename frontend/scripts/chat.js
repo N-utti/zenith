@@ -43,6 +43,8 @@ const CHANNELS = [
 
 const minutesAgo = (m) => new Date(Date.now() - m * 60_000).toISOString()
 
+let nextChannelId = 1
+
 let nextId = 1
 /** 백엔드 `MessageOut` 과 같은 모양(04 §5). 소켓의 `msg` 이벤트도 같은 것을 싣는다. */
 function makeMessage(channelId, authorId, body, createdAt) {
@@ -229,6 +231,70 @@ export async function handleChatRequest(req, res, url) {
         return a.name.localeCompare(b.name)
       })
     return json(res, 200, { items })
+  }
+
+  /**
+   * 공개 채널 또는 DM 생성. 백엔드 `create_channel` 과 같은 규칙이다.
+   *
+   * 공개 채널은 만들 때 **활성 사용자 전원**을 멤버로 넣는다(15명 사내, 초대·탈퇴 없음).
+   * DM 은 두 사람짜리 채널이고 같은 두 사람의 DM 은 하나만 둔다.
+   */
+  if (path === '/channels' && req.method === 'POST') {
+    if (!USERS[viewerId]) return json(res, 401, { detail: '알 수 없는 사용자입니다.' })
+
+    // `readBody` 는 본문 전체를 준다. 메시지 전송은 그 안의 `body` 필드를 쓰지만 여기는 아니다.
+    const payload = await readBody(req)
+    const name = typeof payload?.name === 'string' ? payload.name.trim() : undefined
+    const dmUserId = typeof payload?.dm_user_id === 'string' ? payload.dm_user_id : undefined
+
+    // 백엔드 `ChannelCreateIn` 은 둘 중 하나만 받는다.
+    if ((name === undefined) === (dmUserId === undefined)) {
+      return json(res, 422, {
+        detail: 'name 또는 dm_user_id 중 하나만 보낸다.',
+        code: 'VALIDATION',
+      })
+    }
+
+    if (dmUserId !== undefined) {
+      if (dmUserId === viewerId) {
+        return json(res, 422, {
+          detail: '자기 자신과는 DM 을 만들 수 없습니다.',
+          code: 'VALIDATION',
+        })
+      }
+      if (!USERS[dmUserId]) {
+        return json(res, 422, { detail: '없는 사용자입니다.', code: 'VALIDATION' })
+      }
+      // 같은 두 사람의 DM 이 이미 있으면 그것을 돌려준다. 새로 만들지 않는다.
+      const existing = CHANNELS.find(
+        (c) =>
+          c.is_dm &&
+          c.memberIds.length === 2 &&
+          c.memberIds.includes(viewerId) &&
+          c.memberIds.includes(dmUserId),
+      )
+      const channel = existing ?? {
+        id: `dm-${nextChannelId++}`,
+        is_dm: true,
+        name: '',
+        memberIds: [viewerId, dmUserId],
+      }
+      if (!existing) CHANNELS.push(channel)
+      return json(res, 201, channelView(channel, viewerId))
+    }
+
+    if (!name || name.length > 100) {
+      return json(res, 422, {
+        detail: '채널 이름은 1자 이상 100자 이하여야 합니다.',
+        code: 'VALIDATION',
+      })
+    }
+    if (CHANNELS.some((c) => !c.is_dm && c.name === name)) {
+      return json(res, 409, { detail: '같은 이름의 채널이 있습니다.', code: 'CONFLICT' })
+    }
+    const channel = { id: `c-${nextChannelId++}`, is_dm: false, name, memberIds: ALL }
+    CHANNELS.push(channel)
+    return json(res, 201, channelView(channel, viewerId))
   }
 
   const messagesMatch = path.match(/^\/channels\/([^/]+)\/messages$/)

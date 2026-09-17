@@ -171,6 +171,7 @@ export const handlers = [
   // 뭉뚱그리면 아직 안 만든 채널 생성·첨부까지 삼켜 릴레이의 404로 조용히 떨어지고,
   // 통과는 "처리됨"이라 onUnhandledRequest 경고도 안 뜬다.
   http.get('/api/channels', () => passthrough()),
+  http.post('/api/channels', () => passthrough()),
   http.all('/api/channels/:channelId/messages', () => passthrough()),
   http.post('/api/channels/:channelId/read', () => passthrough()),
 
