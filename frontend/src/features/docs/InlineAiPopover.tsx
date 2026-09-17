@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import type { Editor } from '@tiptap/react'
 import { Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { api } from '@/lib/api'
 import { OPEN_INLINE_AI_EVENT } from './editorBlocks'
 import { parseMarkdownTable, tableToHtml } from './markdownTable'
-import { blocksToHtml } from './templateBlocks'
+import { blocksToHtml, isBlockList } from './templateBlocks'
 
 /** 04 §8 `POST /ai/doc-action` 의 `action`. 자유 프롬프트는 계약에 없다. */
 type DocAction = 'summarize' | 'continue' | 'polish' | 'translate' | 'table'
@@ -57,6 +57,7 @@ export function InlineAiPopover({ editor, docId }: { editor: Editor; docId: stri
   /** 다시 생성이 무엇을 다시 부를지. 동작과 템플릿이 서로 다른 경로다. */
   const [last, setLast] = useState<{ action: DocAction } | { template: DocTemplate } | null>(null)
 
+  const templateLabelId = useId()
   const ref = useRef<HTMLDivElement>(null)
   const firstChipRef = useRef<HTMLButtonElement>(null)
   const applyRef = useRef<HTMLButtonElement>(null)
@@ -80,7 +81,9 @@ export function InlineAiPopover({ editor, docId }: { editor: Editor; docId: stri
     const onOpen = () => {
       insertAt.current = editor.state.selection.from
       setPos(anchorAt(editor))
+      // 초안과 템플릿은 늘 같이 지운다. 하나만 지우면 지난 결과가 다음 팝오버에 남는다.
       setDraft(null)
+      setBlocks(null)
       setError(null)
       setOpen(true)
     }
@@ -133,10 +136,22 @@ export function InlineAiPopover({ editor, docId }: { editor: Editor; docId: stri
     try {
       const result = await fetcher()
       if (reqId.current !== id) return
+      // 응답 모양이 계약에 없다. 문자열 배열이 아니면 그리다가 터지는데, 그 예외는 렌더 중에
+      // 나서 이 화면의 오류 자리로 안 들어오고 편집기까지 같이 내려앉는다.
+      if (result.blocks !== undefined && !isBlockList(result.blocks)) {
+        setError('템플릿을 읽지 못했습니다. 다시 시도해 주세요.')
+        return
+      }
       setDraft(result.draft ?? null)
       setBlocks(result.blocks ?? null)
     } catch {
-      if (reqId.current === id) setError('초안을 만들지 못했습니다. 다시 시도해 주세요.')
+      if (reqId.current === id) {
+        setError(
+          'template' in what
+            ? '템플릿을 만들지 못했습니다. 다시 시도해 주세요.'
+            : '초안을 만들지 못했습니다. 다시 시도해 주세요.',
+        )
+      }
     } finally {
       if (reqId.current === id) setBusy(false)
     }
@@ -174,7 +189,8 @@ export function InlineAiPopover({ editor, docId }: { editor: Editor; docId: stri
   const table = draft ? parseMarkdownTable(draft) : null
 
   /** 편집기에 넣을 모양. 템플릿은 블록마다 노드가 되고, 초안은 표만 노드가 된다. */
-  const html = blocks ? blocksToHtml(blocks) : null
+  // 빈 배열은 볼 것이 없다는 뜻이다. `''` 로 두면 제목·근거 문구가 초안 쪽으로 뒤집힌다.
+  const html = blocks?.length ? blocksToHtml(blocks) : null
 
   /** 삽입: 커서 자리에 / 아래에 추가: 커서가 든 최상위 블록 다음에. */
   const apply = (mode: 'inline' | 'below') => {
@@ -225,8 +241,14 @@ export function InlineAiPopover({ editor, docId }: { editor: Editor; docId: stri
       </div>
 
       {/* 템플릿은 문서를 안 보고 형식만 만든다. 위 동작들과 근거가 달라 줄을 나눈다. */}
-      <div className="border-line flex flex-wrap items-center gap-2 border-b px-4 py-3">
-        <span className="text-subtle text-[11px] font-bold">템플릿</span>
+      <div
+        role="group"
+        aria-labelledby={templateLabelId}
+        className="border-line flex flex-wrap items-center gap-2 border-b px-4 py-3"
+      >
+        <span id={templateLabelId} className="text-subtle text-[11px] font-bold">
+          템플릿
+        </span>
         {TEMPLATES.map((template) => (
           <button
             key={template.id}
@@ -271,7 +293,9 @@ export function InlineAiPopover({ editor, docId }: { editor: Editor; docId: stri
               /* 이 HTML 은 서버가 준 것이 아니라 `blocksToHtml` 이 만든다. 글자는 전부
                  이스케이프되고 태그는 우리가 붙인 것뿐이다(`templateBlocks.test.ts`). */
               <div
-                className="text-fg space-y-2 text-sm leading-[1.7]"
+                // 문서 서식 CSS 는 이 클래스 아래에 있다. 안 붙이면 제목도 목록도 밋밋한
+                // 글줄 더미로 보여서, 구조를 보여 주려던 미리보기가 구조를 안 보여 준다.
+                className="zenith-editor text-fg text-sm"
                 dangerouslySetInnerHTML={{ __html: html }}
               />
             ) : table ? (

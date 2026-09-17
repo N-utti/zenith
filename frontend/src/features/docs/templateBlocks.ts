@@ -1,4 +1,4 @@
-import { parseMarkdownTable, tableToHtml } from './markdownTable'
+import { escapeHtml, parseMarkdownTable, tableToHtml } from './markdownTable'
 
 /**
  * `POST /ai/template` 이 돌려주는 블록을 편집기가 읽는 HTML 로 바꾼다.
@@ -13,9 +13,9 @@ export function blocksToHtml(blocks: string[]): string {
   return blocks.map(blockToHtml).join('')
 }
 
-/** 표 셀과 같은 규칙. 텍스트 자리에만 넣으므로 따옴표는 안 바꾼다. */
-function escapeHtml(text: string): string {
-  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+/** 계약에 없는 응답이라 모양을 믿지 않는다. 문자열 배열이 아니면 화면이 오류 문구로 간다. */
+export function isBlockList(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === 'string')
 }
 
 /**
@@ -41,7 +41,8 @@ function blockToHtml(block: string): string {
   if (rows) return tableToHtml(rows)
 
   const items = lines(block)
-  if (items.length === 0) return ''
+  // 빈 블록은 "여기에 쓰라" 는 자리다. 지워 버리면 공지 템플릿에 본문 쓸 곳이 없어진다.
+  if (items.length === 0) return '<p></p>'
 
   // 할 일 목록이 먼저다. `- [ ] 쓰기` 는 글머리 기호로도 읽히기 때문이다.
   const tasks = items.map((line) => TASK.exec(line))
@@ -49,7 +50,9 @@ function blockToHtml(block: string): string {
     const rowsHtml = tasks
       .map((m) => {
         const done = m![1].toLowerCase() === 'x'
-        return `<li data-checked="${done}"><p>${escapeHtml(m![2] ?? '')}</p></li>`
+        // `data-type` 이 없으면 TipTap 의 할 일 항목으로 안 읽힌다. 글머리 목록으로 밀려나
+        // 체크 상태를 잃고, 블록이 하나뿐이면 스키마가 안 맞아 삽입 자체가 예외로 죽는다.
+        return `<li data-type="taskItem" data-checked="${done}"><p>${escapeHtml(m![2] ?? '')}</p></li>`
       })
       .join('')
     return `<ul data-type="taskList">${rowsHtml}</ul>`
@@ -70,7 +73,8 @@ function blockToHtml(block: string): string {
     const heading = HEADING.exec(items[0])
     if (heading) {
       // 문서 제목은 편집기 밖(문서 메타)에 있다. 본문 최상위는 h2 로 시작한다.
-      const level = Math.min(heading[1].length + 1, 4)
+      // h4 는 편집기 스타일이 없어 문단과 구별이 안 되므로 h3 까지만 쓴다.
+      const level = Math.min(heading[1].length + 1, 3)
       return `<h${level}>${escapeHtml(heading[2])}</h${level}>`
     }
   }
