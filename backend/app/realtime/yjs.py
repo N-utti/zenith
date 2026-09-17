@@ -205,11 +205,17 @@ async def _broadcast(room: Room, message: bytes, *, exclude: WebSocket | None) -
 
 
 async def close_room(doc_id: uuid.UUID) -> None:
-    """문서가 영구 삭제될 때 — 방을 걷고 접속 중인 소켓을 닫는다. 저장은 하지 않는다(행이 없다)."""
+    """문서가 영구 삭제되거나 휴지통으로 갈 때 — 방을 걷고 접속 중인 소켓을 닫는다.
+
+    저장은 하지 않는다: 영구 삭제면 행이 없고, 휴지통이면 편집 중이던 미저장 변경을 버리는 편이 맞다
+    (휴지통 문서는 쓰기가 전부 404 라 프론트도 편집기를 주지 않는다)."""
     async with _rooms_lock:
         room = ROOMS.pop(doc_id, None)
     if room is None:
         return
+    # 이 줄이 docstring 의 "저장하지 않는다" 를 실제로 지킨다 — 소켓을 닫으면 각자의 `_leave` 가 돌고,
+    # 더러운 방은 거기서 마지막 저장을 한다. 휴지통에서는 그 저장이 updated_by("지운 사람")를 덮어썼다.
+    room.dirty = False
     for conn in list(room.conns):
         with contextlib.suppress(Exception):
             await conn.close(code=4404)
