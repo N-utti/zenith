@@ -127,9 +127,8 @@ v0.2 전제로 만들어진 구현을 전부 걷어냈다. `features/attendance/
 목 엔드포인트. 백엔드는 같은 스키마로 응답하면 된다. 근태 API는 설계서 §9로 재정의됐고
 아직 목이 없다.
 
-> 문서 목록·트리·폴더는 필드 표기까지 계약에 맞췄다(snake_case, `updated_by` 객체). 아직 남은 어긋남:
+> 문서 목록·트리·폴더·댓글은 필드 표기까지 계약에 맞췄다(snake_case, `author`·`updated_by` 객체). 아직 남은 어긋남:
 >
-> - **댓글**: 프론트 `authorId`·`authorName`·`authorHue`·`createdAt` ↔ 백엔드 `author:{id,name}`·`created_at`·`block_id`
 > - **문서 상세**: `seedHtml` 은 목 전용이다. 백엔드는 그 자리에 `ydoc`(서버 보관 Yjs 상태)을 준다
 
 ```

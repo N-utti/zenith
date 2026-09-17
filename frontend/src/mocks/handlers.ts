@@ -22,6 +22,7 @@ import {
 } from './boardDb'
 import { addTask, findTask, listTasks, removeTask } from './dashboardDb'
 import { TODO_TEXT_MAX } from '@/features/home/types'
+import { COMMENT_BODY_MAX } from '@/features/docs/types'
 import {
   listMentionNotifications,
   listNotifications,
@@ -1423,11 +1424,17 @@ data: ${JSON.stringify(data)}
   http.post('/api/docs/:docId/comments', async ({ request, params }) => {
     const user = authenticate()
     if (!user) return unauthorized()
-    const { body } = (await request.json()) as { body: string }
-    if (!body.trim()) {
-      return validationError('내용을 입력하세요.')
+    const payload = await readJson<{ body?: unknown; block_id?: unknown }>(request)
+    const body = typeof payload?.body === 'string' ? payload.body : ''
+    if (!body.trim()) return validationError('내용을 입력하세요.')
+    // 백엔드 `CommentCreateIn` 의 max_length. 넘으면 Pydantic 이 422 다.
+    if (body.length > COMMENT_BODY_MAX) {
+      return validationError(`댓글은 ${COMMENT_BODY_MAX}자까지 쓸 수 있습니다.`)
     }
+    const blockId = typeof payload?.block_id === 'string' ? payload.block_id : null
     if (!aliveDoc(String(params.docId))) return notFound()
-    return HttpResponse.json(addComment(String(params.docId), user, body.trim()), { status: 201 })
+    return HttpResponse.json(addComment(String(params.docId), user, body.trim(), blockId), {
+      status: 201,
+    })
   }),
 ]

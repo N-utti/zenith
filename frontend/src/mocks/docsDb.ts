@@ -1,4 +1,3 @@
-import { hueOf } from '@/lib/avatar'
 import type {
   DocComment,
   DocSummary,
@@ -141,19 +140,17 @@ const comments: Record<string, DocComment[]> = {
   'd-2': [
     {
       id: 'cm-1',
-      authorId: 'u-2',
-      authorName: '정성운',
-      authorHue: 155,
+      block_id: null,
+      author: { id: 'u-2', name: '정성운' },
       body: '퇴근 미기록을 결근으로 보지 않는다는 부분, 노무사 검토 때 꼭 짚어야 합니다.',
-      createdAt: minutesAgo(240),
+      created_at: minutesAgo(240),
     },
     {
       id: 'cm-2',
-      authorId: 'u-1',
-      authorName: '진수연',
-      authorHue: 275,
+      block_id: null,
+      author: { id: 'u-1', name: '진수연' },
       body: '동의합니다. 홈 위젯에도 "미확정"으로 표기하도록 반영해 뒀어요.',
-      createdAt: minutesAgo(180),
+      created_at: minutesAgo(180),
     },
   ],
 }
@@ -368,14 +365,18 @@ export function listComments(docId: string): DocComment[] {
   return comments[docId] ?? []
 }
 
-export function addComment(docId: string, user: User, body: string): DocComment {
+export function addComment(
+  docId: string,
+  user: User,
+  body: string,
+  blockId: string | null,
+): DocComment {
   const comment: DocComment = {
     id: `cm-${nextId++}`,
-    authorId: user.id,
-    authorName: user.name,
-    authorHue: hueOf(user.id),
+    block_id: blockId,
+    author: { id: user.id, name: user.name },
     body,
-    createdAt: new Date().toISOString(),
+    created_at: new Date().toISOString(),
   }
   comments[docId] = [...(comments[docId] ?? []), comment]
   return comment

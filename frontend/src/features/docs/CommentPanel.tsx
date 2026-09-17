@@ -7,6 +7,7 @@ import { Textarea } from '@/components/ui/Textarea'
 import { formatRelative } from '@/lib/datetime'
 import { useCurrentUser } from '@/features/auth/AuthContext'
 import { useAddComment, useComments } from './api'
+import { COMMENT_BODY_MAX } from './types'
 
 export function CommentPanel({ docId }: { docId: string }) {
   const user = useCurrentUser()
@@ -29,17 +30,15 @@ export function CommentPanel({ docId }: { docId: string }) {
     <>
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
         {isPending && <Spinner />}
-        {data?.items.length === 0 && (
-          <p className="text-subtle text-sm">첫 댓글을 남겨 보세요.</p>
-        )}
+        {data?.items.length === 0 && <p className="text-subtle text-sm">첫 댓글을 남겨 보세요.</p>}
         {data?.items.map((comment) => (
           <div key={comment.id} className="flex gap-2.5">
-            <Avatar name={comment.authorName} hue={comment.authorHue} size="sm" />
+            <Avatar name={comment.author.name} hue={hueOf(comment.author.id)} size="sm" />
             <div className="min-w-0 flex-1">
               <p className="text-fg text-xs font-medium">
-                {comment.authorName}
+                {comment.author.name}
                 <span className="text-subtle ml-1.5 font-normal">
-                  {formatRelative(comment.createdAt)}
+                  {formatRelative(comment.created_at)}
                 </span>
               </p>
               <p className="text-muted mt-0.5 text-sm break-words whitespace-pre-wrap">
@@ -60,6 +59,7 @@ export function CommentPanel({ docId }: { docId: string }) {
             submitOnEnter
             onSubmitEnter={send}
             rows={2}
+            maxLength={COMMENT_BODY_MAX}
             aria-label="댓글"
             placeholder="댓글 남기기…  (Enter 등록 · Shift+Enter 줄바꿈)"
             className="min-h-16 flex-1"
