@@ -34,11 +34,8 @@ npm run dev      # = tauri dev
 `frontend`의 vite 개발 서버(:5173)를 자동으로 띄우고 그 화면을 창에 붙인다.
 **MSW 목이 그대로 살아 있으므로 백엔드 없이도 전 화면이 돈다.**
 
-채팅·공동편집까지 보려면 다른 터미널에서 릴레이도 함께 띄운다.
-
-```powershell
-cd frontend && npm run server    # :1234. 채팅 + Yjs 릴레이
-```
+`npm run dev` 가 채팅·Yjs 릴레이(:1234)까지 같이 띄우므로 따로 켤 것은 없다.
+릴레이만 재시작하려면 `cd frontend && npm run server`.
 
 > vite 포트는 `strictPort`로 5173에 고정돼 있다. 셸의 `devUrl`이 이 번호를 보고 있어서,
 > vite가 5174로 비켜 가면 셸이 빈 창을 띄우기 때문이다.
@@ -142,7 +139,7 @@ Remove-Item "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\zenith-desktop.l
 
 ### 알림 테스트 방법
 
-앱과 릴레이(`cd frontend && npm run server`)가 떠 있는 상태에서, 로그인한 사람과
+앱과 릴레이(`npm run dev` 가 함께 띄운다)가 떠 있는 상태에서, 로그인한 사람과
 **다른 사용자**로 메시지를 밀어넣는다.
 
 ```powershell

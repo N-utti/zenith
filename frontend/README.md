@@ -8,14 +8,13 @@ Zenith 웹 프론트엔드. React 19 · Vite · TypeScript · Tailwind v4.
 
 ```bash
 npm install
-npm run dev        # http://localhost:5173
-npm run server     # 다른 터미널. 공동편집·채팅 서버
+npm run dev        # http://localhost:5173 — 실시간 서버(:1234)도 같이 뜬다
 ```
 
 | 스크립트 | 설명 |
 | --- | --- |
-| `npm run dev` | 개발 서버 (MSW 켜짐) |
-| `npm run server` | 개발용 실시간 서버. 문서 공동편집 + 채팅. **채팅은 이게 없으면 아예 동작하지 않는다** |
+| `npm run dev` | 개발 서버 (MSW 켜짐) + 실시간 서버. 둘을 각각 자식 프로세스로 띄운다(`scripts/dev.js`) |
+| `npm run server` | 실시간 서버만 따로. 문서 공동편집 + 채팅. `npm run dev` 가 이미 띄우므로 재시작할 때만 쓴다 |
 | `npm run build` | 타입체크 + 프로덕션 빌드 (`dist/`) |
 | `npm run typecheck` | 타입만 검사 |
 | `npm run lint` | ESLint |
@@ -158,14 +157,13 @@ Y.Doc ──┬─ WebSocket              다른 사람 · 다른 브라우저 �
         └─ IndexeddbPersistence   오프라인 영속
 ```
 
-### 실행: 터미널 두 개가 필요하다
+### 실행
 
 ```bash
-npm run dev      # 앱
-npm run server   # 공동편집·채팅 서버 (http://localhost:1234)
+npm run dev      # 앱(:5173) + 공동편집·채팅 서버(:1234)
 ```
 
-**서버를 안 켜면 다른 브라우저·다른 PC와 동기화되지 않는다.** 같은 브라우저의
+**서버가 없으면 다른 브라우저·다른 PC와 동기화되지 않는다.** 같은 브라우저의
 탭끼리는 BroadcastChannel로 붙으므로 서버 없이도 되는 것처럼 보이는데, 이게 착시다.
 그래서 에디터 헤더에 연결 상태를 항상 띄운다. 서버가 없으면
 **"오프라인 편집 중. 이 브라우저에만 저장됩니다"** 가 뜬다. 편집 자체는 계속되고
