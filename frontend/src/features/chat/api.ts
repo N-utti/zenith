@@ -21,7 +21,12 @@ export function useChannels() {
 export function useMessages(channelId: string | null) {
   return useQuery({
     queryKey: chatKeys.messages(channelId ?? ''),
-    queryFn: () => api<{ items: ChatMessage[] }>(`/channels/${channelId}/messages?limit=50`),
+    // 백엔드 `MessagePage`. `next_cursor` 는 더 과거가 있을 때 다음 요청의 `?cursor=` 다.
+    // 지금 화면은 과거 스크롤을 하지 않아 읽지 않는다.
+    queryFn: () =>
+      api<{ items: ChatMessage[]; next_cursor: string | null }>(
+        `/channels/${channelId}/messages?limit=50`,
+      ),
     enabled: channelId !== null,
   })
 }

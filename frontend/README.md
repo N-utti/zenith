@@ -249,8 +249,8 @@ POST  /api/channels/:id/read              읽음 처리 (04 에 없다. 백엔�
 WS    /api/ws                             message · typing · read 이벤트
 ```
 
-> 경로만 맞췄다. 이벤트 봉투(`type` → `ev`)와 필드 표기(camelCase → snake_case, `author` 객체),
-> 그리고 전송·읽음을 REST 대신 소켓 op 로 옮기는 일은 아직 남아 있다(backend/README §4.1 (g)).
+> 응답 모양(`ChannelOut`·`MessageOut`)은 계약에 맞췄다. 남은 것은 **소켓 이벤트 봉투**
+> (`type` → `ev`)와 전송·읽음을 REST 대신 소켓 op 로 옮기는 일이다(backend/README §4.1 (g)).
 
 전송은 REST로 하고 **화면 반영은 전부 WebSocket이 한다**. 내가 보낸 메시지도
 서버를 한 바퀴 돌아 같은 경로로 돌아온다. 낙관적 추가를 하지 않으므로 다른 탭·다른

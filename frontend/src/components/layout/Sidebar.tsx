@@ -45,7 +45,7 @@ function ChannelRow({ channel, onNavigate }: { channel: ChatChannel; onNavigate?
       onClick={onNavigate}
       className={({ isActive }) => cn(ROW, isActive ? ROW_ACTIVE : ROW_IDLE)}
     >
-      {channel.kind === 'channel' ? (
+      {!channel.is_dm ? (
         <span className="text-subtle shrink-0">#</span>
       ) : (
         <AtSign className="text-subtle size-4 shrink-0" />
@@ -67,8 +67,8 @@ function ChannelSection({ onNavigate }: { onNavigate?: () => void }) {
   // 채팅은 MSW가 아니라 개발 서버로 간다. 안 떠 있으면 섹션을 통째로 접는다.
   // 데스크톱 채팅 화면에는 방 목록이 따로 없다. 이 섹션이 곧 방 목록이라 DM 도 여기 둔다.
   const { data } = useChannels()
-  const channels = (data?.items ?? []).filter((channel) => channel.kind === 'channel')
-  const dms = (data?.items ?? []).filter((channel) => channel.kind === 'dm')
+  const channels = (data?.items ?? []).filter((channel) => !channel.is_dm)
+  const dms = (data?.items ?? []).filter((channel) => channel.is_dm)
   if (channels.length === 0 && dms.length === 0) return null
 
   return (

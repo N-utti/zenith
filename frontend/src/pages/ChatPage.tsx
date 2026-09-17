@@ -42,14 +42,14 @@ export function ChatPage() {
       {channelId && channel ? (
         <div className="flex min-h-0 flex-1 flex-col">
           <header className="border-line bg-surface flex h-14 shrink-0 items-center gap-2 border-b px-4">
-            {channel.kind === 'channel' ? (
+            {!channel.is_dm ? (
               <Hash className="text-subtle size-4" />
             ) : (
               <AtSign className="text-subtle size-4" />
             )}
             <h1 className="text-fg text-sm font-semibold">{channel.name}</h1>
             <span className="text-subtle text-xs">
-              {channel.kind === 'channel' ? `멤버 ${channel.memberIds.length}명` : '다이렉트 메시지'}
+              {!channel.is_dm ? `멤버 ${channel.members.length}명` : '다이렉트 메시지'}
             </span>
 
             {!connected && (

@@ -10,8 +10,8 @@ import type { ChatChannel } from './types'
 export function WorkStatus({ channel }: { channel: ChatChannel }) {
   const me = useCurrentUser()
   const kinds = useTodayArrangementKinds()
-  if (channel.kind !== 'dm') return null
-  const other = channel.memberIds.find((id) => id !== me.id)
+  if (!channel.is_dm) return null
+  const other = channel.members.find((m) => m.id !== me.id)?.id
   const kind = other ? kinds.get(other) : undefined
   if (!kind) return null
   return (
