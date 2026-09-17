@@ -1,10 +1,14 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { Paperclip } from 'lucide-react'
 import { Avatar } from '@/components/ui/Avatar'
 import { Spinner } from '@/components/ui/Spinner'
 import { hueOf } from '@/lib/avatar'
 import { formatDay, formatTime } from '@/lib/datetime'
+import { formatBytes } from '@/lib/format'
+import { httpUrl } from '@/lib/serverOrigin'
+import { isImage } from './attachments'
 import { useMessages } from './api'
-import type { ChatMessage } from './types'
+import type { ChatAttachment, ChatMessage } from './types'
 
 /** 같은 사람이 5분 안에 이어서 보낸 메시지는 아바타·이름을 반복하지 않는다. */
 const GROUP_WINDOW_MS = 5 * 60_000
@@ -20,6 +24,50 @@ function grouped(message: ChatMessage, previous: ChatMessage | undefined) {
   return (
     new Date(message.created_at).getTime() - new Date(previous.created_at).getTime() <
     GROUP_WINDOW_MS
+  )
+}
+
+/**
+ * 메시지에 붙은 파일.
+ *
+ * `url` 은 서버가 준 것을 그대로 쓴다. 내려받기는 쿠키로 인증되고 채널 멤버만 받을 수 있다.
+ *
+ * 미리보기 판정은 `attachments.ts` 의 `isImage` 가 한다(서버와 갈릴 수 있는 이유도 거기).
+ */
+function Attachments({ files }: { files: ChatAttachment[] | null }) {
+  /** 그리지 못한 이미지. 확장자 판정이 서버와 갈렸거나 못 받아 온 것이다. */
+  const [broken, setBroken] = useState<Set<string>>(new Set())
+  if (!files || files.length === 0) return null
+
+  return (
+    <ul className="mt-1.5 flex flex-wrap gap-2">
+      {files.map((file, index) => (
+        <li key={`${file.url}-${index}`}>
+          {isImage(file.name) && !broken.has(file.url) ? (
+            <a href={httpUrl(file.url)} target="_blank" rel="noreferrer">
+              <img
+                src={httpUrl(file.url)}
+                alt={file.name}
+                loading="lazy"
+                // 못 그리면 파일 링크로 떨어뜨린다. 깨진 그림 아이콘만 남으면 이름조차 안 보인다.
+                onError={() => setBroken((prev) => new Set(prev).add(file.url))}
+                className="border-line max-h-60 max-w-full rounded-lg border object-contain"
+              />
+            </a>
+          ) : (
+            <a
+              href={httpUrl(file.url)}
+              download={file.name}
+              className="border-line bg-sunken text-muted hover:text-fg flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs transition-colors"
+            >
+              <Paperclip className="size-3.5 shrink-0" />
+              <span className="max-w-48 truncate">{file.name}</span>
+              <span className="text-subtle">{formatBytes(file.size)}</span>
+            </a>
+          )}
+        </li>
+      ))}
+    </ul>
   )
 }
 
@@ -96,9 +144,12 @@ export function MessageList({ channelId }: { channelId: string }) {
                       </span>
                     </p>
                   )}
-                  <p className="text-muted text-sm break-words whitespace-pre-wrap">
-                    {message.body}
-                  </p>
+                  {message.body && (
+                    <p className="text-muted text-sm break-words whitespace-pre-wrap">
+                      {message.body}
+                    </p>
+                  )}
+                  <Attachments files={message.attachments} />
                 </div>
               </div>
             </div>

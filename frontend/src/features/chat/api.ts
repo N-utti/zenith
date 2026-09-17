@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
-import type { ChatChannel, ChatMessage } from './types'
+import type { ChatAttachment, ChatChannel, ChatMessage } from './types'
 
 /**
  * 채팅만 MSW를 거치지 않고 개발 서버로 간다 (vite 프록시). 누구인지는 URL·본문이 아니라
@@ -33,10 +33,10 @@ export function useMessages(channelId: string | null) {
 
 export function useSendMessage(channelId: string) {
   return useMutation({
-    mutationFn: (body: string) =>
+    mutationFn: ({ body, attachments }: { body: string; attachments?: ChatAttachment[] }) =>
       api<ChatMessage>(`/channels/${channelId}/messages`, {
         method: 'POST',
-        body: JSON.stringify({ body }),
+        body: JSON.stringify({ body, attachments }),
       }),
     // 캐시 반영은 WebSocket 이벤트가 한다. 내가 보낸 것도 같은 경로로 돌아온다.
   })
@@ -70,4 +70,25 @@ export function useCreateChannel() {
     // 목록에서 못 찾아 "채널을 선택하세요" 가 한 번 스치는 일이 없다.
     onSuccess: () => qc.invalidateQueries({ queryKey: chatKeys.channels }),
   })
+}
+
+/** 사내망 파일 업로드 상한. 서버도 같은 값을 강제한다(`MAX_ATTACHMENT_BYTES`). */
+export const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024
+
+/** 메시지 하나에 붙일 수 있는 파일 수. 백엔드 `MAX_ATTACHMENTS`. */
+export const MAX_ATTACHMENTS = 10
+
+/**
+ * 첨부를 먼저 올리고 `{url, name, size}` 를 받는다. 그 값을 메시지의 `attachments[]` 에
+ * 그대로 넣는다. 바이너리는 메시지 본문에 실리지 않는다.
+ *
+ * 훅이 아니라 그냥 함수다. 파일 여러 개를 한 번에 고를 수 있는데, 뮤테이션 훅 하나를
+ * 반복문에서 부르면 새 호출이 앞선 것에서 관찰자를 떼어 간다. 그러면 앞선 파일은 서버에
+ * 올라갔는데 성공 콜백이 안 불려 화면에도 메시지에도 없고 서버에만 남는다. 문서 이미지
+ * 업로드(`features/docs/useImageUpload`)도 같은 이유로 함수를 쓴다.
+ */
+export function uploadAttachment(channelId: string, file: File): Promise<ChatAttachment> {
+  const form = new FormData()
+  form.append('file', file)
+  return api<ChatAttachment>(`/channels/${channelId}/attachments`, { method: 'POST', body: form })
 }
