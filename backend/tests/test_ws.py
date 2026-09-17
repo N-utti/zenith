@@ -325,3 +325,24 @@ async def test_doc_comment_mention_is_pushed(app: FastAPI, users: Users, app_db)
                 and notice["payload"]["comment_id"] == r.json()["id"]
             )
             assert notice["id"] and notice["created_at"]
+
+
+async def test_mention_off_gets_message_but_no_notice(app: FastAPI, users: Users, app_db) -> None:
+    """이슈 #81: 멘션 알림을 끈 사람도 메시지·unread 는 받고 notice 만 안 받는다(알림 행도 없다)."""
+    channel = await make_channel(app_db, [users.member, users.lead])
+    async with ws_client(app) as a, ws_client(app) as b:
+        await login(a, "sujin@zenith.co.kr")
+        await login(b, "donghyun@zenith.co.kr")
+        r = await b.patch(
+            "/api/me/preferences", json={"notifications": {"mention": False}}, headers=csrf(b)
+        )
+        assert r.status_code == 200, r.text
+
+        async with aconnect_ws(WS, a) as a_ws, aconnect_ws(WS, b) as b_ws:
+            assert (await recv(a_ws))["ev"] == "presence"
+            await send(a_ws, op="msg", channel_id=str(channel.id), body="@박동현 확인 부탁해요")
+            assert (await recv_until(b_ws, "msg"))["channel_id"] == str(channel.id)
+            assert (await recv_until(b_ws, "unread"))["count"] == 1
+            await silent(b_ws)  # notice 는 오지 않는다
+
+    assert (await app_db.execute(select(Notification))).scalars().all() == []
