@@ -14,7 +14,7 @@ export function useAnnouncements() {
 export function useRecentDocs() {
   return useQuery({
     queryKey: ['documents', 'recent', { limit: 4 }],
-    queryFn: () => api<{ items: DocSummary[] }>('/documents/recent?limit=4'),
+    queryFn: () => api<{ items: DocSummary[] }>('/docs/recent?limit=4'),
   })
 }
 

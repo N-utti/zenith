@@ -7,7 +7,7 @@
  *
  *   npm run server     # http://localhost:1234
  *
- * 앱은 이 포트에 직접 붙지 않는다. 항상 같은 오리진(/api/yjs, /api/chat)으로
+ * 앱은 이 포트에 직접 붙지 않는다. 항상 같은 오리진(/api/yjs, /api/channels, /api/ws)으로
  * 붙고 vite가 여기로 넘긴다(vite.config.ts). 운영에서는 프록시 대상만 실제
  * 백엔드로 바꾸면 앱 코드는 그대로다.
  *

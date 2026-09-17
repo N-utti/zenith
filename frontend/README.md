@@ -130,15 +130,15 @@ v0.2 전제로 만들어진 구현을 전부 걷어냈다. `features/attendance/
 ```
 GET   /api/announcements?limit=        권한 밖 등급 글은 목록에서 제외
 
-GET   /api/documents?q=                목록·검색
-POST  /api/documents                   생성
-GET   /api/documents/:id               메타 (+ seedHtml, 아래 참조)
-PATCH /api/documents/:id               제목·수정시각 투영
-GET   /api/documents/recent?limit=
-GET   /api/documents/:id/comments
-POST  /api/documents/:id/comments
-GET   /api/documents/:id/versions
-POST  /api/documents/:id/versions   { snapshot, label? }
+GET   /api/docs?q=                     목록·검색 (04 에 없다. 백엔드는 /api/tree + /api/search)
+POST  /api/docs                        생성
+GET   /api/docs/:id                    메타 (+ seedHtml, 아래 참조)
+PATCH /api/docs/:id                    제목·수정시각 투영
+GET   /api/docs/recent?limit=          (04 에 없다. 백엔드는 /api/me/home)
+GET   /api/docs/:id/comments
+POST  /api/docs/:id/comments
+GET   /api/docs/:id/versions
+POST  /api/docs/:id/versions        { snapshot, label? }
 ```
 
 ## 문서 본문은 서버에 없다
@@ -202,17 +202,20 @@ MSW는 브라우저 안에서만 도는 목이라, A가 보낸 메시지를 B의
 채팅은 공유 상태를 들고 있는 프로세스가 있어야 성립하므로 **개발 서버가 맡는다**
 (`scripts/chat.js`).
 
-URL은 다른 API와 같은 `/api/chat/*` 을 쓴다. MSW는 이 경로만 통과시키고
-(`handlers.ts`의 `passthrough()`), vite가 개발 서버로 넘긴다. 백엔드가 같은 경로로
-응답하면 MSW를 끄는 것만으로 전환된다.
+URL은 백엔드와 같은 `/api/channels*` · `/api/ws` 를 쓴다. MSW는 이 경로만 통과시키고
+(`handlers.ts`의 `passthrough()`), vite가 개발 서버로 넘긴다(`/api` 를 `/chat` 으로 바꿔서).
+백엔드에 붙일 때는 MSW를 끄는 것만으로 전환된다.
 
 ```
-GET   /api/chat/channels                  사용자별 목록 (안읽음·마지막 메시지)
-GET   /api/chat/channels/:id/messages     최근 메시지
-POST  /api/chat/channels/:id/messages     전송 → 구독자에게 WS 브로드캐스트
-POST  /api/chat/channels/:id/read         읽음 처리
-WS    /api/chat/ws                        message · typing · read 이벤트
+GET   /api/channels                       사용자별 목록 (안읽음·마지막 메시지)
+GET   /api/channels/:id/messages          최근 메시지
+POST  /api/channels/:id/messages          전송 → 구독자에게 WS 브로드캐스트
+POST  /api/channels/:id/read              읽음 처리 (04 에 없다. 백엔드는 WS 의 read op)
+WS    /api/ws                             message · typing · read 이벤트
 ```
+
+> 경로만 맞췄다. 이벤트 봉투(`type` → `ev`)와 필드 표기(camelCase → snake_case, `author` 객체),
+> 그리고 전송·읽음을 REST 대신 소켓 op 로 옮기는 일은 아직 남아 있다(backend/README §4.1 (g)).
 
 전송은 REST로 하고 **화면 반영은 전부 WebSocket이 한다**. 내가 보낸 메시지도
 서버를 한 바퀴 돌아 같은 경로로 돌아온다. 낙관적 추가를 하지 않으므로 다른 탭·다른

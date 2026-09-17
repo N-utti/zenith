@@ -10,24 +10,28 @@ export const docKeys = {
   recent: ['documents', 'recent', { limit: 5 }] as const,
 }
 
+/**
+ * 목록·검색은 04 에 `GET /docs` 가 없다. 백엔드는 사이드바 트리를 `GET /tree`,
+ * 본문 검색을 `GET /search` 로 나눠 준다. 둘을 붙일 때 이 훅이 그쪽으로 옮겨 간다.
+ */
 export function useDocs(query: string) {
   return useQuery({
     queryKey: docKeys.list(query),
-    queryFn: () => api<{ items: DocSummary[] }>(`/documents?q=${encodeURIComponent(query)}`),
+    queryFn: () => api<{ items: DocSummary[] }>(`/docs?q=${encodeURIComponent(query)}`),
   })
 }
 
 export function useDoc(docId: string) {
   return useQuery({
     queryKey: docKeys.detail(docId),
-    queryFn: () => api<DocDetail>(`/documents/${docId}`),
+    queryFn: () => api<DocDetail>(`/docs/${docId}`),
   })
 }
 
 export function useCreateDoc() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: () => api<DocSummary>('/documents', { method: 'POST' }),
+    mutationFn: () => api<DocSummary>('/docs', { method: 'POST' }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['documents'] })
     },
@@ -42,7 +46,7 @@ export function useTouchDoc(docId: string) {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (title?: string) =>
-      api<DocSummary>(`/documents/${docId}`, {
+      api<DocSummary>(`/docs/${docId}`, {
         method: 'PATCH',
         body: JSON.stringify({ title }),
       }),
@@ -57,7 +61,7 @@ export function useTouchDoc(docId: string) {
 export function useVersions(docId: string) {
   return useQuery({
     queryKey: docKeys.versions(docId),
-    queryFn: () => api<{ items: DocVersion[] }>(`/documents/${docId}/versions`),
+    queryFn: () => api<{ items: DocVersion[] }>(`/docs/${docId}/versions`),
   })
 }
 
@@ -65,7 +69,7 @@ export function useSaveVersion(docId: string) {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (input: { snapshot: string; label?: string }) =>
-      api<DocVersion>(`/documents/${docId}/versions`, {
+      api<DocVersion>(`/docs/${docId}/versions`, {
         method: 'POST',
         body: JSON.stringify(input),
       }),
@@ -88,7 +92,7 @@ export function uploadFile(file: File) {
 export function useComments(docId: string) {
   return useQuery({
     queryKey: docKeys.comments(docId),
-    queryFn: () => api<{ items: DocComment[] }>(`/documents/${docId}/comments`),
+    queryFn: () => api<{ items: DocComment[] }>(`/docs/${docId}/comments`),
   })
 }
 
@@ -96,7 +100,7 @@ export function useAddComment(docId: string) {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (body: string) =>
-      api<DocComment>(`/documents/${docId}/comments`, {
+      api<DocComment>(`/docs/${docId}/comments`, {
         method: 'POST',
         body: JSON.stringify({ body }),
       }),

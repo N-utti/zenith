@@ -98,7 +98,8 @@ export const handlers = [
   // 채팅은 MSW가 흉내 내지 않는다. 브라우저마다 따로 도는 목으로는 메시지가
   // 공유되지 않기 때문이다. vite가 개발 서버(`npm run server`)로 넘기도록
   // 그대로 통과시킨다.
-  http.all('/api/chat/*', () => passthrough()),
+  http.all('/api/channels', () => passthrough()),
+  http.all('/api/channels/*', () => passthrough()),
 
   // ── 인증 ──────────────────────────────────────────────────
   http.post('/api/auth/login', async ({ request }) => {
@@ -808,7 +809,7 @@ data: ${JSON.stringify(data)}
   }),
 
   http.get(
-    '/api/documents/recent',
+    '/api/docs/recent',
     authed((_user, request) => {
       const limit = Number(new URL(request.url).searchParams.get('limit') ?? 5)
       return HttpResponse.json({ items: listDocs('').slice(0, limit) })
@@ -817,7 +818,7 @@ data: ${JSON.stringify(data)}
 
   // ── 문서 ──────────────────────────────────────────────────
   http.get(
-    '/api/documents',
+    '/api/docs',
     authed((_user, request) => {
       const query = new URL(request.url).searchParams.get('q') ?? ''
       return HttpResponse.json({ items: listDocs(query) })
@@ -825,11 +826,11 @@ data: ${JSON.stringify(data)}
   ),
 
   http.post(
-    '/api/documents',
+    '/api/docs',
     authed((user) => HttpResponse.json(createDoc(user), { status: 201 })),
   ),
 
-  http.get('/api/documents/:docId', ({ params }) => {
+  http.get('/api/docs/:docId', ({ params }) => {
     if (!authenticate()) return unauthorized()
     const doc = findDoc(String(params.docId))
     if (!doc) return notFound()
@@ -837,7 +838,7 @@ data: ${JSON.stringify(data)}
     return HttpResponse.json({ ...doc, seedHtml: DOC_SEEDS[doc.id] })
   }),
 
-  http.patch('/api/documents/:docId', async ({ request, params }) => {
+  http.patch('/api/docs/:docId', async ({ request, params }) => {
     const user = authenticate()
     if (!user) return unauthorized()
     const { title } = (await request.json()) as { title?: string }
@@ -845,12 +846,12 @@ data: ${JSON.stringify(data)}
     return doc ? HttpResponse.json(doc) : notFound()
   }),
 
-  http.get('/api/documents/:docId/versions', ({ params }) => {
+  http.get('/api/docs/:docId/versions', ({ params }) => {
     if (!authenticate()) return unauthorized()
     return HttpResponse.json({ items: listVersions(String(params.docId)) })
   }),
 
-  http.post('/api/documents/:docId/versions', async ({ request, params }) => {
+  http.post('/api/docs/:docId/versions', async ({ request, params }) => {
     const user = authenticate()
     if (!user) return unauthorized()
     const { snapshot, label } = (await request.json()) as { snapshot: string; label?: string }
@@ -894,12 +895,12 @@ data: ${JSON.stringify(data)}
     })
   }),
 
-  http.get('/api/documents/:docId/comments', ({ params }) => {
+  http.get('/api/docs/:docId/comments', ({ params }) => {
     if (!authenticate()) return unauthorized()
     return HttpResponse.json({ items: listComments(String(params.docId)) })
   }),
 
-  http.post('/api/documents/:docId/comments', async ({ request, params }) => {
+  http.post('/api/docs/:docId/comments', async ({ request, params }) => {
     const user = authenticate()
     if (!user) return unauthorized()
     const { body } = (await request.json()) as { body: string }
