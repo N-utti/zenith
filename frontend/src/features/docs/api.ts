@@ -7,7 +7,8 @@ export const docKeys = {
   detail: (docId: string) => ['documents', docId] as const,
   comments: (docId: string) => ['documents', docId, 'comments'] as const,
   versions: (docId: string) => ['documents', docId, 'versions'] as const,
-  recent: ['documents', 'recent', { limit: 5 }] as const,
+  /** 홈이 limit 을 붙여 쓴다. 무효화가 limit 과 무관하게 걸리도록 여기까지만 키로 둔다. */
+  recent: ['documents', 'recent'] as const,
 }
 
 /**

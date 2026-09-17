@@ -98,8 +98,13 @@ export const handlers = [
   // 채팅은 MSW가 흉내 내지 않는다. 브라우저마다 따로 도는 목으로는 메시지가
   // 공유되지 않기 때문이다. vite가 개발 서버(`npm run server`)로 넘기도록
   // 그대로 통과시킨다.
-  http.all('/api/channels', () => passthrough()),
-  http.all('/api/channels/*', () => passthrough()),
+  //
+  // 개발 릴레이(`scripts/chat.js`)가 실제로 여는 네 개만 넘긴다. `/api/channels/*` 로
+  // 뭉뚱그리면 아직 안 만든 채널 생성·첨부까지 삼켜 릴레이의 404로 조용히 떨어지고,
+  // 통과는 "처리됨"이라 onUnhandledRequest 경고도 안 뜬다.
+  http.get('/api/channels', () => passthrough()),
+  http.all('/api/channels/:channelId/messages', () => passthrough()),
+  http.post('/api/channels/:channelId/read', () => passthrough()),
 
   // ── 인증 ──────────────────────────────────────────────────
   http.post('/api/auth/login', async ({ request }) => {

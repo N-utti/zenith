@@ -39,7 +39,7 @@ export default defineConfig(({ mode }) => {
           ? {
               target: 'ws://localhost:1234',
               ws: true,
-              rewrite: (path) => path.replace(/^\/api\/ws/, '/chat/ws'),
+              rewrite: (path) => path.replace(/^\/api/, '/chat'),
             }
           : { target: apiTarget, ws: true },
         // 문서 공동편집(04 §4.2). 앱은 항상 /api/yjs/{docId} 로 붙는다. 문서 id 는 REST 가 준 것이라

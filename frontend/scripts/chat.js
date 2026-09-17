@@ -10,7 +10,7 @@
  *
  *   GET  /channels                    사용자별 목록 (안읽음·마지막 메시지 포함)
  *   GET  /channels/:id/messages       최근 메시지
- *   POST /channels/:id/messages       전송 → 구독자에게 WS 브로드캐스트
+ *   POST /channels/:id/messages       전송 (04 에 없다. 백엔드는 WS 의 msg op)
  *   POST /channels/:id/read           읽음 처리 (04 에 없다. 백엔드는 WS 의 read 이벤트로 받는다)
  *   WS   /ws                          message · typing · read 이벤트
  *

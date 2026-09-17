@@ -127,6 +127,9 @@ v0.2 전제로 만들어진 구현을 전부 걷어냈다. `features/attendance/
 목 엔드포인트. 백엔드는 같은 스키마로 응답하면 된다. 근태 API는 설계서 §9로 재정의됐고
 아직 목이 없다.
 
+> 경로만 맞췄다. 필드 표기(백엔드는 snake_case 에 `author`·`updated_by` 객체)와 목록·최근
+> 문서의 대체 경로는 아직 다르다. `VITE_DISABLE_MSW=true` 로 돌리면 요청은 닿아도 화면이 빈다.
+
 ```
 GET   /api/announcements?limit=        권한 밖 등급 글은 목록에서 제외
 
@@ -202,14 +205,19 @@ MSW는 브라우저 안에서만 도는 목이라, A가 보낸 메시지를 B의
 채팅은 공유 상태를 들고 있는 프로세스가 있어야 성립하므로 **개발 서버가 맡는다**
 (`scripts/chat.js`).
 
-URL은 백엔드와 같은 `/api/channels*` · `/api/ws` 를 쓴다. MSW는 이 경로만 통과시키고
+URL은 백엔드와 같은 `/api/channels*` · `/api/ws` 를 쓴다. MSW는 아래 네 개만 통과시키고
 (`handlers.ts`의 `passthrough()`), vite가 개발 서버로 넘긴다(`/api` 를 `/chat` 으로 바꿔서).
 백엔드에 붙일 때는 MSW를 끄는 것만으로 전환된다.
+
+통과시키는 경로는 **개발 릴레이가 실제로 여는 것만** 적는다. `/api/channels` 는 프론트가
+지어낸 이름이 아니라 백엔드의 네임스페이스라, 아직 안 만든 채널 생성(`POST /api/channels`)이나
+첨부(`/api/channels/:id/attachments`)까지 뭉뚱그려 통과시키면 MSW 핸들러가 아예 안 불리고
+릴레이의 404로 조용히 떨어진다. 그 둘을 붙일 때는 MSW 핸들러를 새로 만들면 된다.
 
 ```
 GET   /api/channels                       사용자별 목록 (안읽음·마지막 메시지)
 GET   /api/channels/:id/messages          최근 메시지
-POST  /api/channels/:id/messages          전송 → 구독자에게 WS 브로드캐스트
+POST  /api/channels/:id/messages          전송 (04 에 없다. 백엔드는 WS 의 msg op)
 POST  /api/channels/:id/read              읽음 처리 (04 에 없다. 백엔드는 WS 의 read op)
 WS    /api/ws                             message · typing · read 이벤트
 ```
