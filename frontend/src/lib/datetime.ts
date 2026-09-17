@@ -82,10 +82,14 @@ export function formatISOYearDate(iso: string): string {
  * 오늘부터 `iso` 시각까지 남은 날. 지났으면 0 이다.
  *
  * 휴지통의 "n일 뒤 영구 삭제" 처럼 날짜 차이를 세는 자리에 쓴다. 시각이 아니라 **날짜**로
- * 세기 때문에, 자정을 넘기면 시간 차이가 24시간이 안 돼도 하루가 준다.
+ * 세기 때문에, 자정을 넘기면 시간 차이가 24시간이 안 돼도 하루가 준다(`formatRelative` 와
+ * 같은 셈법).
+ *
+ * 시각까지 든 ISO 문자열만 받는다. 날짜만 있는 `2026-10-17` 은 UTC 로 읽혀 하루 밀린다
+ * (`formatISODate` 주석).
  */
 export function daysUntil(iso: string): number {
-  const days = Math.ceil((startOfDay(new Date(iso)) - startOfDay(new Date())) / 86_400_000)
+  const days = Math.round((startOfDay(new Date(iso)) - startOfDay(new Date())) / 86_400_000)
   return days > 0 ? days : 0
 }
 

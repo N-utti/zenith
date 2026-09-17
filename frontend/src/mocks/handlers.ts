@@ -1289,7 +1289,7 @@ data: ${JSON.stringify(data)}
       const raw = new URL(request.url).searchParams.get('limit')
       const limit = raw === null ? 200 : Number(raw)
       if (!Number.isInteger(limit) || limit < 1 || limit > 500) {
-        return validationError('limit 는 1 이상 500 이하입니다.')
+        return validationError('limit 은 1 이상 500 이하의 정수여야 합니다.')
       }
       return HttpResponse.json({ items: listTrash(limit) })
     }),
