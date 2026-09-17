@@ -10,7 +10,7 @@ import { Table, TableEmpty, TBody, TD, TH, THead, TR } from '@/components/ui/Tab
 import { useToast } from '@/components/ui/ToastContext'
 import { ApiError } from '@/lib/api'
 import { currentMonth, formatISODate } from '@/lib/datetime'
-import { useAddHoliday, useHolidays, useRemoveHoliday } from './api'
+import { useAddHoliday, useHolidays, useRebuildCalendar, useRemoveHoliday } from './api'
 
 /**
  * 회사 휴일(임원, FR-ATT-11 · 10 §6). 넣고 빼면 근태 달력이 바로 바뀐다. 마감된 달의 날짜는 서버가 409 로 막는다(§6.2).
@@ -21,6 +21,7 @@ export function HolidaySection() {
   const [year, setYear] = useState(() => Number(currentMonth().slice(0, 4)))
   const holidays = useHolidays(year)
   const remove = useRemoveHoliday()
+  const rebuild = useRebuildCalendar()
   const toast = useToast()
   // 법정 공휴일은 서버가 관리한다. 여기서는 회사 휴일만.
   const items = (holidays.data?.items ?? []).filter((h) => h.kind === 'company')
@@ -35,16 +36,46 @@ export function HolidaySection() {
     })
   }
 
+  /**
+   * 근무 달력 다시 만들기. 휴일을 넣고 빼면 서버가 알아서 다시 만들므로 평소에는 쓸 일이 없다.
+   * 새해 달력을 미리 깔거나 서버 밖에서 휴일이 바뀌었을 때를 위한 손잡이다.
+   */
+  const onRebuild = () => {
+    // 전 직원의 근무 달력을 새로 까는 일이라 한 번 묻는다.
+    if (!confirm(`${year}년 근무 달력을 다시 만들까요? 그 해 모든 직원의 달력이 새로 깔립니다.`)) {
+      return
+    }
+    rebuild.mutate(year, {
+      onSuccess: (result) =>
+        toast.success(
+          `${result.year}년 근무 달력을 다시 만들었습니다. 근무일 ${result.workdays}일.`,
+        ),
+      onError: (err) =>
+        toast.error(err instanceof ApiError ? err.message : '달력을 다시 만들지 못했습니다.'),
+    })
+  }
+
   return (
     <div className="space-y-4">
       <YearHeader
         year={year}
         onYearChange={setYear}
         actions={
-          <p className="text-subtle text-xs">
-            창립기념일·종무식 같은 회사 휴일. 법정 공휴일은 여기서 다루지 않습니다. 마감된 달의
-            날짜는 바꿀 수 없습니다.
-          </p>
+          <div className="flex items-center gap-3">
+            <p className="text-subtle text-xs">
+              창립기념일·종무식 같은 회사 휴일. 법정 공휴일은 여기서 다루지 않습니다. 마감된 달의
+              날짜는 바꿀 수 없습니다.
+            </p>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={rebuild.isPending}
+              onClick={onRebuild}
+              className="shrink-0"
+            >
+              {rebuild.isPending ? <Spinner /> : `${year}년 달력 다시 만들기`}
+            </Button>
+          </div>
         }
       />
 

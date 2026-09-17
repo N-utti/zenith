@@ -305,6 +305,19 @@ function workdaysOf(month: string): string[] {
 }
 
 /**
+ * 한 해의 근무일 수. 달력 재생성이 "몇 일이 깔렸는지" 를 돌려주는 데 쓴다.
+ *
+ * 목에는 깔아 둘 달력이 없다. 근무일은 필요할 때마다 주말·휴일을 빼고 계산한다(`workdaysOf`).
+ * 그래서 재생성은 그 계산을 한 해 치 돌려 개수만 세는 것이 전부다. 실제 서버는 `att_days` 행을
+ * 다시 만든다(10 §6.2).
+ */
+export function workdaysInYear(year: number): number {
+  let count = 0
+  for (let m = 1; m <= 12; m++) count += workdaysOf(`${year}-${String(m).padStart(2, '0')}`).length
+  return count
+}
+
+/**
  * 10 §5.2 상태 판정. 위 규칙이 먼저 이긴다: 휴가 > 반차 > 예외근무 > 정상.
  * ponytail: 승인된 정정은 반영하지 않는다. 목에서는 아무도 승인하지 않으니 생길 일이 없다.
  */

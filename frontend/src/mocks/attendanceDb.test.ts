@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { toISODate } from '@/lib/datetime'
-import { attendanceMonth, attendanceRange } from './attendanceDb'
+import { attendanceMonth, attendanceRange, workdaysInYear } from './attendanceDb'
 import { MOCK_USERS } from './db'
 
 const user = MOCK_USERS.find((u) => u.id === 'u-2')!
@@ -67,5 +67,25 @@ describe('기간 집계', () => {
     const thisMonth = attendanceMonth(user, month).summary
     expect(ytd.leave_days).toBeGreaterThanOrEqual(thisMonth.leave_days)
     expect(ytd.overtime_minutes).toBeGreaterThanOrEqual(thisMonth.overtime_minutes)
+  })
+})
+
+describe('근무 달력 재생성', () => {
+  it('주말과 휴일을 뺀 근무일 수를 센다', () => {
+    const year = Number(month.slice(0, 4))
+    const byMonth = Array.from({ length: 12 }, (_, i) =>
+      attendanceMonth(user, `${year}-${String(i + 1).padStart(2, '0')}`),
+    ).reduce((sum, m) => sum + m.days.length, 0)
+
+    // 달력 재생성이 돌려주는 숫자가 달 조회의 근무일 행 수와 달라지면, 화면이 말하는 숫자와
+    // 실제로 깔린 달력이 갈린다.
+    expect(workdaysInYear(year)).toBe(byMonth)
+  })
+
+  it('한 해는 주말만 빼도 260일 언저리다', () => {
+    // 휴일을 아무리 넣어도 이 범위를 벗어나면 계산이 깨진 것이다.
+    const count = workdaysInYear(Number(month.slice(0, 4)))
+    expect(count).toBeGreaterThan(220)
+    expect(count).toBeLessThanOrEqual(262)
   })
 })
