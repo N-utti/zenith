@@ -1,10 +1,12 @@
 import { useEffect, useRef } from 'react'
+import { Paperclip } from 'lucide-react'
 import { Avatar } from '@/components/ui/Avatar'
 import { Spinner } from '@/components/ui/Spinner'
 import { hueOf } from '@/lib/avatar'
 import { formatDay, formatTime } from '@/lib/datetime'
+import { httpUrl } from '@/lib/serverOrigin'
 import { useMessages } from './api'
-import type { ChatMessage } from './types'
+import type { ChatAttachment, ChatMessage } from './types'
 
 /** 같은 사람이 5분 안에 이어서 보낸 메시지는 아바타·이름을 반복하지 않는다. */
 const GROUP_WINDOW_MS = 5 * 60_000
@@ -20,6 +22,56 @@ function grouped(message: ChatMessage, previous: ChatMessage | undefined) {
   return (
     new Date(message.created_at).getTime() - new Date(previous.created_at).getTime() <
     GROUP_WINDOW_MS
+  )
+}
+
+/** 이미지만 바로 보여 준다. 나머지는 이름·크기만 두고 누르면 내려받는다. */
+function isImage(name: string): boolean {
+  return /\.(png|jpe?g|gif|webp)$/i.test(name)
+}
+
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes}B`
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)}KB`
+  return `${(bytes / 1024 / 1024).toFixed(1)}MB`
+}
+
+/**
+ * 메시지에 붙은 파일.
+ *
+ * `url` 은 서버가 준 것을 그대로 쓴다. 내려받기는 쿠키로 인증되고 채널 멤버만 받을 수 있다.
+ * 이미지는 서버가 `inline` 으로 내려주는 형식(png·jpeg·gif·webp)만 미리 보여 준다.
+ * SVG·HTML 은 같은 오리진에서 스크립트가 돌 수 있어 서버도 내려받기로만 준다.
+ */
+function Attachments({ files }: { files: ChatAttachment[] | null }) {
+  if (!files || files.length === 0) return null
+
+  return (
+    <ul className="mt-1.5 flex flex-wrap gap-2">
+      {files.map((file) => (
+        <li key={file.url}>
+          {isImage(file.name) ? (
+            <a href={httpUrl(file.url)} target="_blank" rel="noreferrer">
+              <img
+                src={httpUrl(file.url)}
+                alt={file.name}
+                className="border-line max-h-60 max-w-full rounded-lg border object-contain"
+              />
+            </a>
+          ) : (
+            <a
+              href={httpUrl(file.url)}
+              download={file.name}
+              className="border-line bg-sunken text-muted hover:text-fg flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs transition-colors"
+            >
+              <Paperclip className="size-3.5 shrink-0" />
+              <span className="max-w-48 truncate">{file.name}</span>
+              <span className="text-subtle">{formatSize(file.size)}</span>
+            </a>
+          )}
+        </li>
+      ))}
+    </ul>
   )
 }
 
@@ -96,9 +148,12 @@ export function MessageList({ channelId }: { channelId: string }) {
                       </span>
                     </p>
                   )}
-                  <p className="text-muted text-sm break-words whitespace-pre-wrap">
-                    {message.body}
-                  </p>
+                  {message.body && (
+                    <p className="text-muted text-sm break-words whitespace-pre-wrap">
+                      {message.body}
+                    </p>
+                  )}
+                  <Attachments files={message.attachments} />
                 </div>
               </div>
             </div>

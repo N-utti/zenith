@@ -47,7 +47,7 @@ let nextChannelId = 1
 
 let nextId = 1
 /** 백엔드 `MessageOut` 과 같은 모양(04 §5). 소켓의 `msg` 이벤트도 같은 것을 싣는다. */
-function makeMessage(channelId, authorId, body, createdAt) {
+function makeMessage(channelId, authorId, body, createdAt, files) {
   const author = USERS[authorId]
   // 모르는 id 로 만들면 `author: undefined` 가 그대로 실려 화면이 메시지를 그리다 죽는다.
   if (!author) throw new Error(`모르는 사용자: ${authorId}`)
@@ -57,7 +57,7 @@ function makeMessage(channelId, authorId, body, createdAt) {
     author,
     body,
     doc_ref: null,
-    attachments: null,
+    attachments: files?.length ? files : null,
     created_at: createdAt ?? new Date().toISOString(),
   }
 }
@@ -89,6 +89,19 @@ const messages = new Map([
     [makeMessage('dm-u2-u5', 'u-5', '오늘 재택이라 펀드 보고서는 메일로 드릴게요.', minutesAgo(140))],
   ],
 ])
+
+/**
+ * 올라온 첨부. 실제 서버는 MinIO 에 넣는다. 릴레이는 메모리라 다시 띄우면 사라진다.
+ * 키는 백엔드와 같은 모양(`channels/{채널}/{파일}/{이름}`).
+ * @type {Map<string, {data: Buffer, contentType: string}>}
+ */
+const attachments = new Map()
+
+/** FR-CHT-04 · 백엔드 `MAX_ATTACHMENT_BYTES` 와 같다. */
+const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024
+
+/** 브라우저가 인라인으로 그려도 스크립트가 돌지 않는 형식만. SVG·HTML 은 같은 오리진에서 XSS 다. */
+const INLINE_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp'])
 
 /** userId → channelId → 마지막으로 읽은 시각 */
 const reads = new Map()
@@ -223,6 +236,86 @@ export function sessionUserId(req) {
   return cookie ? decodeURIComponent(cookie.slice('zenith.mock.session='.length)) : null
 }
 
+/** 경로로 쓸 수 없는 글자를 뺀다. 백엔드 `storage.safe_name` 이 하는 일이다. */
+function safeName(raw) {
+  // 정규식 대신 글자로 건다. 경로 구분자와 따옴표류가 섞여 있어 정규식으로 쓰면 읽기 어렵다.
+  const base = String(raw || 'file').split('/').pop().split(String.fromCharCode(92)).pop() || 'file'
+  const banned = '"*/:<>?|' + String.fromCharCode(92)
+  const cleaned = [...base]
+    .filter((ch) => ch >= ' ' && !banned.includes(ch))
+    .join('')
+    .trim()
+  return (cleaned || 'file').slice(0, 200)
+}
+
+/**
+ * multipart 본문에서 `file` 파트 하나를 꺼낸다. 라이브러리를 더하지 않으려고 직접 자른다.
+ * 첨부는 파트 하나뿐이라 경계 문자열로 나누면 충분하다.
+ */
+function readMultipartFile(req) {
+  /** 파트의 헤더와 본문 사이. 빈 줄 하나다. */
+  const CRLF2 = '\r\n\r\n'
+  const type = req.headers['content-type'] ?? ''
+  const boundary = /boundary=(?:"([^"]+)"|([^;]+))/.exec(type)?.slice(1).find(Boolean)
+  if (!boundary) return Promise.resolve(null)
+
+  return new Promise((resolve, reject) => {
+    /** @type {Buffer[]} */
+    const chunks = []
+    let size = 0
+    req.on('data', (chunk) => {
+      size += chunk.length
+      // 상한의 두 배까지만 받는다. 그보다 크면 어차피 422 라 끝까지 읽을 이유가 없다.
+      if (size > MAX_ATTACHMENT_BYTES * 2) return reject(new Error('body too large'))
+      chunks.push(chunk)
+    })
+    req.on('error', reject)
+    req.on('end', () => {
+      const raw = Buffer.concat(chunks)
+      const sep = Buffer.from(`--${boundary}`)
+      let from = raw.indexOf(sep)
+      while (from !== -1) {
+        const start = from + sep.length
+        const next = raw.indexOf(sep, start)
+        if (next === -1) break
+        const part = raw.subarray(start, next)
+        const headEnd = part.indexOf(CRLF2)
+        if (headEnd !== -1) {
+          const head = part.subarray(0, headEnd).toString('utf8')
+          if (/name="file"/.test(head)) {
+            const filename = /filename="([^"]*)"/.exec(head)?.[1] ?? 'file'
+            const ct = /content-type:\s*([^\r\n]+)/i.exec(head)?.[1]?.trim().toLowerCase()
+            // 헤더 값을 그대로 반사하므로 토큰 모양만 받는다. 나머지는 octet-stream.
+            const contentType = ct && /^[\w.+-]+\/[\w.+-]+$/.test(ct) ? ct : 'application/octet-stream'
+            // 파트 끝의 CRLF 는 경계에 속한다.
+            const data = part.subarray(headEnd + 4, part.length - 2)
+            return resolve({ filename, contentType, data })
+          }
+        }
+        from = next
+      }
+      resolve(null)
+    })
+  })
+}
+
+/**
+ * 메시지에 실린 첨부가 **이 채널에 올라온 것**인지 확인한다. 백엔드 `parse_attachment_url` 과
+ * 같은 판정이다. 남의 채널 파일을 메시지에 끼울 수 없고, 이름도 업로드 때 정해진 것이어야 한다.
+ */
+function pickAttachments(raw, channelId) {
+  if (!Array.isArray(raw)) return []
+  return raw.slice(0, 10).flatMap((item) => {
+    if (!item || typeof item.url !== 'string') return []
+    const match = /^\/api\/channels\/([^/]+)\/attachments\/([^/]+)\/(.+)$/.exec(item.url)
+    if (!match || match[1] !== channelId) return []
+    const name = decodeURIComponent(match[3])
+    const stored = attachments.get(`${channelId}/${match[2]}/${name}`)
+    if (!stored) return []
+    return [{ url: item.url, name, size: stored.data.length }]
+  })
+}
+
 export async function handleChatRequest(req, res, url) {
   const path = url.pathname.replace(/^\/chat/, '')
   const viewerId = sessionUserId(req)
@@ -309,6 +402,70 @@ export async function handleChatRequest(req, res, url) {
     return json(res, 201, createdView(channel, viewerId))
   }
 
+  /**
+   * 첨부 업로드(multipart `file`). 백엔드 `upload_attachment` 와 같은 규칙이다.
+   * 10MB 초과·빈 파일은 422, 채널 멤버가 아니면 403. 돌려주는 `{url, name, size}` 를
+   * 메시지의 `attachments[]` 에 그대로 넣는다.
+   */
+  const uploadMatch = path.match(/^\/channels\/([^/]+)\/attachments$/)
+  if (uploadMatch && req.method === 'POST') {
+    if (!USERS[viewerId]) {
+      return json(res, 401, { detail: '알 수 없는 사용자입니다.', code: 'AUTH_REQUIRED' })
+    }
+    const channelId = uploadMatch[1]
+    const channel = CHANNELS.find((c) => c.id === channelId)
+    if (!channel || !channel.memberIds.includes(viewerId)) {
+      return json(res, 403, { detail: '이 채널의 멤버가 아닙니다.', code: 'FORBIDDEN' })
+    }
+
+    const part = await readMultipartFile(req)
+    if (!part) return json(res, 422, { detail: '파일이 없습니다.', code: 'VALIDATION' })
+    if (part.data.length === 0) {
+      return json(res, 422, { detail: '빈 파일입니다.', code: 'VALIDATION' })
+    }
+    if (part.data.length > MAX_ATTACHMENT_BYTES) {
+      return json(res, 422, { detail: '10MB 이하 파일만 올릴 수 있습니다.', code: 'VALIDATION' })
+    }
+
+    const fileId = `f-${nextId++}`
+    const name = safeName(part.filename)
+    attachments.set(`${channelId}/${fileId}/${name}`, {
+      data: part.data,
+      contentType: part.contentType,
+    })
+    return json(res, 201, {
+      url: `/api/channels/${channelId}/attachments/${fileId}/${encodeURIComponent(name)}`,
+      name,
+      size: part.data.length,
+    })
+  }
+
+  /** 첨부 내려받기. 채널 멤버만. 이미지는 inline, 나머지는 내려받기. */
+  const downloadMatch = path.match(/^\/channels\/([^/]+)\/attachments\/([^/]+)\/(.+)$/)
+  if (downloadMatch && req.method === 'GET') {
+    if (!USERS[viewerId]) {
+      return json(res, 401, { detail: '알 수 없는 사용자입니다.', code: 'AUTH_REQUIRED' })
+    }
+    const [, channelId, fileId, rawName] = downloadMatch
+    const channel = CHANNELS.find((c) => c.id === channelId)
+    if (!channel || !channel.memberIds.includes(viewerId)) {
+      return json(res, 403, { detail: '이 채널의 멤버가 아닙니다.', code: 'FORBIDDEN' })
+    }
+    const name = decodeURIComponent(rawName)
+    const found = attachments.get(`${channelId}/${fileId}/${name}`)
+    if (!found) return json(res, 404, { detail: '없는 첨부입니다.', code: 'NOT_FOUND' })
+
+    const inline = INLINE_TYPES.has(found.contentType)
+    res.writeHead(200, {
+      'Content-Type': found.contentType,
+      'Content-Length': found.data.length,
+      // 한글 파일명은 filename* 로(RFC 6266). 스크립트가 돌 수 있는 형식은 내려받기만.
+      'Content-Disposition': `${inline ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(name)}`,
+      'X-Content-Type-Options': 'nosniff',
+    })
+    return res.end(found.data)
+  }
+
   const messagesMatch = path.match(/^\/channels\/([^/]+)\/messages$/)
   if (messagesMatch) {
     const channelId = messagesMatch[1]
@@ -326,15 +483,22 @@ export async function handleChatRequest(req, res, url) {
     }
 
     if (req.method === 'POST') {
-      const { body } = await readBody(req)
+      const payload = await readBody(req)
+      const body = typeof payload?.body === 'string' ? payload.body : ''
       const userId = viewerId
-      if (!USERS[userId]) return json(res, 401, { detail: '알 수 없는 사용자입니다.' })
-      if (!channel.memberIds.includes(userId)) {
-        return json(res, 403, { detail: '이 채널의 멤버가 아닙니다.' })
+      if (!USERS[userId]) {
+        return json(res, 401, { detail: '알 수 없는 사용자입니다.', code: 'AUTH_REQUIRED' })
       }
-      if (!body?.trim()) return json(res, 400, { detail: '내용을 입력하세요.' })
+      if (!channel.memberIds.includes(userId)) {
+        return json(res, 403, { detail: '이 채널의 멤버가 아닙니다.', code: 'FORBIDDEN' })
+      }
+      // 첨부만 보내는 메시지도 있다. 둘 다 없을 때만 막는다.
+      const files = pickAttachments(payload?.attachments, channelId)
+      if (!body.trim() && files.length === 0) {
+        return json(res, 422, { detail: '내용을 입력하세요.', code: 'VALIDATION' })
+      }
 
-      const message = makeMessage(channelId, userId, body.trim())
+      const message = makeMessage(channelId, userId, body.trim(), undefined, files)
       messages.get(channelId)?.push(message) ?? messages.set(channelId, [message])
       // 보낸 사람 기준으로는 읽은 상태다.
       markRead(userId, channelId)

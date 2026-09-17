@@ -247,6 +247,9 @@ POST  /api/channels                       { name } 공개 채널(전원 멤버) 
                                           같은 두 사람의 DM 은 하나만. 같은 이름 채널은 409
 GET   /api/channels/:id/messages          최근 메시지
 POST  /api/channels/:id/messages          전송 (04 에 없다. 백엔드는 WS 의 msg op)
+                                          { body, attachments? } 첨부는 먼저 올리고 url 만 싣는다
+POST  /api/channels/:id/attachments       multipart `file` → { url, name, size }. 10MB·빈 파일 422
+GET   /api/channels/:id/attachments/:fid/:name  내려받기. 멤버만. 이미지는 inline
 POST  /api/channels/:id/read              읽음 처리 (04 에 없다. 백엔드는 WS 의 read op)
 WS    /api/ws                             message · typing · read 이벤트
 ```
