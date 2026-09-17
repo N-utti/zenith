@@ -7,9 +7,8 @@ import { ContinueWorkCard } from '@/features/home/ContinueWorkCard'
 import { MentionsCard } from '@/features/home/MentionsCard'
 import { TodayTasksCard } from '@/features/home/TodayTasksCard'
 import { UnreadChatCard } from '@/features/home/UnreadChatCard'
-import { useMentions } from '@/features/home/api'
+import { useHome } from '@/features/home/api'
 import { useCurrentUser } from '@/features/auth/AuthContext'
-import { useChannels } from '@/features/chat/api'
 import { useToast } from '@/components/ui/ToastContext'
 import { useCreateDoc, useDefaultFolder } from '@/features/docs/api'
 
@@ -35,11 +34,10 @@ export function HomePage() {
   const { folderId, folderName, isPending: treePending } = useDefaultFolder()
   const toast = useToast()
 
-  // 청사진의 "안 읽은 항목 N". 채널 미읽음과 멘션을 합친 수다.
-  const unreadMessages =
-    useChannels().data?.items.reduce((sum, channel) => sum + channel.unread, 0) ?? 0
-  const unreadMentions = useMentions().data?.items.length ?? 0
-  const unreadTotal = unreadMessages + unreadMentions
+  // 청사진의 "안 읽은 항목 N". 채널 미읽음과 멘션을 합친 수다. 둘 다 홈 한 벌에서 온다.
+  const home = useHome().data
+  const unreadMessages = home?.unread.reduce((sum, channel) => sum + channel.count, 0) ?? 0
+  const unreadTotal = unreadMessages + (home?.mentions.length ?? 0)
 
   return (
     <>
@@ -69,9 +67,7 @@ export function HomePage() {
               )
             }
             disabled={createDoc.isPending || treePending || !folderId}
-            title={
-              folderId || treePending ? undefined : '먼저 사이드바에서 폴더를 만들어 주세요.'
-            }
+            title={folderId || treePending ? undefined : '먼저 사이드바에서 폴더를 만들어 주세요.'}
           >
             <Plus className="size-4" />새 문서
           </Button>

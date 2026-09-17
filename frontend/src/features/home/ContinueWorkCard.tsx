@@ -28,13 +28,13 @@ export function ContinueWorkCard() {
       )}
 
       {data &&
-        (data.items.length === 0 ? (
+        (data.length === 0 ? (
           <Card>
             <CardEmpty>최근 편집한 문서가 없습니다.</CardEmpty>
           </Card>
         ) : (
           <div className="grid grid-cols-2 gap-3.5">
-            {data.items.map((doc) => (
+            {data.map((doc) => (
               <Link
                 key={doc.id}
                 to={`/docs/${doc.id}`}

@@ -45,11 +45,11 @@ export function TodayTasksCard() {
         {isError && <CardEmpty>할 일을 불러오지 못했습니다.</CardEmpty>}
 
         {data &&
-          (data.items.length === 0 ? (
+          (data.length === 0 ? (
             <CardEmpty>오늘 할 일이 없습니다.</CardEmpty>
           ) : (
             <ul className="p-1.5">
-              {data.items.map((task) => (
+              {data.map((task) => (
                 <li
                   key={task.id}
                   className="group/task hover:bg-surface-hover flex items-start gap-2 rounded-lg px-3 py-2"

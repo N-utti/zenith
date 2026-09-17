@@ -2,21 +2,24 @@ import { Link } from 'react-router'
 import { Avatar } from '@/components/ui/Avatar'
 import { Card, CardEmpty } from '@/components/ui/Card'
 import { SkeletonRows } from '@/components/ui/Skeleton'
+import { hueOf } from '@/lib/avatar'
 import { formatRelative } from '@/lib/datetime'
+import { notificationView } from '@/features/notifications/view'
 import { HomeSection } from './HomeSection'
 import { useMentions } from './api'
-import type { Mention } from './types'
 
-function sourceLink(source: Mention['source']): string {
-  return source.kind === 'doc' ? `/docs/${source.docId}` : `/chat/${source.channelId}`
-}
-
-function sourceLabel(source: Mention['source']): string {
-  return source.kind === 'doc' ? source.docTitle : `#${source.channelName}`
-}
-
+/**
+ * 나를 부른 곳. 홈 한 벌의 `mentions` 는 **알림 그대로**라(백엔드 `NotificationOut`)
+ * 알림함과 같은 변환을 쓴다. 같은 사건을 두 가지 모양으로 그리지 않는다.
+ */
 export function MentionsCard() {
   const { data, isPending, isError } = useMentions()
+
+  // 그릴 수 있는 것만 남긴다. 모르는 종류가 와도 빈 줄이 생기지 않는다.
+  const rows = (data ?? []).flatMap((notification) => {
+    const view = notificationView(notification)
+    return view?.to ? [{ notification, view }] : []
+  })
 
   return (
     <HomeSection title="나에게 온 멘션 & 댓글" to="/notifications">
@@ -25,33 +28,27 @@ export function MentionsCard() {
         {isError && <CardEmpty>알림을 불러오지 못했습니다.</CardEmpty>}
 
         {data &&
-          (data.items.length === 0 ? (
+          (rows.length === 0 ? (
             <CardEmpty>새 멘션이 없습니다.</CardEmpty>
           ) : (
             <ul>
-              {data.items.map((mention, index) => (
-                <li key={mention.id}>
+              {rows.map(({ notification, view }, index) => (
+                <li key={notification.id}>
                   <Link
-                    to={sourceLink(mention.source)}
+                    to={view.to ?? '/notifications'}
                     className={
                       'hover:bg-surface-hover flex gap-3 px-4 py-3.5 transition-colors' +
                       (index > 0 ? ' border-line border-t' : '')
                     }
                   >
-                    <Avatar name={mention.actorName} hue={mention.actorHue} size="sm" />
+                    <Avatar name={view.actorName} hue={hueOf(view.actorId)} size="sm" />
                     <div className="min-w-0 flex-1">
-                      <p className="text-fg text-[13px] leading-relaxed">
-                        <span className="font-semibold">{mention.actorName}</span>님이{' '}
-                        {mention.mentionsMe && (
-                          <span className="bg-accent-soft text-accent rounded px-1 py-0.5 text-[12px] font-medium">
-                            @나
-                          </span>
-                        )}{' '}
-                        {mention.body}
-                      </p>
+                      <p className="text-fg text-[13px] leading-relaxed">{view.summary}</p>
+                      {view.detail && (
+                        <p className="text-muted mt-0.5 truncate text-[12px]">{view.detail}</p>
+                      )}
                       <p className="text-subtle mt-1 truncate text-[11px]">
-                        {sourceLabel(mention.source)} · {mention.source.via} ·{' '}
-                        {formatRelative(mention.createdAt)}
+                        {formatRelative(notification.created_at)}
                       </p>
                     </div>
                   </Link>

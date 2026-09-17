@@ -1,39 +1,53 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
-import { docKeys } from '@/features/docs/api'
 import { homeKeys } from './keys'
-import type { DocSummary } from '@/features/docs/types'
-import type { BoardPost } from '@/features/board/types'
-import type { CalendarEvent, CalendarEventInput, Mention, TodayTask } from './types'
+import type { CalendarEvent, CalendarEventInput, HomeData, TodayTask } from './types'
+
+/**
+ * 홈 한 벌. 카드 다섯 개가 이 요청 하나를 나눠 쓴다.
+ *
+ * 전에는 카드마다 다른 경로로 받았는데(`/announcements`·`/mentions`·`/docs/recent`·
+ * `/tasks/today`) 넷 다 04 에 없는 프론트 전용 경로였다. 서버는 처음부터 한 벌로 준다.
+ */
+export function useHome() {
+  return useQuery({
+    queryKey: homeKeys.home,
+    queryFn: () => api<HomeData>('/me/home'),
+  })
+}
+
+const todosKey = homeKeys.home
+
+/** 홈 한 벌에서 카드가 쓸 조각만 꺼낸다. 로딩·실패 상태는 그대로 물려받는다. */
+function useHomeSlice<T>(pick: (data: HomeData) => T) {
+  const home = useHome()
+  return { ...home, data: home.data && pick(home.data) }
+}
 
 export function useAnnouncements() {
-  return useQuery({
-    queryKey: [...homeKeys.announcements, { limit: 4 }],
-    queryFn: () => api<{ items: BoardPost[] }>('/announcements?limit=4'),
-  })
+  return useHomeSlice((data) => data.posts)
 }
 
 export function useRecentDocs() {
-  return useQuery({
-    queryKey: [...docKeys.recent, { limit: 4 }],
-    queryFn: () => api<{ items: DocSummary[] }>('/docs/recent?limit=4'),
-  })
+  return useHomeSlice((data) => data.recent_docs)
 }
 
 export function useMentions() {
-  return useQuery({
-    queryKey: [...homeKeys.mentions, { limit: 3 }],
-    queryFn: () => api<{ items: Mention[] }>('/mentions?limit=3'),
-  })
+  return useHomeSlice((data) => data.mentions)
 }
 
-const todosKey = homeKeys.todos
+export function useUnreadChannels() {
+  return useHomeSlice((data) => data.unread)
+}
 
+/**
+ * 할 일 목록. 홈에서는 한 벌(`/me/home`)에 이미 실려 오므로 그걸 쓴다.
+ *
+ * `GET /me/todos` 는 홈 밖에서 할 일만 볼 때를 위해 서버가 따로 두고 있다. 홈에서 또 부르면
+ * 같은 것을 두 번 받는다.
+ */
 export function useTodayTasks() {
-  return useQuery({
-    queryKey: todosKey,
-    queryFn: () => api<{ items: TodayTask[] }>('/me/todos'),
-  })
+  return useHomeSlice((data) => data.todos)
 }
 
 /*

@@ -23,11 +23,11 @@ export function AnnouncementsCard() {
         {isError && <CardEmpty>공지를 불러오지 못했습니다.</CardEmpty>}
 
         {data &&
-          (data.items.length === 0 ? (
+          (data.length === 0 ? (
             <CardEmpty>새 공지가 없습니다.</CardEmpty>
           ) : (
             <ul>
-              {data.items.map((item, index) => {
+              {data.map((item, index) => {
                 const divider = index > 0 ? 'border-line border-t' : ''
 
                 const inner = (

@@ -130,11 +130,11 @@ v0.2 전제로 만들어진 구현을 전부 걷어냈다. `features/attendance/
 >
 > - **댓글**: 프론트 `authorId`·`authorName`·`authorHue`·`createdAt` ↔ 백엔드 `author:{id,name}`·`created_at`·`block_id`
 > - **문서 상세**: `seedHtml` 은 목 전용이다. 백엔드는 그 자리에 `ydoc`(서버 보관 Yjs 상태)을 준다
-> - **홈 카드**: `/api/announcements`·`/api/mentions`·`/api/docs/recent` 는 04 에 없다. 백엔드는 `GET /api/me/home` 하나로 준다(할 일은 옮겼다)
 
 ```
-GET   /api/announcements?limit=        권한 밖 등급 글은 목록에서 제외 (04 에 없다. 백엔드는 /api/me/home)
-GET   /api/mentions?limit=             알림에서 파생 (04 에 없다. 백엔드는 /api/me/home 의 mentions)
+GET   /api/me/home                     대시보드 1콜 { recent_docs, mentions, unread, posts, todos }
+                                       공지는 게시판에서, 멘션은 알림에서, 할 일은 할 일 저장소에서 온다
+                                       안 읽은 대화만 개발 릴레이에 물어본다(목은 채팅 상태를 모른다)
 
 GET   /api/me/todos                    오늘 할 일. 만든 순(완료 여부는 정렬에 안 들어간다)
 POST  /api/me/todos                    { text } 추가
@@ -158,7 +158,6 @@ DELETE /api/docs/:id                   휴지통으로(30일). ?hard=1 은 임�
 POST  /api/docs/:id/untrash            휴지통에서 되돌리기
 GET   /api/docs/:id                    메타 (+ seedHtml, 아래 참조)
 PATCH /api/docs/:id                    제목·수정시각 투영
-GET   /api/docs/recent?limit=          (04 에 없다. 백엔드는 /api/me/home)
 GET   /api/docs/:id/comments
 POST  /api/docs/:id/comments
 GET   /api/docs/:id/versions        목록에 스냅샷은 없다. 내용은 /restore 로 한 건씩
