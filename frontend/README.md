@@ -130,7 +130,11 @@ v0.2 전제로 만들어진 구현을 전부 걷어냈다. `features/attendance/
 > 문서의 대체 경로는 아직 다르다. `VITE_DISABLE_MSW=true` 로 돌리면 요청은 닿아도 화면이 빈다.
 
 ```
-GET   /api/announcements?limit=        권한 밖 등급 글은 목록에서 제외
+GET   /api/announcements?limit=        권한 밖 등급 글은 목록에서 제외 (04 에 없다. 백엔드는 /api/me/home)
+GET   /api/mentions?limit=             알림에서 파생 (04 에 없다. 백엔드는 /api/me/home 의 mentions)
+
+GET   /api/me/notifications?unread=1   알림함. 권한 밖 글 알림은 제목을 가려서 내려간다
+POST  /api/me/notifications/read       { ids[] } 읽음 처리, 204
 
 GET   /api/docs?q=                     목록·검색 (04 에 없다. 백엔드는 /api/tree + /api/search)
 POST  /api/docs                        생성
