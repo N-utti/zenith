@@ -19,10 +19,12 @@ export interface Mention {
   createdAt: string
 }
 
+/** 오늘 할 일. 백엔드 `routers/me.py` 의 `TodoOut` 과 같다. */
 export interface TodayTask {
   id: string
-  title: string
+  text: string
   done: boolean
+  created_at: string
 }
 
 /**

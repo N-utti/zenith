@@ -6,4 +6,5 @@ export const homeKeys = {
   announcements: ['announcements'] as const,
   mentions: ['mentions'] as const,
   events: ['events'] as const,
+  todos: ['me', 'todos'] as const,
 }

@@ -16,7 +16,7 @@ import {
   toDetail,
   updatePost,
 } from './boardDb'
-import { TODAY_TASKS } from './dashboardDb'
+import { addTask, findTask, listTasks, removeTask } from './dashboardDb'
 import {
   listMentions,
   listNotifications,
@@ -413,9 +413,19 @@ export const handlers = [
   }),
 
   http.get(
-    '/api/tasks/today',
-    authed(() => HttpResponse.json({ items: TODAY_TASKS })),
+    '/api/me/todos',
+    authed(() => HttpResponse.json({ items: listTasks() })),
   ),
+
+  http.post('/api/me/todos', async ({ request }) => {
+    if (!authenticate()) return unauthorized()
+    const body = await readJson<{ text?: unknown }>(request)
+    if (!body) return validationError('본문이 JSON 이 아닙니다.')
+    if (typeof body.text !== 'string' || !body.text.trim() || body.text.trim().length > 200) {
+      return validationError('할 일은 1자 이상 200자 이하여야 합니다.')
+    }
+    return HttpResponse.json(addTask(body.text.trim()), { status: 201 })
+  }),
 
   // ── 전자결재 (13 §9) ──────────────────────────────────────
   http.get(
@@ -976,13 +986,30 @@ data: ${JSON.stringify(data)}
     })
   }),
 
-  http.patch('/api/tasks/:taskId', async ({ request, params }) => {
+  http.patch('/api/me/todos/:taskId', async ({ request, params }) => {
     if (!authenticate()) return unauthorized()
-    const task = TODAY_TASKS.find((item) => item.id === String(params.taskId))
+    // 남의 것도 404 다(TC-AUTH-04). 목은 사용자를 나누지 않아 없는 것만 404 가 된다.
+    const task = findTask(String(params.taskId))
     if (!task) return notFound()
-    const body = (await request.json()) as { done?: boolean }
-    if (body.done !== undefined) task.done = body.done
+
+    const body = await readJson<{ text?: unknown; done?: unknown }>(request)
+    if (!body) return validationError('본문이 JSON 이 아닙니다.')
+    for (const key of ['text', 'done'] as const) {
+      if (body[key] === null) return validationError(`${key} 는 null 일 수 없습니다.`)
+    }
+    if (body.text !== undefined) {
+      if (typeof body.text !== 'string' || !body.text.trim() || body.text.trim().length > 200) {
+        return validationError('할 일은 1자 이상 200자 이하여야 합니다.')
+      }
+      task.text = body.text.trim()
+    }
+    if (typeof body.done === 'boolean') task.done = body.done
     return HttpResponse.json(task)
+  }),
+
+  http.delete('/api/me/todos/:taskId', ({ params }) => {
+    if (!authenticate()) return unauthorized()
+    return removeTask(String(params.taskId)) ? new HttpResponse(null, { status: 204 }) : notFound()
   }),
 
   http.get(

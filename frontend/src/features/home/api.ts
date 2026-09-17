@@ -27,12 +27,12 @@ export function useMentions() {
   })
 }
 
-const todayTasksKey = ['tasks', 'today'] as const
+const todosKey = homeKeys.todos
 
 export function useTodayTasks() {
   return useQuery({
-    queryKey: todayTasksKey,
-    queryFn: () => api<{ items: TodayTask[] }>('/tasks/today'),
+    queryKey: todosKey,
+    queryFn: () => api<{ items: TodayTask[] }>('/me/todos'),
   })
 }
 
@@ -40,21 +40,55 @@ export function useToggleTask() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ id, done }: { id: string; done: boolean }) =>
-      api<TodayTask>(`/tasks/${id}`, { method: 'PATCH', body: JSON.stringify({ done }) }),
+      api<TodayTask>(`/me/todos/${id}`, { method: 'PATCH', body: JSON.stringify({ done }) }),
     // 체크는 즉시 반응해야 한다. 실패하면 이전 목록으로 되돌린다.
     onMutate: async ({ id, done }) => {
-      await qc.cancelQueries({ queryKey: todayTasksKey })
-      const previous = qc.getQueryData<{ items: TodayTask[] }>(todayTasksKey)
-      qc.setQueryData<{ items: TodayTask[] }>(todayTasksKey, (old) =>
+      await qc.cancelQueries({ queryKey: todosKey })
+      const previous = qc.getQueryData<{ items: TodayTask[] }>(todosKey)
+      qc.setQueryData<{ items: TodayTask[] }>(todosKey, (old) =>
         old ? { items: old.items.map((t) => (t.id === id ? { ...t, done } : t)) } : old,
       )
       return { previous }
     },
     onError: (_error, _vars, context) => {
-      if (context?.previous) qc.setQueryData(todayTasksKey, context.previous)
+      if (context?.previous) qc.setQueryData(todosKey, context.previous)
     },
     onSettled: () => {
-      void qc.invalidateQueries({ queryKey: todayTasksKey })
+      void qc.invalidateQueries({ queryKey: todosKey })
+    },
+  })
+}
+
+/** 백엔드 `TodoCreateIn.text` 의 제약(`NonBlank`). */
+export const TODO_TEXT_MAX = 200
+
+export function useAddTask() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (text: string) =>
+      api<TodayTask>('/me/todos', { method: 'POST', body: JSON.stringify({ text }) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: todosKey }),
+  })
+}
+
+export function useDeleteTask() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => api<void>(`/me/todos/${id}`, { method: 'DELETE' }),
+    // 지우는 것도 즉시 반응한다. 목록에서 한 줄 사라지는 게 전부라 되돌리기도 쉽다.
+    onMutate: async (id) => {
+      await qc.cancelQueries({ queryKey: todosKey })
+      const previous = qc.getQueryData<{ items: TodayTask[] }>(todosKey)
+      qc.setQueryData<{ items: TodayTask[] }>(todosKey, (old) =>
+        old ? { items: old.items.filter((t) => t.id !== id) } : old,
+      )
+      return { previous }
+    },
+    onError: (_error, _id, context) => {
+      if (context?.previous) qc.setQueryData(todosKey, context.previous)
+    },
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: todosKey })
     },
   })
 }
