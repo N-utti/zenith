@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
+import { homeKeys } from '@/features/home/keys'
 import type { Board, BoardPost, BoardPostDetail } from './types'
 
 export function useBoards() {
@@ -40,7 +41,7 @@ export function useCreatePost(boardId: string) {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['boards', boardId, 'posts'] })
       // 홈 공지 카드도 같은 데이터를 본다.
-      void qc.invalidateQueries({ queryKey: ['announcements'] })
+      void qc.invalidateQueries({ queryKey: homeKeys.announcements })
     },
   })
 }
@@ -48,7 +49,7 @@ export function useCreatePost(boardId: string) {
 /** 제목이 바뀌거나 글이 사라지면 같이 흔들리는 목록들. 홈 공지 카드도 같은 데이터를 본다. */
 function invalidateLists(qc: ReturnType<typeof useQueryClient>, boardId: string) {
   void qc.invalidateQueries({ queryKey: ['boards', boardId, 'posts'] })
-  void qc.invalidateQueries({ queryKey: ['announcements'] })
+  void qc.invalidateQueries({ queryKey: homeKeys.announcements })
 }
 
 export function useUpdatePost(boardId: string, postId: string) {

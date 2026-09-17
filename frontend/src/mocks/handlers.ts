@@ -16,7 +16,12 @@ import {
   toDetail,
   updatePost,
 } from './boardDb'
-import { MENTIONS, TODAY_TASKS } from './dashboardDb'
+import { TODAY_TASKS } from './dashboardDb'
+import {
+  listMentions,
+  listNotifications,
+  markRead as markNotificationsRead,
+} from './notificationsDb'
 import {
   addComment,
   addVersion,
@@ -322,14 +327,42 @@ export const handlers = [
     }),
   ),
 
+  // 멘션 카드는 알림에서 파생된다. 공지와 같은 이유로 별도 데이터를 두지 않는다.
   http.get(
     '/api/mentions',
-    authed((_user, request) => {
+    authed((user, request) => {
       const limit = Number(new URL(request.url).searchParams.get('limit') ?? 3)
-      const sorted = [...MENTIONS].sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-      return HttpResponse.json({ items: sorted.slice(0, limit) })
+      return HttpResponse.json({ items: listMentions(user, limit) })
     }),
   ),
+
+  // ── 알림함 (`/notifications`) ─────────────────────────────
+  http.get(
+    '/api/me/notifications',
+    authed((user, request) => {
+      const url = new URL(request.url)
+      const unread = url.searchParams.get('unread') === '1'
+      const raw = url.searchParams.get('limit')
+      // 백엔드는 1 이상 200 이하만 받는다(`Query(50, ge=1, le=200)`). 숫자가 아니면 422.
+      const limit = raw === null ? 50 : Number(raw)
+      if (!Number.isInteger(limit) || limit < 1 || limit > 200) {
+        return validationError('limit 은 1 이상 200 이하의 정수여야 합니다.')
+      }
+      return HttpResponse.json({ items: listNotifications(user, { unread, limit }) })
+    }),
+  ),
+
+  http.post('/api/me/notifications/read', async ({ request }) => {
+    if (!authenticate()) return unauthorized()
+
+    const body = await readJson<{ ids?: unknown }>(request)
+    // 백엔드는 `ids` 를 1개 이상 200개 이하로 받는다(`ReadIn`).
+    if (!body || !Array.isArray(body.ids) || body.ids.length === 0 || body.ids.length > 200) {
+      return validationError('읽음 처리할 알림 id 를 1개 이상 200개 이하로 보내 주세요.')
+    }
+    markNotificationsRead(body.ids.map(String))
+    return new HttpResponse(null, { status: 204 })
+  }),
 
   http.get(
     '/api/tasks/today',
