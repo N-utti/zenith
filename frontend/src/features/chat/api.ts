@@ -66,6 +66,8 @@ export function useCreateChannel() {
   return useMutation({
     mutationFn: (input: { name: string } | { dm_user_id: string }) =>
       api<ChatChannel>('/channels', { method: 'POST', body: JSON.stringify(input) }),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: chatKeys.channels }),
+    // 약속을 돌려준다. 목록이 갱신된 뒤에 호출부의 이동이 일어나야, 방금 만든 채널을
+    // 목록에서 못 찾아 "채널을 선택하세요" 가 한 번 스치는 일이 없다.
+    onSuccess: () => qc.invalidateQueries({ queryKey: chatKeys.channels }),
   })
 }

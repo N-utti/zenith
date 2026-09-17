@@ -94,6 +94,9 @@ function ChannelSection({ onNavigate }: { onNavigate?: () => void }) {
       <SectionLabel action={<AddButton label="새 채널" onClick={() => setCreating('channel')} />}>
         채널
       </SectionLabel>
+      {channels.length === 0 && (
+        <p className="text-subtle px-3 py-1 text-xs">아직 채널이 없습니다.</p>
+      )}
       {channels.map((channel) => (
         <ChannelRow key={channel.id} channel={channel} onNavigate={onNavigate} />
       ))}
@@ -109,7 +112,9 @@ function ChannelSection({ onNavigate }: { onNavigate?: () => void }) {
       {creating && (
         <NewChatModal
           mode={creating}
-          onClose={() => {
+          // 취소는 모달만 닫는다. 여기서 서랍까지 닫으면 잘못 열었다 닫았을 뿐인데 메뉴가 사라진다.
+          onClose={() => setCreating(null)}
+          onCreated={() => {
             setCreating(null)
             onNavigate?.()
           }}

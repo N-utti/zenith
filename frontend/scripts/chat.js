@@ -109,6 +109,14 @@ function channelName(channel, viewerId) {
   return USERS[other]?.name ?? '알 수 없음'
 }
 
+/**
+ * 생성 응답. 백엔드는 이미 있던 DM 을 돌려줄 때도 안읽음 0 · 마지막 메시지 null 로 준다.
+ * 릴레이가 진짜 값을 주면, 응답을 목록 캐시에 꽂는 순간 안읽음 배지가 지워지는 차이가 생긴다.
+ */
+function createdView(channel, viewerId) {
+  return { ...channelView(channel, viewerId), unread: 0, last_message: null }
+}
+
 /** 백엔드 `ChannelOut` 과 같은 모양(04 §5). */
 function channelView(channel, viewerId) {
   const list = messages.get(channel.id) ?? []
@@ -236,11 +244,14 @@ export async function handleChatRequest(req, res, url) {
   /**
    * 공개 채널 또는 DM 생성. 백엔드 `create_channel` 과 같은 규칙이다.
    *
-   * 공개 채널은 만들 때 **활성 사용자 전원**을 멤버로 넣는다(15명 사내, 초대·탈퇴 없음).
+   * 공개 채널은 만들 때 **전원**을 멤버로 넣는다(15명 사내, 초대·탈퇴 없음). 백엔드는 비활성
+   * 계정도 넣는다. 복직하면 그 사이 생긴 채널도 보여야 하기 때문이다.
    * DM 은 두 사람짜리 채널이고 같은 두 사람의 DM 은 하나만 둔다.
    */
   if (path === '/channels' && req.method === 'POST') {
-    if (!USERS[viewerId]) return json(res, 401, { detail: '알 수 없는 사용자입니다.' })
+    if (!USERS[viewerId]) {
+      return json(res, 401, { detail: '알 수 없는 사용자입니다.', code: 'AUTH_REQUIRED' })
+    }
 
     // `readBody` 는 본문 전체를 준다. 메시지 전송은 그 안의 `body` 필드를 쓰지만 여기는 아니다.
     const payload = await readBody(req)
@@ -280,7 +291,7 @@ export async function handleChatRequest(req, res, url) {
         memberIds: [viewerId, dmUserId],
       }
       if (!existing) CHANNELS.push(channel)
-      return json(res, 201, channelView(channel, viewerId))
+      return json(res, 201, createdView(channel, viewerId))
     }
 
     if (!name || name.length > 100) {
@@ -292,9 +303,10 @@ export async function handleChatRequest(req, res, url) {
     if (CHANNELS.some((c) => !c.is_dm && c.name === name)) {
       return json(res, 409, { detail: '같은 이름의 채널이 있습니다.', code: 'CONFLICT' })
     }
-    const channel = { id: `c-${nextChannelId++}`, is_dm: false, name, memberIds: ALL }
+    // `ALL` 을 그대로 참조하면 나중에 멤버를 건드릴 때 시드 채널까지 같이 바뀐다.
+    const channel = { id: `c-${nextChannelId++}`, is_dm: false, name, memberIds: [...ALL] }
     CHANNELS.push(channel)
-    return json(res, 201, channelView(channel, viewerId))
+    return json(res, 201, createdView(channel, viewerId))
   }
 
   const messagesMatch = path.match(/^\/channels\/([^/]+)\/messages$/)
