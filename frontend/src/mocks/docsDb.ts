@@ -229,7 +229,12 @@ export function untrashDoc(doc: DocSummary, user: User): DocSummary {
   return doc
 }
 
-/** 영구 삭제. 버전·댓글까지 같이 지운다(백엔드 `_purge`). */
+/**
+ * 영구 삭제. 버전·댓글까지 같이 지운다.
+ *
+ * 백엔드 `_purge` 는 여기에 더해 AI 색인을 지우고, 채팅에 붙은 문서 카드 참조를 풀고,
+ * 공동편집 릴레이의 접속자를 끊는다. 목에는 그 셋이 없어 흉내 낼 대상이 아니다.
+ */
 export function purgeDoc(id: string): void {
   const index = DOCS.findIndex((doc) => doc.id === id)
   if (index >= 0) DOCS.splice(index, 1)

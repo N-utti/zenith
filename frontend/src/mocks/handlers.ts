@@ -29,11 +29,11 @@ import {
   createDoc,
   createFolder,
   docTree,
+  findFolder,
+  isDescendantFolder,
   purgeDoc,
   trashDoc,
   untrashDoc,
-  findFolder,
-  isDescendantFolder,
   updateFolder,
   DOC_SEEDS,
   findDoc,
@@ -1104,8 +1104,13 @@ data: ${JSON.stringify(data)}
     const doc = findDoc(String(params.docId))
     if (!doc) return notFound()
 
+    // 백엔드는 이 값을 불리언으로 읽는다. `1`·`true`·`yes`·`on` 이 참이고 그 밖은 422.
+    const raw = new URL(request.url).searchParams.get('hard')
+    if (raw !== null && !['1', '0', 'true', 'false', 'yes', 'no', 'on', 'off'].includes(raw)) {
+      return validationError('hard 는 불리언이어야 합니다.')
+    }
     // ?hard=1 은 영구 삭제. 임원만 할 수 있고 버전·댓글까지 같이 지운다.
-    if (new URL(request.url).searchParams.get('hard') === '1') {
+    if (raw !== null && ['1', 'true', 'yes', 'on'].includes(raw)) {
       if (user.role !== 'exec') {
         return HttpResponse.json(
           { detail: '영구 삭제는 관리자만 할 수 있습니다.', code: 'FORBIDDEN' },
@@ -1137,10 +1142,10 @@ data: ${JSON.stringify(data)}
     for (const key of ['title', 'folder_id'] as const) {
       if (body[key] === null) return validationError(`${key} 는 null 일 수 없습니다.`)
     }
+    if (!aliveDoc(String(params.docId))) return notFound()
     if (body.folder_id !== undefined && !findFolder(String(body.folder_id))) {
       return validationError('없는 폴더입니다.')
     }
-    if (!aliveDoc(String(params.docId))) return notFound()
     const doc = touchDoc(String(params.docId), user, {
       title: typeof body.title === 'string' ? body.title : undefined,
       folder_id: typeof body.folder_id === 'string' ? body.folder_id : undefined,
@@ -1156,11 +1161,12 @@ data: ${JSON.stringify(data)}
   http.post('/api/docs/:docId/versions', async ({ request, params }) => {
     const user = authenticate()
     if (!user) return unauthorized()
-    if (!aliveDoc(String(params.docId))) return notFound()
+    // 본문 검증이 먼저다. 백엔드는 FastAPI 가 핸들러에 들어가기 전에 스키마를 본다.
     const { snapshot, label } = (await request.json()) as { snapshot: string; label?: string }
     if (!snapshot) {
       return validationError('스냅샷이 없습니다.')
     }
+    if (!aliveDoc(String(params.docId))) return notFound()
     return HttpResponse.json(addVersion(String(params.docId), user, snapshot, label), {
       status: 201,
     })
@@ -1206,11 +1212,11 @@ data: ${JSON.stringify(data)}
   http.post('/api/docs/:docId/comments', async ({ request, params }) => {
     const user = authenticate()
     if (!user) return unauthorized()
-    if (!aliveDoc(String(params.docId))) return notFound()
     const { body } = (await request.json()) as { body: string }
     if (!body.trim()) {
       return validationError('내용을 입력하세요.')
     }
+    if (!aliveDoc(String(params.docId))) return notFound()
     return HttpResponse.json(addComment(String(params.docId), user, body.trim()), { status: 201 })
   }),
 ]
