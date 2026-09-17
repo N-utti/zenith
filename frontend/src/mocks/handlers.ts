@@ -1,7 +1,9 @@
 import { bypass, delay, http, HttpResponse, passthrough } from 'msw'
-import type { User } from '@/types'
+import { PASSWORD_MIN, type User } from '@/types'
 import { BODY_MAX, TITLE_MAX } from '@/features/board/types'
 import { DEMO_PASSWORD } from './accounts'
+import { createAccount, emailTaken, findAccount, listAccounts, patchAccount } from './adminDb'
+import { EMAIL_PATTERN, type UserCreate, type UserPatch } from '@/features/admin/types'
 import { clearMockSession, MOCK_USERS, setMockSession, userFromCookie } from './db'
 import { AI_MODELS, answer, DOC_ACTIONS, docActionDraft } from './aiDb'
 import {
@@ -566,6 +568,65 @@ export const handlers = [
       return HttpResponse.json(companyAttendance(month))
     }),
   ),
+
+  // ── 관리자 · 계정 (04 §9, 임원) ──────────────────
+  http.get(
+    '/api/admin/users',
+    authed((user) => (user.role === 'exec' ? HttpResponse.json(listAccounts()) : forbidden())),
+  ),
+
+  http.post('/api/admin/users', async ({ request }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    if (user.role !== 'exec') return forbidden()
+
+    await delay(300)
+    const body = await readJson<UserCreate>(request)
+    if (!body) return validationError('본문이 올바르지 않습니다.')
+    const name = String(body.name ?? '').trim()
+    const email = String(body.email ?? '')
+      .trim()
+      .toLowerCase()
+    if (!name) return validationError('이름을 입력하세요.')
+    if (!EMAIL_PATTERN.test(email)) return validationError('이메일 형식이 아닙니다.')
+    if (String(body.password ?? '').length < PASSWORD_MIN) {
+      return validationError(`비밀번호는 ${PASSWORD_MIN}자 이상이어야 합니다.`)
+    }
+    if (emailTaken(email)) {
+      return HttpResponse.json(
+        { detail: '이미 있는 이메일입니다.', code: 'CONFLICT' },
+        { status: 409 },
+      )
+    }
+    return HttpResponse.json(createAccount({ ...body, name, email }), { status: 201 })
+  }),
+
+  http.patch('/api/admin/users/:userId', async ({ request, params }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    if (user.role !== 'exec') return forbidden()
+
+    const target = findAccount(String(params.userId))
+    if (!target) return notFound('없는 계정입니다.')
+
+    await delay(300)
+    const patch = await readJson<UserPatch>(request)
+    if (!patch) return validationError('본문이 올바르지 않습니다.')
+    // 값이 같아도 칸이 왔으면 막는다. 백엔드가 `exclude_unset` 으로 가르는 것과 같다.
+    if (target.id === user.id && ('role' in patch || 'active' in patch)) {
+      return HttpResponse.json(
+        { detail: '자기 자신의 등급·활성 상태는 바꿀 수 없습니다.', code: 'ADMIN_SELF' },
+        { status: 400 },
+      )
+    }
+    if (patch.name !== undefined && !patch.name.trim()) {
+      return validationError('이름을 입력하세요.')
+    }
+    if (patch.password !== undefined && patch.password.length < PASSWORD_MIN) {
+      return validationError(`비밀번호는 ${PASSWORD_MIN}자 이상이어야 합니다.`)
+    }
+    return HttpResponse.json(patchAccount(target, patch))
+  }),
 
   // ── 근태 · 공휴일·회사 휴일 (10 §9.6, 임원) ─────────────
   // `?year=` 와 DELETE 는 프론트 확장(PR 본문). 바꾸면 근무 달력이 바로 따라온다(§6.2).

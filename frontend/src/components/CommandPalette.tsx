@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router'
 import { CornerDownLeft, FileText, MessagesSquare, Megaphone, Search, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { formatRelative } from '@/lib/datetime'
-import { ALL_NAV } from '@/app/navigation'
+import { ALL_NAV, visibleNav } from '@/app/navigation'
+import { useCurrentUser } from '@/features/auth/AuthContext'
 import { useSearch } from '@/features/search/api'
 import { hitRows, paletteRows } from '@/features/search/rows'
 import { parseSnippet } from '@/features/search/snippet'
@@ -24,7 +25,10 @@ function Snippet({ text }: { text: string }) {
     <>
       {parseSnippet(text).map((part, i) =>
         part.hit ? (
-          <mark key={i} className="text-fg bg-transparent font-semibold underline decoration-dotted">
+          <mark
+            key={i}
+            className="text-fg bg-transparent font-semibold underline decoration-dotted"
+          >
             {part.text}
           </mark>
         ) : (
@@ -71,6 +75,7 @@ function HitRow({ hit, active }: { hit: SearchHit; active: boolean }) {
  */
 export function CommandPalette({ onClose }: { onClose: () => void }) {
   const navigate = useNavigate()
+  const { role } = useCurrentUser()
   const [query, setQuery] = useState('')
   // 화면에 보이는 값과 서버에 보내는 값을 나눈다. 타자가 멈춘 뒤에 후자가 따라간다.
   const [settled, setSettled] = useState('')
@@ -87,8 +92,9 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
 
   const navItems = useMemo(() => {
     const q = query.trim().toLowerCase()
-    return q ? ALL_NAV.filter((item) => item.label.toLowerCase().includes(q)) : ALL_NAV
-  }, [query])
+    const allowed = visibleNav(ALL_NAV, role)
+    return q ? allowed.filter((item) => item.label.toLowerCase().includes(q)) : allowed
+  }, [query, role])
 
   /*
    * 그려지는 것과 커서가 세는 것이 같은 배열이어야 한다. 검색어를 지우면 결과 구획은

@@ -70,6 +70,15 @@ export function formatISODate(iso: string): string {
 }
 
 /**
+ * `1998-03-02` → "1998. 3. 2.". 입사일처럼 **연도가 중요한** 날짜에 쓴다.
+ * `formatISODate` 는 올해 안의 일정용이라 연도를 뺀다.
+ */
+export function formatISOYearDate(iso: string): string {
+  const [year, month, day] = iso.split('-').map(Number)
+  return new Date(year, month - 1, day).toLocaleDateString('ko-KR')
+}
+
+/**
  * `2026-08` → 그 달을 덮는 주 배열. 앞뒤 주는 이웃 달 날짜로 채운다.
  *
  * `new Date('2026-08-01')`은 UTC로 해석돼 KST에서 하루 밀린다. 숫자로 넘겨

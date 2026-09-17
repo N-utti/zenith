@@ -33,8 +33,10 @@ function Control({
           'border-line-strong bg-canvas checked:border-accent checked:bg-accent mt-0.5 size-4 shrink-0 cursor-pointer appearance-none border transition-colors disabled:cursor-not-allowed',
           type === 'checkbox' ? 'rounded' : 'rounded-full',
           // 체크 표시는 배경 이미지로 그린다. 아이콘 컴포넌트를 겹치면 클릭 판정이 갈라진다.
+          // 안의 공백은 %20 이어야 한다. 클래스 이름은 공백에서 잘려서, 띄어 쓰면
+          // `checked:bg-[url("data:image/svg+xml,%3Csvg` 까지만 클래스로 잡히고 아무 CSS 도 안 생긴다.
           type === 'checkbox'
-            ? "checked:bg-[url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='white' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 8.5l3.5 3.5L13 5'/%3E%3C/svg%3E\")] checked:bg-center checked:bg-no-repeat"
+            ? 'checked:bg-[url(data:image/svg+xml,%3Csvg%20xmlns=%27http://www.w3.org/2000/svg%27%20viewBox=%270%200%2016%2016%27%20fill=%27none%27%20stroke=%27white%27%20stroke-width=%272.5%27%20stroke-linecap=%27round%27%20stroke-linejoin=%27round%27%3E%3Cpath%20d=%27M3%208.5l3.5%203.5L13%205%27/%3E%3C/svg%3E)] checked:bg-center checked:bg-no-repeat'
             : 'checked:border-[5px]',
         )}
         {...props}

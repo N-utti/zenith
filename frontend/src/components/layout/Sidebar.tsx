@@ -2,7 +2,8 @@ import { useState, type ReactNode } from 'react'
 import { NavLink, useLocation } from 'react-router'
 import { AtSign, Plus, X } from 'lucide-react'
 import { cn } from '@/lib/cn'
-import { SECONDARY_NAV, TOP_NAV, type NavItem } from '@/app/navigation'
+import { SECONDARY_NAV, TOP_NAV, visibleNav, type NavItem } from '@/app/navigation'
+import { useCurrentUser } from '@/features/auth/AuthContext'
 import { useBoards } from '@/features/board/api'
 import { useChannels } from '@/features/chat/api'
 import { NewChatModal } from '@/features/chat/NewChatModal'
@@ -155,10 +156,12 @@ function BoardSection({ onNavigate }: { onNavigate?: () => void }) {
 }
 
 export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
+  const { role } = useCurrentUser()
+
   return (
     <div className="flex h-full flex-col">
       <nav className="flex-1 overflow-y-auto px-2 py-3">
-        {TOP_NAV.map((item) => (
+        {visibleNav(TOP_NAV, role).map((item) => (
           <NavRow key={item.to} item={item} onNavigate={onNavigate} />
         ))}
 
@@ -170,7 +173,7 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
       </nav>
 
       <div className="border-line border-t px-2 py-2">
-        {SECONDARY_NAV.map((item) => (
+        {visibleNav(SECONDARY_NAV, role).map((item) => (
           <NavRow key={item.to} item={item} onNavigate={onNavigate} />
         ))}
       </div>

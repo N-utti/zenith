@@ -14,6 +14,12 @@ export const ROLE_RANK: Record<Role, number> = {
   exec: 3,
 }
 
+/**
+ * 서버가 비밀번호에 거는 최소 길이(backend/app/config.py `password_min_length`). 내 비밀번호
+ * 변경과 관리자의 임시 비밀번호가 같은 규칙을 본다.
+ */
+export const PASSWORD_MIN = 8
+
 export interface Team {
   id: string
   name: string
