@@ -527,6 +527,51 @@
         }
       }
     },
+    "/api/trash": {
+      "get": {
+        "tags": [
+          "docs"
+        ],
+        "summary": "휴지통 목록 — `/tree` 의 여집합, 지운 지 최근 순. 30일이 지나면 서버가 영구 삭제한다",
+        "operationId": "list_trash_api_trash_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 200,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Items_DocOut_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/folders": {
       "post": {
         "tags": [
@@ -3798,6 +3843,22 @@
           "items"
         ],
         "title": "Items[CommentOut]"
+      },
+      "Items_DocOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DocOut"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "Items[DocOut]"
       },
       "Items_NotificationOut_": {
         "properties": {

@@ -248,6 +248,27 @@ async def tree(db: AsyncSession = Depends(get_db)) -> TreeOut:
     )
 
 
+# `/tree` 가 휴지통을 빼므로 되돌리려면 이 목록이 있어야 한다(문서 주소를 외우고 있지 않는 한).
+# ponytail: 커서 페이징 없이 상한만 둔다 — 30일이 지나면 스스로 비고, 15명이 그 안에 500개를 지우면
+# 그때 `/admin/audit` 과 같은 커서를 붙인다.
+@router.get(
+    "/trash",
+    response_model=Items[DocOut],
+    summary="휴지통 목록 — `/tree` 의 여집합, 지운 지 최근 순. 30일이 지나면 서버가 영구 삭제한다",
+)
+async def list_trash(
+    limit: int = Query(200, ge=1, le=500), db: AsyncSession = Depends(get_db)
+) -> Items[DocOut]:
+    rows = await db.execute(
+        select(Document, User)
+        .outerjoin(User, User.id == Document.updated_by)
+        .where(Document.deleted_at.is_not(None))
+        .order_by(Document.deleted_at.desc(), Document.id)
+        .limit(limit)
+    )
+    return Items(items=[_doc_out(doc, editor) for doc, editor in rows])
+
+
 @router.post("/folders", status_code=201, response_model=FolderOut, summary="폴더 생성")
 async def create_folder(body: FolderCreateIn, db: AsyncSession = Depends(get_db)) -> Folder:
     # ponytail: 워크스페이스는 하나다(03 §2.5 시드). 여러 개가 되면 요청에서 받는다.
@@ -357,6 +378,9 @@ async def delete_doc(
             doc.deleted_at = _now()
             doc.updated_by = user.id  # 누가 휴지통에 넣었나. 30일 뒤 purge_trash 가 지운다
             await db.commit()
+            # 열려 있던 편집 방을 걷는다 — 안 걷으면 30초마다 도는 저장이 updated_by("지운 사람")·제목·
+            # 스냅샷을 편집자 것으로 덮어쓴다. 휴지통 문서는 새로 열 수도 없으니(yjs 핸드셰이크) 방만 남는다.
+            await yjs.close_room(doc.id)
         return Response(status_code=204)
     if ROLE_RANK.get(user.role, 0) < ROLE_RANK["exec"]:
         audit.record(

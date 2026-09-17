@@ -321,6 +321,27 @@ async def test_hard_delete_closes_open_sockets(app: FastAPI, users: Users, app_d
         assert ROOMS == {}
 
 
+async def test_trashing_closes_open_room(app: FastAPI, users: Users, app_db) -> None:
+    """휴지통으로 보내면 열려 있던 방도 걷는다 — 안 걷으면 편집자의 주기 저장이 "지운 사람"을 덮어쓴다."""
+    async with ws_client(app) as editor, ws_client(app) as remover:
+        await login(editor, "sujin@zenith.co.kr")
+        await login(remover, "donghyun@zenith.co.kr")
+        doc_id = await _doc_id(editor, app_db)
+        async with aconnect_ws(f"https://test/api/yjs/{doc_id}", editor) as ws:
+            a = Peer(ws)
+            await a.connect()
+            await a.edit(write_paragraph("편집 중"))
+            r = await remover.delete(f"/api/docs/{doc_id}", headers=csrf(remover))
+            assert r.status_code == 204
+            with pytest.raises(Exception):  # noqa: B017 — 닫힘의 형태는 전송층이 정한다
+                await asyncio.wait_for(ws.receive_bytes(), timeout=1)
+        assert ROOMS == {}
+
+        row = (await remover.get(f"/api/docs/{doc_id}")).json()
+        assert row["deleted_at"] is not None
+        assert row["updated_by"]["name"] == "박동현"  # 편집자가 아니라 지운 사람
+
+
 async def test_periodic_save_while_others_stay(
     app: FastAPI, users: Users, app_db, monkeypatch
 ) -> None:
