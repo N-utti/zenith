@@ -130,6 +130,7 @@ v0.2 전제로 만들어진 구현을 전부 걷어냈다. `features/attendance/
 > 문서 목록·트리·폴더·댓글은 필드 표기까지 계약에 맞췄다(snake_case, `author`·`updated_by` 객체). 아직 남은 어긋남:
 >
 > - **문서 상세**: `seedHtml` 은 목 전용이다. 백엔드는 그 자리에 `ydoc`(서버 보관 Yjs 상태)을 준다
+> - **댓글 멘션**: 필드 표기는 맞췄지만, 서버가 댓글 본문의 @이름으로 만드는 알림을 목은 만들지 않는다. 목의 알림은 고정 씨앗이라 어느 경로도 알림을 새로 만들지 않는다
 
 ```
 GET   /api/me/home                     대시보드 1콜 { recent_docs, mentions, unread, posts, todos }

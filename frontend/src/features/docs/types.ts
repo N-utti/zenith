@@ -60,6 +60,9 @@ export interface DocComment {
 /** 백엔드 `CommentCreateIn.body` 의 max_length. 최소 한 글자는 있어야 한다. */
 export const COMMENT_BODY_MAX = 10_000
 
+/** 블록 id 길이 상한(백엔드 `BlockId`). 공백을 턴 뒤 1~100자다. */
+export const BLOCK_ID_MAX = 100
+
 /**
  * 버전 목록에 실리는 것. 백엔드 `VersionMeta` 와 같다.
  *
