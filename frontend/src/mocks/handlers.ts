@@ -580,12 +580,16 @@ export const handlers = [
     if (!user) return unauthorized()
     if (user.role !== 'exec') return forbidden()
 
-    const body = (await request.json()) as UserCreate
-    const name = body.name.trim()
-    const email = body.email.trim().toLowerCase()
+    await delay(300)
+    const body = await readJson<UserCreate>(request)
+    if (!body) return validationError('본문이 올바르지 않습니다.')
+    const name = String(body.name ?? '').trim()
+    const email = String(body.email ?? '')
+      .trim()
+      .toLowerCase()
     if (!name) return validationError('이름을 입력하세요.')
     if (!EMAIL_PATTERN.test(email)) return validationError('이메일 형식이 아닙니다.')
-    if (body.password.length < PASSWORD_MIN) {
+    if (String(body.password ?? '').length < PASSWORD_MIN) {
       return validationError(`비밀번호는 ${PASSWORD_MIN}자 이상이어야 합니다.`)
     }
     if (emailTaken(email)) {
@@ -605,7 +609,9 @@ export const handlers = [
     const target = findAccount(String(params.userId))
     if (!target) return notFound('없는 계정입니다.')
 
-    const patch = (await request.json()) as UserPatch
+    await delay(300)
+    const patch = await readJson<UserPatch>(request)
+    if (!patch) return validationError('본문이 올바르지 않습니다.')
     // 값이 같아도 칸이 왔으면 막는다. 백엔드가 `exclude_unset` 으로 가르는 것과 같다.
     if (target.id === user.id && ('role' in patch || 'active' in patch)) {
       return HttpResponse.json(

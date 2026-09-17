@@ -56,11 +56,23 @@ export function createAccount(body: UserCreate): AdminUser {
   return account
 }
 
-/** 보낸 칸만 바꾼다. 비밀번호는 목이 저장하지 않으므로 받기만 하고 버린다. */
+/**
+ * 보낸 칸만 바꾼다. 비밀번호는 목이 저장하지 않으므로 받기만 하고 버린다.
+ *
+ * 이름·등급은 `MOCK_USERS` 쪽에도 같이 심는다. 실제 서버는 계정 한 줄을 고치는 것이라
+ * `GET /me` 와 사이드바·검색이 전부 따라오는데, 목에서 둘이 갈라져 있으면 내 이름을 바꿔도
+ * 헤더가 옛 이름을 들고 있다. 그러면 프로필 캐시 무효화가 도는지 확인할 방법이 없다.
+ */
 export function patchAccount(account: AdminUser, patch: UserPatch): AdminUser {
   if (patch.name !== undefined) account.name = patch.name.trim()
   if (patch.role !== undefined) account.role = patch.role
   if (patch.active !== undefined) account.active = patch.active
   if (patch.hire_date !== undefined) account.hire_date = patch.hire_date
+
+  const mirror = MOCK_USERS.find((user) => user.id === account.id)
+  if (mirror) {
+    mirror.name = account.name
+    mirror.role = account.role
+  }
   return account
 }

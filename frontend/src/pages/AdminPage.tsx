@@ -87,7 +87,13 @@ export function AdminPage() {
                   {user.hire_date ? formatISOYearDate(user.hire_date) : '-'}
                 </TD>
                 <TD className="text-right">
-                  <Button variant="ghost" size="sm" onClick={() => setEditing(user)}>
+                  {/* 줄마다 "편집" 이라 화면을 안 보는 사람에게는 열세 개가 다 같은 이름이다. */}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    aria-label={`${user.name} 계정 편집`}
+                    onClick={() => setEditing(user)}
+                  >
                     편집
                   </Button>
                 </TD>

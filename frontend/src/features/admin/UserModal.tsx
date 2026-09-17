@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
 import { Select } from '@/components/ui/Select'
 import { Spinner } from '@/components/ui/Spinner'
+import { useToast } from '@/components/ui/ToastContext'
 import { ApiError } from '@/lib/api'
 import { PASSWORD_MIN, ROLE_LABEL, type Role } from '@/types'
 import { useCreateUser, useUpdateUser } from './api'
@@ -43,6 +44,7 @@ export function UserModal({
 }) {
   const create = useCreateUser()
   const update = useUpdateUser()
+  const toast = useToast()
   const [form, setForm] = useState<Form>({
     name: user?.name ?? '',
     email: '',
@@ -62,10 +64,15 @@ export function UserModal({
   const name = form.name.trim()
   const email = form.email.trim().toLowerCase()
   const patch = user ? userPatch(user, form) : null
-  const ready = user
-    ? Object.keys(patch ?? {}).length > 0
-    : Boolean(name) && EMAIL_PATTERN.test(email) && form.password.length >= PASSWORD_MIN
+  const emptyName = !name
+  const ready =
+    !emptyName &&
+    (user
+      ? Object.keys(patch ?? {}).length > 0
+      : EMAIL_PATTERN.test(email) && form.password.length >= PASSWORD_MIN)
   const passwordTooShort = form.password.length > 0 && form.password.length < PASSWORD_MIN
+  // 처음부터 빈 새 계정 폼에 대고 틀렸다고 말하지는 않는다. 채웠다가 지운 경우에만.
+  const nameError = emptyName && (user || form.name !== '') ? '이름을 입력하세요.' : null
 
   const close = () => {
     // 보내는 중에 닫으면 성공·실패를 받을 곳이 사라진다. 끝난 뒤에 닫힌다.
@@ -79,7 +86,25 @@ export function UserModal({
       setError(err instanceof ApiError ? err.message : '저장하지 못했습니다.')
 
     if (user && patch) {
-      update.mutate({ id: user.id, patch }, { onSuccess: onClose, onError: fail })
+      update.mutate(
+        { id: user.id, patch },
+        {
+          onSuccess: () => {
+            onClose()
+            // 임시 비밀번호는 그 사람의 로그인을 전부 끊는다. 되돌릴 수 없는 일에는 말이 있어야 한다.
+            if (patch.password) {
+              toast.success(
+                `${user.name} 님의 비밀번호를 임시 비밀번호로 바꿨습니다. 로그인은 모두 해제됩니다.`,
+              )
+            } else if (patch.active === false) {
+              toast.success(`${user.name} 님의 계정을 비활성화했습니다.`)
+            } else {
+              toast.success('계정을 저장했습니다.')
+            }
+          },
+          onError: fail,
+        },
+      )
       return
     }
     create.mutate(
@@ -90,8 +115,21 @@ export function UserModal({
         role: form.role,
         hire_date: form.hireDate || null,
       },
-      { onSuccess: onClose, onError: fail },
+      {
+        onSuccess: (created) => {
+          onClose()
+          toast.success(`${created.name} 님의 계정을 만들었습니다.`)
+        },
+        onError: fail,
+      },
     )
+  }
+
+  // 한글 조합 확정 Enter 는 거른다(폴더 이름·팔레트·작성창과 같은 규약).
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key !== 'Enter' || e.nativeEvent.isComposing) return
+    e.preventDefault()
+    submit()
   }
 
   return (
@@ -112,13 +150,14 @@ export function UserModal({
       }
     >
       <div className="space-y-4">
-        <Field label="이름" required>
+        <Field label="이름" required error={nameError}>
           {(slot) => (
             <Input
               {...slot}
               autoFocus
               value={form.name}
               onChange={(e) => set('name', e.target.value)}
+              onKeyDown={onKeyDown}
               placeholder="예: 진수연"
             />
           )}
@@ -126,7 +165,8 @@ export function UserModal({
 
         {user ? (
           <Field label="이메일" hint="이메일은 바꿀 수 없습니다.">
-            {(slot) => <Input {...slot} value={user.email} readOnly disabled />}
+            {/* `disabled` 는 안 쓴다. 탭에서 빠지면 키보드로는 이메일을 읽을 수도 없다. */}
+            {(slot) => <Input {...slot} value={user.email} readOnly />}
           </Field>
         ) : (
           <Field label="이메일" required>
@@ -136,6 +176,7 @@ export function UserModal({
                 type="email"
                 value={form.email}
                 onChange={(e) => set('email', e.target.value)}
+                onKeyDown={onKeyDown}
                 placeholder="예: suyeon@zenith.co.kr"
               />
             )}
@@ -159,6 +200,7 @@ export function UserModal({
               autoComplete="new-password"
               value={form.password}
               onChange={(e) => set('password', e.target.value)}
+              onKeyDown={onKeyDown}
               minLength={PASSWORD_MIN}
             />
           )}
