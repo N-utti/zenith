@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router'
+import { Avatar } from '@/components/ui/Avatar'
 import { Button } from '@/components/ui/Button'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { Field } from '@/components/ui/Field'
@@ -16,8 +17,11 @@ import {
   useUpdateDraft,
 } from '@/features/approvals/api'
 import { useMyArrangements } from '@/features/attendance/api'
+import { useColleagues } from '@/features/people/colleagues'
 import { useCurrentUser } from '@/features/auth/AuthContext'
 import { ApiError } from '@/lib/api'
+import { hueOf } from '@/lib/avatar'
+import { cn } from '@/lib/cn'
 
 /**
  * 기안 작성(13 SCR-APV-01). v1 최소판은 일반 기안 한 종류다. 근태 4종은 근태 화면의 신청이 곧 기안이다.
@@ -53,6 +57,9 @@ export function ApprovalNewPage() {
   const [amount, setAmount] = useState<string | null>(null)
   const [body, setBody] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  /** 고른 참조자. 임시저장을 열면 저장돼 있던 것으로 시작한다. */
+  const [references, setReferences] = useState<string[] | null>(null)
+  const { people, isPending: peoplePending, isError: peopleError } = useColleagues()
   // 상신이 실패해도 방금 만든 임시저장을 잃지 않는다. 다음 시도는 새로 만들지 않고 이것을 고친다.
   const [createdId, setCreatedId] = useState<string | null>(null)
 
@@ -83,6 +90,16 @@ export function ApprovalNewPage() {
     seed?.subject.body ??
     (trip ? `출장 기간: ${tripPeriod}\n출장 목적: ${trip.reason}\n\n지출 내역:\n- ` : '')
   const related = seed?.related ?? (trip ? { type: 'arrangement' as const, id: trip.id } : null)
+  // 임시저장에는 참조자가 결재선에 섞여 저장돼 있다. 역할로 갈라 낸다.
+  const savedReferences =
+    seed?.steps.filter((step) => step.role === 'reference').map((step) => step.approver.id) ?? []
+  const referenceIds = references ?? savedReferences
+  const toggleReference = (id: string) =>
+    // 저장돼 있던 값에서 출발한다. `null` 은 "아직 안 건드림" 이라 그때는 그 값이 시작점이다.
+    setReferences((prev) => {
+      const current = prev ?? savedReferences
+      return current.includes(id) ? current.filter((each) => each !== id) : [...current, id]
+    })
 
   const amountNumber = amountValue.trim() === '' ? null : Number(amountValue.replace(/,/g, ''))
   const amountError =
@@ -96,6 +113,7 @@ export function ApprovalNewPage() {
     type_code: 'general' as const,
     title: titleValue.trim(),
     subject: { body: bodyValue, amount: amountNumber, related },
+    references: referenceIds,
   }
   const fail = (err: unknown) =>
     setError(err instanceof ApiError ? err.message : '저장하지 못했습니다.')
@@ -170,6 +188,45 @@ export function ApprovalNewPage() {
                 value={amountValue}
                 onChange={(e) => setAmount(e.target.value)}
               />
+            )}
+          </Field>
+          <Field
+            label="참조"
+            hint="결재는 하지 않지만 문서를 볼 사람입니다. 결재선에 오른 사람은 빠집니다."
+            error={peopleError ? '참조자 목록을 불러오지 못했습니다.' : null}
+          >
+            {(slot) => (
+              <div
+                role="group"
+                aria-label="참조자"
+                aria-describedby={slot['aria-describedby']}
+                className="flex flex-wrap gap-1.5"
+              >
+                {peoplePending && <Spinner />}
+                {!peoplePending && !peopleError && people.length === 0 && (
+                  <p className="text-subtle text-sm">고를 수 있는 사람이 없습니다.</p>
+                )}
+                {people.map((each) => {
+                  const picked = referenceIds.includes(each.id)
+                  return (
+                    <button
+                      key={each.id}
+                      type="button"
+                      aria-pressed={picked}
+                      onClick={() => toggleReference(each.id)}
+                      className={cn(
+                        'flex cursor-pointer items-center gap-1.5 rounded-full border py-1 pr-2.5 pl-1 text-xs transition-colors',
+                        picked
+                          ? 'border-accent bg-accent-soft text-accent'
+                          : 'border-line text-muted hover:bg-surface-hover',
+                      )}
+                    >
+                      <Avatar name={each.name} hue={hueOf(each.id)} size="sm" />
+                      {each.name}
+                    </button>
+                  )
+                })}
+              </div>
             )}
           </Field>
           <Field label="본문" required>

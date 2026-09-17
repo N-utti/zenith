@@ -5,8 +5,10 @@ import {
   createDraft,
   decide,
   forceClose,
+  getApproval,
   listApprovals,
   submitApproval,
+  updateDraft,
 } from './approvalsDb'
 
 const member = MOCK_USERS.find((u) => u.email === 'sungwoon@zenith.co.kr')!
@@ -128,5 +130,134 @@ describe('강제 종결 (13 §9.2)', () => {
     // 끝난 문서는 또 끝낼 수 없고, 결재함에서도 빠진다.
     expect(forceClose(ceo, doc.id, '또')).toMatchObject({ code: 'NOT_PENDING' })
     expect(listApprovals(senior, 'inbox').map((d) => d.id)).not.toContain(doc.id)
+  })
+})
+
+describe('참조자 (13 FR-APV-16)', () => {
+  it('상신 전에는 참조자에게 안 보이고, 상신하면 참조함에 들어간다', () => {
+    const draft = createDraft(member, {
+      type_code: 'general',
+      title: '참조 시험',
+      subject: { body: '본문', amount: null, related: null },
+      references: [other.id],
+    })
+    if ('error' in draft) throw new Error(draft.error)
+
+    // 기안자가 아직 고쳐 쓰는 중이다.
+    expect(listApprovals(other, 'reference').map((d) => d.id)).not.toContain(draft.id)
+
+    const pending = submitApproval(member, draft.id)
+    if ('error' in pending) throw new Error(pending.error)
+    expect(listApprovals(other, 'reference').map((d) => d.id)).toContain(draft.id)
+  })
+
+  it('참조는 결재 차례를 가로채지 않는다', () => {
+    const draft = createDraft(member, {
+      type_code: 'general',
+      title: '참조가 결재를 막지 않는다',
+      subject: { body: '본문', amount: null, related: null },
+      references: [other.id],
+    })
+    if ('error' in draft) throw new Error(draft.error)
+    const pending = submitApproval(member, draft.id)
+    if ('error' in pending) throw new Error(pending.error)
+
+    // 결재선은 전무 → 대표. 참조자는 그 뒤에 붙고 대기 사슬에 들어가지 않는다.
+    expect(pending.waiting_on?.id).toBe(senior.id)
+    expect(pending.steps.map((s) => s.role)).toEqual(['approve', 'approve', 'reference'])
+    expect(pending.steps.at(-1)?.approver.id).toBe(other.id)
+
+    const done = decide(senior, pending.id, 'approve', 1, undefined)
+    if ('error' in done) throw new Error(done.error)
+    expect(done.waiting_on?.id).toBe(ceo.id)
+  })
+
+  it('참조자만 있고 결재자가 없는 임원 기안은 그대로 확정된다', () => {
+    // 참조는 결재선이 아니다. 개수로 재면 아무도 처리할 수 없는 문서가 대기로 남는다.
+    const draft = createDraft(ceo, {
+      type_code: 'general',
+      title: '임원 기안에 참조만',
+      subject: { body: '본문', amount: null, related: null },
+      references: [member.id],
+    })
+    if ('error' in draft) throw new Error(draft.error)
+
+    const done = submitApproval(ceo, draft.id)
+    if ('error' in done) throw new Error(done.error)
+    expect(done.status).toBe('approved')
+    expect(done.waiting_on).toBeNull()
+    expect(listApprovals(member, 'reference').map((d) => d.id)).toContain(draft.id)
+  })
+
+  it('임시저장을 고치면 참조자가 바뀐다', () => {
+    const draft = createDraft(member, {
+      type_code: 'general',
+      title: '참조 교체',
+      subject: { body: '본문', amount: null, related: null },
+      references: [other.id],
+    })
+    if ('error' in draft) throw new Error(draft.error)
+
+    const updated = updateDraft(member, draft.id, {
+      type_code: 'general',
+      title: '참조 교체',
+      subject: { body: '본문', amount: null, related: null },
+      references: [ceo.id],
+    })
+    if ('error' in updated) throw new Error(updated.error)
+    expect(updated.steps.map((s) => s.approver.id)).toEqual([ceo.id])
+  })
+})
+
+describe('참조자 검증과 겹침', () => {
+  it('결재자·기안자는 참조에서 빠진다', () => {
+    // 결재선은 상신할 때 정해져서 화면이 미리 거를 수 없다. 서버가 거른다.
+    const draft = createDraft(member, {
+      type_code: 'general',
+      title: '결재자를 참조로',
+      subject: { body: '본문', amount: null, related: null },
+      references: [senior.id, other.id],
+    })
+    if ('error' in draft) throw new Error(draft.error)
+    const pending = submitApproval(member, draft.id)
+    if ('error' in pending) throw new Error(pending.error)
+
+    const references = pending.steps.filter((s) => s.role === 'reference')
+    expect(references.map((s) => s.approver.id)).toEqual([other.id])
+    // 같은 사람이 결재선에 두 줄로 서면 받은 결재함과 참조함에 같이 뜬다.
+    expect(listApprovals(senior, 'reference').map((d) => d.id)).not.toContain(draft.id)
+  })
+
+  it('없는 사람·겹친 사람·배열이 아닌 값은 422 다', () => {
+    const base = {
+      type_code: 'general' as const,
+      title: '참조 검증',
+      subject: { body: '본문', amount: null, related: null },
+    }
+    expect(createDraft(member, { ...base, references: ['u-없음'] })).toMatchObject({
+      code: 'VALIDATION',
+    })
+    expect(createDraft(member, { ...base, references: [other.id, other.id] })).toMatchObject({
+      code: 'VALIDATION',
+    })
+    expect(
+      createDraft(member, { ...base, references: other.id as unknown as string[] }),
+    ).toMatchObject({ code: 'VALIDATION' })
+  })
+
+  it('참조자는 상신 전 초안을 열 수 없다', () => {
+    const draft = createDraft(member, {
+      type_code: 'general',
+      title: '초안 열람',
+      subject: { body: '본문', amount: null, related: null },
+      references: [other.id],
+    })
+    if ('error' in draft) throw new Error(draft.error)
+
+    // 주소만 바꿔 들어와도 막힌다. 목록에서 빼는 것만으로는 부족하다.
+    expect(getApproval(other, draft.id)).toMatchObject({ code: 'FORBIDDEN' })
+
+    submitApproval(member, draft.id)
+    expect(getApproval(other, draft.id)).toMatchObject({ id: draft.id })
   })
 })

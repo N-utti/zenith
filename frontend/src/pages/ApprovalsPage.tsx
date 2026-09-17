@@ -15,9 +15,9 @@ import {
 } from '@/features/approvals/types'
 import { formatDateTime, formatRelative } from '@/lib/datetime'
 
-const BOXES: ApprovalBox[] = ['inbox', 'sent', 'draft']
+const BOXES: ApprovalBox[] = ['inbox', 'sent', 'reference', 'draft']
 
-/** 결재함(13 SCR-APV-02). 받은 결재 · 보낸 결재 · 임시저장. 참조는 참조자 지정(FR-APV-16)이 붙을 때. */
+/** 결재함(13 SCR-APV-02). 받은 결재 · 보낸 결재 · 참조 · 임시저장. */
 export function ApprovalsPage() {
   const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
