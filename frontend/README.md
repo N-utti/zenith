@@ -150,6 +150,8 @@ PATCH /api/folders/:id                 이름·이동·정렬 (프론트는 아�
 
 GET   /api/docs?q=                     제목 필터 (04 에 없다. 본문 검색은 /api/search)
 POST  /api/docs                        { folder_id, title } 생성
+DELETE /api/docs/:id                   휴지통으로(30일). ?hard=1 은 임원만, 버전·댓글까지 삭제
+POST  /api/docs/:id/untrash            휴지통에서 되돌리기
 GET   /api/docs/:id                    메타 (+ seedHtml, 아래 참조)
 PATCH /api/docs/:id                    제목·수정시각 투영
 GET   /api/docs/recent?limit=          (04 에 없다. 백엔드는 /api/me/home)

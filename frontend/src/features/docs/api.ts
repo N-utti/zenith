@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
+import { queryClient } from '@/lib/queryClient'
 import { defaultFolderId } from './tree'
 import type {
   DocComment,
@@ -123,6 +124,49 @@ export function useTouchDoc(docId: string) {
       void qc.invalidateQueries({ queryKey: docKeys.tree })
     },
   })
+}
+
+/** 문서 목록·트리·홈 카드가 한꺼번에 흔들린다. 문서가 사라지거나 돌아오면 다 다시 받는다. */
+function invalidateDocLists(qc: ReturnType<typeof useQueryClient>) {
+  void qc.invalidateQueries({ queryKey: ['documents'] })
+  void qc.invalidateQueries({ queryKey: docKeys.tree })
+  void qc.invalidateQueries({ queryKey: ['search'] })
+}
+
+/**
+ * 휴지통으로 보낸다. 30일 뒤 서버가 영구 삭제한다.
+ *
+ * `?hard=1`(임원만, 즉시 영구 삭제)은 아직 부르지 않는다. 휴지통 목록을 주는 경로가 04 에
+ * 없어서 화면을 만들 수 없다(PR 본문에 백엔드로 공유).
+ */
+export function useTrashDoc(docId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => api<void>(`/docs/${docId}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      // 지운 문서의 상세는 다시 부르지 않고 stale 로만 남긴다. 아직 이 화면이 그 쿼리를 보고
+      // 있어서 지우면 곧바로 새로 만들어지며 요청이 한 번 더 나간다(게시글 삭제에서 확인했다).
+      void qc.invalidateQueries({ queryKey: docKeys.detail(docId), refetchType: 'none' })
+      invalidateDocLists(qc)
+    },
+  })
+}
+
+/**
+ * 휴지통에서 되돌린다. 훅이 아니라 그냥 함수다.
+ *
+ * 되돌리기를 누르는 자리가 **문서를 떠난 뒤의 토스트**이기 때문이다. 훅으로 만들면 그 요청을
+ * 건 화면이 이미 없어서 `mutate` 에 넘긴 성공·실패 콜백이 불리지 않는다(관찰자에 리스너가
+ * 없다). 캐시는 갱신되는데 사용자에게는 아무 표시가 없고, 실패해도 조용하다.
+ */
+export async function untrashDoc(docId: string): Promise<DocSummary> {
+  const doc = await api<DocSummary>(`/docs/${docId}/untrash`, { method: 'POST' })
+  queryClient.setQueryData(docKeys.detail(doc.id), (prev: DocDetail | undefined) =>
+    prev ? { ...prev, ...doc } : undefined,
+  )
+  void queryClient.invalidateQueries({ queryKey: docKeys.detail(doc.id), refetchType: 'none' })
+  invalidateDocLists(queryClient)
+  return doc
 }
 
 export function useVersions(docId: string) {

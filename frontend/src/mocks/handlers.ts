@@ -29,6 +29,9 @@ import {
   createDoc,
   createFolder,
   docTree,
+  purgeDoc,
+  trashDoc,
+  untrashDoc,
   findFolder,
   isDescendantFolder,
   updateFolder,
@@ -89,6 +92,16 @@ const unauthorized = () =>
   HttpResponse.json({ detail: '로그인이 필요합니다.', code: 'AUTH_REQUIRED' }, { status: 401 })
 const notFound = () =>
   HttpResponse.json({ detail: '문서를 찾을 수 없습니다.', code: 'NOT_FOUND' }, { status: 404 })
+
+/**
+ * 휴지통에 든 문서는 **읽기만** 된다. 백엔드는 수정·버전 저장·댓글 작성에서 404 다
+ * (`_get_doc` 의 `trashed_ok`). 읽기(상세·버전 목록·댓글 목록)는 되돌리기 전에 확인할 수
+ * 있어야 하므로 열어 둔다.
+ */
+function aliveDoc(id: string) {
+  const doc = findDoc(id)
+  return doc && !doc.deleted_at ? doc : undefined
+}
 
 /**
  * 권한 거부는 한 가지 문구뿐이다. 백엔드 `_deny` 도 열람 거부와 수정 거부를 구분해 주지
@@ -1084,6 +1097,38 @@ data: ${JSON.stringify(data)}
     return HttpResponse.json({ ...doc, ydoc: null, seedHtml: DOC_SEEDS[doc.id] })
   }),
 
+  http.delete('/api/docs/:docId', ({ request, params }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+
+    const doc = findDoc(String(params.docId))
+    if (!doc) return notFound()
+
+    // ?hard=1 은 영구 삭제. 임원만 할 수 있고 버전·댓글까지 같이 지운다.
+    if (new URL(request.url).searchParams.get('hard') === '1') {
+      if (user.role !== 'exec') {
+        return HttpResponse.json(
+          { detail: '영구 삭제는 관리자만 할 수 있습니다.', code: 'FORBIDDEN' },
+          { status: 403 },
+        )
+      }
+      purgeDoc(doc.id)
+      return new HttpResponse(null, { status: 204 })
+    }
+
+    trashDoc(doc, user)
+    return new HttpResponse(null, { status: 204 })
+  }),
+
+  http.post('/api/docs/:docId/untrash', ({ params }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+
+    const doc = findDoc(String(params.docId))
+    if (!doc) return notFound()
+    return HttpResponse.json(untrashDoc(doc, user))
+  }),
+
   http.patch('/api/docs/:docId', async ({ request, params }) => {
     const user = authenticate()
     if (!user) return unauthorized()
@@ -1095,6 +1140,7 @@ data: ${JSON.stringify(data)}
     if (body.folder_id !== undefined && !findFolder(String(body.folder_id))) {
       return validationError('없는 폴더입니다.')
     }
+    if (!aliveDoc(String(params.docId))) return notFound()
     const doc = touchDoc(String(params.docId), user, {
       title: typeof body.title === 'string' ? body.title : undefined,
       folder_id: typeof body.folder_id === 'string' ? body.folder_id : undefined,
@@ -1110,9 +1156,10 @@ data: ${JSON.stringify(data)}
   http.post('/api/docs/:docId/versions', async ({ request, params }) => {
     const user = authenticate()
     if (!user) return unauthorized()
+    if (!aliveDoc(String(params.docId))) return notFound()
     const { snapshot, label } = (await request.json()) as { snapshot: string; label?: string }
     if (!snapshot) {
-      return HttpResponse.json({ detail: '스냅샷이 없습니다.' }, { status: 400 })
+      return validationError('스냅샷이 없습니다.')
     }
     return HttpResponse.json(addVersion(String(params.docId), user, snapshot, label), {
       status: 201,
@@ -1159,9 +1206,10 @@ data: ${JSON.stringify(data)}
   http.post('/api/docs/:docId/comments', async ({ request, params }) => {
     const user = authenticate()
     if (!user) return unauthorized()
+    if (!aliveDoc(String(params.docId))) return notFound()
     const { body } = (await request.json()) as { body: string }
     if (!body.trim()) {
-      return HttpResponse.json({ detail: '내용을 입력하세요.' }, { status: 400 })
+      return validationError('내용을 입력하세요.')
     }
     return HttpResponse.json(addComment(String(params.docId), user, body.trim()), { status: 201 })
   }),

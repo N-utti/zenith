@@ -2,14 +2,19 @@ import { hueOf } from '@/lib/avatar'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { EditorContent, useEditor, type Editor } from '@tiptap/react'
 import DragHandle from '@tiptap/extension-drag-handle-react'
-import { GripVertical, WifiOff, X } from 'lucide-react'
+import { GripVertical, Trash2, WifiOff, X } from 'lucide-react'
+import { useNavigate } from 'react-router'
 import { Avatar } from '@/components/ui/Avatar'
+import { Button } from '@/components/ui/Button'
+import { Modal } from '@/components/ui/Modal'
 import { Spinner } from '@/components/ui/Spinner'
+import { useToast } from '@/components/ui/ToastContext'
+import { ApiError } from '@/lib/api'
 import { useCurrentUser } from '@/features/auth/AuthContext'
 import { cn } from '@/lib/cn'
 import { formatRelative } from '@/lib/datetime'
 import { useDragAutoScroll } from '@/lib/useDragAutoScroll'
-import { useSaveVersion, useTouchDoc } from './api'
+import { untrashDoc, useSaveVersion, useTouchDoc, useTrashDoc } from './api'
 import { CommentPanel } from './CommentPanel'
 import { DocBreadcrumb } from './DocBreadcrumb'
 import { EditorBubbleMenu } from './EditorBubbleMenu'
@@ -146,6 +151,43 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
   const { mutate: touchDoc } = useTouchDoc(meta.id)
   const { mutate: saveVersion, isPending: savingVersion } = useSaveVersion(meta.id)
 
+  const navigate = useNavigate()
+  const toast = useToast()
+  const trash = useTrashDoc(meta.id)
+  const [confirmTrash, setConfirmTrash] = useState(false)
+
+  /**
+   * 휴지통으로 보내고 문서 목록으로 나간다. 되돌릴 길은 토스트의 버튼 하나뿐이다.
+   * 서버가 휴지통 목록을 주는 경로를 아직 열지 않아 따로 볼 화면을 만들 수 없다.
+   * 그래서 토스트를 오래 띄운다.
+   */
+  const moveToTrash = () =>
+    trash.mutate(undefined, {
+      onSuccess: () => {
+        setConfirmTrash(false)
+        void navigate('/docs', { replace: true })
+        toast.success('문서를 휴지통으로 옮겼습니다. 30일 뒤에 영구 삭제됩니다.', {
+          durationMs: 10_000,
+          action: {
+            label: '되돌리기',
+            // 여기는 이미 문서를 떠난 뒤다. 되돌린 문서로 다시 들어가지 않고 목록에 다시
+            // 나타나게만 한다. 떠난 화면의 이동 함수는 더 이상 듣지 않는다.
+            onClick: () => {
+              void untrashDoc(meta.id)
+                .then(() => toast.success('문서를 되돌렸습니다.'))
+                .catch((err: unknown) =>
+                  toast.error(err instanceof ApiError ? err.message : '되돌리지 못했습니다.'),
+                )
+            },
+          },
+        })
+      },
+      onError: (err) => {
+        setConfirmTrash(false)
+        toast.error(err instanceof ApiError ? err.message : '휴지통으로 옮기지 못했습니다.')
+      },
+    })
+
   const [tab, setTab] = useState<SidebarTab>('comments')
   const [preview, setPreview] = useState<{ version: DocVersion; content: RestoredContent } | null>(
     null,
@@ -240,10 +282,46 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
       {/* 경로와 함께 편집 중인 사람. 청사진 1b의 44px 상단 줄이다. */}
       <div className="border-line bg-surface flex h-11 shrink-0 items-center gap-3 border-b px-4">
         <DocBreadcrumb docId={meta.id} title={title} />
-        <div className="ml-auto shrink-0">
+        <div className="ml-auto flex shrink-0 items-center gap-1">
           <PresenceBar session={session} />
+          <button
+            type="button"
+            aria-label="문서를 휴지통으로"
+            title="휴지통으로"
+            onClick={() => setConfirmTrash(true)}
+            className="text-subtle hover:text-danger grid size-7 cursor-pointer place-items-center rounded transition-colors"
+          >
+            <Trash2 className="size-4" />
+          </button>
         </div>
       </div>
+
+      <Modal
+        open={confirmTrash}
+        onClose={() => {
+          if (!trash.isPending) setConfirmTrash(false)
+        }}
+        title="휴지통으로 옮길까요?"
+        description="30일 동안 되돌릴 수 있고, 그 뒤에는 영구 삭제됩니다."
+        size="sm"
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setConfirmTrash(false)}
+              disabled={trash.isPending}
+            >
+              취소
+            </Button>
+            <Button variant="danger" size="sm" onClick={moveToTrash} disabled={trash.isPending}>
+              {trash.isPending ? <Spinner className="border-t-white" /> : '휴지통으로'}
+            </Button>
+          </>
+        }
+      >
+        <p className="text-muted text-sm leading-relaxed">{title || '제목 없는 문서'}</p>
+      </Modal>
 
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
         {preview ? (
