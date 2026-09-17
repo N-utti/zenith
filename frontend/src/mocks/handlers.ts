@@ -22,6 +22,7 @@ import {
   listNotifications,
   markRead as markNotificationsRead,
 } from './notificationsDb'
+import { search } from './searchDb'
 import {
   addComment,
   addVersion,
@@ -333,6 +334,33 @@ export const handlers = [
     authed((user, request) => {
       const limit = Number(new URL(request.url).searchParams.get('limit') ?? 3)
       return HttpResponse.json({ items: listMentions(user, limit) })
+    }),
+  ),
+
+  // ── 통합검색 (⌘K) ────────────────────────────────────────
+  http.get(
+    '/api/search',
+    authed((user, request) => {
+      const url = new URL(request.url)
+      const q = url.searchParams.get('q') ?? ''
+      // 백엔드는 1자 이상 200자 이하만 받는다(`Query(min_length=1, max_length=200)`).
+      if (q.length < 1 || q.length > 200) {
+        return validationError('검색어는 1자 이상 200자 이하여야 합니다.')
+      }
+      const raw = url.searchParams.get('limit')
+      const limit = raw === null ? 20 : Number(raw)
+      if (!Number.isInteger(limit) || limit < 1 || limit > 50) {
+        return validationError('limit 은 1 이상 50 이하의 정수여야 합니다.')
+      }
+      const types = (url.searchParams.get('types') ?? 'doc,chat,post')
+        .split(',')
+        .map((t) => t.trim())
+        .filter(Boolean)
+      if (types.length === 0 || types.some((t) => !['doc', 'chat', 'post'].includes(t))) {
+        return validationError('types 는 doc, chat, post 중에서.')
+      }
+      // 응답이 `{items}` 가 아니라 배열 그대로다.
+      return HttpResponse.json(search(user, q, limit))
     }),
   ),
 

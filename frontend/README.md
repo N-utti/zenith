@@ -136,6 +136,10 @@ GET   /api/mentions?limit=             알림에서 파생 (04 에 없다. 백�
 GET   /api/me/notifications?unread=1   알림함. 권한 밖 글 알림은 제목을 가려서 내려간다
 POST  /api/me/notifications/read       { ids[] } 읽음 처리, 204
 
+GET   /api/search?q=&types=&limit=     ⌘K 통합검색. 배열 그대로 돌려준다({items} 아님)
+                                       권한 밖은 마스킹이 아니라 결과에서 빠진다
+                                       채팅은 목에서 검색되지 않는다(메시지가 개발 릴레이에 있다)
+
 GET   /api/docs?q=                     목록·검색 (04 에 없다. 백엔드는 /api/tree + /api/search)
 POST  /api/docs                        생성
 GET   /api/docs/:id                    메타 (+ seedHtml, 아래 참조)
