@@ -12,6 +12,15 @@ import { auditView, AUDIT_FILTERS, type AuditTone } from './audit'
 
 const COLUMNS = 4
 
+/**
+ * 서버가 스스로 남기는 기록. 여기만 한 사람이 없는 게 정상이다.
+ *
+ * 행위자가 비는 경우는 둘인데 뜻이 정반대다. 휴지통 자동 정리는 서버가 한 일이고,
+ * 로그인 실패는 **누군지 모르는 사람**이 한 일이다. 없는 이메일로 두드리는 외부인이
+ * "시스템" 으로 보이면, 이 화면을 보는 이유(보안 사고 판단)가 거꾸로 선다.
+ */
+const SYSTEM_KINDS = new Set(['docs.purged'])
+
 const TONE: Record<AuditTone, string> = {
   neutral: 'text-fg',
   warning: 'text-warning',
@@ -26,14 +35,16 @@ const TONE: Record<AuditTone, string> = {
  */
 export function AuditLog() {
   const [kind, setKind] = useState('')
-  const { data: users } = useUsers(true)
-  const { data, isPending, isError, fetchNextPage, hasNextPage, isFetchingNextPage } = useAudit(
-    kind,
-    true,
-  )
+  const { data: users } = useUsers()
+  const { data, isPending, isError, fetchNextPage, hasNextPage, isFetchingNextPage } =
+    useAudit(kind)
 
-  const nameOf = (id: string | null) =>
-    id ? (users?.find((user) => user.id === id)?.name ?? '알 수 없음') : '시스템'
+  const nameOf = (event: { actor_id: string | null; kind: string }) => {
+    if (event.actor_id) {
+      return users?.find((user) => user.id === event.actor_id)?.name ?? '알 수 없음'
+    }
+    return SYSTEM_KINDS.has(event.kind) ? '시스템' : '알 수 없음'
+  }
 
   const rows = data?.pages.flatMap((page) => page.items) ?? []
 
@@ -52,7 +63,8 @@ export function AuditLog() {
       </div>
 
       {isPending && <SkeletonRows />}
-      {isError && (
+      {/* 이미 받아 둔 장이 있으면 표를 지우지 않는다. "더 보기" 실패는 버튼 옆에서 말한다. */}
+      {isError && !data && (
         <Card>
           <CardEmpty>감사 기록을 불러오지 못했습니다.</CardEmpty>
         </Card>
@@ -82,7 +94,7 @@ export function AuditLog() {
                       <p className={cn('font-medium', TONE[view.tone])}>{view.summary}</p>
                       {view.detail && <p className="text-muted mt-0.5 text-xs">{view.detail}</p>}
                     </TD>
-                    <TD className="truncate">{nameOf(event.actor_id)}</TD>
+                    <TD className="truncate">{nameOf(event)}</TD>
                     {/* 아이피가 없는 기록도 있다(서버가 스스로 남긴 것). 빈칸 대신 자리를 표시한다. */}
                     <TD className="text-muted truncate">{event.ip ?? '-'}</TD>
                   </TR>
@@ -92,7 +104,7 @@ export function AuditLog() {
           </Table>
 
           {hasNextPage && (
-            <div className="mt-3 grid place-items-center">
+            <div className="mt-3 grid place-items-center gap-2">
               <Button
                 variant="secondary"
                 size="sm"
@@ -101,6 +113,11 @@ export function AuditLog() {
               >
                 {isFetchingNextPage ? <Spinner /> : '더 보기'}
               </Button>
+              {isError && (
+                <p role="alert" className="text-danger text-xs">
+                  다음 기록을 불러오지 못했습니다.
+                </p>
+              )}
             </div>
           )}
         </>

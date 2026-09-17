@@ -3,7 +3,7 @@ import { PASSWORD_MIN, type User } from '@/types'
 import { BODY_MAX, TITLE_MAX } from '@/features/board/types'
 import { DEMO_PASSWORD } from './accounts'
 import { createAccount, emailTaken, findAccount, listAccounts, patchAccount } from './adminDb'
-import { badCursor, listAudit } from './auditDb'
+import { badCursor, listAudit, push as recordAudit } from './auditDb'
 import { EMAIL_PATTERN, type UserCreate, type UserPatch } from '@/features/admin/types'
 import { clearMockSession, MOCK_USERS, setMockSession, userFromCookie } from './db'
 import { AI_MODELS, answer, DOC_ACTIONS, docActionDraft } from './aiDb'
@@ -599,7 +599,16 @@ export const handlers = [
         { status: 409 },
       )
     }
-    return HttpResponse.json(createAccount({ ...body, name, email }), { status: 201 })
+    const created = createAccount({ ...body, name, email })
+    recordAudit({
+      kind: 'admin.user_created',
+      actor_id: user.id,
+      target_id: created.id,
+      ip: '127.0.0.1',
+      user_agent: navigator.userAgent,
+      detail: { email, role: created.role },
+    })
+    return HttpResponse.json(created, { status: 201 })
   }),
 
   http.patch('/api/admin/users/:userId', async ({ request, params }) => {
@@ -626,7 +635,21 @@ export const handlers = [
     if (patch.password !== undefined && patch.password.length < PASSWORD_MIN) {
       return validationError(`비밀번호는 ${PASSWORD_MIN}자 이상이어야 합니다.`)
     }
-    return HttpResponse.json(patchAccount(target, patch))
+    const before = { role: target.role, active: target.active }
+    const updated = patchAccount(target, patch)
+    recordAudit({
+      kind: 'admin.user_updated',
+      actor_id: user.id,
+      target_id: updated.id,
+      ip: '127.0.0.1',
+      user_agent: navigator.userAgent,
+      detail: {
+        fields: Object.keys(patch).sort(),
+        before,
+        after: { role: updated.role, active: updated.active },
+      },
+    })
+    return HttpResponse.json(updated)
   }),
 
   http.get(

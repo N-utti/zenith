@@ -61,6 +61,7 @@ const SEEDS: Omit<AuditEvent, 'id' | 'at'>[] = [
     detail: null,
   },
   {
+    // 게시판 거부만 현재 등급까지 담는다(`boards._deny`). `reason` 은 read·delete 뿐이다.
     kind: 'acl.denied',
     actor_id: user(5),
     target_id: 'b-exec',
@@ -68,11 +69,29 @@ const SEEDS: Omit<AuditEvent, 'id' | 'at'>[] = [
     user_agent: 'Mozilla/5.0',
     detail: {
       path: '/api/boards/exec/posts',
-      reason: 'min_role',
+      reason: 'read',
       min_role: 'exec',
       role: 'member',
       post_id: null,
     },
+  },
+  {
+    // 가장 자주 쌓이는 모양. 등급 검사(`require_role`)는 현재 등급을 안 남긴다.
+    kind: 'acl.denied',
+    actor_id: user(4),
+    target_id: null,
+    ip: '10.0.1.33',
+    user_agent: 'Mozilla/5.0',
+    detail: { path: '/api/admin/users', min_role: 'exec' },
+  },
+  {
+    // 채널 거부는 경로만 남는다.
+    kind: 'acl.denied',
+    actor_id: user(7),
+    target_id: 'c-dev',
+    ip: '10.0.1.42',
+    user_agent: 'Mozilla/5.0',
+    detail: { path: '/api/channels/c-dev/messages' },
   },
   {
     kind: 'acl.denied',
@@ -156,20 +175,40 @@ const SEEDS: Omit<AuditEvent, 'id' | 'at'>[] = [
   },
 ]
 
-/** 최신순. 씨앗을 네 바퀴 돌려 "더 보기" 가 실제로 눌리는 양을 만든다. */
-const EVENTS: AuditEvent[] = Array.from({ length: SEEDS.length * 4 }, (_, index) => ({
+/**
+ * 최신순. 씨앗을 열 바퀴 돌린다. 한 장이 쉰 줄이라, **거른 뒤에도** "더 보기" 가 눌리려면
+ * 한 갈래가 쉰 줄을 넘어야 한다(로그인·세션 갈래가 예순 줄).
+ */
+const EVENTS: AuditEvent[] = Array.from({ length: SEEDS.length * 10 }, (_, index) => ({
   ...SEEDS[index % SEEDS.length],
   id: `a-${index + 1}`,
   at: at(index * 37 + 5),
 }))
 
-/** 서버와 같은 불투명 커서: `시각|id` 를 base64 로. 안을 읽는 쪽은 여기뿐이다. */
-const encode = (event: AuditEvent) => btoa(`${event.at}|${event.id}`)
+let nextId = EVENTS.length + 1
+
+/**
+ * 목이 스스로 남기는 기록. 실제 서버는 계정을 만들거나 고칠 때 감사 줄을 같이 쌓는다
+ * (`admin.user_created`·`admin.user_updated`). 목이 안 쌓으면 방금 한 일이 기록에 안 보여,
+ * 계정 탭에서 바꾸고 기록 탭을 열었을 때 화면이 맞는지 개발에서 확인할 수가 없다.
+ */
+export function push(event: Omit<AuditEvent, 'id' | 'at'>): void {
+  EVENTS.unshift({ ...event, id: `a-${nextId++}`, at: new Date().toISOString() })
+}
+
+/**
+ * 서버와 같은 모양의 불투명 커서: `시각|id` 를 **urlsafe** base64 로(`app/paging.py`).
+ * 안을 읽는 쪽은 이 파일뿐이다.
+ */
+const encode = (event: AuditEvent) =>
+  btoa(`${event.at}|${event.id}`).replace(/\+/g, '-').replace(/\//g, '_')
+
+const decode = (cursor: string) => atob(cursor.replace(/-/g, '+').replace(/_/g, '/'))
 
 /** 커서가 가리키는 줄의 다음부터가 다음 장이다. 못 찾으면 더 줄 것이 없다는 뜻으로 본다. */
 function idOf(cursor: string): string | null {
   try {
-    return atob(cursor).split('|')[1] ?? null
+    return decode(cursor).split('|')[1] ?? null
   } catch {
     return null
   }
@@ -198,7 +237,7 @@ export function listAudit(kind: string | null, cursor: string | null, limit: num
 /** 커서가 망가졌는지 판정. 서버는 422 를 준다. */
 export function badCursor(cursor: string): boolean {
   try {
-    const [time, id] = atob(cursor).split('|')
+    const [time, id] = decode(cursor).split('|')
     return !time || !id || Number.isNaN(Date.parse(time))
   } catch {
     return true

@@ -79,7 +79,10 @@ function changedState(detail: Record<string, unknown> | null): {
   return { text: parts.length > 0 ? parts.join(', ') : undefined, covered }
 }
 
-/** `fields` 는 서버가 실제로 바꾼 칸 이름 배열이다. 그대로 보여 주면 영문 필드명이 나간다. */
+/**
+ * `fields` 는 서버가 **본문에 온** 칸 이름 배열이다(`exclude_unset`). 값이 그대로여도 보냈으면
+ * 들어간다. 그대로 보여 주면 영문 필드명이 나가므로 우리말로 바꾼다.
+ */
 const FIELD_LABEL: Record<string, string> = {
   name: '이름',
   role: '등급',
@@ -116,7 +119,7 @@ export function auditView(event: AuditEvent): AuditView {
       const reason = text(detail, 'reason') === 'disabled' ? '비활성 계정' : '비밀번호 불일치'
       return {
         summary: '로그인 실패',
-        detail: [text(detail, 'email'), reason].filter(Boolean).join(' · '),
+        detail: [text(detail, 'email'), reason].filter(Boolean).join(' · ') || undefined,
         tone: 'warning',
       }
     }
@@ -135,13 +138,14 @@ export function auditView(event: AuditEvent): AuditView {
       }
 
     case 'acl.denied': {
-      const where = text(detail, 'path') ?? text(detail, 'op')
+      // 소켓 거부도 `path` 를 담는다(`/api/ws`). 갈래로 두면 정작 쓸모 있는 `op` 가 버려진다.
+      const where = [text(detail, 'path'), text(detail, 'op')].filter(Boolean).join(' ')
       const need = roleLabel(detail?.min_role)
       const had = roleLabel(detail?.role)
       const gap = need && had ? `${need} 이상 필요, 현재 ${had}` : need && `${need} 이상 필요`
       return {
         summary: '권한 밖 접근을 막았습니다',
-        detail: [where, gap || undefined].filter(Boolean).join(' · '),
+        detail: [where, gap || undefined].filter(Boolean).join(' · ') || undefined,
         tone: 'warning',
       }
     }
@@ -149,7 +153,8 @@ export function auditView(event: AuditEvent): AuditView {
     case 'admin.user_created':
       return {
         summary: '계정 생성',
-        detail: [text(detail, 'email'), roleLabel(detail?.role)].filter(Boolean).join(' · '),
+        detail:
+          [text(detail, 'email'), roleLabel(detail?.role)].filter(Boolean).join(' · ') || undefined,
         tone: 'neutral',
       }
 
@@ -157,7 +162,9 @@ export function auditView(event: AuditEvent): AuditView {
       const state = changedState(detail)
       return {
         summary: '계정 수정',
-        detail: [changedFields(detail, state.covered), state.text].filter(Boolean).join(' · '),
+        detail:
+          [changedFields(detail, state.covered), state.text].filter(Boolean).join(' · ') ||
+          undefined,
         tone: 'neutral',
       }
     }
@@ -179,7 +186,7 @@ export function auditView(event: AuditEvent): AuditView {
       const size = typeof detail?.size === 'number' ? formatBytes(detail.size) : undefined
       return {
         summary: '파일 올림',
-        detail: [text(detail, 'type'), size].filter(Boolean).join(' · '),
+        detail: [text(detail, 'type'), size].filter(Boolean).join(' · ') || undefined,
         tone: 'neutral',
       }
     }
@@ -187,7 +194,8 @@ export function auditView(event: AuditEvent): AuditView {
     case 'files.rejected':
       return {
         summary: '파일 거부',
-        detail: [text(detail, 'name'), text(detail, 'claimed')].filter(Boolean).join(' · '),
+        detail:
+          [text(detail, 'name'), text(detail, 'claimed')].filter(Boolean).join(' · ') || undefined,
         tone: 'warning',
       }
 

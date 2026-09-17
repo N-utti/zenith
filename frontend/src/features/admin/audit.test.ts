@@ -74,7 +74,7 @@ describe('auditView', () => {
   it('detail 이 없어도 부연만 비고 줄은 남는다', () => {
     const view = auditView(event({ kind: 'admin.user_updated', detail: null }))
     expect(view.summary).toBe('계정 수정')
-    expect(view.detail).toBe('')
+    expect(view.detail).toBeUndefined()
   })
 
   it('세션 토큰 재사용은 가장 센 색으로 표시한다', () => {

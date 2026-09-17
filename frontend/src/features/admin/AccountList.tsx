@@ -19,7 +19,7 @@ const COLUMNS = 5
 
 export function AccountList() {
   const me = useCurrentUser()
-  const { data, isPending, isError } = useUsers(true)
+  const { data, isPending, isError } = useUsers()
   /** 열려 있는 대화상자. `new` 는 새 계정, 그 밖에는 고치는 계정. */
   const [editing, setEditing] = useState<AdminUser | 'new' | null>(null)
 
