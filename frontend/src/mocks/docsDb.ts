@@ -215,6 +215,33 @@ export function findDoc(id: string): DocSummary | undefined {
   return DOCS.find((doc) => doc.id === id)
 }
 
+/** 휴지통으로. 이미 들어가 있으면 시각을 다시 찍지 않는다(백엔드와 같다). */
+export function trashDoc(doc: DocSummary, user: User): void {
+  if (doc.deleted_at) return
+  doc.deleted_at = new Date().toISOString()
+  doc.updated_by = { id: user.id, name: user.name }
+}
+
+export function untrashDoc(doc: DocSummary, user: User): DocSummary {
+  doc.deleted_at = null
+  doc.updated_at = new Date().toISOString()
+  doc.updated_by = { id: user.id, name: user.name }
+  return doc
+}
+
+/**
+ * 영구 삭제. 버전·댓글까지 같이 지운다.
+ *
+ * 백엔드 `_purge` 는 여기에 더해 AI 색인을 지우고, 채팅에 붙은 문서 카드 참조를 풀고,
+ * 공동편집 릴레이의 접속자를 끊는다. 목에는 그 셋이 없어 흉내 낼 대상이 아니다.
+ */
+export function purgeDoc(id: string): void {
+  const index = DOCS.findIndex((doc) => doc.id === id)
+  if (index >= 0) DOCS.splice(index, 1)
+  delete versions[id]
+  delete comments[id]
+}
+
 export function createDoc(user: User, folderId: string, title: string): DocSummary {
   const doc: DocSummary = {
     // 새로고침해도 겹치지 않아야 한다. 브라우저 IndexedDB 가 문서 id 로 본문을 남기므로

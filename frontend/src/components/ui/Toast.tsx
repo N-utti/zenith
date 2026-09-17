@@ -2,21 +2,28 @@ import type { CSSProperties, ReactNode } from 'react'
 import { AlertTriangle, Check, Info } from 'lucide-react'
 import { Toaster, toast } from 'sonner'
 import { useTheme } from '@/lib/theme'
-import { ToastContext, type ToastApi } from './ToastContext'
+import { ToastContext, type ToastApi, type ToastOptions } from './ToastContext'
 
 /** 성공은 잠깐, 실패는 오래. 읽고 대응할 시간이 필요하다. */
 const LIFETIME = { success: 3200, info: 3200, error: 6000 }
 
 /** 호출부는 이 셋만 안다. 라이브러리가 바뀌어도 여기만 바꾼다. */
+function opts(fallback: number, options?: ToastOptions) {
+  return {
+    duration: options?.durationMs ?? fallback,
+    action: options?.action && { label: options.action.label, onClick: options.action.onClick },
+  }
+}
+
 const api: ToastApi = {
-  success: (message) => {
-    toast.success(message, { duration: LIFETIME.success })
+  success: (message, options) => {
+    toast.success(message, opts(LIFETIME.success, options))
   },
-  error: (message) => {
-    toast.error(message, { duration: LIFETIME.error })
+  error: (message, options) => {
+    toast.error(message, opts(LIFETIME.error, options))
   },
-  info: (message) => {
-    toast.info(message, { duration: LIFETIME.info })
+  info: (message, options) => {
+    toast.info(message, opts(LIFETIME.info, options))
   },
 }
 

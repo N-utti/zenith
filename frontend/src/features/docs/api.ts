@@ -1,5 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api } from '@/lib/api'
+import { api, ApiError } from '@/lib/api'
+import { queryClient } from '@/lib/queryClient'
+import { meQueryKey } from '@/features/auth/queries'
 import { defaultFolderId } from './tree'
 import type {
   DocComment,
@@ -123,6 +125,74 @@ export function useTouchDoc(docId: string) {
       void qc.invalidateQueries({ queryKey: docKeys.tree })
     },
   })
+}
+
+/**
+ * 문서가 사라지거나 돌아오면 같이 흔들리는 **목록들**. 상세·댓글·버전은 건드리지 않는다.
+ *
+ * `['documents']` 로 한 번에 지우면 접두 일치라 모든 문서의 상세·댓글·버전까지 딸려 간다.
+ * 바로 위에서 상세를 "다시 부르지 않는다" 고 해 둔 것도 그 한 줄이 도로 무효로 만든다.
+ */
+function invalidateDocLists(qc: ReturnType<typeof useQueryClient>) {
+  void qc.invalidateQueries({ queryKey: ['documents', 'list'] })
+  void qc.invalidateQueries({ queryKey: docKeys.recent })
+  void qc.invalidateQueries({ queryKey: docKeys.tree })
+  void qc.invalidateQueries({ queryKey: ['search'] })
+}
+
+/**
+ * 휴지통으로 보낸다. 30일 뒤 서버가 영구 삭제한다.
+ *
+ * `?hard=1`(임원만, 즉시 영구 삭제)은 아직 부르지 않는다. 휴지통 목록을 주는 경로가 04 에
+ * 없어서 화면을 만들 수 없다(PR 본문에 백엔드로 공유).
+ */
+export function useTrashDoc(docId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => api<void>(`/docs/${docId}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      /*
+       * 상세 캐시에 휴지통 표시를 직접 찍는다. 다시 부르게 두면 아직 이 화면이 그 쿼리를 보고
+       * 있어서 요청이 한 번 더 나가고, 아무것도 안 하면 `staleTime` 동안 살아 있는 문서로
+       * 남아 같은 주소를 다시 열었을 때 편집기가 뜬다.
+       *
+       * 시각은 서버 값이 아니다(DELETE 는 204 라 본문이 없다). 다음 조회에서 서버 값으로
+       * 덮인다. 영구 삭제 예정일 계산에만 쓰이므로 이 정도 오차는 화면에 안 보인다.
+       */
+      qc.setQueryData(docKeys.detail(docId), (prev: DocDetail | undefined) =>
+        prev ? { ...prev, deleted_at: new Date().toISOString() } : undefined,
+      )
+      void qc.invalidateQueries({ queryKey: docKeys.detail(docId), refetchType: 'none' })
+      invalidateDocLists(qc)
+    },
+  })
+}
+
+/**
+ * 휴지통에서 되돌린다. 훅이 아니라 그냥 함수다.
+ *
+ * 되돌리기를 누르는 자리가 **문서를 떠난 뒤의 토스트**이기 때문이다. 훅으로 만들면 그 요청을
+ * 건 화면이 이미 없어서 `mutate` 에 넘긴 성공·실패 콜백이 불리지 않는다(관찰자에 리스너가
+ * 없다). 캐시는 갱신되는데 사용자에게는 아무 표시가 없고, 실패해도 조용하다.
+ */
+export async function untrashDoc(docId: string): Promise<DocSummary> {
+  const doc = await api<DocSummary>(`/docs/${docId}/untrash`, { method: 'POST' }).catch(
+    (err: unknown) => {
+      /*
+       * 훅 밖이라 `lib/queryClient.ts` 의 401 처리가 안 탄다. 그 처리는 쿼리·뮤테이션 캐시의
+       * 오류 훅에 걸려 있는데 이 호출은 둘 다 아니다. 그대로 두면 되돌리기를 누르는 사이에
+       * 세션이 끊겼을 때 "되돌리지 못했습니다" 만 뜨고 로그인 화면으로 못 간다.
+       */
+      if (err instanceof ApiError && err.status === 401) queryClient.setQueryData(meQueryKey, null)
+      throw err
+    },
+  )
+  queryClient.setQueryData(docKeys.detail(doc.id), (prev: DocDetail | undefined) =>
+    prev ? { ...prev, ...doc } : undefined,
+  )
+  void queryClient.invalidateQueries({ queryKey: docKeys.detail(doc.id), refetchType: 'none' })
+  invalidateDocLists(queryClient)
+  return doc
 }
 
 export function useVersions(docId: string) {

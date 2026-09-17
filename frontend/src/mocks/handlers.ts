@@ -31,6 +31,9 @@ import {
   docTree,
   findFolder,
   isDescendantFolder,
+  purgeDoc,
+  trashDoc,
+  untrashDoc,
   updateFolder,
   DOC_SEEDS,
   findDoc,
@@ -89,6 +92,16 @@ const unauthorized = () =>
   HttpResponse.json({ detail: '로그인이 필요합니다.', code: 'AUTH_REQUIRED' }, { status: 401 })
 const notFound = () =>
   HttpResponse.json({ detail: '문서를 찾을 수 없습니다.', code: 'NOT_FOUND' }, { status: 404 })
+
+/**
+ * 휴지통에 든 문서는 **읽기만** 된다. 백엔드는 수정·버전 저장·댓글 작성에서 404 다
+ * (`_get_doc` 의 `trashed_ok`). 읽기(상세·버전 목록·댓글 목록)는 되돌리기 전에 확인할 수
+ * 있어야 하므로 열어 둔다.
+ */
+function aliveDoc(id: string) {
+  const doc = findDoc(id)
+  return doc && !doc.deleted_at ? doc : undefined
+}
 
 /**
  * 권한 거부는 한 가지 문구뿐이다. 백엔드 `_deny` 도 열람 거부와 수정 거부를 구분해 주지
@@ -1084,6 +1097,43 @@ data: ${JSON.stringify(data)}
     return HttpResponse.json({ ...doc, ydoc: null, seedHtml: DOC_SEEDS[doc.id] })
   }),
 
+  http.delete('/api/docs/:docId', ({ request, params }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+
+    const doc = findDoc(String(params.docId))
+    if (!doc) return notFound()
+
+    // 백엔드는 이 값을 불리언으로 읽는다. `1`·`true`·`yes`·`on` 이 참이고 그 밖은 422.
+    const raw = new URL(request.url).searchParams.get('hard')
+    if (raw !== null && !['1', '0', 'true', 'false', 'yes', 'no', 'on', 'off'].includes(raw)) {
+      return validationError('hard 는 불리언이어야 합니다.')
+    }
+    // ?hard=1 은 영구 삭제. 임원만 할 수 있고 버전·댓글까지 같이 지운다.
+    if (raw !== null && ['1', 'true', 'yes', 'on'].includes(raw)) {
+      if (user.role !== 'exec') {
+        return HttpResponse.json(
+          { detail: '영구 삭제는 관리자만 할 수 있습니다.', code: 'FORBIDDEN' },
+          { status: 403 },
+        )
+      }
+      purgeDoc(doc.id)
+      return new HttpResponse(null, { status: 204 })
+    }
+
+    trashDoc(doc, user)
+    return new HttpResponse(null, { status: 204 })
+  }),
+
+  http.post('/api/docs/:docId/untrash', ({ params }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+
+    const doc = findDoc(String(params.docId))
+    if (!doc) return notFound()
+    return HttpResponse.json(untrashDoc(doc, user))
+  }),
+
   http.patch('/api/docs/:docId', async ({ request, params }) => {
     const user = authenticate()
     if (!user) return unauthorized()
@@ -1092,6 +1142,7 @@ data: ${JSON.stringify(data)}
     for (const key of ['title', 'folder_id'] as const) {
       if (body[key] === null) return validationError(`${key} 는 null 일 수 없습니다.`)
     }
+    if (!aliveDoc(String(params.docId))) return notFound()
     if (body.folder_id !== undefined && !findFolder(String(body.folder_id))) {
       return validationError('없는 폴더입니다.')
     }
@@ -1110,10 +1161,12 @@ data: ${JSON.stringify(data)}
   http.post('/api/docs/:docId/versions', async ({ request, params }) => {
     const user = authenticate()
     if (!user) return unauthorized()
+    // 본문 검증이 먼저다. 백엔드는 FastAPI 가 핸들러에 들어가기 전에 스키마를 본다.
     const { snapshot, label } = (await request.json()) as { snapshot: string; label?: string }
     if (!snapshot) {
-      return HttpResponse.json({ detail: '스냅샷이 없습니다.' }, { status: 400 })
+      return validationError('스냅샷이 없습니다.')
     }
+    if (!aliveDoc(String(params.docId))) return notFound()
     return HttpResponse.json(addVersion(String(params.docId), user, snapshot, label), {
       status: 201,
     })
@@ -1161,8 +1214,9 @@ data: ${JSON.stringify(data)}
     if (!user) return unauthorized()
     const { body } = (await request.json()) as { body: string }
     if (!body.trim()) {
-      return HttpResponse.json({ detail: '내용을 입력하세요.' }, { status: 400 })
+      return validationError('내용을 입력하세요.')
     }
+    if (!aliveDoc(String(params.docId))) return notFound()
     return HttpResponse.json(addComment(String(params.docId), user, body.trim()), { status: 201 })
   }),
 ]
