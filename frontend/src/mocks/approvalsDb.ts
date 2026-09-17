@@ -140,7 +140,11 @@ function submit(doc: Stored, at = now()) {
   // 결재선은 상신할 때 서버가 만든다(13 §4.2.2). 기안 때 고른 참조자는 그 뒤에 붙는다.
   const references = doc.steps.filter((s) => s.role === 'reference').map((s) => s.approver.id)
   const approvers = drafter ? buildSteps(drafter) : []
-  doc.steps = [...approvers, ...referenceSteps(references, approvers.length + 1)]
+  // 결재자와 기안자는 참조에서 뺀다. 결재선은 상신할 때 정해져서 화면이 미리 거를 수 없다.
+  // 그대로 두면 같은 사람이 결재선에 두 줄로 서고, 받은 결재함과 참조함에 같이 뜬다.
+  const already = new Set([doc.drafter_id, ...approvers.map((s) => s.approver.id)])
+  const kept = references.filter((id) => !already.has(id))
+  doc.steps = [...approvers, ...referenceSteps(kept, approvers.length + 1)]
   doc.submitted_at = at
   // 참조가 아니라 **결재자**가 없는지를 본다. 참조자만 걸린 임원 기안을 `steps.length` 로 재면
   // 결재선이 있는 줄 알고 대기로 남는다. 아무도 처리할 수 없는 문서가 된다.
@@ -227,7 +231,11 @@ export function getApproval(user: User, id: string): ApprovalDocument | Failure 
   if (!doc) return fail('문서를 찾을 수 없습니다.', 404, 'NOT_FOUND')
   const related =
     doc.drafter_id === user.id ||
-    doc.steps.some((s) => s.approver.id === user.id) ||
+    // 참조자는 **상신한 뒤에만** 볼 수 있다. 목록도 같은 기준이다. 기안 때 고른 참조자가
+    // `steps` 에 먼저 들어가므로, 여기서 안 막으면 주소만 바꿔 남의 초안을 열 수 있다.
+    doc.steps.some(
+      (s) => s.approver.id === user.id && (s.role !== 'reference' || doc.status !== 'draft'),
+    ) ||
     user.role === 'exec'
   if (!related) return fail('열람 권한이 없습니다.', 403, 'FORBIDDEN')
   return expose(doc)
@@ -240,6 +248,18 @@ function validate(input: DraftInput): Failure | null {
   if (!input.title?.trim()) return fail('제목을 입력해 주세요.', 422, 'VALIDATION')
   if (input.subject.amount !== null && !(input.subject.amount >= 0)) {
     return fail('금액이 올바르지 않습니다.', 422, 'VALIDATION')
+  }
+  if (input.references !== undefined) {
+    if (!Array.isArray(input.references)) {
+      return fail('참조자 목록이 올바르지 않습니다.', 422, 'VALIDATION')
+    }
+    // 없는 사람을 조용히 버리면 프론트는 서버가 뺀 줄을 모른다. 겹친 id 도 줄을 두 개 만든다.
+    if (new Set(input.references).size !== input.references.length) {
+      return fail('참조자가 겹칩니다.', 422, 'VALIDATION')
+    }
+    if (input.references.some((id) => !userById(id))) {
+      return fail('없는 사람을 참조로 걸 수 없습니다.', 422, 'VALIDATION')
+    }
   }
   return null
 }
@@ -261,7 +281,8 @@ export function updateDraft(user: User, id: string, input: DraftInput): Approval
   doc.subject = input.subject
   doc.amount = input.subject.amount
   doc.related = input.subject.related
-  if (input.references) doc.steps = referenceSteps(input.references, 1)
+  // 안 보내면 그대로 둔다. 빈 배열은 "전부 해제" 라서 둘을 갈라야 한다.
+  if (input.references !== undefined) doc.steps = referenceSteps(input.references, 1)
   return expose(doc)
 }
 

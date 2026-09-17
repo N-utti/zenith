@@ -5,6 +5,7 @@ import {
   createDraft,
   decide,
   forceClose,
+  getApproval,
   listApprovals,
   submitApproval,
   updateDraft,
@@ -205,5 +206,58 @@ describe('참조자 (13 FR-APV-16)', () => {
     })
     if ('error' in updated) throw new Error(updated.error)
     expect(updated.steps.map((s) => s.approver.id)).toEqual([ceo.id])
+  })
+})
+
+describe('참조자 검증과 겹침', () => {
+  it('결재자·기안자는 참조에서 빠진다', () => {
+    // 결재선은 상신할 때 정해져서 화면이 미리 거를 수 없다. 서버가 거른다.
+    const draft = createDraft(member, {
+      type_code: 'general',
+      title: '결재자를 참조로',
+      subject: { body: '본문', amount: null, related: null },
+      references: [senior.id, other.id],
+    })
+    if ('error' in draft) throw new Error(draft.error)
+    const pending = submitApproval(member, draft.id)
+    if ('error' in pending) throw new Error(pending.error)
+
+    const references = pending.steps.filter((s) => s.role === 'reference')
+    expect(references.map((s) => s.approver.id)).toEqual([other.id])
+    // 같은 사람이 결재선에 두 줄로 서면 받은 결재함과 참조함에 같이 뜬다.
+    expect(listApprovals(senior, 'reference').map((d) => d.id)).not.toContain(draft.id)
+  })
+
+  it('없는 사람·겹친 사람·배열이 아닌 값은 422 다', () => {
+    const base = {
+      type_code: 'general' as const,
+      title: '참조 검증',
+      subject: { body: '본문', amount: null, related: null },
+    }
+    expect(createDraft(member, { ...base, references: ['u-없음'] })).toMatchObject({
+      code: 'VALIDATION',
+    })
+    expect(createDraft(member, { ...base, references: [other.id, other.id] })).toMatchObject({
+      code: 'VALIDATION',
+    })
+    expect(
+      createDraft(member, { ...base, references: other.id as unknown as string[] }),
+    ).toMatchObject({ code: 'VALIDATION' })
+  })
+
+  it('참조자는 상신 전 초안을 열 수 없다', () => {
+    const draft = createDraft(member, {
+      type_code: 'general',
+      title: '초안 열람',
+      subject: { body: '본문', amount: null, related: null },
+      references: [other.id],
+    })
+    if ('error' in draft) throw new Error(draft.error)
+
+    // 주소만 바꿔 들어와도 막힌다. 목록에서 빼는 것만으로는 부족하다.
+    expect(getApproval(other, draft.id)).toMatchObject({ code: 'FORBIDDEN' })
+
+    submitApproval(member, draft.id)
+    expect(getApproval(other, draft.id)).toMatchObject({ id: draft.id })
   })
 })

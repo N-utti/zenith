@@ -10,7 +10,7 @@ import { useToast } from '@/components/ui/ToastContext'
 import { ApiError } from '@/lib/api'
 import { hueOf } from '@/lib/avatar'
 import { useChannels, useCreateChannel } from './api'
-import { useColleagues } from './people'
+import { useColleagues } from '@/features/people/colleagues'
 
 /** 백엔드 `ChannelCreateIn.name` 의 제약(`NonBlank`, 100자). */
 const NAME_MAX = 100

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router'
+import { Avatar } from '@/components/ui/Avatar'
 import { Button } from '@/components/ui/Button'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { Field } from '@/components/ui/Field'
@@ -16,12 +17,11 @@ import {
   useUpdateDraft,
 } from '@/features/approvals/api'
 import { useMyArrangements } from '@/features/attendance/api'
-import { useColleagues } from '@/features/chat/people'
-import { Avatar } from '@/components/ui/Avatar'
-import { hueOf } from '@/lib/avatar'
-import { cn } from '@/lib/cn'
+import { useColleagues } from '@/features/people/colleagues'
 import { useCurrentUser } from '@/features/auth/AuthContext'
 import { ApiError } from '@/lib/api'
+import { hueOf } from '@/lib/avatar'
+import { cn } from '@/lib/cn'
 
 /**
  * 기안 작성(13 SCR-APV-01). v1 최소판은 일반 기안 한 종류다. 근태 4종은 근태 화면의 신청이 곧 기안이다.
@@ -59,7 +59,7 @@ export function ApprovalNewPage() {
   const [error, setError] = useState<string | null>(null)
   /** 고른 참조자. 임시저장을 열면 저장돼 있던 것으로 시작한다. */
   const [references, setReferences] = useState<string[] | null>(null)
-  const { people } = useColleagues()
+  const { people, isPending: peoplePending, isError: peopleError } = useColleagues()
   // 상신이 실패해도 방금 만든 임시저장을 잃지 않는다. 다음 시도는 새로 만들지 않고 이것을 고친다.
   const [createdId, setCreatedId] = useState<string | null>(null)
 
@@ -95,11 +95,11 @@ export function ApprovalNewPage() {
     seed?.steps.filter((step) => step.role === 'reference').map((step) => step.approver.id) ?? []
   const referenceIds = references ?? savedReferences
   const toggleReference = (id: string) =>
-    setReferences(
-      referenceIds.includes(id)
-        ? referenceIds.filter((each) => each !== id)
-        : [...referenceIds, id],
-    )
+    // 저장돼 있던 값에서 출발한다. `null` 은 "아직 안 건드림" 이라 그때는 그 값이 시작점이다.
+    setReferences((prev) => {
+      const current = prev ?? savedReferences
+      return current.includes(id) ? current.filter((each) => each !== id) : [...current, id]
+    })
 
   const amountNumber = amountValue.trim() === '' ? null : Number(amountValue.replace(/,/g, ''))
   const amountError =
@@ -192,11 +192,18 @@ export function ApprovalNewPage() {
           </Field>
           <Field
             label="참조"
-            hint="결재는 하지 않지만 문서를 볼 사람입니다. 상신하면 참조함에 들어갑니다."
+            hint="결재는 하지 않지만 문서를 볼 사람입니다. 결재선에 오른 사람은 빠집니다."
+            error={peopleError ? '참조자 목록을 불러오지 못했습니다.' : null}
           >
-            {() => (
-              <div className="flex flex-wrap gap-1.5">
-                {people.length === 0 && (
+            {(slot) => (
+              <div
+                role="group"
+                aria-label="참조자"
+                aria-describedby={slot['aria-describedby']}
+                className="flex flex-wrap gap-1.5"
+              >
+                {peoplePending && <Spinner />}
+                {!peoplePending && !peopleError && people.length === 0 && (
                   <p className="text-subtle text-sm">고를 수 있는 사람이 없습니다.</p>
                 )}
                 {people.map((each) => {
