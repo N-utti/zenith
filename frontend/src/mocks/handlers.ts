@@ -53,6 +53,7 @@ import {
 } from './docsDb'
 import {
   attendanceMonth,
+  attendanceRange,
   companyAttendance,
   cancelException,
   createArrangement,
@@ -63,6 +64,7 @@ import {
   listCorrections,
   listOvertime,
   MONTH,
+  RANGE_MAX_DAYS,
   type ExceptionStore,
 } from './attendanceDb'
 import {
@@ -86,6 +88,7 @@ import { createEvent, deleteEvent, listEvents } from './eventsDb'
 import {
   cancelLeave,
   createLeave,
+  ISO_DATE,
   LEAVE_TYPES,
   leaveBalance,
   listBalances,
@@ -587,6 +590,25 @@ export const handlers = [
   }),
 
   // ── 근태 · 내 근태 (04 §10.1) ─────────────────────────────
+  // 기간 집계(04 §10.1). `/api/attendance/me` 보다 먼저 등록할 필요는 없다(세그먼트 수가 다르다).
+  http.get(
+    '/api/attendance/me/summary',
+    authed((user, request) => {
+      const params = new URL(request.url).searchParams
+      const from = params.get('from') ?? ''
+      const to = params.get('to') ?? ''
+      if (!ISO_DATE.test(from) || !ISO_DATE.test(to)) {
+        return validationError('from·to 는 YYYY-MM-DD 입니다.')
+      }
+      if (from > to) return validationError('from 이 to 보다 뒤입니다.')
+      const span = (Date.parse(to) - Date.parse(from)) / 86_400_000 + 1
+      if (span > RANGE_MAX_DAYS) {
+        return validationError(`기간은 ${RANGE_MAX_DAYS}일까지 볼 수 있습니다.`)
+      }
+      return HttpResponse.json(attendanceRange(user, from, to))
+    }),
+  ),
+
   http.get(
     '/api/attendance/me',
     authed((user, request) => {

@@ -12,6 +12,7 @@ import type {
   ArrangementOnCalendar,
   AttendanceGrid,
   AttendanceMonth,
+  AttendanceRange,
   Correction,
   CorrectionInput,
   Holiday,
@@ -102,6 +103,23 @@ export function useCancelLeave() {
 }
 
 /** 내 근태 한 달(04 §10.1). `month` 는 `2026-09`. */
+/**
+ * 기간 집계. 달을 넘어가는 누계를 볼 때 쓴다(연장근로·휴가는 해 단위로 관리한다).
+ *
+ * 날짜가 비었거나 거꾸로면 부르지 않는다. 서버는 422 인데, 고르는 중에 매번 빨간 문구를
+ * 띄울 이유가 없다.
+ */
+export function useAttendanceRange(from: string, to: string) {
+  return useQuery({
+    queryKey: ['attendance', 'me', 'summary', { from, to }],
+    queryFn: () =>
+      api<AttendanceRange>(
+        `/attendance/me/summary?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+      ),
+    enabled: from !== '' && to !== '' && from <= to,
+  })
+}
+
 export function useMyAttendance(month: string) {
   return useQuery({
     queryKey: ['attendance', 'me', month],
