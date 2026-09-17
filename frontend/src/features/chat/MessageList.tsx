@@ -1,10 +1,12 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Paperclip } from 'lucide-react'
 import { Avatar } from '@/components/ui/Avatar'
 import { Spinner } from '@/components/ui/Spinner'
 import { hueOf } from '@/lib/avatar'
 import { formatDay, formatTime } from '@/lib/datetime'
+import { formatBytes } from '@/lib/format'
 import { httpUrl } from '@/lib/serverOrigin'
+import { isImage } from './attachments'
 import { useMessages } from './api'
 import type { ChatAttachment, ChatMessage } from './types'
 
@@ -25,36 +27,30 @@ function grouped(message: ChatMessage, previous: ChatMessage | undefined) {
   )
 }
 
-/** 이미지만 바로 보여 준다. 나머지는 이름·크기만 두고 누르면 내려받는다. */
-function isImage(name: string): boolean {
-  return /\.(png|jpe?g|gif|webp)$/i.test(name)
-}
-
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes}B`
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)}KB`
-  return `${(bytes / 1024 / 1024).toFixed(1)}MB`
-}
-
 /**
  * 메시지에 붙은 파일.
  *
  * `url` 은 서버가 준 것을 그대로 쓴다. 내려받기는 쿠키로 인증되고 채널 멤버만 받을 수 있다.
- * 이미지는 서버가 `inline` 으로 내려주는 형식(png·jpeg·gif·webp)만 미리 보여 준다.
- * SVG·HTML 은 같은 오리진에서 스크립트가 돌 수 있어 서버도 내려받기로만 준다.
+ *
+ * 미리보기 판정은 `attachments.ts` 의 `isImage` 가 한다(서버와 갈릴 수 있는 이유도 거기).
  */
 function Attachments({ files }: { files: ChatAttachment[] | null }) {
+  /** 그리지 못한 이미지. 확장자 판정이 서버와 갈렸거나 못 받아 온 것이다. */
+  const [broken, setBroken] = useState<Set<string>>(new Set())
   if (!files || files.length === 0) return null
 
   return (
     <ul className="mt-1.5 flex flex-wrap gap-2">
-      {files.map((file) => (
-        <li key={file.url}>
-          {isImage(file.name) ? (
+      {files.map((file, index) => (
+        <li key={`${file.url}-${index}`}>
+          {isImage(file.name) && !broken.has(file.url) ? (
             <a href={httpUrl(file.url)} target="_blank" rel="noreferrer">
               <img
                 src={httpUrl(file.url)}
                 alt={file.name}
+                loading="lazy"
+                // 못 그리면 파일 링크로 떨어뜨린다. 깨진 그림 아이콘만 남으면 이름조차 안 보인다.
+                onError={() => setBroken((prev) => new Set(prev).add(file.url))}
                 className="border-line max-h-60 max-w-full rounded-lg border object-contain"
               />
             </a>
@@ -66,7 +62,7 @@ function Attachments({ files }: { files: ChatAttachment[] | null }) {
             >
               <Paperclip className="size-3.5 shrink-0" />
               <span className="max-w-48 truncate">{file.name}</span>
-              <span className="text-subtle">{formatSize(file.size)}</span>
+              <span className="text-subtle">{formatBytes(file.size)}</span>
             </a>
           )}
         </li>

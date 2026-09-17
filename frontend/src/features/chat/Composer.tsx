@@ -4,14 +4,9 @@ import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
 import { Textarea } from '@/components/ui/Textarea'
 import { ApiError } from '@/lib/api'
-import { MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, useSendMessage, useUploadAttachment } from './api'
+import { formatBytes } from '@/lib/format'
+import { MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, uploadAttachment, useSendMessage } from './api'
 import type { ChatAttachment } from './types'
-
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes}B`
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)}KB`
-  return `${(bytes / 1024 / 1024).toFixed(1)}MB`
-}
 
 export function Composer({
   channelId,
@@ -23,18 +18,20 @@ export function Composer({
   onTyping: () => void
 }) {
   const send = useSendMessage(channelId)
-  const upload = useUploadAttachment(channelId)
   const [body, setBody] = useState('')
   /** 올려 둔 파일. 보내기 전까지는 서버에만 있고 어느 메시지에도 안 붙어 있다. */
   const [files, setFiles] = useState<ChatAttachment[]>([])
+  /** 올라가는 중인 개수. 개수 상한은 이것까지 세야 한다. */
+  const [uploading, setUploading] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const picker = useRef<HTMLInputElement>(null)
 
-  const pick = (list: FileList | null) => {
+  const pick = async (list: FileList | null) => {
     setError(null)
     const chosen = [...(list ?? [])]
     if (chosen.length === 0) return
-    if (files.length + chosen.length > MAX_ATTACHMENTS) {
+    // 올라가는 중인 것도 센다. 안 그러면 두 번에 나눠 고를 때 상한을 넘긴다.
+    if (files.length + uploading + chosen.length > MAX_ATTACHMENTS) {
       return setError(`파일은 ${MAX_ATTACHMENTS}개까지 붙일 수 있습니다.`)
     }
     // 상한은 서버가 강제하지만 여기서 먼저 걸러야 10MB 를 올렸다가 422 를 보지 않는다.
@@ -43,28 +40,35 @@ export function Composer({
     const empty = chosen.find((file) => file.size === 0)
     if (empty) return setError(`${empty.name} 은 빈 파일입니다.`)
 
+    setUploading((n) => n + chosen.length)
     for (const file of chosen) {
-      upload.mutate(file, {
-        onSuccess: (attachment) => setFiles((prev) => [...prev, attachment]),
-        onError: (err) =>
-          setError(err instanceof ApiError ? err.message : `${file.name} 을 올리지 못했습니다.`),
-      })
+      try {
+        const attachment = await uploadAttachment(channelId, file)
+        setFiles((prev) => [...prev, attachment])
+      } catch (err) {
+        setError(err instanceof ApiError ? err.message : `${file.name} 을 올리지 못했습니다.`)
+      } finally {
+        setUploading((n) => n - 1)
+      }
     }
   }
 
   const dispatch = () => {
     const text = body.trim()
     // 첨부만 보내는 메시지도 있다. 둘 다 없을 때만 막는다.
-    if ((!text && files.length === 0) || send.isPending || upload.isPending) return
+    if ((!text && files.length === 0) || send.isPending || uploading > 0) return
+    const sending = files
     // 성공은 WebSocket 이벤트로 확인된다. 입력창은 먼저 비워도 안전하다.
+    setError(null)
     setBody('')
     setFiles([])
     send.mutate(
-      { body: text, attachments: files.length > 0 ? files : undefined },
+      { body: text, attachments: sending.length > 0 ? sending : undefined },
       {
         onError: () => {
           setBody(text)
-          setFiles(files)
+          // 보내는 사이에 올라온 파일이 있으면 그것도 남긴다.
+          setFiles((prev) => [...sending, ...prev])
         },
       },
     )
@@ -75,7 +79,7 @@ export function Composer({
     dispatch()
   }
 
-  const busy = send.isPending || upload.isPending
+  const busy = send.isPending || uploading > 0
 
   return (
     <form onSubmit={submit} className="border-line bg-surface border-t px-4 py-3">
@@ -89,7 +93,7 @@ export function Composer({
               >
                 <Paperclip className="size-3 shrink-0" />
                 <span className="max-w-40 truncate">{file.name}</span>
-                <span className="text-subtle">{formatSize(file.size)}</span>
+                <span className="text-subtle">{formatBytes(file.size)}</span>
                 <button
                   type="button"
                   aria-label={`${file.name} 떼기`}
@@ -110,7 +114,7 @@ export function Composer({
             multiple
             hidden
             onChange={(e) => {
-              pick(e.target.files)
+              void pick(e.target.files)
               // 같은 파일을 다시 고를 수 있게 비운다.
               e.target.value = ''
             }}
@@ -119,10 +123,10 @@ export function Composer({
             type="button"
             variant="secondary"
             aria-label="파일 붙이기"
-            disabled={upload.isPending}
+            disabled={uploading > 0}
             onClick={() => picker.current?.click()}
           >
-            {upload.isPending ? <Spinner /> : <Paperclip className="size-4" />}
+            {uploading > 0 ? <Spinner /> : <Paperclip className="size-4" />}
           </Button>
 
           <Textarea

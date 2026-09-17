@@ -81,16 +81,14 @@ export const MAX_ATTACHMENTS = 10
 /**
  * 첨부를 먼저 올리고 `{url, name, size}` 를 받는다. 그 값을 메시지의 `attachments[]` 에
  * 그대로 넣는다. 바이너리는 메시지 본문에 실리지 않는다.
+ *
+ * 훅이 아니라 그냥 함수다. 파일 여러 개를 한 번에 고를 수 있는데, 뮤테이션 훅 하나를
+ * 반복문에서 부르면 새 호출이 앞선 것에서 관찰자를 떼어 간다. 그러면 앞선 파일은 서버에
+ * 올라갔는데 성공 콜백이 안 불려 화면에도 메시지에도 없고 서버에만 남는다. 문서 이미지
+ * 업로드(`features/docs/useImageUpload`)도 같은 이유로 함수를 쓴다.
  */
-export function useUploadAttachment(channelId: string) {
-  return useMutation({
-    mutationFn: (file: File) => {
-      const form = new FormData()
-      form.append('file', file)
-      return api<ChatAttachment>(`/channels/${channelId}/attachments`, {
-        method: 'POST',
-        body: form,
-      })
-    },
-  })
+export function uploadAttachment(channelId: string, file: File): Promise<ChatAttachment> {
+  const form = new FormData()
+  form.append('file', file)
+  return api<ChatAttachment>(`/channels/${channelId}/attachments`, { method: 'POST', body: form })
 }

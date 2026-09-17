@@ -236,16 +236,23 @@ export function sessionUserId(req) {
   return cookie ? decodeURIComponent(cookie.slice('zenith.mock.session='.length)) : null
 }
 
-/** 경로로 쓸 수 없는 글자를 뺀다. 백엔드 `storage.safe_name` 이 하는 일이다. */
+/**
+ * 경로로 쓸 수 없는 글자를 뺀다. 백엔드 `storage.safe_name` 과 같은 규칙이다.
+ *
+ * 앞뒤의 점·공백을 떼는 것이 중요하다. `..` 가 그대로 남으면 브라우저가 경로를 해소해
+ * 엉뚱한 주소로 요청한다. 200자는 글자가 아니라 **바이트** 기준이다(한글은 3바이트).
+ */
 function safeName(raw) {
-  // 정규식 대신 글자로 건다. 경로 구분자와 따옴표류가 섞여 있어 정규식으로 쓰면 읽기 어렵다.
   const base = String(raw || 'file').split('/').pop().split(String.fromCharCode(92)).pop() || 'file'
   const banned = '"*/:<>?|' + String.fromCharCode(92)
-  const cleaned = [...base]
-    .filter((ch) => ch >= ' ' && !banned.includes(ch))
+  let cleaned = [...base]
+    // 제어·서식 문자를 뺀다. U+202E 같은 것이 남으면 파일명 표시를 뒤집을 수 있다.
+    .filter((ch) => !/\p{C}/u.test(ch) && !banned.includes(ch))
     .join('')
-    .trim()
-  return (cleaned || 'file').slice(0, 200)
+    .replace(/^[.\s]+|[.\s]+$/g, '')
+  if (!cleaned) cleaned = 'file'
+  while (Buffer.byteLength(cleaned, 'utf8') > 200) cleaned = cleaned.slice(0, -1)
+  return cleaned || 'file'
 }
 
 /**
@@ -256,7 +263,11 @@ function readMultipartFile(req) {
   /** 파트의 헤더와 본문 사이. 빈 줄 하나다. */
   const CRLF2 = '\r\n\r\n'
   const type = req.headers['content-type'] ?? ''
-  const boundary = /boundary=(?:"([^"]+)"|([^;]+))/.exec(type)?.slice(1).find(Boolean)
+  const boundary = /boundary=(?:"([^"]+)"|([^;]+))/i
+    .exec(type)
+    ?.slice(1)
+    .find(Boolean)
+    ?.trim()
   if (!boundary) return Promise.resolve(null)
 
   return new Promise((resolve, reject) => {
@@ -274,6 +285,9 @@ function readMultipartFile(req) {
       const raw = Buffer.concat(chunks)
       const sep = Buffer.from(`--${boundary}`)
       let from = raw.indexOf(sep)
+      // 같은 이름의 파트가 여럿이면 **마지막** 것을 쓴다. 백엔드(Starlette)가 그렇다.
+      // 검사한 파트와 저장한 파트가 달라지는 파서 차이를 만들지 않는다.
+      let picked = null
       while (from !== -1) {
         const start = from + sep.length
         const next = raw.indexOf(sep, start)
@@ -284,36 +298,63 @@ function readMultipartFile(req) {
           const head = part.subarray(0, headEnd).toString('utf8')
           if (/name="file"/.test(head)) {
             const filename = /filename="([^"]*)"/.exec(head)?.[1] ?? 'file'
-            const ct = /content-type:\s*([^\r\n]+)/i.exec(head)?.[1]?.trim().toLowerCase()
-            // 헤더 값을 그대로 반사하므로 토큰 모양만 받는다. 나머지는 octet-stream.
-            const contentType = ct && /^[\w.+-]+\/[\w.+-]+$/.test(ct) ? ct : 'application/octet-stream'
+            // 헤더 줄 시작에 앵커를 건다. 파일명 안에 든 문자열이 먼저 잡히면 안 된다.
+            const ctLine = head
+              .split(/\r?\n/)
+              .find((line) => /^content-type:/i.test(line))
+              ?.slice('content-type:'.length)
+            // 매개변수(`; charset=`)는 떼고 본다. 그대로 반사하므로 토큰 모양만 받는다.
+            const ct = ctLine?.split(';')[0]?.trim().toLowerCase()
+            const contentType =
+              ct && /^[\w.+-]+\/[\w.+-]+$/.test(ct) ? ct : 'application/octet-stream'
             // 파트 끝의 CRLF 는 경계에 속한다.
             const data = part.subarray(headEnd + 4, part.length - 2)
-            return resolve({ filename, contentType, data })
+            picked = { filename, contentType, data }
           }
         }
         from = next
       }
-      resolve(null)
+      resolve(picked)
     })
   })
 }
 
 /**
- * 메시지에 실린 첨부가 **이 채널에 올라온 것**인지 확인한다. 백엔드 `parse_attachment_url` 과
- * 같은 판정이다. 남의 채널 파일을 메시지에 끼울 수 없고, 이름도 업로드 때 정해진 것이어야 한다.
+ * 메시지에 실린 첨부가 **이 채널에 올라온 것**인지 확인한다. 백엔드 `MsgOp` 검증과 같다.
+ *
+ * 하나라도 걸리면 첨부만 빼는 게 아니라 **메시지를 만들지 않는다.** 백엔드가 그렇게 한다.
+ * 조용히 빼면 개발에서는 멀쩡히 보내지는데 실서버에서만 거절당한다.
+ *
+ * @returns 검사를 통과한 목록, 또는 거절 사유
  */
-function pickAttachments(raw, channelId) {
-  if (!Array.isArray(raw)) return []
-  return raw.slice(0, 10).flatMap((item) => {
-    if (!item || typeof item.url !== 'string') return []
+function checkAttachments(raw, channelId) {
+  if (raw === undefined || raw === null) return { files: [] }
+  if (!Array.isArray(raw)) return { error: '첨부는 배열이어야 합니다.' }
+  if (raw.length > 10) return { error: '첨부는 10개까지입니다.' }
+
+  const files = []
+  for (const item of raw) {
+    if (!item || typeof item.url !== 'string') return { error: '첨부 모양이 올바르지 않습니다.' }
     const match = /^\/api\/channels\/([^/]+)\/attachments\/([^/]+)\/(.+)$/.exec(item.url)
-    if (!match || match[1] !== channelId) return []
-    const name = decodeURIComponent(match[3])
+    if (!match || match[1] !== channelId) {
+      return { error: '이 채널에 올린 첨부가 아닙니다.' }
+    }
+    let name
+    try {
+      name = decodeURIComponent(match[3])
+    } catch {
+      // 잘못된 퍼센트 인코딩. 던지면 500 이 된다.
+      return { error: '이 채널에 올린 첨부가 아닙니다.' }
+    }
+    // 이름도 업로드 때 정해진 것이어야 한다. 고쳐 주지 않고 거절한다(백엔드와 같다).
+    if (typeof item.name !== 'string' || item.name !== name) {
+      return { error: '이 채널에 올린 첨부가 아닙니다.' }
+    }
     const stored = attachments.get(`${channelId}/${match[2]}/${name}`)
-    if (!stored) return []
-    return [{ url: item.url, name, size: stored.data.length }]
-  })
+    // 백엔드는 존재를 여기서 보지 않는다(없으면 내려받을 때 404). 릴레이는 크기를 채워야 해서 본다.
+    files.push({ url: item.url, name, size: stored ? stored.data.length : 0 })
+  }
+  return { files }
 }
 
 export async function handleChatRequest(req, res, url) {
@@ -415,7 +456,7 @@ export async function handleChatRequest(req, res, url) {
     const channelId = uploadMatch[1]
     const channel = CHANNELS.find((c) => c.id === channelId)
     if (!channel || !channel.memberIds.includes(viewerId)) {
-      return json(res, 403, { detail: '이 채널의 멤버가 아닙니다.', code: 'FORBIDDEN' })
+      return json(res, 403, { detail: '권한이 부족합니다.', code: 'FORBIDDEN' })
     }
 
     const part = await readMultipartFile(req)
@@ -449,9 +490,15 @@ export async function handleChatRequest(req, res, url) {
     const [, channelId, fileId, rawName] = downloadMatch
     const channel = CHANNELS.find((c) => c.id === channelId)
     if (!channel || !channel.memberIds.includes(viewerId)) {
-      return json(res, 403, { detail: '이 채널의 멤버가 아닙니다.', code: 'FORBIDDEN' })
+      return json(res, 403, { detail: '권한이 부족합니다.', code: 'FORBIDDEN' })
     }
-    const name = decodeURIComponent(rawName)
+    let name
+    try {
+      name = decodeURIComponent(rawName)
+    } catch {
+      // 잘못된 퍼센트 인코딩. 던지면 500 이 된다.
+      return json(res, 404, { detail: '없는 첨부입니다.', code: 'NOT_FOUND' })
+    }
     const found = attachments.get(`${channelId}/${fileId}/${name}`)
     if (!found) return json(res, 404, { detail: '없는 첨부입니다.', code: 'NOT_FOUND' })
 
@@ -462,6 +509,8 @@ export async function handleChatRequest(req, res, url) {
       // 한글 파일명은 filename* 로(RFC 6266). 스크립트가 돌 수 있는 형식은 내려받기만.
       'Content-Disposition': `${inline ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(name)}`,
       'X-Content-Type-Options': 'nosniff',
+      // 키에 랜덤 파일 id 가 있어 불변이다. 인라인 이미지가 스크롤마다 다시 내려오지 않게.
+      'Cache-Control': 'private, max-age=86400',
     })
     return res.end(found.data)
   }
@@ -492,8 +541,10 @@ export async function handleChatRequest(req, res, url) {
       if (!channel.memberIds.includes(userId)) {
         return json(res, 403, { detail: '이 채널의 멤버가 아닙니다.', code: 'FORBIDDEN' })
       }
+      const checked = checkAttachments(payload?.attachments, channelId)
+      if (checked.error) return json(res, 422, { detail: checked.error, code: 'VALIDATION' })
+      const files = checked.files
       // 첨부만 보내는 메시지도 있다. 둘 다 없을 때만 막는다.
-      const files = pickAttachments(payload?.attachments, channelId)
       if (!body.trim() && files.length === 0) {
         return json(res, 422, { detail: '내용을 입력하세요.', code: 'VALIDATION' })
       }
