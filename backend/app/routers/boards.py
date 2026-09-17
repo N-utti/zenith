@@ -26,6 +26,7 @@ from app.deps import current_user
 from app.errors import ApiError
 from app.models import ROLE_RANK, Board, Notification, Post, User
 from app.paging import decode_cursor, encode_cursor
+from app.prefs import wants
 from app.realtime import chat
 
 router = APIRouter(tags=["boards"], dependencies=[Depends(current_user)])
@@ -226,9 +227,11 @@ async def create_post(
     readers = [role for role, r in ROLE_RANK.items() if r >= ROLE_RANK.get(board.min_role, 99)]
     targets = (
         await db.execute(
-            select(User.id).where(User.active.is_(True), User.role.in_(readers), User.id != user.id)
+            select(User.id, User.preferences).where(
+                User.active.is_(True), User.role.in_(readers), User.id != user.id
+            )
         )
-    ).scalars()
+    ).all()
     notices = [
         Notification(
             user_id=uid,
@@ -242,7 +245,8 @@ async def create_post(
                 "from": {"id": str(user.id), "name": user.name},
             },
         )
-        for uid in targets
+        for uid, prefs in targets
+        if wants(prefs, "post")
     ]
     db.add_all(notices)
     await db.commit()

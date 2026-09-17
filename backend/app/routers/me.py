@@ -29,6 +29,7 @@ from app.models import (
     Todo,
     User,
 )
+from app.prefs import Preferences, PreferencesPatch, merged
 
 router = APIRouter(tags=["me"], dependencies=[Depends(current_user)])
 
@@ -398,3 +399,34 @@ async def read_notifications(
     )
     await db.commit()
     return Response(status_code=204)
+
+
+@router.get(
+    "/me/preferences",
+    response_model=Preferences,
+    summary="내 환경설정 — 알림 종류별 수신·시작 화면 (04 밖, 이슈 #81)",
+)
+async def get_preferences(user: User = Depends(current_user)) -> Preferences:
+    return merged(user.preferences)
+
+
+@router.patch(
+    "/me/preferences",
+    response_model=Preferences,
+    summary="환경설정 부분 갱신 — 준 것만 덮어쓰고 전체를 돌려준다. 모르는 값은 422",
+)
+async def update_preferences(
+    body: PreferencesPatch,
+    user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Preferences:
+    # ponytail: 읽어서 합치고 JSONB 를 통째로 쓴다 — 같은 사람이 탭 두 개로 동시에 고치면 나중 것이 이긴다.
+    # 본인만 본인 것을 고치는 화면이라 감수한다. 걸리면 select(...).with_for_update() 로 줄을 세운다.
+    now = merged(user.preferences).model_dump()
+    if body.notifications is not None:
+        now["notifications"].update(body.notifications.model_dump(exclude_unset=True))
+    if body.start_page:
+        now["start_page"] = body.start_page
+    await db.execute(update(User).where(User.id == user.id).values(preferences=now))
+    await db.commit()
+    return Preferences.model_validate(now)

@@ -45,6 +45,7 @@ from app.db import session_scope
 from app.deps import _own_origin, authenticate, origin_allowed
 from app.errors import ApiError
 from app.models import ChannelMember, Document, Message, Notification, User
+from app.prefs import wants
 from app.routers.channels import MAX_ATTACHMENTS, AttachmentOut, parse_attachment_url
 
 log = logging.getLogger("zenith.ws")
@@ -259,7 +260,7 @@ async def _handle(ws: WebSocket, user: User, op: SubOp | MsgOp | ReadOp | Typing
             await db.flush()  # id 를 받는다
             # 채널 밖 사람에게 열 수 없는 채널을 가리키는 알림은 만들지 않는다
             for target in await mention_targets(db, op.body, user.id):
-                if target.id in members:
+                if target.id in members and wants(target.preferences, "mention"):
                     notices.append(
                         Notification(
                             user_id=target.id,

@@ -66,6 +66,8 @@ class User(Base):
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=sql_text("true"))
     team_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("teams.id"))
     hire_date: Mapped[date | None] = mapped_column(Date)
+    # 알림 수신·시작 화면 (app/prefs.py). null 이면 기본값 — 03 에 없던 컬럼 (2026-09-17)
+    preferences: Mapped[dict | None] = mapped_column(JSONB)
     created_at: Mapped[datetime] = created_at_col()
 
 

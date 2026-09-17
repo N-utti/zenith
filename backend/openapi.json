@@ -446,6 +446,66 @@
         }
       }
     },
+    "/api/me/preferences": {
+      "get": {
+        "tags": [
+          "me"
+        ],
+        "summary": "내 환경설정 — 알림 종류별 수신·시작 화면 (04 밖, 이슈 #81)",
+        "operationId": "get_preferences_api_me_preferences_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Preferences"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "me"
+        ],
+        "summary": "환경설정 부분 갱신 — 준 것만 덮어쓰고 전체를 돌려준다. 모르는 값은 422",
+        "operationId": "update_preferences_api_me_preferences_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreferencesPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Preferences"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/tree": {
       "get": {
         "tags": [
@@ -4027,6 +4087,117 @@
         ],
         "title": "NotificationOut"
       },
+      "NotificationPatch": {
+        "properties": {
+          "mention": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mention"
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          },
+          "reply": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reply"
+          },
+          "post": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Post"
+          },
+          "attendance": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attendance"
+          },
+          "approval": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approval"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "NotificationPatch",
+        "description": "준 종류만 덮어쓴다 — 모르는 종류는 422(프론트 오타가 조용히 무시되지 않게)."
+      },
+      "NotificationPrefs": {
+        "properties": {
+          "mention": {
+            "type": "boolean",
+            "title": "Mention",
+            "default": true
+          },
+          "comment": {
+            "type": "boolean",
+            "title": "Comment",
+            "default": true
+          },
+          "reply": {
+            "type": "boolean",
+            "title": "Reply",
+            "default": true
+          },
+          "post": {
+            "type": "boolean",
+            "title": "Post",
+            "default": true
+          },
+          "attendance": {
+            "type": "boolean",
+            "title": "Attendance",
+            "default": true
+          },
+          "approval": {
+            "type": "boolean",
+            "title": "Approval",
+            "default": true
+          }
+        },
+        "type": "object",
+        "title": "NotificationPrefs",
+        "description": "03 `notifications.kind` 와 같은 키. 근태(`att_*`, 04 §10.5)·결재(`apv_*`, 13 §9.4)는 종류가 여럿이라\n묶음 하나로 받는다 — `wants()` 가 접두사로 되돌린다."
+      },
       "PasswordIn": {
         "properties": {
           "current_password": {
@@ -4266,6 +4437,71 @@
         },
         "type": "object",
         "title": "PostPatchIn"
+      },
+      "Preferences": {
+        "properties": {
+          "notifications": {
+            "$ref": "#/components/schemas/NotificationPrefs",
+            "default": {
+              "mention": true,
+              "comment": true,
+              "reply": true,
+              "post": true,
+              "attendance": true,
+              "approval": true
+            }
+          },
+          "start_page": {
+            "type": "string",
+            "enum": [
+              "/",
+              "/docs",
+              "/chat",
+              "/board",
+              "/attendance"
+            ],
+            "title": "Start Page",
+            "default": "/"
+          }
+        },
+        "type": "object",
+        "title": "Preferences"
+      },
+      "PreferencesPatch": {
+        "properties": {
+          "notifications": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NotificationPatch"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "start_page": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "/",
+                  "/docs",
+                  "/chat",
+                  "/board",
+                  "/attendance"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Page"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "PreferencesPatch",
+        "description": "부분 갱신 — 준 것만 덮어쓴다. null 은 \"안 준 것\"과 같다."
       },
       "ReadIn": {
         "properties": {

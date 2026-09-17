@@ -34,6 +34,7 @@ from app.models import (
     User,
     Workspace,
 )
+from app.prefs import wants
 from app.realtime import chat, yjs
 
 router = APIRouter(tags=["docs"], dependencies=[Depends(current_user)])
@@ -597,6 +598,7 @@ async def create_comment(
             },
         )
         for target in await chat.mention_targets(db, comment.body, user.id)
+        if wants(target.preferences, "mention")
     ]
     db.add_all(notices)
     await db.commit()
