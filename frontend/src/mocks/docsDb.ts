@@ -4,6 +4,7 @@ import type {
   DocSummary,
   DocTreeData,
   DocVersion,
+  DocVersionSnapshot,
   Folder,
 } from '@/features/docs/types'
 import type { User } from '@/types'
@@ -276,7 +277,7 @@ export function touchDoc(
 
 // ── 버전 기록 ────────────────────────────────────────────────
 
-const versions: Record<string, DocVersion[]> = {}
+const versions: Record<string, DocVersionSnapshot[]> = {}
 
 /**
  * 같은 사람이 이어서 편집하는 동안 생기는 스냅샷을 하나로 접는 시간.
@@ -284,9 +285,20 @@ const versions: Record<string, DocVersion[]> = {}
  */
 const COALESCE_MS = 3 * 60_000
 
-/** 최신순. */
+/** 최신순. **스냅샷은 싣지 않는다**(백엔드 `VersionMeta`). 내용은 `/restore` 로 한 건씩. */
 export function listVersions(docId: string): DocVersion[] {
-  return [...(versions[docId] ?? [])].reverse()
+  return [...(versions[docId] ?? [])]
+    .reverse()
+    .map((version) => ({
+      id: version.id,
+      created_at: version.created_at,
+      author: version.author,
+      label: version.label,
+    }))
+}
+
+export function findVersion(docId: string, versionId: string): DocVersionSnapshot | undefined {
+  return versions[docId]?.find((version) => version.id === versionId)
 }
 
 export function addVersion(
@@ -294,18 +306,16 @@ export function addVersion(
   user: User,
   snapshot: string,
   label?: string,
-): DocVersion {
+): DocVersionSnapshot {
   const history = (versions[docId] ??= [])
   const latest = history.at(-1)
 
-  const version: DocVersion = {
+  const version: DocVersionSnapshot = {
     id: `v-${nextId++}`,
-    createdAt: new Date().toISOString(),
-    authorId: user.id,
-    authorName: user.name,
-    authorHue: hueOf(user.id),
+    created_at: new Date().toISOString(),
+    author: { id: user.id, name: user.name },
     snapshot,
-    label,
+    label: label ?? null,
   }
 
   // 같은 사람이 방금 남긴 무명 버전이면 새로 쌓지 않고 갱신한다.
@@ -313,8 +323,8 @@ export function addVersion(
     latest !== undefined &&
     !label &&
     !latest.label &&
-    latest.authorId === user.id &&
-    Date.now() - new Date(latest.createdAt).getTime() < COALESCE_MS
+    latest.author?.id === user.id &&
+    Date.now() - new Date(latest.created_at).getTime() < COALESCE_MS
 
   if (coalescable) {
     history[history.length - 1] = { ...version, id: latest.id }

@@ -14,7 +14,7 @@ import { useCurrentUser } from '@/features/auth/AuthContext'
 import { cn } from '@/lib/cn'
 import { formatRelative } from '@/lib/datetime'
 import { useDragAutoScroll } from '@/lib/useDragAutoScroll'
-import { untrashDoc, useSaveVersion, useTouchDoc, useTrashDoc } from './api'
+import { untrashDoc, useSaveVersion, useTouchDoc, useTrashDoc, useVersionSnapshot } from './api'
 import { CommentPanel } from './CommentPanel'
 import { DocBreadcrumb } from './DocBreadcrumb'
 import { EditorBubbleMenu } from './EditorBubbleMenu'
@@ -99,9 +99,7 @@ function DocSidebar({
             onClick={() => onTabChange(key)}
             className={cn(
               '-mb-px cursor-pointer border-b-2 px-4 py-3 text-sm font-medium transition-colors',
-              tab === key
-                ? 'border-accent text-fg'
-                : 'text-muted hover:text-fg border-transparent',
+              tab === key ? 'border-accent text-fg' : 'text-muted hover:text-fg border-transparent',
             )}
           >
             {label}
@@ -150,6 +148,7 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
   const { title, setTitle } = useCollabTitle(doc, meta.title)
   const { mutate: touchDoc } = useTouchDoc(meta.id)
   const { mutate: saveVersion, isPending: savingVersion } = useSaveVersion(meta.id)
+  const versionSnapshot = useVersionSnapshot(meta.id)
 
   const navigate = useNavigate()
   const toast = useToast()
@@ -191,6 +190,16 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
     })
 
   const [tab, setTab] = useState<SidebarTab>('comments')
+  /**
+   * 스냅샷 요청의 세대. 늦게 온 응답이 지금 화면을 덮어쓰지 않게 막는다.
+   *
+   * 미리보기를 여는 일이 요청 한 번을 끼면서 비동기가 됐다. 버전을 누르고 미리보기를 닫거나
+   * 댓글 탭으로 옮긴 뒤에 응답이 도착하면, 닫아 둔 미리보기가 다시 열리거나 댓글을 보고 있는데
+   * 본문이 과거 버전으로 바뀐다. 화면을 바꾸는 모든 자리에서 세대를 올리고, 응답은 자기 세대가
+   * 아직 최신일 때만 반영한다.
+   */
+  const previewSeq = useRef(0)
+  const [pendingVersionId, setPendingVersionId] = useState<string | null>(null)
   const [preview, setPreview] = useState<{ version: DocVersion; content: RestoredContent } | null>(
     null,
   )
@@ -255,16 +264,51 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
     }
   }, [doc, provider, touchDoc, saveVersion])
 
-  const openPreview = (version: DocVersion | null) => {
+  /**
+   * 미리보기를 열 때 그 버전의 스냅샷을 받아 온다. 목록에는 스냅샷이 없다(`VersionMeta`).
+   * 버전이 쌓인 문서에서 목록 한 번이 수십 MB 가 되기 때문이다.
+   */
+  /** 화면이 바뀌었다. 지금 도는 스냅샷 요청의 결과는 버린다. */
+  const dropPendingPreview = () => {
+    previewSeq.current += 1
+    setPendingVersionId(null)
+  }
+
+  const closePreview = () => {
+    dropPendingPreview()
     setPreviewError(null)
-    if (!version) return setPreview(null)
-    try {
-      setPreview({ version, content: readSnapshot(doc, version.snapshot) })
-    } catch {
-      // 이 기능이 붙기 전에 만들어진 문서는 삭제 이력이 이미 수거돼 복원할 수 없다.
-      setPreview(null)
-      setPreviewError('이 버전은 복원할 수 없습니다. 기록 보존 설정 이전에 만들어진 문서입니다.')
-    }
+    setPreview(null)
+  }
+
+  const openPreview = (version: DocVersion | null) => {
+    if (!version) return closePreview()
+
+    dropPendingPreview()
+    const seq = previewSeq.current
+    setPreviewError(null)
+    setPendingVersionId(version.id)
+
+    versionSnapshot.mutate(version.id, {
+      onSuccess: (full) => {
+        if (seq !== previewSeq.current) return
+        setPendingVersionId(null)
+        try {
+          setPreview({ version, content: readSnapshot(doc, full.snapshot) })
+        } catch {
+          // 이 기능이 붙기 전에 만들어진 문서는 삭제 이력이 이미 수거돼 복원할 수 없다.
+          setPreview(null)
+          setPreviewError(
+            '이 버전은 복원할 수 없습니다. 기록 보존 설정 이전에 만들어진 문서입니다.',
+          )
+        }
+      },
+      onError: (err) => {
+        if (seq !== previewSeq.current) return
+        setPendingVersionId(null)
+        setPreview(null)
+        setPreviewError(err instanceof ApiError ? err.message : '이 버전을 불러오지 못했습니다.')
+      },
+    })
   }
 
   const restore = () => {
@@ -276,7 +320,7 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
       doc.getMap<string>('meta').set('title', preview.content.title)
     }
     saveVersion({ snapshot: takeSnapshot(doc), label: '되돌림' })
-    setPreview(null)
+    closePreview()
   }
 
   return (
@@ -331,7 +375,7 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
             version={preview.version}
             content={preview.content}
             onRestore={restore}
-            onClose={() => setPreview(null)}
+            onClose={closePreview}
             restoring={savingVersion}
           />
         ) : (
@@ -390,7 +434,14 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
           </div>
         )}
 
-        <DocSidebar tab={tab} onTabChange={setTab}>
+        <DocSidebar
+          tab={tab}
+          onTabChange={(next) => {
+            // 탭을 옮기면 도는 요청의 결과도 버린다. 댓글을 보는데 본문이 바뀌면 안 된다.
+            dropPendingPreview()
+            setTab(next)
+          }}
+        >
           {tab === 'comments' ? (
             <CommentPanel docId={meta.id} />
           ) : (
@@ -405,7 +456,8 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
               )}
               <VersionPanel
                 docId={meta.id}
-                selectedId={preview?.version.id ?? null}
+                selectedId={preview?.version.id ?? pendingVersionId}
+                pendingId={pendingVersionId}
                 onSelect={openPreview}
               />
             </>
