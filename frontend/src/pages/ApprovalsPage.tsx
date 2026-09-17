@@ -9,8 +9,8 @@ import { useApprovals } from '@/features/approvals/api'
 import {
   APPROVAL_TYPE_LABEL,
   BOX_LABEL,
-  DOCUMENT_STATUS_LABEL,
-  DOCUMENT_STATUS_TONE,
+  statusLabel,
+  statusTone,
   type ApprovalBox,
 } from '@/features/approvals/types'
 import { formatDateTime, formatRelative } from '@/lib/datetime'
@@ -92,9 +92,7 @@ export function ApprovalsPage() {
                       {box === 'inbox' ? item.drafter.name : (item.waiting_on?.name ?? '-')}
                     </TD>
                     <TD>
-                      <Badge tone={DOCUMENT_STATUS_TONE[item.status]}>
-                        {DOCUMENT_STATUS_LABEL[item.status]}
-                      </Badge>
+                      <Badge tone={statusTone(item.status)}>{statusLabel(item.status)}</Badge>
                     </TD>
                     <TD className="text-muted whitespace-nowrap">
                       <time dateTime={at} title={formatDateTime(at)}>

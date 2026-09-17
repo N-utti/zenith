@@ -83,7 +83,7 @@ function currentOf(doc: Stored) {
 }
 
 /** 문서를 닫는다. 아직 차례가 안 온 단계는 `skipped`(13 §6.2). "대기"로 남기면 끝난 문서가 진행 중처럼 보인다. */
-function close(doc: Stored, status: 'approved' | 'rejected' | 'canceled', at = now()) {
+function close(doc: Stored, status: 'approved' | 'rejected' | 'canceled' | 'closed', at = now()) {
   doc.status = status
   doc.closed_at = at
   for (const step of doc.steps) if (step.status === 'waiting') step.status = 'skipped'
@@ -255,6 +255,33 @@ export function cancelApproval(user: User, id: string): ApprovalDocument | Failu
     )
   }
   close(doc, 'canceled')
+  return expose(doc)
+}
+
+/**
+ * 강제 종결(13 §9.2). 임원만, 대기 중인 문서만. 사유는 필수다.
+ *
+ * 사유는 그때 걸려 있던 단계에 적어 둔다. 문서에는 사유를 담을 칸이 없고(`ApprovalDocument`),
+ * 결재선 이력에 남겨야 나중에 "누구 차례에서 왜 끊겼는지" 를 읽을 수 있다.
+ */
+export function forceClose(user: User, id: string, reason: string): ApprovalDocument | Failure {
+  seed()
+  const doc = docs.find((d) => d.id === id)
+  if (!doc) return fail('문서를 찾을 수 없습니다.', 404, 'NOT_FOUND')
+  if (user.role !== 'exec') return fail('임원만 강제 종결할 수 있습니다.', 403, 'FORBIDDEN')
+  if (doc.status !== 'pending')
+    return fail('대기 중인 문서만 강제 종결할 수 있습니다.', 409, 'NOT_PENDING')
+  if (!reason.trim()) return fail('종결 사유를 입력해 주세요.', 400, 'REASON_REQUIRED')
+
+  const at = now()
+  const step = doc.steps.find((s) => s.status === 'waiting')
+  if (step) {
+    step.comment = reason.trim()
+    // 원 결재자가 아닌 사람이 처리했다는 뜻이다. 화면은 이걸 "강제 종결" 로 읽는다(위임은 "대결").
+    step.acted_by = person(user)
+    step.acted_at = at
+  }
+  close(doc, 'closed', at)
   return expose(doc)
 }
 

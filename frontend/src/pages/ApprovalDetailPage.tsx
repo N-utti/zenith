@@ -14,20 +14,34 @@ import {
   useApproval,
   useApproveStep,
   useCancelApproval,
+  useForceCloseApproval,
   useRejectStep,
   useSubmitApproval,
 } from '@/features/approvals/api'
 import { StepTimeline } from '@/features/approvals/StepTimeline'
-import {
-  APPROVAL_TYPE_LABEL,
-  DOCUMENT_STATUS_LABEL,
-  DOCUMENT_STATUS_TONE,
-} from '@/features/approvals/types'
+import { APPROVAL_TYPE_LABEL, statusLabel, statusTone } from '@/features/approvals/types'
 import { useCurrentUser } from '@/features/auth/AuthContext'
 import { ApiError } from '@/lib/api'
 import { formatDateTime } from '@/lib/datetime'
+import { ROLE_RANK } from '@/types'
 
 const won = new Intl.NumberFormat('ko-KR')
+
+/** 사유를 받아야 끝나는 두 동작. 문구만 다르고 폼은 같다. */
+const REASON_FORM = {
+  reject: {
+    title: '반려',
+    description: '사유는 기안자에게 그대로 전달됩니다.',
+    label: '반려 사유',
+    submit: '반려',
+  },
+  force: {
+    title: '강제 종결',
+    description: '결재를 더 받지 않고 문서를 끝냅니다. 사유는 기록에 남습니다.',
+    label: '종결 사유',
+    submit: '강제 종결',
+  },
+}
 
 /** 문서 상세(13 SCR-APV-03). 본문 + 결재선 타임라인 + 내 차례면 승인/반려, 기안자면 상신/회수. */
 export function ApprovalDetailPage() {
@@ -40,7 +54,9 @@ export function ApprovalDetailPage() {
   const cancel = useCancelApproval()
   const approve = useApproveStep()
   const reject = useRejectStep()
-  const [rejecting, setRejecting] = useState(false)
+  const forceClose = useForceCloseApproval()
+  /** 열려 있는 사유 입력창. 반려와 강제 종결이 같은 폼을 쓴다. */
+  const [asking, setAsking] = useState<'reject' | 'force' | null>(null)
   const [reason, setReason] = useState('')
   const [error, setError] = useState<string | null>(null)
 
@@ -64,23 +80,50 @@ export function ApprovalDetailPage() {
   const current = d.steps.find((s) => s.step_no === d.current_step)
   const myTurn = d.status === 'pending' && current?.approver.id === user.id
   const isDrafter = d.drafter.id === user.id
-  const busy = submit.isPending || cancel.isPending || approve.isPending || reject.isPending
+  // 임원은 남의 문서도 끝낼 수 있다. 결재자가 자리를 비워 영영 대기로 남는 문서를 끊는 길이다.
+  // 내 차례일 때는 안 보인다. 그건 부재가 아니라 내 판단이고, 승인·반려로 남겨야 이력이 정확하다.
+  const canForceClose = d.status === 'pending' && !myTurn && ROLE_RANK[user.role] >= ROLE_RANK.exec
+  const busy =
+    submit.isPending ||
+    cancel.isPending ||
+    approve.isPending ||
+    reject.isPending ||
+    forceClose.isPending
   const onError = (err: unknown) =>
     toast.error(err instanceof ApiError ? err.message : '처리하지 못했습니다.')
 
-  const doReject = () => {
-    if (!current) return
+  // 보내는 중에 닫아도 안전하다. 요청을 건 `useMutation` 은 이 화면에 있고 창만 사라지므로
+  // 결과 콜백은 그대로 불린다. Esc·X·바깥 클릭을 말없이 무시하면 창이 고장 난 것처럼 보인다.
+  const closeForm = () => {
+    setAsking(null)
+    setReason('')
     setError(null)
+  }
+
+  const done = (message: string) => () => {
+    setAsking(null)
+    setReason('')
+    toast.success(message)
+  }
+
+  const failed = (fallback: string) => (err: unknown) =>
+    setError(err instanceof ApiError ? err.message : fallback)
+
+  const submitReason = () => {
+    const text = reason.trim()
+    if (!text) return
+    setError(null)
+    if (asking === 'force') {
+      forceClose.mutate(
+        { id: d.id, reason: text },
+        { onSuccess: done('강제 종결했습니다.'), onError: failed('종결하지 못했습니다.') },
+      )
+      return
+    }
+    if (!current) return
     reject.mutate(
-      { id: d.id, version: current.version, reason: reason.trim() },
-      {
-        onSuccess: () => {
-          setRejecting(false)
-          setReason('')
-          toast.success('반려했습니다.')
-        },
-        onError: (err) => setError(err instanceof ApiError ? err.message : '반려하지 못했습니다.'),
-      },
+      { id: d.id, version: current.version, reason: text },
+      { onSuccess: done('반려했습니다.'), onError: failed('반려하지 못했습니다.') },
     )
   }
 
@@ -94,7 +137,7 @@ export function ApprovalDetailPage() {
         description={`${APPROVAL_TYPE_LABEL[d.type_code]} · ${d.drafter.name} 기안 · ${formatDateTime(d.submitted_at ?? d.created_at)}`}
         actions={
           <>
-            <Badge tone={DOCUMENT_STATUS_TONE[d.status]}>{DOCUMENT_STATUS_LABEL[d.status]}</Badge>
+            <Badge tone={statusTone(d.status)}>{statusLabel(d.status)}</Badge>
             {isDrafter && d.status === 'draft' && (
               <>
                 <Button
@@ -138,7 +181,7 @@ export function ApprovalDetailPage() {
                   variant="secondary"
                   size="sm"
                   disabled={busy}
-                  onClick={() => setRejecting(true)}
+                  onClick={() => setAsking('reject')}
                 >
                   반려
                 </Button>
@@ -155,6 +198,11 @@ export function ApprovalDetailPage() {
                   {approve.isPending ? <Spinner className="border-t-on-accent" /> : '승인'}
                 </Button>
               </>
+            )}
+            {canForceClose && (
+              <Button variant="ghost" size="sm" disabled={busy} onClick={() => setAsking('force')}>
+                강제 종결
+              </Button>
             )}
           </>
         }
@@ -189,30 +237,30 @@ export function ApprovalDetailPage() {
         </Card>
       </div>
 
-      {rejecting && (
+      {asking && (
         <Modal
           open
-          onClose={() => setRejecting(false)}
-          title="반려"
-          description="사유는 기안자에게 그대로 전달됩니다."
+          onClose={closeForm}
+          title={REASON_FORM[asking].title}
+          description={REASON_FORM[asking].description}
           size="sm"
           footer={
             <>
-              <Button variant="secondary" size="sm" onClick={() => setRejecting(false)}>
+              <Button variant="secondary" size="sm" onClick={closeForm}>
                 취소
               </Button>
               <Button
                 variant="danger"
                 size="sm"
-                disabled={reason.trim().length === 0 || reject.isPending}
-                onClick={doReject}
+                disabled={reason.trim().length === 0 || busy}
+                onClick={submitReason}
               >
-                {reject.isPending ? <Spinner /> : '반려'}
+                {busy ? <Spinner /> : REASON_FORM[asking].submit}
               </Button>
             </>
           }
         >
-          <Field label="반려 사유" required>
+          <Field label={REASON_FORM[asking].label} required>
             {(slot) => (
               <Textarea
                 {...slot}

@@ -8,7 +8,7 @@ import { SkeletonRows } from '@/components/ui/Skeleton'
 import { Table, TableEmpty, TBody, TD, TH, THead, TR } from '@/components/ui/Table'
 import { useToast } from '@/components/ui/ToastContext'
 import { useApprovals } from '@/features/approvals/api'
-import { DOCUMENT_STATUS_LABEL, DOCUMENT_STATUS_TONE } from '@/features/approvals/types'
+import { statusLabel, statusTone, type DocumentStatus } from '@/features/approvals/types'
 import { ApiError } from '@/lib/api'
 import { formatDateTime, formatRelative } from '@/lib/datetime'
 import {
@@ -112,6 +112,10 @@ export function ExceptionSection() {
       (d) => d.related?.type === 'arrangement' && d.related.id === arrangementId,
     )
 
+  /** 끝난 결의서는 다시 올릴 수 있어야 한다. 반려·회수·강제 종결은 "다시 하라" 는 뜻이다. */
+  const canRewrite = (status: DocumentStatus | undefined) =>
+    status === undefined || status === 'rejected' || status === 'canceled' || status === 'closed'
+
   const isPending = arrangements.isPending || overtime.isPending || corrections.isPending
   const isError = arrangements.isError || overtime.isError || corrections.isError
   const rows = toRows(
@@ -202,19 +206,19 @@ export function ExceptionSection() {
                 <TD className="whitespace-nowrap">
                   {expense && (
                     <Link to={`/approvals/${expense.id}`} aria-label="출장비 결의서 보기">
-                      <Badge tone={DOCUMENT_STATUS_TONE[expense.status]}>
-                        {DOCUMENT_STATUS_LABEL[expense.status]}
-                      </Badge>
+                      <Badge tone={statusTone(expense.status)}>{statusLabel(expense.status)}</Badge>
                     </Link>
                   )}
-                  {!expense && row.subKind === 'trip' && row.status !== 'canceled' && (
-                    <Link
-                      to={`/approvals/new?arrangement=${row.id}`}
-                      className="text-accent text-xs hover:underline"
-                    >
-                      결의서 작성
-                    </Link>
-                  )}
+                  {row.subKind === 'trip' &&
+                    row.status !== 'canceled' &&
+                    canRewrite(expense?.status) && (
+                      <Link
+                        to={`/approvals/new?arrangement=${row.id}`}
+                        className="text-accent ml-1.5 text-xs hover:underline"
+                      >
+                        {expense ? '다시 작성' : '결의서 작성'}
+                      </Link>
+                    )}
                 </TD>
                 <TD className="text-muted whitespace-nowrap">
                   <time dateTime={row.created_at} title={formatDateTime(row.created_at)}>

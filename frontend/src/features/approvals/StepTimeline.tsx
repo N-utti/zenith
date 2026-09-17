@@ -8,7 +8,9 @@ const STATUS: Record<StepStatus, { label: string; icon: typeof Check; tone: stri
   approved: { label: '승인', icon: Check, tone: 'bg-success/12 text-success' },
   rejected: { label: '반려', icon: X, tone: 'bg-danger/12 text-danger' },
   delegated_done: { label: '대결', icon: Check, tone: 'bg-success/12 text-success' },
-  skipped: { label: '전결 생략', icon: Minus, tone: 'bg-sunken text-subtle' },
+  // 문서가 끝나 더 받지 않은 단계. 전결로 끊긴 경우만이 아니라 반려·회수·강제 종결 뒤에도
+  // 이 상태가 되므로 "전결 생략" 이라고 못 박지 않는다. 전결 처리 자체는 `delegated_done`(대결)이다.
+  skipped: { label: '생략', icon: Minus, tone: 'bg-sunken text-subtle' },
 }
 
 /**
@@ -46,7 +48,12 @@ export function StepTimeline({
                 <span className="text-subtle mr-1.5 tabular-nums">{step.step_no}</span>
                 {step.approver.name}
                 {step.acted_by && step.acted_by.id !== step.approver.id && (
-                  <span className="text-muted"> ({step.acted_by.name} 대결)</span>
+                  <span className="text-muted">
+                    {' '}
+                    {/* 원 결재자가 아닌 사람이 처리한 두 경우. 위임은 대신 결재한 것이고,
+                        생략은 임원이 문서를 끊은 것이다. 둘을 같은 말로 적으면 감사 기록이 거짓이 된다. */}
+                    ({step.acted_by.name} {step.status === 'skipped' ? '강제 종결' : '대결'})
+                  </span>
                 )}
                 <span className={cn('ml-2 text-xs', isCurrent ? 'text-accent' : 'text-subtle')}>
                   {isCurrent ? '처리 중' : meta.label}

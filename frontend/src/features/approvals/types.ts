@@ -22,27 +22,47 @@ export interface ApprovalType {
   allow_delegate_decision: boolean
 }
 
-/** 13 §6.1 문서 상태. 종료 상태에서 되돌아오는 경로는 없다. */
-export type DocumentStatus = 'draft' | 'pending' | 'approved' | 'rejected' | 'canceled'
+/**
+ * 13 §6.1 문서 상태. 종료 상태에서 되돌아오는 경로는 없다.
+ *
+ * `closed` 는 임원이 강제로 끝낸 문서다(13 §9.2 `force-close`). **이 값은 프론트 가정이다.**
+ * 백엔드가 아직 결재 모듈 전체를 501 로 두고 있어 종결 상태 이름이 계약에 없다. 서버가 다른
+ * 이름을 쓰면 여기만 고치면 되고, 그동안 모르는 값이 와도 `statusLabel` 이 코드를 그대로 그린다.
+ */
+export type DocumentStatus = 'draft' | 'pending' | 'approved' | 'rejected' | 'canceled' | 'closed'
 
-export const DOCUMENT_STATUS_LABEL: Record<DocumentStatus, string> = {
+const DOCUMENT_STATUS_LABEL: Record<DocumentStatus, string> = {
   draft: '임시저장',
   pending: '결재 대기',
   approved: '승인',
   rejected: '반려',
   canceled: '회수',
+  closed: '강제 종결',
 }
 
-/** 13 §10 상태 색상: 대기 muted / 승인 success / 반려 danger / 회수 subtle. */
-export const DOCUMENT_STATUS_TONE: Record<
-  DocumentStatus,
-  'neutral' | 'accent' | 'success' | 'warning' | 'danger'
-> = {
+/** 13 §10 상태 색상. 강제 종결(`closed`)의 색은 계약에 없어 경고색으로 뒀다(프론트 가정). */
+export type StatusTone = 'neutral' | 'accent' | 'success' | 'warning' | 'danger'
+
+const DOCUMENT_STATUS_TONE: Record<DocumentStatus, StatusTone> = {
   draft: 'neutral',
   pending: 'accent',
   approved: 'success',
   rejected: 'danger',
   canceled: 'neutral',
+  closed: 'warning',
+}
+
+/**
+ * 모르는 상태가 와도 배지를 비우지 않는다. 결재 모듈은 백엔드가 아직 안 만들어서 상태 이름이
+ * 바뀔 수 있는데, 그때 화면에서 배지가 빈칸이 되면 무슨 일이 일어난 문서인지 알 수 없게 된다.
+ */
+export function statusLabel(status: DocumentStatus): string {
+  return DOCUMENT_STATUS_LABEL[status] ?? `알 수 없음(${status})`
+}
+
+export function statusTone(status: DocumentStatus): StatusTone {
+  // 모르는 상태는 눈에 걸려야 한다. 회색으로 두면 임시저장·회수와 섞여 아무도 못 알아챈다.
+  return DOCUMENT_STATUS_TONE[status] ?? 'warning'
 }
 
 /** 13 §6.2 단계 상태 */
@@ -56,7 +76,12 @@ export interface Person {
 export interface ApprovalStep {
   step_no: number
   approver: Person
-  /** 위임 시 실제 처리자(13 §4.2.3). 아니면 null */
+  /**
+   * 그 단계를 실제로 처리한 사람. 원 결재자가 처리했으면 `null` 이다.
+   *
+   * 위임 결재(대결, 13 §4.2.3)와 임원의 강제 종결이 여기 들어간다. 강제 종결은 백엔드가
+   * 결재 모듈을 안 만들어서 프론트 가정이다(PR 본문).
+   */
   acted_by: Person | null
   role: 'approve' | 'reference'
   status: StepStatus

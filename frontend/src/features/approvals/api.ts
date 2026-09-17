@@ -108,3 +108,21 @@ export function useRejectStep() {
     onSuccess: refetch,
   })
 }
+
+/**
+ * 강제 종결(13 §9.2). 임원만, 대기 중인 문서만. 사유는 필수고 감사 기록에 남는다.
+ *
+ * 결재자가 자리를 비웠거나 퇴사해 문서가 영영 대기로 남는 경우를 끝내는 길이다. 기안자의
+ * 회수(`cancel`)와 달리 남의 문서도 끝낼 수 있어서, 사유 없이는 보내지 않는다.
+ */
+export function useForceCloseApproval() {
+  const refetch = useRefetchApprovals()
+  return useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
+      api<ApprovalDocument>(`/approvals/${id}/force-close`, {
+        method: 'POST',
+        body: JSON.stringify({ reason }),
+      }),
+    onSuccess: refetch,
+  })
+}

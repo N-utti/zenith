@@ -68,6 +68,7 @@ import {
   APPROVAL_TYPES,
   cancelApproval,
   createDraft,
+  forceClose,
   decide,
   getApproval,
   listApprovals,
@@ -533,6 +534,17 @@ export const handlers = [
     const { version, reason } = (await request.json()) as { version: number; reason?: string }
     await delay(400)
     return approvalResponse(decide(user, String(params.id), 'reject', version, reason))
+  }),
+
+  // 강제 종결(13 §9.2). 임원만. `version` 을 안 받는다: 어느 단계에 걸려 있든 끝내는 동작이라
+  // 단계 잠금을 볼 이유가 없다(승인·반려와 다른 점이다).
+  http.post('/api/approvals/:id/force-close', async ({ request, params }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    const payload = await readJson<{ reason?: unknown }>(request)
+    const reason = typeof payload?.reason === 'string' ? payload.reason : ''
+    await delay(400)
+    return approvalResponse(forceClose(user, String(params.id), reason))
   }),
 
   // ── 근태 · 내 근태 (04 §10.1) ─────────────────────────────
