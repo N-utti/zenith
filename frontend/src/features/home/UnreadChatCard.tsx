@@ -30,14 +30,14 @@ export function UnreadChatCard() {
                       (index > 0 ? ' border-line border-t' : '')
                     }
                   >
-                    {channel.kind === 'channel' ? (
+                    {!channel.is_dm ? (
                       <Hash className="text-subtle size-4 shrink-0" />
                     ) : (
                       <Avatar name={channel.name} hue={200} size="sm" className="size-6" />
                     )}
                     <span className="text-fg min-w-0 flex-1 truncate text-[13px]">
                       {channel.name}
-                      {channel.kind === 'dm' && <span className="text-subtle"> (DM)</span>}
+                      {channel.is_dm && <span className="text-subtle"> (DM)</span>}
                     </span>
                     <span className="bg-accent text-on-accent shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold tabular-nums">
                       {channel.unread}

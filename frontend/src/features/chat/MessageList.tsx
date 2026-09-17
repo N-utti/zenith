@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { hueOf } from '@/lib/avatar'
 import { Avatar } from '@/components/ui/Avatar'
 import { Spinner } from '@/components/ui/Spinner'
 import { formatDay, formatTime } from '@/lib/datetime'
@@ -14,10 +15,10 @@ function sameDay(a: string, b: string) {
 
 function grouped(message: ChatMessage, previous: ChatMessage | undefined) {
   if (!previous) return false
-  if (previous.authorId !== message.authorId) return false
-  if (!sameDay(previous.createdAt, message.createdAt)) return false
+  if (previous.author.id !== message.author.id) return false
+  if (!sameDay(previous.created_at, message.created_at)) return false
   return (
-    new Date(message.createdAt).getTime() - new Date(previous.createdAt).getTime() <
+    new Date(message.created_at).getTime() - new Date(previous.created_at).getTime() <
     GROUP_WINDOW_MS
   )
 }
@@ -64,7 +65,7 @@ export function MessageList({ channelId }: { channelId: string }) {
 
         {data.items.map((message, index) => {
           const previous = data.items[index - 1]
-          const newDay = !previous || !sameDay(previous.createdAt, message.createdAt)
+          const newDay = !previous || !sameDay(previous.created_at, message.created_at)
           const compact = grouped(message, previous)
 
           return (
@@ -72,7 +73,7 @@ export function MessageList({ channelId }: { channelId: string }) {
               {newDay && (
                 <div className="my-5 flex items-center gap-3">
                   <span className="bg-line h-px flex-1" />
-                  <span className="text-subtle text-xs">{formatDay(message.createdAt)}</span>
+                  <span className="text-subtle text-xs">{formatDay(message.created_at)}</span>
                   <span className="bg-line h-px flex-1" />
                 </div>
               )}
@@ -80,18 +81,18 @@ export function MessageList({ channelId }: { channelId: string }) {
               <div className={cnRow(compact)}>
                 {compact ? (
                   <span className="text-subtle w-9 shrink-0 pt-0.5 text-right text-[11px] opacity-0 group-hover:opacity-100">
-                    {formatTime(message.createdAt)}
+                    {formatTime(message.created_at)}
                   </span>
                 ) : (
-                  <Avatar name={message.authorName} hue={message.authorHue} size="md" />
+                  <Avatar name={message.author.name} hue={hueOf(message.author.id)} size="md" />
                 )}
 
                 <div className="min-w-0 flex-1">
                   {!compact && (
                     <p className="text-fg text-sm font-semibold">
-                      {message.authorName}
+                      {message.author.name}
                       <span className="text-subtle ml-1.5 text-xs font-normal">
-                        {formatTime(message.createdAt)}
+                        {formatTime(message.created_at)}
                       </span>
                     </p>
                   )}

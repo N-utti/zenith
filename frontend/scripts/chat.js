@@ -23,41 +23,34 @@
 
 import users from '../src/mocks/users.json' with { type: 'json' }
 
-/** src/lib/avatar.ts 의 hueOf 와 같은 식. 채팅 아바타 색이 다른 화면과 같아야 한다. */
-function hueOf(id) {
-  let hash = 0
-  for (const ch of id) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0
-  return hash % 360
-}
-
 /** 명단은 MSW 와 같은 users.json. u-1 진수연(사원) · u-2 정성운(사원) · u-3 홍성완(임원)이 시드 대화에 등장한다. */
-const USERS = Object.fromEntries(users.map((u) => [u.id, { id: u.id, name: u.name, hue: hueOf(u.id) }]))
+const USERS = Object.fromEntries(users.map((u) => [u.id, { id: u.id, name: u.name }]))
 
 const ALL = Object.keys(USERS)
 
-/** @type {{id:string, kind:'channel'|'dm', name?:string, memberIds:string[]}[]} */
+/** @type {{id:string, is_dm:boolean, name:string, memberIds:string[]}[]} */
 const CHANNELS = [
-  { id: 'c-notice', kind: 'channel', name: '공지', memberIds: ALL },
-  { id: 'c-dev', kind: 'channel', name: '개발', memberIds: ALL },
-  { id: 'c-random', kind: 'channel', name: '잡담', memberIds: ALL },
-  { id: 'dm-u1-u2', kind: 'dm', memberIds: ['u-1', 'u-2'] },
+  { id: 'c-notice', is_dm: false, name: '공지', memberIds: ALL },
+  { id: 'c-dev', is_dm: false, name: '개발', memberIds: ALL },
+  { id: 'c-random', is_dm: false, name: '잡담', memberIds: ALL },
+  { id: 'dm-u1-u2', is_dm: true, name: '', memberIds: ['u-1', 'u-2'] },
   // u-5 안재호는 MSW 근태 시드에서 오늘 재택이다. DM 행의 근무 상태 표시를 보여 주는 용도.
-  { id: 'dm-u2-u5', kind: 'dm', memberIds: ['u-2', 'u-5'] },
+  { id: 'dm-u2-u5', is_dm: true, name: '', memberIds: ['u-2', 'u-5'] },
 ]
 
 const minutesAgo = (m) => new Date(Date.now() - m * 60_000).toISOString()
 
 let nextId = 1
+/** 백엔드 `MessageOut` 과 같은 모양(04 §5). 소켓의 `msg` 이벤트도 같은 것을 싣는다. */
 function makeMessage(channelId, authorId, body, createdAt) {
-  const author = USERS[authorId]
   return {
     id: `m-${nextId++}`,
-    channelId,
-    authorId,
-    authorName: author.name,
-    authorHue: author.hue,
+    channel_id: channelId,
+    author: USERS[authorId],
     body,
-    createdAt: createdAt ?? new Date().toISOString(),
+    doc_ref: null,
+    attachments: null,
+    created_at: createdAt ?? new Date().toISOString(),
   }
 }
 
@@ -103,25 +96,24 @@ function markRead(userId, channelId) {
 
 /** DM 이름은 보는 사람에 따라 다르다. 상대의 이름이다. */
 function channelName(channel, viewerId) {
-  if (channel.kind === 'channel') return channel.name
+  if (!channel.is_dm) return channel.name
   const other = channel.memberIds.find((id) => id !== viewerId) ?? viewerId
   return USERS[other]?.name ?? '알 수 없음'
 }
 
+/** 백엔드 `ChannelOut` 과 같은 모양(04 §5). */
 function channelView(channel, viewerId) {
   const list = messages.get(channel.id) ?? []
   const since = lastReadAt(viewerId, channel.id)
-  const last = list.at(-1)
 
   return {
     id: channel.id,
-    kind: channel.kind,
     name: channelName(channel, viewerId),
-    memberIds: channel.memberIds,
+    is_dm: channel.is_dm,
+    members: channel.memberIds.map((id) => USERS[id]).filter(Boolean),
     // 내가 보낸 메시지는 안읽음이 아니다.
-    unread: list.filter((m) => m.createdAt > since && m.authorId !== viewerId).length,
-    lastMessage: last?.body ?? null,
-    lastAt: last?.createdAt ?? null,
+    unread: list.filter((m) => m.created_at > since && m.author.id !== viewerId).length,
+    last_message: list.at(-1) ?? null,
   }
 }
 
@@ -220,7 +212,9 @@ export async function handleChatRequest(req, res, url) {
     const items = CHANNELS.filter((c) => c.memberIds.includes(viewerId))
       .map((c) => channelView(c, viewerId))
       // 최근 대화가 위로. 대화가 없는 채널은 아래로 밀린다.
-      .sort((a, b) => (b.lastAt ?? '').localeCompare(a.lastAt ?? ''))
+      .sort((a, b) =>
+        (b.last_message?.created_at ?? '').localeCompare(a.last_message?.created_at ?? ''),
+      )
     return json(res, 200, { items })
   }
 

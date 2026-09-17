@@ -24,17 +24,17 @@ function socketUrl(): string {
  * 겹치면 방해만 된다. 최소화·다른 앱 사용 중일 때만 알린다.
  */
 function notifyIncoming(qc: QueryClient, message: ChatMessage, currentUserId: string): void {
-  if (message.authorId === currentUserId) return
+  if (message.author.id === currentUserId) return
   if (document.hasFocus()) return
 
   const channels = qc.getQueryData<{ items: ChatChannel[] }>(chatKeys.channels)
-  const channel = channels?.items.find((item) => item.id === message.channelId)
+  const channel = channels?.items.find((item) => item.id === message.channel_id)
 
   // DM은 채널명이 곧 상대 이름이라 "정성운 · 정성운"이 되므로 이름만 쓴다.
   const title =
-    channel && channel.kind === 'channel'
-      ? `#${channel.name} · ${message.authorName}`
-      : message.authorName
+    channel && !channel.is_dm
+      ? `#${channel.name} · ${message.author.name}`
+      : message.author.name
 
   void notify({ title, body: message.body })
 }
@@ -93,7 +93,7 @@ export function useChatSocket(): ChatSocket {
         if (event.type === 'message') {
           const { message } = event
           qc.setQueryData<{ items: ChatMessage[] }>(
-            chatKeys.messages(message.channelId),
+            chatKeys.messages(message.channel_id),
             (old) => {
               if (!old) return old
               // 탭이 여러 개면 같은 이벤트를 중복으로 받을 수 있다.

@@ -8,7 +8,7 @@ import type { ChatChannel } from './types'
 import { WorkStatus } from './WorkStatus'
 
 function Row({ channel }: { channel: ChatChannel }) {
-  const Icon = channel.kind === 'channel' ? Hash : AtSign
+  const Icon = !channel.is_dm ? Hash : AtSign
 
   return (
     <NavLink
@@ -33,8 +33,8 @@ function Row({ channel }: { channel: ChatChannel }) {
           </span>
           <WorkStatus channel={channel} />
         </p>
-        {channel.lastMessage && (
-          <p className="text-subtle truncate text-xs">{channel.lastMessage}</p>
+        {channel.last_message && (
+          <p className="text-subtle truncate text-xs">{channel.last_message.body}</p>
         )}
       </div>
       <div className="flex shrink-0 flex-col items-end gap-1">
@@ -43,8 +43,8 @@ function Row({ channel }: { channel: ChatChannel }) {
             {channel.unread}
           </span>
         )}
-        {channel.lastAt && (
-          <span className="text-subtle text-[11px]">{formatRelative(channel.lastAt)}</span>
+        {channel.last_message?.created_at && (
+          <span className="text-subtle text-[11px]">{formatRelative(channel.last_message?.created_at)}</span>
         )}
       </div>
     </NavLink>
@@ -58,8 +58,8 @@ function Row({ channel }: { channel: ChatChannel }) {
 export function ChannelList() {
   const { data, isPending, isError } = useChannels()
 
-  const channels = data?.items.filter((c) => c.kind === 'channel') ?? []
-  const dms = data?.items.filter((c) => c.kind === 'dm') ?? []
+  const channels = data?.items.filter((c) => !c.is_dm) ?? []
+  const dms = data?.items.filter((c) => c.is_dm) ?? []
 
   return (
     <nav className="bg-surface flex min-h-0 w-full flex-1 flex-col overflow-y-auto md:hidden">
