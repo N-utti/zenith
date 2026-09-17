@@ -1,0 +1,214 @@
+import { useState } from 'react'
+import { Button } from '@/components/ui/Button'
+import { Checkbox } from '@/components/ui/Checkbox'
+import { Field } from '@/components/ui/Field'
+import { Input } from '@/components/ui/Input'
+import { Modal } from '@/components/ui/Modal'
+import { Select } from '@/components/ui/Select'
+import { Spinner } from '@/components/ui/Spinner'
+import { ApiError } from '@/lib/api'
+import { PASSWORD_MIN, ROLE_LABEL, type Role } from '@/types'
+import { useCreateUser, useUpdateUser } from './api'
+import { userPatch, type UserForm } from './patch'
+import { EMAIL_PATTERN, type AdminUser } from './types'
+
+const ROLE_OPTIONS = (['member', 'lead', 'exec'] as Role[]).map((role) => ({
+  value: role,
+  label: ROLE_LABEL[role],
+}))
+
+/** 새 계정에만 있는 칸(이메일)을 더한 폼 상태. 고칠 때는 서버에 이메일을 바꾸는 길이 없다. */
+interface Form extends UserForm {
+  email: string
+}
+
+/**
+ * 계정 하나를 만들거나 고친다. 두 경우가 칸을 거의 공유해서 한 폼으로 둔다.
+ *
+ * 다른 점은 셋이다. 이메일은 만들 때만 정한다(서버에 바꾸는 길이 없다). 비밀번호는 만들 때는
+ * 필수고 고칠 때는 채운 경우에만 임시 비밀번호로 재설정한다. 활성 여부는 이미 있는 계정에만 있다.
+ *
+ * 열 때 마운트한다. 처음 값을 effect 로 다시 채우지 않게(`FolderNameModal` 과 같은 규약).
+ */
+export function UserModal({
+  user,
+  isSelf,
+  onClose,
+}: {
+  /** 없으면 새 계정. */
+  user?: AdminUser
+  /** 내 계정이면 등급·활성 상태를 못 바꾼다. 서버도 `ADMIN_SELF` 로 막는다. */
+  isSelf: boolean
+  onClose: () => void
+}) {
+  const create = useCreateUser()
+  const update = useUpdateUser()
+  const [form, setForm] = useState<Form>({
+    name: user?.name ?? '',
+    email: '',
+    password: '',
+    role: user?.role ?? 'member',
+    hireDate: user?.hire_date ?? '',
+    active: user?.active ?? true,
+  })
+  const [error, setError] = useState<string | null>(null)
+
+  const set = <K extends keyof Form>(key: K, value: Form[K]) => {
+    setForm((prev) => ({ ...prev, [key]: value }))
+    setError(null)
+  }
+
+  const pending = create.isPending || update.isPending
+  const name = form.name.trim()
+  const email = form.email.trim().toLowerCase()
+  const patch = user ? userPatch(user, form) : null
+  const ready = user
+    ? Object.keys(patch ?? {}).length > 0
+    : Boolean(name) && EMAIL_PATTERN.test(email) && form.password.length >= PASSWORD_MIN
+  const passwordTooShort = form.password.length > 0 && form.password.length < PASSWORD_MIN
+
+  const close = () => {
+    // 보내는 중에 닫으면 성공·실패를 받을 곳이 사라진다. 끝난 뒤에 닫힌다.
+    if (pending) return
+    onClose()
+  }
+
+  const submit = () => {
+    if (!ready || pending || passwordTooShort) return
+    const fail = (err: unknown) =>
+      setError(err instanceof ApiError ? err.message : '저장하지 못했습니다.')
+
+    if (user && patch) {
+      update.mutate({ id: user.id, patch }, { onSuccess: onClose, onError: fail })
+      return
+    }
+    create.mutate(
+      {
+        name,
+        email,
+        password: form.password,
+        role: form.role,
+        hire_date: form.hireDate || null,
+      },
+      { onSuccess: onClose, onError: fail },
+    )
+  }
+
+  return (
+    <Modal
+      open
+      onClose={close}
+      title={user ? `${user.name} 계정` : '새 계정'}
+      description={user ? undefined : '가입 화면은 없습니다. 계정은 관리자가 여기서만 만듭니다.'}
+      footer={
+        <>
+          <Button variant="secondary" size="sm" onClick={close} disabled={pending}>
+            취소
+          </Button>
+          <Button size="sm" onClick={submit} disabled={!ready || pending || passwordTooShort}>
+            {pending ? <Spinner className="border-t-on-accent" /> : user ? '저장' : '만들기'}
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <Field label="이름" required>
+          {(slot) => (
+            <Input
+              {...slot}
+              autoFocus
+              value={form.name}
+              onChange={(e) => set('name', e.target.value)}
+              placeholder="예: 진수연"
+            />
+          )}
+        </Field>
+
+        {user ? (
+          <Field label="이메일" hint="이메일은 바꿀 수 없습니다.">
+            {(slot) => <Input {...slot} value={user.email} readOnly disabled />}
+          </Field>
+        ) : (
+          <Field label="이메일" required>
+            {(slot) => (
+              <Input
+                {...slot}
+                type="email"
+                value={form.email}
+                onChange={(e) => set('email', e.target.value)}
+                placeholder="예: suyeon@zenith.co.kr"
+              />
+            )}
+          </Field>
+        )}
+
+        <Field
+          label={user ? '임시 비밀번호' : '비밀번호'}
+          required={!user}
+          hint={
+            user
+              ? `채우면 임시 비밀번호로 바꾸고 그 사람의 로그인을 모두 해제합니다. ${PASSWORD_MIN}자 이상.`
+              : `${PASSWORD_MIN}자 이상. 첫 로그인 뒤 본인이 설정에서 바꿉니다.`
+          }
+          error={passwordTooShort ? `${PASSWORD_MIN}자 이상이어야 합니다.` : null}
+        >
+          {(slot) => (
+            <Input
+              {...slot}
+              type="password"
+              autoComplete="new-password"
+              value={form.password}
+              onChange={(e) => set('password', e.target.value)}
+              minLength={PASSWORD_MIN}
+            />
+          )}
+        </Field>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="등급" hint={isSelf ? '자기 등급은 바꿀 수 없습니다.' : undefined}>
+            {(slot) => (
+              <Select
+                {...slot}
+                options={ROLE_OPTIONS}
+                value={form.role}
+                disabled={isSelf}
+                onChange={(e) => set('role', e.target.value as Role)}
+              />
+            )}
+          </Field>
+
+          <Field label="입사일" hint="연차 계산 기준입니다. 비워 둘 수 있습니다.">
+            {(slot) => (
+              <Input
+                {...slot}
+                type="date"
+                value={form.hireDate}
+                onChange={(e) => set('hireDate', e.target.value)}
+              />
+            )}
+          </Field>
+        </div>
+
+        {user && (
+          <Checkbox
+            checked={form.active}
+            disabled={isSelf}
+            onChange={(e) => set('active', e.target.checked)}
+            label="계정 활성"
+            description={
+              isSelf
+                ? '자기 계정은 비활성화할 수 없습니다.'
+                : '끄면 로그인을 막고 열려 있던 세션을 모두 닫습니다.'
+            }
+          />
+        )}
+
+        {error && (
+          <p role="alert" className="text-danger text-xs">
+            {error}
+          </p>
+        )}
+      </div>
+    </Modal>
+  )
+}

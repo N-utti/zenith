@@ -13,10 +13,7 @@ import { api, ApiError } from '@/lib/api'
 import { hueOf } from '@/lib/avatar'
 import { useTheme } from '@/lib/theme'
 import { DEMO_PASSWORD, MSW_ENABLED } from '@/mocks/accounts'
-import { ROLE_LABEL } from '@/types'
-
-/** 서버 `PasswordIn.new_password` 의 min_length(backend/app/config.py `password_min_length`)와 같은 값. */
-const PASSWORD_MIN = 8
+import { PASSWORD_MIN, ROLE_LABEL } from '@/types'
 
 /**
  * 개발 목(mock) 모드에서만 세 칸을 미리 채운다. 토스트를 보려고 매번 같은 값을 세 번 타이핑하지 않게.

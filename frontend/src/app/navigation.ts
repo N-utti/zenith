@@ -7,10 +7,11 @@ import {
   Megaphone,
   MessagesSquare,
   Settings,
+  ShieldUser,
   Sparkles,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import type { Role } from '@/types'
+import { ROLE_RANK, type Role } from '@/types'
 
 export interface NavItem {
   to: string
@@ -34,7 +35,19 @@ export const TOP_NAV: NavItem[] = [
   { to: '/ai', label: 'AI 어시스턴트', icon: Sparkles },
 ]
 
-export const SECONDARY_NAV: NavItem[] = [{ to: '/settings', label: '설정', icon: Settings }]
+export const SECONDARY_NAV: NavItem[] = [
+  { to: '/admin', label: '관리자', icon: ShieldUser, minRole: 'exec' },
+  { to: '/settings', label: '설정', icon: Settings },
+]
+
+/**
+ * 등급이 모자란 항목을 뺀다. 사이드바와 ⌘K 가 같은 함수를 쓴다.
+ *
+ * 숨기는 것은 편의다. 실제 차단은 서버의 403 이고, 주소를 직접 쳐서 들어가도 화면이 막는다.
+ */
+export function visibleNav(items: NavItem[], role: Role): NavItem[] {
+  return items.filter((item) => !item.minRole || ROLE_RANK[role] >= ROLE_RANK[item.minRole])
+}
 
 /** 모바일 하단 탭바. 와이어프레임 3a의 5개 탭. */
 export const MOBILE_TABS: NavItem[] = [

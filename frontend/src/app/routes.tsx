@@ -4,6 +4,7 @@ import { AppLayout } from '@/components/layout/AppLayout'
 import { Spinner } from '@/components/ui/Spinner'
 import { LoginPage } from '@/features/auth/LoginPage'
 import { RequireAuth } from '@/features/auth/RequireAuth'
+import { AdminPage } from '@/pages/AdminPage'
 import { AiPage } from '@/pages/AiPage'
 import { ApprovalDetailPage } from '@/pages/ApprovalDetailPage'
 import { ApprovalNewPage } from '@/pages/ApprovalNewPage'
@@ -70,6 +71,8 @@ export function AppRoutes() {
             <Route path="approvals/:approvalId" element={<ApprovalDetailPage />} />
             <Route path="notifications" element={<NotificationsPage />} />
             <Route path="settings" element={<SettingsPage />} />
+            {/* 임원 전용. 화면이 등급을 보고 막고, 실제 차단은 서버 403 이다. */}
+            <Route path="admin" element={<AdminPage />} />
             <Route path="*" element={<NotFoundPage />} />
           </Route>
         </Route>
