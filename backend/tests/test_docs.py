@@ -48,6 +48,7 @@ async def _doc(client: AsyncClient, folder_id, title: str = "기획서") -> dict
 
 async def test_docs_require_login(client: AsyncClient) -> None:
     assert (await client.get("/api/tree")).status_code == 401
+    assert (await client.get("/api/trash")).status_code == 401
 
 
 async def test_folders_and_tree(client: AsyncClient, users: Users, app_db) -> None:
@@ -184,6 +185,38 @@ async def test_trash_untrash_and_hard_delete(client: AsyncClient, users: Users, 
     assert r.status_code == 204
     assert (await client.get(f"/api/docs/{doc['id']}")).status_code == 404
     assert await audit.count_since(app_db, "docs.hard_deleted", since) == 1
+
+
+async def test_trash_list(client: AsyncClient, users: Users, app_db) -> None:
+    """휴지통 목록 — 지운 지 최근 순, 되돌리면 빠진다. 트리와 정확히 반대집합."""
+    root = await _root(app_db)
+    await login(client, "sujin@zenith.co.kr")
+    keep = await _doc(client, root.id, "남는 문서")
+    first = await _doc(client, root.id, "먼저 지운 문서")
+    second = await _doc(client, root.id, "나중에 지운 문서")
+
+    assert (await client.get("/api/trash")).json()["items"] == []  # 지운 게 없으면 빈 목록
+    assert (
+        await client.delete(f"/api/docs/{first['id']}", headers=csrf(client))
+    ).status_code == 204
+    await login(client, "donghyun@zenith.co.kr")  # 만든 사람과 지운 사람을 갈라 둔다
+    assert (
+        await client.delete(f"/api/docs/{second['id']}", headers=csrf(client))
+    ).status_code == 204
+
+    items = (await client.get("/api/trash")).json()["items"]
+    assert [d["title"] for d in items] == ["나중에 지운 문서", "먼저 지운 문서"]  # 최근 삭제 순
+    assert items[0]["deleted_at"] is not None
+    assert items[0]["updated_by"]["name"] == "박동현"  # 만든 사람이 아니라 지운 사람
+    assert items[1]["updated_by"]["name"] == "김수진"
+    assert [d["id"] for d in (await client.get("/api/tree")).json()["docs"]] == [keep["id"]]
+
+    assert len((await client.get("/api/trash", params={"limit": 1})).json()["items"]) == 1
+    for bad in (0, 501):
+        assert (await client.get("/api/trash", params={"limit": bad})).status_code == 422
+
+    await client.post(f"/api/docs/{second['id']}/untrash", headers=csrf(client))
+    assert [d["id"] for d in (await client.get("/api/trash")).json()["items"]] == [first["id"]]
 
 
 async def test_missing_doc_paths_are_404(client: AsyncClient, users: Users, app_db) -> None:
@@ -440,3 +473,5 @@ async def test_purge_trash_after_30_days(client: AsyncClient, users: Users, app_
     ).scalar_one()
     assert (ev.actor_id, str(ev.target_id)) == (None, old["id"])
     assert await purge_trash(app_db, now=now) == 0  # 두 번 돌려도 더 지울 게 없다
+    trash = (await client.get("/api/trash")).json()["items"]  # 지워진 것은 목록에서도 사라진다
+    assert [d["id"] for d in trash] == [fresh["id"]]
