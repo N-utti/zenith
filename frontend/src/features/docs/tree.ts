@@ -1,51 +1,85 @@
-import type { DocSummary } from './types'
+import type { DocSummary, DocTreeData, Folder } from './types'
 
-export interface TreeNode {
-  doc: DocSummary
-  children: TreeNode[]
+/**
+ * 사이드바에 그릴 한 줄. 폴더는 자식을 담고, 문서는 잎이다.
+ *
+ * 서버는 폴더 목록과 문서 목록을 따로 준다(`GET /tree`). 화면이 그리려면 하나로 접어야 한다.
+ */
+export type TreeNode =
+  | { kind: 'folder'; folder: Folder; children: TreeNode[] }
+  | { kind: 'doc'; doc: DocSummary }
+
+function titleOf(node: TreeNode): string {
+  return node.kind === 'folder' ? node.folder.title : node.doc.title
+}
+
+/** 폴더는 `sort` 순, 같으면 이름순. 문서는 폴더 뒤에 이름순으로 붙는다. */
+function ordered(nodes: TreeNode[]): TreeNode[] {
+  return [...nodes].sort((a, b) => {
+    if (a.kind !== b.kind) return a.kind === 'folder' ? -1 : 1
+    if (a.kind === 'folder' && b.kind === 'folder' && a.folder.sort !== b.folder.sort) {
+      return a.folder.sort - b.folder.sort
+    }
+    return titleOf(a).localeCompare(titleOf(b))
+  })
 }
 
 /**
- * 평평한 목록을 `parentId`로 접어 트리로 만든다.
+ * 폴더·문서를 트리로 접는다.
  *
- * 부모를 잃은 문서(권한 밖이거나 삭제된 부모)는 최상위로 올린다. 트리에서
- * 사라지면 열 방법이 없어진다.
+ * 부모를 잃은 폴더·문서(지워졌거나 안 온 것)는 최상위로 올린다. 트리에서 사라지면 열 방법이
+ * 없어진다. 휴지통에 든 문서는 빼되, 그건 서버가 이미 빼고 주는 것이라 안전망이다.
  */
-export function buildTree(docs: DocSummary[]): TreeNode[] {
-  const nodes = new Map<string, TreeNode>(docs.map((doc) => [doc.id, { doc, children: [] }]))
+export function buildTree({ folders, docs }: DocTreeData): TreeNode[] {
+  const byId = new Map<string, { kind: 'folder'; folder: Folder; children: TreeNode[] }>(
+    folders.map((folder) => [folder.id, { kind: 'folder', folder, children: [] }]),
+  )
   const roots: TreeNode[] = []
 
-  for (const node of nodes.values()) {
-    const parent = node.doc.parentId ? nodes.get(node.doc.parentId) : undefined
+  for (const node of byId.values()) {
+    const parent = node.folder.parent_id ? byId.get(node.folder.parent_id) : undefined
     if (parent) parent.children.push(node)
     else roots.push(node)
   }
-  return roots
+
+  for (const doc of docs) {
+    if (doc.deleted_at) continue
+    const node: TreeNode = { kind: 'doc', doc }
+    const parent = byId.get(doc.folder_id)
+    if (parent) parent.children.push(node)
+    else roots.push(node)
+  }
+
+  for (const node of byId.values()) node.children = ordered(node.children)
+  return ordered(roots)
 }
 
-/**
- * 최상위부터 이 문서까지의 경로. 사이드바 트리는 조상만 쓰고,
- * breadcrumb은 문서 자신까지 포함해 쓴다.
- */
-export function pathTo(docId: string | undefined, docs: DocSummary[]): DocSummary[] {
-  if (!docId) return []
-  const byId = new Map(docs.map((doc) => [doc.id, doc]))
-  const path: DocSummary[] = []
+/** 최상위부터 이 문서까지의 폴더 사슬. 순환 참조가 생겨도 멈춘다. */
+export function foldersTo(docId: string | undefined, { folders, docs }: DocTreeData): Folder[] {
+  const doc = docId ? docs.find((d) => d.id === docId) : undefined
+  if (!doc) return []
 
-  let current = byId.get(docId)
-  // 순환 참조가 생겨도 멈추도록 방문한 id를 기록한다.
+  const byId = new Map(folders.map((folder) => [folder.id, folder]))
+  const path: Folder[] = []
   const seen = new Set<string>()
+
+  let current = byId.get(doc.folder_id)
   while (current && !seen.has(current.id)) {
     seen.add(current.id)
     path.unshift(current)
-    current = current.parentId ? byId.get(current.parentId) : undefined
+    current = current.parent_id ? byId.get(current.parent_id) : undefined
   }
   return path
 }
 
-/** 열려 있는 문서까지의 조상 id들. 트리에서 그 경로를 펼쳐 두는 데 쓴다. */
-export function ancestorsOf(docId: string | undefined, docs: DocSummary[]): string[] {
-  return pathTo(docId, docs)
-    .slice(0, -1)
-    .map((doc) => doc.id)
+/** 열려 있는 문서까지의 폴더 id들. 트리에서 그 경로를 펼쳐 두는 데 쓴다. */
+export function ancestorsOf(docId: string | undefined, data: DocTreeData): string[] {
+  return foldersTo(docId, data).map((folder) => folder.id)
+}
+
+/** 새 문서·새 폴더의 기본 자리. 최상위 폴더 중 첫 번째. */
+export function defaultFolderId({ folders }: DocTreeData): string | undefined {
+  return folders
+    .filter((f) => f.parent_id === null)
+    .sort((a, b) => a.sort - b.sort || a.title.localeCompare(b.title))[0]?.id
 }

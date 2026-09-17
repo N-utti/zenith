@@ -279,12 +279,12 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
               <div className="mx-auto max-w-3xl px-6 py-8">
                 <p className="text-subtle mb-1 text-xs">
                   <Avatar
-                    name={meta.editorName}
-                    hue={meta.editorHue}
+                    name={meta.updated_by?.name ?? '?'}
+                    hue={hueOf(meta.updated_by?.id ?? '')}
                     size="sm"
                     className="mr-1.5 align-middle"
                   />
-                  {meta.editorName} · {formatRelative(meta.updatedAt)} 수정
+                  {meta.updated_by?.name ?? '알 수 없음'} · {formatRelative(meta.updated_at)} 수정
                 </p>
 
                 <input

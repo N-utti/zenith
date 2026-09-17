@@ -1,7 +1,7 @@
 import type { SearchHit } from '@/features/search/types'
 import type { User } from '@/types'
 import { BOARD_DEFS, canRead, POSTS } from './boardDb'
-import { DOC_SEEDS, DOCS } from './docsDb'
+import { DOC_SEEDS, DOCS, findFolder } from './docsDb'
 
 /**
  * ⌘K 통합검색의 목. 백엔드 `routers/search.py` 와 같은 모양을 돌려준다.
@@ -45,17 +45,18 @@ export function search(user: User, query: string, limit = 20): SearchHit[] {
   const hits: SearchHit[] = []
 
   for (const doc of DOCS) {
+    // 휴지통에 든 문서는 검색되지 않는다. 백엔드도 `deleted_at` 이 없는 것만 본다.
+    if (doc.deleted_at) continue
     const text = docText(doc.id)
     if (!doc.title.toLowerCase().includes(q) && !text.toLowerCase().includes(q)) continue
     hits.push({
       type: 'doc',
       id: doc.id,
       title: doc.title,
-      // 실제 서버는 폴더 이름을 준다. 목의 문서는 폴더가 없어 부모 문서 제목으로 대신한다.
-      sub: DOCS.find((d) => d.id === doc.parentId)?.title ?? '워크스페이스',
+      sub: findFolder(doc.folder_id)?.title ?? '워크스페이스',
       snippet: snippet(text, q),
       to: `/docs/${doc.id}`,
-      at: doc.updatedAt,
+      at: doc.updated_at,
     })
   }
 

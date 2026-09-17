@@ -27,6 +27,11 @@ import {
   addComment,
   addVersion,
   createDoc,
+  createFolder,
+  docTree,
+  findFolder,
+  isDescendantFolder,
+  updateFolder,
   DOC_SEEDS,
   findDoc,
   listComments,
@@ -973,6 +978,67 @@ data: ${JSON.stringify(data)}
     }),
   ),
 
+  // ── 문서 트리·폴더 ────────────────────────────────────────
+  http.get(
+    '/api/tree',
+    authed(() => HttpResponse.json(docTree())),
+  ),
+
+  http.post('/api/folders', async ({ request }) => {
+    if (!authenticate()) return unauthorized()
+
+    const body = await readJson<{ title?: unknown; parent_id?: unknown; sort?: unknown }>(request)
+    if (!body) return validationError('본문이 JSON 이 아닙니다.')
+    if (typeof body.title !== 'string' || !body.title.trim() || body.title.trim().length > 200) {
+      return validationError('폴더 이름은 1자 이상 200자 이하여야 합니다.')
+    }
+    const parentId = body.parent_id === undefined || body.parent_id === null ? null : String(body.parent_id)
+    if (parentId !== null && !findFolder(parentId)) return notFound()
+
+    return HttpResponse.json(
+      createFolder({
+        title: body.title.trim(),
+        parent_id: parentId,
+        sort: typeof body.sort === 'number' ? body.sort : 0,
+      }),
+      { status: 201 },
+    )
+  }),
+
+  http.patch('/api/folders/:folderId', async ({ request, params }) => {
+    if (!authenticate()) return unauthorized()
+
+    const folder = findFolder(String(params.folderId))
+    if (!folder) return notFound()
+
+    const body = await readJson<{ title?: unknown; parent_id?: unknown; sort?: unknown }>(request)
+    if (!body) return validationError('본문이 JSON 이 아닙니다.')
+    if (body.title !== undefined) {
+      if (typeof body.title !== 'string' || !body.title.trim() || body.title.trim().length > 200) {
+        return validationError('폴더 이름은 1자 이상 200자 이하여야 합니다.')
+      }
+    }
+    let parentId: string | null | undefined
+    if (body.parent_id !== undefined) {
+      parentId = body.parent_id === null ? null : String(body.parent_id)
+      if (parentId !== null) {
+        if (!findFolder(parentId)) return notFound()
+        // 자기 자신이나 자기 자손 아래로 옮기면 트리에서 통째로 사라진다.
+        if (isDescendantFolder(parentId, folder.id)) {
+          return validationError('폴더를 자기 안으로 옮길 수 없습니다.')
+        }
+      }
+    }
+
+    return HttpResponse.json(
+      updateFolder(folder, {
+        title: typeof body.title === 'string' ? body.title.trim() : undefined,
+        parent_id: parentId,
+        sort: typeof body.sort === 'number' ? body.sort : undefined,
+      }),
+    )
+  }),
+
   // ── 문서 ──────────────────────────────────────────────────
   http.get(
     '/api/docs',
@@ -982,10 +1048,21 @@ data: ${JSON.stringify(data)}
     }),
   ),
 
-  http.post(
-    '/api/docs',
-    authed((user) => HttpResponse.json(createDoc(user), { status: 201 })),
-  ),
+  http.post('/api/docs', async ({ request }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+
+    const body = await readJson<{ folder_id?: unknown; title?: unknown }>(request)
+    if (!body) return validationError('본문이 JSON 이 아닙니다.')
+    // 백엔드 `DocCreateIn` 은 `folder_id` 와 `title` 을 둘 다 요구한다.
+    if (typeof body.folder_id !== 'string' || !findFolder(body.folder_id)) {
+      return validationError('folder_id 가 필요합니다.')
+    }
+    const title = typeof body.title === 'string' ? body.title.trim() : ''
+    if (title.length > 200) return validationError('제목은 200자를 넘을 수 없습니다.')
+
+    return HttpResponse.json(createDoc(user, body.folder_id, title || undefined), { status: 201 })
+  }),
 
   http.get('/api/docs/:docId', ({ params }) => {
     if (!authenticate()) return unauthorized()
@@ -998,8 +1075,13 @@ data: ${JSON.stringify(data)}
   http.patch('/api/docs/:docId', async ({ request, params }) => {
     const user = authenticate()
     if (!user) return unauthorized()
-    const { title } = (await request.json()) as { title?: string }
-    const doc = touchDoc(String(params.docId), user, title)
+    const body = await readJson<{ title?: unknown; folder_id?: unknown }>(request)
+    if (!body) return validationError('본문이 JSON 이 아닙니다.')
+    if (body.folder_id !== undefined && !findFolder(String(body.folder_id))) return notFound()
+    const doc = touchDoc(String(params.docId), user, {
+      title: typeof body.title === 'string' ? body.title : undefined,
+      folder_id: typeof body.folder_id === 'string' ? body.folder_id : undefined,
+    })
     return doc ? HttpResponse.json(doc) : notFound()
   }),
 

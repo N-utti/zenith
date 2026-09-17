@@ -1,12 +1,38 @@
+/** 백엔드 `routers/docs.py` 의 `Person`. */
+export interface Person {
+  id: string
+  name: string
+}
+
+/**
+ * 폴더. 백엔드 `FolderOut` 과 같은 모양이다.
+ *
+ * 문서는 문서 안에 들어가지 않는다. **폴더가 폴더를 담고, 문서는 폴더에만 담긴다.**
+ * 이전에는 문서끼리 `parentId` 로 겹쳐 두었는데 서버에는 그런 관계가 없다.
+ */
+export interface Folder {
+  id: string
+  parent_id: string | null
+  title: string
+  /** 같은 부모 안에서의 순서. 작은 것이 위. */
+  sort: number
+}
+
 export interface DocSummary {
   id: string
+  folder_id: string
   title: string
-  updatedAt: string
-  /** 마지막으로 손댄 사람. 목록에서 아바타로 보여준다. */
-  editorName: string
-  editorHue: number
-  /** 사이드바 트리의 부모. 최상위 문서는 null. */
-  parentId: string | null
+  updated_at: string
+  /** 마지막으로 손댄 사람. 계정이 지워졌으면 `null`. */
+  updated_by: Person | null
+  /** 휴지통에 들어간 시각. 살아 있는 문서는 `null`. */
+  deleted_at: string | null
+}
+
+/** 사이드바 트리 한 벌(`GET /tree`). 폴더와 문서를 따로 준다. */
+export interface DocTreeData {
+  folders: Folder[]
+  docs: DocSummary[]
 }
 
 /** 업로드 결과. 문서에는 바이너리가 아니라 이 url만 들어간다. */

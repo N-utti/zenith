@@ -8,19 +8,24 @@ import { Input } from '@/components/ui/Input'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { SkeletonRows } from '@/components/ui/Skeleton'
 import { Spinner } from '@/components/ui/Spinner'
+import { hueOf } from '@/lib/avatar'
 import { formatRelative } from '@/lib/datetime'
-import { useCreateDoc, useDocs } from '@/features/docs/api'
+import { useCreateDoc, useDefaultFolderId, useDocs } from '@/features/docs/api'
 
 export function DocsPage() {
   const [query, setQuery] = useState('')
   const { data, isPending, isError } = useDocs(query)
   const createDoc = useCreateDoc()
+  // 문서는 폴더 안에만 생긴다. 여기서는 고를 자리가 없어 최상위 첫 폴더에 넣는다.
+  const folderId = useDefaultFolderId()
   const navigate = useNavigate()
 
   const create = () => {
-    createDoc.mutate(undefined, {
-      onSuccess: (doc) => void navigate(`/docs/${doc.id}`),
-    })
+    if (!folderId) return
+    createDoc.mutate(
+      { folder_id: folderId },
+      { onSuccess: (doc) => void navigate(`/docs/${doc.id}`) },
+    )
   }
 
   return (
@@ -29,7 +34,12 @@ export function DocsPage() {
         title="문서"
         description="사내 위키와 회의록. 여러 명이 동시에 편집할 수 있습니다."
         actions={
-          <Button size="sm" onClick={create} disabled={createDoc.isPending}>
+          <Button
+            size="sm"
+            onClick={create}
+            disabled={createDoc.isPending || !folderId}
+            title={folderId ? undefined : '먼저 사이드바에서 폴더를 만들어 주세요.'}
+          >
             {createDoc.isPending ? (
               <Spinner className="border-t-on-accent" />
             ) : (
@@ -71,9 +81,13 @@ export function DocsPage() {
                     <span className="text-fg min-w-0 flex-1 truncate text-sm font-medium">
                       {doc.title}
                     </span>
-                    <Avatar name={doc.editorName} hue={doc.editorHue} size="sm" />
+                    <Avatar
+                      name={doc.updated_by?.name ?? '?'}
+                      hue={hueOf(doc.updated_by?.id ?? '')}
+                      size="sm"
+                    />
                     <span className="text-subtle w-16 shrink-0 text-right text-xs">
-                      {formatRelative(doc.updatedAt)}
+                      {formatRelative(doc.updated_at)}
                     </span>
                   </Link>
                 </li>
