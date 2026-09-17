@@ -1,5 +1,8 @@
 import type {
   ApprovalBox,
+  ApprovalTypeCode,
+  Delegation,
+  DelegationInput,
   ApprovalDocument,
   ApprovalListItem,
   ApprovalStep,
@@ -221,6 +224,31 @@ export function listApprovals(user: User, box: ApprovalBox): ApprovalListItem[] 
     .map(summarize)
 }
 
+type StoredDelegation = Delegation & { owner_id: string }
+
+const delegations: StoredDelegation[] = []
+
+function withoutOwner(row: StoredDelegation): Delegation {
+  const copy: Partial<StoredDelegation> = { ...row }
+  delete copy.owner_id
+  return copy as Delegation
+}
+
+let delegationSeq = 1
+
+/** 오늘이 기간 안이고 유형이 맞는 위임. 없으면 `undefined`. */
+function delegationFor(ownerId: string, delegateId: string, typeCode: ApprovalTypeCode) {
+  const today = new Date().toISOString().slice(0, 10)
+  return delegations.find(
+    (d) =>
+      d.owner_id === ownerId &&
+      d.delegate.id === delegateId &&
+      d.start_date <= today &&
+      today <= d.end_date &&
+      (d.type_code === null || d.type_code === typeCode),
+  )
+}
+
 type Failure = { error: string; status: number; code: string }
 const fail = (error: string, status: number, code: string): Failure => ({ error, status, code })
 
@@ -339,6 +367,60 @@ export function forceClose(user: User, id: string, reason: string): ApprovalDocu
   return expose(doc)
 }
 
+/** 내가 건 위임만 돌려준다. 남이 나에게 건 위임은 그 사람 설정이다. */
+export function listDelegations(user: User): Delegation[] {
+  seed()
+  // 저장소에만 있는 `owner_id` 는 응답에서 뺀다. 내 목록이라 누구 것인지는 물을 필요가 없다.
+  return delegations.filter((d) => d.owner_id === user.id).map(withoutOwner)
+}
+
+export function createDelegation(user: User, input: DelegationInput): Delegation | Failure {
+  seed()
+  const delegate = userById(input.delegate_id)
+  if (!delegate) return fail('없는 사람입니다.', 422, 'VALIDATION')
+  if (delegate.id === user.id) return fail('자기 자신에게는 위임할 수 없습니다.', 422, 'VALIDATION')
+  if (!input.start_date || !input.end_date || input.start_date > input.end_date) {
+    return fail('기간이 올바르지 않습니다.', 422, 'VALIDATION')
+  }
+  const type = input.type_code ?? null
+  if (type !== null) {
+    const known = APPROVAL_TYPES.find((t) => t.code === type)
+    if (!known) return fail('없는 문서 유형입니다.', 422, 'VALIDATION')
+    // 유형마다 위임 가능 여부가 다르다(13 §4.1). 근태 4종 중 휴가만 켜져 있다.
+    if (!known.allow_delegate_decision) {
+      return fail(`${known.name} 은 위임할 수 없는 유형입니다.`, 422, 'DELEGATE_NOT_ALLOWED')
+    }
+  }
+  // 같은 유형에 기간이 겹치면 누가 대신 결재할지가 갈린다.
+  const overlap = delegations.find(
+    (d) =>
+      d.owner_id === user.id &&
+      (d.type_code === null || type === null || d.type_code === type) &&
+      d.start_date <= input.end_date &&
+      input.start_date <= d.end_date,
+  )
+  if (overlap) return fail('기간이 겹치는 위임이 이미 있습니다.', 409, 'CONFLICT')
+
+  const made: Delegation & { owner_id: string } = {
+    id: `dlg-${delegationSeq++}`,
+    owner_id: user.id,
+    delegate: person(delegate),
+    start_date: input.start_date,
+    end_date: input.end_date,
+    type_code: type,
+    created_at: now(),
+  }
+  delegations.push(made)
+  return withoutOwner(made)
+}
+
+export function deleteDelegation(user: User, id: string): Failure | null {
+  const index = delegations.findIndex((d) => d.id === id && d.owner_id === user.id)
+  if (index < 0) return fail('위임을 찾을 수 없습니다.', 404, 'NOT_FOUND')
+  delegations.splice(index, 1)
+  return null
+}
+
 /**
  * 승인·반려. 내 차례인 단계만, `version` 이 맞을 때만(13 §4.2.5). 두 탭에서 동시에 누르면 하나만 성공.
  */
@@ -352,7 +434,13 @@ export function decide(
   const doc = docs.find((d) => d.id === id)
   if (!doc) return fail('문서를 찾을 수 없습니다.', 404, 'NOT_FOUND')
   const step = doc.steps.find((s) => s.status === 'waiting')
-  if (doc.status !== 'pending' || !step || step.approver.id !== user.id) {
+  // 위임받은 사람도 처리할 수 있다(대결, 13 §4.2.3). 원 결재자 이름은 단계에 그대로 남고
+  // 실제 처리자만 `acted_by` 로 붙는다.
+  const delegated =
+    !!step && step.approver.id !== user.id
+      ? delegationFor(step.approver.id, user.id, doc.type_code)
+      : undefined
+  if (doc.status !== 'pending' || !step || (step.approver.id !== user.id && !delegated)) {
     return fail('처리할 차례가 아닙니다.', 403, 'NOT_YOUR_TURN')
   }
   if (step.version !== version)
@@ -363,11 +451,16 @@ export function decide(
   if (action === 'reject') {
     step.status = 'rejected'
     step.comment = text?.trim() || null
+    if (delegated) step.acted_by = person(user)
     step.acted_at = at
     step.version += 1
     close(doc, 'rejected', at)
   } else {
     approveStep(step, text?.trim() || null, at)
+    if (delegated) {
+      step.status = 'delegated_done'
+      step.acted_by = person(user)
+    }
     if (doc.steps.some((s) => s.status === 'waiting')) currentOf(doc)
     else close(doc, 'approved', at)
   }

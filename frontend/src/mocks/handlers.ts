@@ -68,8 +68,11 @@ import {
 import {
   APPROVAL_TYPES,
   cancelApproval,
+  createDelegation,
   createDraft,
+  deleteDelegation,
   forceClose,
+  listDelegations,
   decide,
   getApproval,
   listApprovals,
@@ -489,6 +492,41 @@ export const handlers = [
       return HttpResponse.json({ items: listApprovals(user, box as 'inbox'), next_cursor: null })
     }),
   ),
+  // ── 결재 위임 (13 §9.3, §4.2.3) ───────────────────────────
+  // `/api/approvals/:id` 보다 **먼저** 등록해야 한다. 목은 먼저 걸린 핸들러가 이기므로
+  // 뒤에 두면 `delegations` 가 문서 id 로 잡혀 404 가 된다.
+  http.get(
+    '/api/approvals/delegations',
+    authed((user) => HttpResponse.json({ items: listDelegations(user) })),
+  ),
+
+  http.post('/api/approvals/delegations', async ({ request }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    const body = await readJson<Parameters<typeof createDelegation>[1]>(request)
+    if (!body) return validationError('본문이 올바르지 않습니다.')
+    await delay(300)
+    const made = createDelegation(user, body)
+    if ('error' in made) {
+      return HttpResponse.json({ detail: made.error, code: made.code }, { status: made.status })
+    }
+    return HttpResponse.json(made, { status: 201 })
+  }),
+
+  http.delete('/api/approvals/delegations/:id', async ({ params }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    await delay(300)
+    const failure = deleteDelegation(user, String(params.id))
+    if (failure) {
+      return HttpResponse.json(
+        { detail: failure.error, code: failure.code },
+        { status: failure.status },
+      )
+    }
+    return new HttpResponse(null, { status: 204 })
+  }),
+
   http.post('/api/approvals/drafts', async ({ request }) => {
     const user = authenticate()
     if (!user) return unauthorized()

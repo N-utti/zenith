@@ -8,6 +8,7 @@ import { Field } from '@/components/ui/Field'
 import { Input } from '@/components/ui/Input'
 import { Spinner } from '@/components/ui/Spinner'
 import { useToast } from '@/components/ui/ToastContext'
+import { DelegationSection } from '@/features/approvals/DelegationSection'
 import { useCurrentUser } from '@/features/auth/AuthContext'
 import { api, ApiError } from '@/lib/api'
 import { hueOf } from '@/lib/avatar'
@@ -144,6 +145,8 @@ export function SettingsPage() {
       </section>
 
       <PasswordSection />
+
+      <DelegationSection />
 
       <section className="border-line bg-surface mt-4 rounded-xl border p-6">
         <h2 className="text-fg mb-1 text-sm font-semibold">화면</h2>

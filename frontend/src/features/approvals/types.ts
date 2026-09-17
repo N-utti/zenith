@@ -150,3 +150,29 @@ export interface DraftInput {
    */
   references?: string[]
 }
+
+/**
+ * 결재 위임(13 §4.2.3). 내가 자리를 비우는 동안 이 사람이 대신 결재한다.
+ *
+ * **계약에 없어서 정한 모양이다.** 백엔드는 결재 모듈 전체가 501 이고 위임은 경로 셋에
+ * 한 줄 요약(`위임 목록`·`위임 설정`·`위임 해제`)뿐이다. 서버가 붙을 때 여기를 맞춘다.
+ */
+export interface Delegation {
+  id: string
+  /** 대신 결재할 사람. */
+  delegate: Person
+  /** 위임 기간. `YYYY-MM-DD`, 양끝을 포함한다. */
+  start_date: string
+  end_date: string
+  /** 이 유형만 위임하면 그 코드, 모든 유형이면 `null`. */
+  type_code: ApprovalTypeCode | null
+  created_at: string
+}
+
+export interface DelegationInput {
+  delegate_id: string
+  start_date: string
+  end_date: string
+  /** 안 보내면 모든 유형이다. */
+  type_code?: ApprovalTypeCode | null
+}
