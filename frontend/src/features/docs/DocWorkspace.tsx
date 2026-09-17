@@ -14,7 +14,7 @@ import { useCurrentUser } from '@/features/auth/AuthContext'
 import { cn } from '@/lib/cn'
 import { formatRelative } from '@/lib/datetime'
 import { useDragAutoScroll } from '@/lib/useDragAutoScroll'
-import { untrashDoc, useSaveVersion, useTouchDoc, useTrashDoc } from './api'
+import { untrashDoc, useSaveVersion, useTouchDoc, useTrashDoc, useVersionSnapshot } from './api'
 import { CommentPanel } from './CommentPanel'
 import { DocBreadcrumb } from './DocBreadcrumb'
 import { EditorBubbleMenu } from './EditorBubbleMenu'
@@ -150,6 +150,7 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
   const { title, setTitle } = useCollabTitle(doc, meta.title)
   const { mutate: touchDoc } = useTouchDoc(meta.id)
   const { mutate: saveVersion, isPending: savingVersion } = useSaveVersion(meta.id)
+  const versionSnapshot = useVersionSnapshot(meta.id)
 
   const navigate = useNavigate()
   const toast = useToast()
@@ -255,16 +256,32 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
     }
   }, [doc, provider, touchDoc, saveVersion])
 
+  /**
+   * 미리보기를 열 때 그 버전의 스냅샷을 받아 온다. 목록에는 스냅샷이 없다(`VersionMeta`).
+   * 버전이 쌓인 문서에서 목록 한 번이 수십 MB 가 되기 때문이다.
+   */
   const openPreview = (version: DocVersion | null) => {
     setPreviewError(null)
     if (!version) return setPreview(null)
-    try {
-      setPreview({ version, content: readSnapshot(doc, version.snapshot) })
-    } catch {
-      // 이 기능이 붙기 전에 만들어진 문서는 삭제 이력이 이미 수거돼 복원할 수 없다.
-      setPreview(null)
-      setPreviewError('이 버전은 복원할 수 없습니다. 기록 보존 설정 이전에 만들어진 문서입니다.')
-    }
+    versionSnapshot.mutate(version.id, {
+      onSuccess: (full) => {
+        try {
+          setPreview({ version, content: readSnapshot(doc, full.snapshot) })
+        } catch {
+          // 이 기능이 붙기 전에 만들어진 문서는 삭제 이력이 이미 수거돼 복원할 수 없다.
+          setPreview(null)
+          setPreviewError(
+            '이 버전은 복원할 수 없습니다. 기록 보존 설정 이전에 만들어진 문서입니다.',
+          )
+        }
+      },
+      onError: (err) => {
+        setPreview(null)
+        setPreviewError(
+          err instanceof ApiError ? err.message : '이 버전을 불러오지 못했습니다.',
+        )
+      },
+    })
   }
 
   const restore = () => {

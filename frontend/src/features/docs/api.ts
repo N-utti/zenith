@@ -9,6 +9,7 @@ import type {
   DocSummary,
   DocTreeData,
   DocVersion,
+  DocVersionSnapshot,
   Folder,
   UploadedFile,
 } from './types'
@@ -202,11 +203,29 @@ export function useVersions(docId: string) {
   })
 }
 
+/**
+ * 그 버전의 스냅샷을 받는다. 목록에는 스냅샷이 없어서(`VersionMeta`) 미리보기를 열 때마다
+ * 한 건씩 받아 온다.
+ *
+ * 이름이 `restore` 지만 서버는 아무것도 되돌리지 않는다. Y.Doc 을 서버가 과거 상태로
+ * 갈아끼우면 접속 중인 다른 사람과 병합돼 도로 취소되기 때문이다. 서버는 표식만 주고,
+ * 되돌리기는 클라이언트가 '앞으로 가는 편집' 한 번으로 한다.
+ */
+export function useVersionSnapshot(docId: string) {
+  return useMutation({
+    mutationFn: (versionId: string) =>
+      api<DocVersionSnapshot>(`/docs/${docId}/restore`, {
+        method: 'POST',
+        body: JSON.stringify({ version_id: versionId }),
+      }),
+  })
+}
+
 export function useSaveVersion(docId: string) {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (input: { snapshot: string; label?: string }) =>
-      api<DocVersion>(`/docs/${docId}/versions`, {
+      api<DocVersionSnapshot>(`/docs/${docId}/versions`, {
         method: 'POST',
         body: JSON.stringify(input),
       }),

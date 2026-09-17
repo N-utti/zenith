@@ -30,6 +30,7 @@ import {
   createFolder,
   docTree,
   findFolder,
+  findVersion,
   isDescendantFolder,
   purgeDoc,
   trashDoc,
@@ -1156,6 +1157,30 @@ data: ${JSON.stringify(data)}
   http.get('/api/docs/:docId/versions', ({ params }) => {
     if (!authenticate()) return unauthorized()
     return HttpResponse.json({ items: listVersions(String(params.docId)) })
+  }),
+
+  /**
+   * 버전 복구. 이름과 달리 서버는 아무것도 되돌리지 않는다. 그 버전의 스냅샷만 돌려주고,
+   * 되돌리기는 클라이언트가 '앞으로 가는 편집' 한 번으로 한다.
+   */
+  http.post('/api/docs/:docId/restore', async ({ request, params }) => {
+    if (!authenticate()) return unauthorized()
+
+    const body = await readJson<{ version_id?: unknown }>(request)
+    if (!body || typeof body.version_id !== 'string') {
+      return validationError('version_id 가 필요합니다.')
+    }
+    // 휴지통에 든 문서는 되돌릴 수 없다(백엔드 `_get_doc` 기본값).
+    if (!aliveDoc(String(params.docId))) return notFound()
+
+    const version = findVersion(String(params.docId), body.version_id)
+    if (!version) {
+      return HttpResponse.json(
+        { detail: '이 문서에 없는 버전입니다.', code: 'NOT_FOUND' },
+        { status: 404 },
+      )
+    }
+    return HttpResponse.json(version)
   }),
 
   http.post('/api/docs/:docId/versions', async ({ request, params }) => {

@@ -40,8 +40,11 @@ export function VersionPreview({
       <div className="border-warning/30 bg-warning/10 flex flex-wrap items-center gap-x-3 gap-y-2 border-b px-5 py-3">
         <History className="text-warning size-4 shrink-0" />
         <p className="text-fg flex-1 text-sm">
-          {formatDay(version.createdAt)} {formatTime(version.createdAt)} 버전을 보고 있습니다.
-          <span className="text-muted"> {version.authorName} 편집 · 읽기 전용</span>
+          {formatDay(version.created_at)} {formatTime(version.created_at)} 버전을 보고 있습니다.
+          <span className="text-muted">
+            {' '}
+            {version.author?.name ?? '알 수 없음'} 편집 · 읽기 전용
+          </span>
         </p>
         <Button size="sm" onClick={onRestore} disabled={restoring}>
           <RotateCcw className="size-4" />이 버전으로 되돌리기

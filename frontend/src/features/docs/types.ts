@@ -52,16 +52,25 @@ export interface DocComment {
   createdAt: string
 }
 
+/**
+ * 버전 목록에 실리는 것. 백엔드 `VersionMeta` 와 같다.
+ *
+ * **스냅샷이 없다.** 버전이 쌓인 문서에서 목록 한 번이 수십 MB 가 되기 때문이다. 내용은
+ * `POST /docs/{id}/restore` 로 그 버전 하나만 받는다.
+ */
 export interface DocVersion {
   id: string
-  createdAt: string
-  authorId: string
-  authorName: string
-  authorHue: number
+  created_at: string
+  /** 계정이 지워졌으면 `null`. */
+  author: Person | null
+  /** 되돌리기처럼 이유가 분명한 버전에만 붙는다. 붙으면 병합되지 않는다. */
+  label: string | null
+}
+
+/** 스냅샷까지 실린 버전. 백엔드 `VersionOut` — 버전 저장과 `/restore` 의 응답이다. */
+export interface DocVersionSnapshot extends DocVersion {
   /** Yjs 스냅샷(base64). 내용 사본이 아니라 시점 표식이다. */
   snapshot: string
-  /** 되돌리기처럼 이유가 분명한 버전에만 붙는다. 붙으면 병합되지 않는다. */
-  label?: string
 }
 
 export interface DocDetail extends DocSummary {

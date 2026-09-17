@@ -3,6 +3,7 @@ import { Avatar } from '@/components/ui/Avatar'
 import { Badge } from '@/components/ui/Badge'
 import { Spinner } from '@/components/ui/Spinner'
 import { cn } from '@/lib/cn'
+import { hueOf } from '@/lib/avatar'
 import { formatDay, formatRelative, formatTime } from '@/lib/datetime'
 import { useVersions } from './api'
 import type { DocVersion } from './types'
@@ -49,16 +50,20 @@ export function VersionPanel({
               selected ? 'bg-accent-soft' : 'hover:bg-surface-hover',
             )}
           >
-            <Avatar name={version.authorName} hue={version.authorHue} size="sm" />
+            <Avatar
+              name={version.author?.name ?? '?'}
+              hue={hueOf(version.author?.id ?? '')}
+              size="sm"
+            />
             <div className="min-w-0 flex-1">
               <p className="text-fg flex items-center gap-1.5 text-sm">
-                <span className="truncate">{formatRelative(version.createdAt)}</span>
+                <span className="truncate">{formatRelative(version.created_at)}</span>
                 {index === 0 && <Badge tone="accent">최신</Badge>}
                 {version.label && <Badge tone="warning">{version.label}</Badge>}
               </p>
               <p className="text-subtle mt-0.5 truncate text-xs">
-                {version.authorName} · {formatDay(version.createdAt)}{' '}
-                {formatTime(version.createdAt)}
+                {version.author?.name ?? '알 수 없음'} · {formatDay(version.created_at)}{' '}
+                {formatTime(version.created_at)}
               </p>
             </div>
             {selected && <RotateCcw className="text-accent mt-0.5 size-3.5 shrink-0" />}

@@ -129,7 +129,6 @@ v0.2 전제로 만들어진 구현을 전부 걷어냈다. `features/attendance/
 > 문서 목록·트리·폴더는 필드 표기까지 계약에 맞췄다(snake_case, `updated_by` 객체). 아직 남은 어긋남:
 >
 > - **댓글**: 프론트 `authorId`·`authorName`·`authorHue`·`createdAt` ↔ 백엔드 `author:{id,name}`·`created_at`·`block_id`
-> - **버전**: 프론트는 `snapshot` 을 필수로 두는데 백엔드 목록(`VersionMeta`)은 스냅샷을 아예 안 준다. 스냅샷은 `/restore` 로 받는다
 > - **문서 상세**: `seedHtml` 은 목 전용이다. 백엔드는 그 자리에 `ydoc`(서버 보관 Yjs 상태)을 준다
 > - **홈 카드**: `/api/announcements`·`/api/mentions`·`/api/docs/recent`·`/api/tasks/today` 는 04 에 없다. 백엔드는 `GET /api/me/home` 하나로 준다
 
@@ -157,8 +156,9 @@ PATCH /api/docs/:id                    제목·수정시각 투영
 GET   /api/docs/recent?limit=          (04 에 없다. 백엔드는 /api/me/home)
 GET   /api/docs/:id/comments
 POST  /api/docs/:id/comments
-GET   /api/docs/:id/versions
-POST  /api/docs/:id/versions        { snapshot, label? }
+GET   /api/docs/:id/versions        목록에 스냅샷은 없다. 내용은 /restore 로 한 건씩
+POST  /api/docs/:id/versions        { snapshot, label? } → 스냅샷까지 실린 버전
+POST  /api/docs/:id/restore         { version_id } → 그 버전의 스냅샷. 서버는 되돌리지 않는다
 ```
 
 ### 검색의 목 한계
