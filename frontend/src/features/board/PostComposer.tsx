@@ -8,6 +8,7 @@ import { Textarea } from '@/components/ui/Textarea'
 import { useToast } from '@/components/ui/ToastContext'
 import { ApiError } from '@/lib/api'
 import { useCreatePost, useUpdatePost } from './api'
+import { BODY_MAX, TITLE_MAX } from './types'
 import type { Board, BoardPostDetail } from './types'
 
 /**
@@ -16,19 +17,20 @@ import type { Board, BoardPostDetail } from './types'
  *
  * `post`가 있으면 수정, 없으면 새 글.
  *
- * 부르는 쪽은 **열 때 마운트한다**(`{open && <PostComposer .../>}`). 입력을 원본에서
+ * 부르는 쪽은 **열 때 마운트한다**(`{editing && <PostComposer .../>}`). 입력을 원본에서
  * 다시 채우는 일을 effect 로 하면 리렌더가 겹치고, 리셋을 닫기 함수에 두면 Esc·바깥
  * 클릭처럼 그 함수를 안 거치는 닫기에서 지난 입력이 남는다.
+ *
+ * 대신 보내는 중에는 닫히지 않게 막는다. 언마운트되면 `mutate` 에 넘긴 콜백이 불리지
+ * 않아서(관찰자에 리스너가 없다) 403·422 로 실패해도 화면에 아무 표시가 안 남는다.
  */
 export function PostComposer({
   board,
   post,
-  open,
   onClose,
 }: {
   board: Board
   post?: BoardPostDetail
-  open: boolean
   onClose: () => void
 }) {
   const create = useCreatePost(board.id)
@@ -40,6 +42,7 @@ export function PostComposer({
   const [error, setError] = useState<string | null>(null)
 
   const close = () => {
+    if (mutation.isPending) return
     setError(null)
     onClose()
   }
@@ -69,7 +72,7 @@ export function PostComposer({
 
   return (
     <Modal
-      open={open}
+      open
       onClose={close}
       title={post ? '글 수정' : `${board.name}에 글쓰기`}
       description={
@@ -79,7 +82,7 @@ export function PostComposer({
       }
       footer={
         <>
-          <Button variant="secondary" size="sm" onClick={close}>
+          <Button variant="secondary" size="sm" onClick={close} disabled={mutation.isPending}>
             취소
           </Button>
           <Button
@@ -105,6 +108,7 @@ export function PostComposer({
               {...slot}
               value={title}
               onChange={(e) => setTitle(e.target.value)}
+              maxLength={TITLE_MAX}
               placeholder="제목을 입력하세요"
             />
           )}
@@ -117,6 +121,7 @@ export function PostComposer({
               {...slot}
               value={body}
               onChange={(e) => setBody(e.target.value)}
+              maxLength={BODY_MAX}
               rows={8}
               placeholder="내용을 입력하세요"
             />

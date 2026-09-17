@@ -54,7 +54,7 @@ export function BoardPage() {
       <PostTable boardId={boardId} badge={board?.badge ?? ''} />
 
       {board?.allowed && composing && (
-        <PostComposer board={board} open onClose={() => setComposing(false)} />
+        <PostComposer board={board} onClose={() => setComposing(false)} />
       )}
     </>
   )
@@ -99,7 +99,7 @@ function PostTable({ boardId, badge }: { boardId: string; badge: string }) {
                   </span>
                 </MaskedRow>
                 <p className="text-subtle mt-1 text-xs md:hidden">
-                  {post.masked ? <MaskedNote /> : post.authorName} ·{' '}
+                  {post.masked ? <MaskedNote /> : (post.author?.name ?? '알 수 없음')} ·{' '}
                   {formatRelative(post.createdAt)}
                 </p>
               </TD>
@@ -109,7 +109,7 @@ function PostTable({ boardId, badge }: { boardId: string; badge: string }) {
                 <Badge>{badge}</Badge>
               </TD>
               <TD className="text-muted hidden whitespace-nowrap md:table-cell">
-                {post.masked ? <MaskedNote /> : post.authorName}
+                {post.masked ? <MaskedNote /> : (post.author?.name ?? '알 수 없음')}
               </TD>
               <TD className="text-subtle hidden whitespace-nowrap text-xs md:table-cell">
                 {formatRelative(post.createdAt)}
