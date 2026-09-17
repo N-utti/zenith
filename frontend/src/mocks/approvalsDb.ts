@@ -142,7 +142,9 @@ function submit(doc: Stored, at = now()) {
   const approvers = drafter ? buildSteps(drafter) : []
   doc.steps = [...approvers, ...referenceSteps(references, approvers.length + 1)]
   doc.submitted_at = at
-  if (doc.steps.length === 0) {
+  // 참조가 아니라 **결재자**가 없는지를 본다. 참조자만 걸린 임원 기안을 `steps.length` 로 재면
+  // 결재선이 있는 줄 알고 대기로 남는다. 아무도 처리할 수 없는 문서가 된다.
+  if (approvers.length === 0) {
     // 대표 기안: 결재선 없음 → 즉시 확정. 문서와 이력은 남는다.
     close(doc, 'approved', at)
   } else {

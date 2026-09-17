@@ -171,6 +171,23 @@ describe('참조자 (13 FR-APV-16)', () => {
     expect(done.waiting_on?.id).toBe(ceo.id)
   })
 
+  it('참조자만 있고 결재자가 없는 임원 기안은 그대로 확정된다', () => {
+    // 참조는 결재선이 아니다. 개수로 재면 아무도 처리할 수 없는 문서가 대기로 남는다.
+    const draft = createDraft(ceo, {
+      type_code: 'general',
+      title: '임원 기안에 참조만',
+      subject: { body: '본문', amount: null, related: null },
+      references: [member.id],
+    })
+    if ('error' in draft) throw new Error(draft.error)
+
+    const done = submitApproval(ceo, draft.id)
+    if ('error' in done) throw new Error(done.error)
+    expect(done.status).toBe('approved')
+    expect(done.waiting_on).toBeNull()
+    expect(listApprovals(member, 'reference').map((d) => d.id)).toContain(draft.id)
+  })
+
   it('임시저장을 고치면 참조자가 바뀐다', () => {
     const draft = createDraft(member, {
       type_code: 'general',
