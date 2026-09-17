@@ -126,8 +126,12 @@ v0.2 전제로 만들어진 구현을 전부 걷어냈다. `features/attendance/
 목 엔드포인트. 백엔드는 같은 스키마로 응답하면 된다. 근태 API는 설계서 §9로 재정의됐고
 아직 목이 없다.
 
-> 경로만 맞췄다. 필드 표기(백엔드는 snake_case 에 `author`·`updated_by` 객체)와 목록·최근
-> 문서의 대체 경로는 아직 다르다. `VITE_DISABLE_MSW=true` 로 돌리면 요청은 닿아도 화면이 빈다.
+> 문서 목록·트리·폴더는 필드 표기까지 계약에 맞췄다(snake_case, `updated_by` 객체). 아직 남은 어긋남:
+>
+> - **댓글**: 프론트 `authorId`·`authorName`·`authorHue`·`createdAt` ↔ 백엔드 `author:{id,name}`·`created_at`·`block_id`
+> - **버전**: 프론트는 `snapshot` 을 필수로 두는데 백엔드 목록(`VersionMeta`)은 스냅샷을 아예 안 준다. 스냅샷은 `/restore` 로 받는다
+> - **문서 상세**: `seedHtml` 은 목 전용이다. 백엔드는 그 자리에 `ydoc`(서버 보관 Yjs 상태)을 준다
+> - **홈 카드**: `/api/announcements`·`/api/mentions`·`/api/docs/recent`·`/api/tasks/today` 는 04 에 없다. 백엔드는 `GET /api/me/home` 하나로 준다
 
 ```
 GET   /api/announcements?limit=        권한 밖 등급 글은 목록에서 제외 (04 에 없다. 백엔드는 /api/me/home)
@@ -140,8 +144,12 @@ GET   /api/search?q=&types=&limit=     ⌘K 통합검색. 배열 그대로 돌�
                                        권한 밖은 마스킹이 아니라 결과에서 빠진다
                                        스니펫은 `**…**` 마커가 든 평문이고 <>& 가 이스케이프돼 온다
 
-GET   /api/docs?q=                     목록·검색 (04 에 없다. 백엔드는 /api/tree + /api/search)
-POST  /api/docs                        생성
+GET   /api/tree                        사이드바 트리 { folders[], docs[] }
+POST  /api/folders                     { title, parent_id?, sort? }
+PATCH /api/folders/:id                 이름·이동·정렬 (프론트는 아직 이름만 쓴다)
+
+GET   /api/docs?q=                     제목 필터 (04 에 없다. 본문 검색은 /api/search)
+POST  /api/docs                        { folder_id, title } 생성
 GET   /api/docs/:id                    메타 (+ seedHtml, 아래 참조)
 PATCH /api/docs/:id                    제목·수정시각 투영
 GET   /api/docs/recent?limit=          (04 에 없다. 백엔드는 /api/me/home)

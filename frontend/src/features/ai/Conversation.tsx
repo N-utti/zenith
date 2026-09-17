@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router'
 import { cn } from '@/lib/cn'
 import { useToast } from '@/components/ui/ToastContext'
-import { useCreateDoc } from '@/features/docs/api'
+import { useCreateDoc, useDefaultFolder } from '@/features/docs/api'
 import { useFeedback } from './api'
 import { answerToSeed } from './saveAsDoc'
 import { ExcludedNote, SourceCard } from './SourcesPanel'
@@ -59,16 +59,28 @@ function AnswerActions({
   const [helpful, setHelpful] = useState(false)
   const feedback = useFeedback()
   const createDoc = useCreateDoc()
+  const { folderId, folderName, isPending: treePending } = useDefaultFolder()
   const navigate = useNavigate()
   const toast = useToast()
 
   /** 빈 문서를 만들고 초안을 라우터 state 로 실어 편집기로 간다. 본문은 편집기가 Y.Doc 에 심는다. */
   const saveAsDoc = () => {
     if (createDoc.isPending) return
-    createDoc.mutate(undefined, {
-      onSuccess: (doc) => void navigate(`/docs/${doc.id}`, { state: answerToSeed(body, question) }),
-      onError: () => toast.error('문서를 만들지 못했습니다.'),
-    })
+    // 문서는 폴더 안에만 생긴다. 고를 자리가 없으니 최상위 첫 폴더에 넣는다.
+    if (treePending) return toast.info('문서 트리를 불러오는 중입니다. 잠시 뒤에 눌러 주세요.')
+    if (!folderId) {
+      return toast.error('문서를 넣을 폴더가 없습니다. 사이드바에서 폴더를 먼저 만들어 주세요.')
+    }
+    createDoc.mutate(
+      { folder_id: folderId },
+      {
+        onSuccess: (doc) => {
+          if (folderName) toast.success(`${folderName} 폴더에 만들었습니다.`)
+          void navigate(`/docs/${doc.id}`, { state: answerToSeed(body, question) })
+        },
+        onError: () => toast.error('문서를 만들지 못했습니다.'),
+      },
+    )
   }
 
   /** 켤 때만 1 을 보낸다. -1 은 "도움 안 됨" 이지 철회가 아니라, 끄기는 화면 표시만 되돌린다. */

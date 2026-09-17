@@ -43,7 +43,7 @@ export function ContinueWorkCard() {
                 <div className="h-[70px] rounded-md" style={{ background: THUMBNAIL }} />
                 <p className="text-fg mt-2.5 truncate text-[13.5px] font-semibold">{doc.title}</p>
                 <p className="text-subtle mt-1 truncate text-[11px]">
-                  {doc.editorName} · {formatRelative(doc.updatedAt)}
+                  {doc.updated_by?.name ?? '알 수 없음'} · {formatRelative(doc.updated_at)}
                 </p>
               </Link>
             ))}

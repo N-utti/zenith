@@ -1,8 +1,18 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
-import type { DocComment, DocDetail, DocSummary, DocVersion, UploadedFile } from './types'
+import { defaultFolderId } from './tree'
+import type {
+  DocComment,
+  DocDetail,
+  DocSummary,
+  DocTreeData,
+  DocVersion,
+  Folder,
+  UploadedFile,
+} from './types'
 
 export const docKeys = {
+  tree: ['tree'] as const,
   list: (query: string) => ['documents', 'list', query] as const,
   detail: (docId: string) => ['documents', docId] as const,
   comments: (docId: string) => ['documents', docId, 'comments'] as const,
@@ -11,9 +21,58 @@ export const docKeys = {
   recent: ['documents', 'recent'] as const,
 }
 
+/** 사이드바 트리. 폴더와 문서를 한 번에 받는다. */
+export function useTree() {
+  return useQuery({
+    queryKey: docKeys.tree,
+    queryFn: () => api<DocTreeData>('/tree'),
+  })
+}
+
 /**
- * 목록·검색은 04 에 `GET /docs` 가 없다. 백엔드는 사이드바 트리를 `GET /tree`,
- * 본문 검색을 `GET /search` 로 나눠 준다. 둘을 붙일 때 이 훅이 그쪽으로 옮겨 간다.
+ * 새 문서를 넣을 기본 폴더. 문서는 폴더 안에만 생기는데, 홈·문서 목록·AI 답변 저장처럼
+ * 폴더를 고를 자리가 없는 곳에서는 최상위 첫 폴더에 넣는다.
+ *
+ * 아직 안 온 것과 하나도 없는 것을 갈라서 준다. 둘을 뭉치면 트리를 받는 동안 "폴더를 먼저
+ * 만들어 주세요" 라는 틀린 안내가 뜬다.
+ */
+export function useDefaultFolder(): {
+  folderId: string | undefined
+  folderName: string | undefined
+  isPending: boolean
+  isError: boolean
+} {
+  const { data, isPending, isError } = useTree()
+  const folderId = data && defaultFolderId(data)
+  return {
+    folderId,
+    folderName: data?.folders.find((f) => f.id === folderId)?.title,
+    isPending,
+    isError,
+  }
+}
+
+export function useCreateFolder() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { title: string; parent_id?: string | null }) =>
+      api<Folder>('/folders', { method: 'POST', body: JSON.stringify(input) }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: docKeys.tree }),
+  })
+}
+
+export function useRenameFolder() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, title }: { id: string; title: string }) =>
+      api<Folder>(`/folders/${id}`, { method: 'PATCH', body: JSON.stringify({ title }) }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: docKeys.tree }),
+  })
+}
+
+/**
+ * 제목으로 거르는 목록. 04 에 `GET /docs` 가 없다. 본문 검색은 `GET /search` 가 따로 있고,
+ * 이 훅은 문서 화면의 제목 필터라 그대로 둔다.
  */
 export function useDocs(query: string) {
   return useQuery({
@@ -29,12 +88,18 @@ export function useDoc(docId: string) {
   })
 }
 
+/** 빈 문서의 제목. 서버가 제목을 **요구하므로**(`DocCreateIn`) 안 보내면 422 다. */
+export const UNTITLED_DOC = '제목 없는 문서'
+
+/** 문서는 폴더 안에만 생긴다. 서버가 `folder_id` 와 `title` 을 둘 다 요구한다. */
 export function useCreateDoc() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: () => api<DocSummary>('/docs', { method: 'POST' }),
+    mutationFn: ({ folder_id, title = UNTITLED_DOC }: { folder_id: string; title?: string }) =>
+      api<DocSummary>('/docs', { method: 'POST', body: JSON.stringify({ folder_id, title }) }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['documents'] })
+      void qc.invalidateQueries({ queryKey: docKeys.tree })
     },
   })
 }
@@ -55,6 +120,7 @@ export function useTouchDoc(docId: string) {
       qc.setQueryData(docKeys.detail(docId), doc)
       void qc.invalidateQueries({ queryKey: ['documents', 'list'] })
       void qc.invalidateQueries({ queryKey: docKeys.recent })
+      void qc.invalidateQueries({ queryKey: docKeys.tree })
     },
   })
 }

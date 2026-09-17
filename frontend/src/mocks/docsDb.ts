@@ -1,11 +1,28 @@
 import { hueOf } from '@/lib/avatar'
-import type { DocComment, DocSummary, DocVersion } from '@/features/docs/types'
+import type {
+  DocComment,
+  DocSummary,
+  DocTreeData,
+  DocVersion,
+  Folder,
+} from '@/features/docs/types'
 import type { User } from '@/types'
 import { uuid } from '@/features/ai/store'
 
 function minutesAgo(minutes: number): string {
   return new Date(Date.now() - minutes * 60_000).toISOString()
 }
+
+/**
+ * 폴더. 문서는 폴더에만 담긴다(문서끼리 겹치지 않는다).
+ *
+ * 실제 서버도 같은 모양이다. `sort` 는 같은 부모 안에서의 순서이고 작은 것이 위다.
+ */
+export const FOLDERS: Folder[] = [
+  { id: 'f-1', parent_id: null, title: '회사 위키', sort: 0 },
+  { id: 'f-2', parent_id: null, title: '회의록', sort: 1 },
+  { id: 'f-3', parent_id: 'f-1', title: '제품', sort: 0 },
+]
 
 /**
  * 문서 메타. 본문은 여기 없다: Y.Doc(IndexedDB)에 있다.
@@ -16,51 +33,51 @@ function minutesAgo(minutes: number): string {
 export const DOCS: DocSummary[] = [
   {
     id: 'd-0',
-    title: '회사 위키',
-    updatedAt: minutesAgo(40),
-    editorName: '정성운',
-    editorHue: 155,
-    parentId: null,
+    folder_id: 'f-1',
+    title: '온보딩 안내',
+    updated_at: minutesAgo(40),
+    updated_by: { id: 'u-2', name: '정성운' },
+    deleted_at: null,
   },
   {
     id: 'd-1',
+    folder_id: 'f-3',
     title: '2026 하반기 제품 로드맵',
-    updatedAt: minutesAgo(12),
-    editorName: '정성운',
-    editorHue: 155,
-    parentId: 'd-0',
+    updated_at: minutesAgo(12),
+    updated_by: { id: 'u-2', name: '정성운' },
+    deleted_at: null,
   },
   {
     id: 'd-2',
+    folder_id: 'f-2',
     title: '근태 모듈 설계서 v0.3 리뷰 노트',
-    updatedAt: minutesAgo(95),
-    editorName: '진수연',
-    editorHue: 275,
-    parentId: null,
+    updated_at: minutesAgo(95),
+    updated_by: { id: 'u-1', name: '진수연' },
+    deleted_at: null,
   },
   {
     id: 'd-3',
+    folder_id: 'f-2',
     title: '주간 개발 회의록 (8월 4주차)',
-    updatedAt: minutesAgo(300),
-    editorName: '이정민',
-    editorHue: 200,
-    parentId: null,
+    updated_at: minutesAgo(300),
+    updated_by: { id: 'u-4', name: '장지윤' },
+    deleted_at: null,
   },
   {
     id: 'd-4',
+    folder_id: 'f-3',
     title: 'RAG 권한 필터 설계 메모',
-    updatedAt: minutesAgo(1500),
-    editorName: '한지우',
-    editorHue: 95,
-    parentId: 'd-0',
+    updated_at: minutesAgo(1500),
+    updated_by: { id: 'u-7', name: '김혜리' },
+    deleted_at: null,
   },
   {
     id: 'd-5',
+    folder_id: 'f-1',
     title: '휴가·연차 정책 확인 메모',
-    updatedAt: minutesAgo(2900),
-    editorName: '진수연',
-    editorHue: 275,
-    parentId: 'd-2',
+    updated_at: minutesAgo(2900),
+    updated_by: { id: 'u-1', name: '진수연' },
+    deleted_at: null,
   },
 ]
 
@@ -143,37 +160,90 @@ let nextId = 100
 
 export function listDocs(query: string): DocSummary[] {
   const q = query.trim().toLowerCase()
-  const matched = q ? DOCS.filter((doc) => doc.title.toLowerCase().includes(q)) : DOCS
-  return [...matched].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+  const alive = DOCS.filter((doc) => !doc.deleted_at)
+  const matched = q ? alive.filter((doc) => doc.title.toLowerCase().includes(q)) : alive
+  return [...matched].sort((a, b) => b.updated_at.localeCompare(a.updated_at))
+}
+
+/** 사이드바 트리 한 벌. 휴지통에 든 문서는 빼고 준다. */
+export function docTree(): DocTreeData {
+  return { folders: [...FOLDERS], docs: DOCS.filter((doc) => !doc.deleted_at) }
+}
+
+export function findFolder(id: string): Folder | undefined {
+  return FOLDERS.find((folder) => folder.id === id)
+}
+
+export function createFolder(input: {
+  title: string
+  parent_id?: string | null
+  sort?: number
+}): Folder {
+  const folder: Folder = {
+    id: `f-${uuid()}`,
+    parent_id: input.parent_id ?? null,
+    title: input.title,
+    sort: input.sort ?? 0,
+  }
+  FOLDERS.push(folder)
+  return folder
+}
+
+export function updateFolder(
+  folder: Folder,
+  input: { title?: string; parent_id?: string | null; sort?: number },
+): Folder {
+  if (input.title !== undefined) folder.title = input.title
+  if (input.parent_id !== undefined) folder.parent_id = input.parent_id
+  if (input.sort !== undefined) folder.sort = input.sort
+  return folder
+}
+
+/** 폴더를 자기 자손 아래로 옮기면 트리에서 통째로 사라진다. 서버도 막는 자리다. */
+export function isDescendantFolder(folderId: string, maybeAncestorId: string): boolean {
+  const seen = new Set<string>()
+  let current = findFolder(folderId)
+  while (current && !seen.has(current.id)) {
+    if (current.id === maybeAncestorId) return true
+    seen.add(current.id)
+    current = current.parent_id ? findFolder(current.parent_id) : undefined
+  }
+  return false
 }
 
 export function findDoc(id: string): DocSummary | undefined {
   return DOCS.find((doc) => doc.id === id)
 }
 
-export function createDoc(user: User): DocSummary {
+export function createDoc(user: User, folderId: string, title: string): DocSummary {
   const doc: DocSummary = {
     // 새로고침해도 겹치지 않아야 한다. 브라우저 IndexedDB 가 문서 id 로 본문을 남기므로
     // 카운터를 쓰면 두 번째로 만든 문서에 이전 본문이 뜬다.
     id: `d-${uuid()}`,
-    title: '제목 없는 문서',
-    updatedAt: new Date().toISOString(),
-    editorName: user.name,
-    editorHue: hueOf(user.id),
-    parentId: null,
+    folder_id: folderId,
+    title,
+    updated_at: new Date().toISOString(),
+    updated_by: { id: user.id, name: user.name },
+    deleted_at: null,
   }
   DOCS.unshift(doc)
   return doc
 }
 
 /** 제목의 원천은 Y.Doc이다. 여기 반영하는 건 목록·검색용 투영일 뿐이다. */
-export function touchDoc(id: string, user: User, title?: string): DocSummary | undefined {
+export function touchDoc(
+  id: string,
+  user: User,
+  input: { title?: string; folder_id?: string },
+): DocSummary | undefined {
   const doc = findDoc(id)
   if (!doc) return undefined
-  if (title !== undefined) doc.title = title
-  doc.updatedAt = new Date().toISOString()
-  doc.editorName = user.name
-  doc.editorHue = hueOf(user.id)
+  // 빈 본문으로 "이어서 작업" 순서를 흔들지 않는다. 백엔드도 아무것도 안 바꾸고 그대로 준다.
+  if (input.title === undefined && input.folder_id === undefined) return doc
+  if (input.title !== undefined) doc.title = input.title
+  if (input.folder_id !== undefined) doc.folder_id = input.folder_id
+  doc.updated_at = new Date().toISOString()
+  doc.updated_by = { id: user.id, name: user.name }
   return doc
 }
 

@@ -10,7 +10,8 @@ import { UnreadChatCard } from '@/features/home/UnreadChatCard'
 import { useMentions } from '@/features/home/api'
 import { useCurrentUser } from '@/features/auth/AuthContext'
 import { useChannels } from '@/features/chat/api'
-import { useCreateDoc } from '@/features/docs/api'
+import { useToast } from '@/components/ui/ToastContext'
+import { useCreateDoc, useDefaultFolder } from '@/features/docs/api'
 
 function greeting(): string {
   const hour = new Date().getHours()
@@ -31,6 +32,8 @@ export function HomePage() {
   const user = useCurrentUser()
   const navigate = useNavigate()
   const createDoc = useCreateDoc()
+  const { folderId, folderName, isPending: treePending } = useDefaultFolder()
+  const toast = useToast()
 
   // 청사진의 "안 읽은 항목 N". 채널 미읽음과 멘션을 합친 수다.
   const unreadMessages =
@@ -54,11 +57,21 @@ export function HomePage() {
         <div className="flex gap-2">
           <Button
             onClick={() =>
-              createDoc.mutate(undefined, {
-                onSuccess: (doc) => void navigate(`/docs/${doc.id}`),
-              })
+              folderId &&
+              createDoc.mutate(
+                { folder_id: folderId },
+                {
+                  onSuccess: (doc) => {
+                    if (folderName) toast.success(`${folderName} 폴더에 만들었습니다.`)
+                    void navigate(`/docs/${doc.id}`)
+                  },
+                },
+              )
             }
-            disabled={createDoc.isPending}
+            disabled={createDoc.isPending || treePending || !folderId}
+            title={
+              folderId || treePending ? undefined : '먼저 사이드바에서 폴더를 만들어 주세요.'
+            }
           >
             <Plus className="size-4" />새 문서
           </Button>

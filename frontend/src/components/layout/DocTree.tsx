@@ -1,14 +1,28 @@
 import { useMemo, useState } from 'react'
-import { NavLink, useParams } from 'react-router'
-import { ChevronDown, ChevronRight, FileText } from 'lucide-react'
+import { NavLink, useNavigate, useParams } from 'react-router'
+import {
+  ChevronDown,
+  ChevronRight,
+  FilePlus2,
+  FileText,
+  Folder,
+  FolderOpen,
+  FolderPlus,
+  Pencil,
+  Plus,
+} from 'lucide-react'
 import { cn } from '@/lib/cn'
-import { useDocs } from '@/features/docs/api'
+import { useToast } from '@/components/ui/ToastContext'
+import { ApiError } from '@/lib/api'
+import { FolderNameModal } from '@/features/docs/FolderNameModal'
+import { useCreateDoc, useCreateFolder, useRenameFolder, useTree } from '@/features/docs/api'
 import { ancestorsOf, buildTree, type TreeNode } from '@/features/docs/tree'
 
-const EXPANDED_KEY = 'zenith.docTreeExpanded'
+// 값의 의미가 문서 id 에서 폴더 id 로 바뀌었다. 옛 키를 그대로 쓰면 안 맞는 id 가 영원히 쌓인다.
+const EXPANDED_KEY = 'zenith.docTreeExpanded.v2'
 
 /**
- * 사용자가 직접 펼친 노드 id. AppLayout 이 bleed 유무로 두 벌이라 에디터를 열고 닫을 때마다
+ * 사용자가 직접 펼친 폴더 id. AppLayout 이 bleed 유무로 두 벌이라 에디터를 열고 닫을 때마다
  * 트리가 다시 마운트되고, 컴포넌트 상태만으로는 그때마다 접혀 버린다(12 §10). 사이드바 접힘과
  * 같은 방식으로 브라우저에 남긴다.
  */
@@ -33,86 +47,238 @@ function rememberExpanded(id: string, expanded: boolean) {
   }
 }
 
-function TreeRow({
+interface RowActions {
+  onNavigate?: () => void
+  onAddDoc: (folderId: string) => void
+  onAddFolder: (parentId: string | null) => void
+  onRename: (folderId: string, title: string) => void
+}
+
+function DocRow({
+  node,
+  depth,
+  onNavigate,
+}: {
+  node: TreeNode & { kind: 'doc' }
+  depth: number
+  onNavigate?: () => void
+}) {
+  return (
+    <div className="flex items-center">
+      <span className="size-5 shrink-0" style={{ marginLeft: depth * 14 }} />
+      <NavLink
+        to={`/docs/${node.doc.id}`}
+        onClick={onNavigate}
+        className={({ isActive }) =>
+          cn(
+            'flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-[13.5px] transition-colors',
+            isActive
+              ? 'bg-accent-soft text-accent font-semibold'
+              : 'text-muted hover:bg-surface-hover hover:text-fg',
+          )
+        }
+      >
+        <FileText className="size-3.5 shrink-0" strokeWidth={2} />
+        <span className="truncate">{node.doc.title}</span>
+      </NavLink>
+    </div>
+  )
+}
+
+function FolderAction({
+  label,
+  onClick,
+  children,
+}: {
+  label: string
+  onClick: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+      className="text-subtle hover:text-fg grid size-6 cursor-pointer place-items-center rounded transition-colors"
+    >
+      {children}
+    </button>
+  )
+}
+
+function FolderRow({
   node,
   depth,
   openPath,
-  onNavigate,
+  actions,
 }: {
-  node: TreeNode
+  node: TreeNode & { kind: 'folder' }
   depth: number
-  /** 처음 마운트할 때 펼쳐 둘 조상 id들. 열려 있는 문서까지의 경로다. */
+  /** 처음 마운트할 때 펼쳐 둘 폴더 id들. 열려 있는 문서까지의 경로다. */
   openPath: Set<string>
-  onNavigate?: () => void
+  actions: RowActions
 }) {
-  // 열려 있는 문서까지의 경로는 기억과 무관하게 항상 펼친다. 접어 둔 폴더 안의 문서를 검색으로 열어도 보여야 한다.
-  const [expanded, setExpanded] = useState(
-    () => openPath.has(node.doc.id) || expandedIds.has(node.doc.id),
-  )
-  const hasChildren = node.children.length > 0
+  const { id, title } = node.folder
+  const [opened, setOpened] = useState(() => expandedIds.has(id))
+  /*
+   * 열려 있는 문서까지의 경로는 기억과 무관하게 항상 펼친다. 접어 둔 폴더 안의 문서를 ⌘K 로
+   * 열어도 보여야 한다. 이 판정을 `useState` 초기값으로만 하면 안 된다. 편집 화면에서 다른
+   * 문서로 옮길 때는 트리가 다시 마운트되지 않아 `openPath` 만 바뀌고 펼쳐지지 않는다.
+   */
+  const expanded = opened || openPath.has(id)
+
   const toggle = () => {
     const next = !expanded
-    setExpanded(next)
-    rememberExpanded(node.doc.id, next)
+    setOpened(next)
+    rememberExpanded(id, next)
   }
+
+  const Icon = expanded ? FolderOpen : Folder
 
   return (
     <>
-      <div className="flex items-center">
-        {hasChildren ? (
-          <button
-            type="button"
-            onClick={toggle}
-            aria-label={expanded ? '접기' : '펼치기'}
-            aria-expanded={expanded}
-            className="text-subtle hover:text-fg grid size-5 shrink-0 cursor-pointer place-items-center rounded transition-colors"
-            style={{ marginLeft: depth * 14 }}
-          >
-            {expanded ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
-          </button>
-        ) : (
-          <span className="size-5 shrink-0" style={{ marginLeft: depth * 14 }} />
-        )}
-
-        <NavLink
-          to={`/docs/${node.doc.id}`}
-          onClick={onNavigate}
-          className={({ isActive }) =>
-            cn(
-              'flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-[13.5px] transition-colors',
-              isActive
-                ? 'bg-accent-soft text-accent font-semibold'
-                : 'text-muted hover:bg-surface-hover hover:text-fg',
-            )
-          }
+      <div className="group/row flex items-center">
+        <button
+          type="button"
+          onClick={toggle}
+          aria-label={`${title} ${expanded ? '접기' : '펼치기'}`}
+          aria-expanded={expanded}
+          className="text-subtle hover:text-fg grid size-5 shrink-0 cursor-pointer place-items-center rounded transition-colors"
+          style={{ marginLeft: depth * 14 }}
         >
-          <FileText className="size-3.5 shrink-0" strokeWidth={2} />
-          <span className="truncate">{node.doc.title}</span>
-        </NavLink>
+          {expanded ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
+        </button>
+
+        <button
+          type="button"
+          onClick={toggle}
+          aria-expanded={expanded}
+          className="text-muted hover:bg-surface-hover hover:text-fg flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13.5px] font-medium transition-colors"
+        >
+          <Icon className="size-3.5 shrink-0" strokeWidth={2} />
+          <span className="truncate">{title}</span>
+        </button>
+
+        {/*
+          폴더 행에만 붙는 조작. 마우스를 올렸을 때와 키보드 초점이 왔을 때 보인다.
+          `opacity-0` 은 보이지만 않을 뿐 초점을 받으므로 Tab 으로도 닿는다.
+        */}
+        <div className="flex shrink-0 opacity-0 transition-opacity group-focus-within/row:opacity-100 group-hover/row:opacity-100">
+          <FolderAction label={`${title} 안에 새 문서`} onClick={() => actions.onAddDoc(id)}>
+            <FilePlus2 className="size-3.5" />
+          </FolderAction>
+          <FolderAction label={`${title} 안에 새 폴더`} onClick={() => actions.onAddFolder(id)}>
+            <FolderPlus className="size-3.5" />
+          </FolderAction>
+          <FolderAction label={`${title} 이름 변경`} onClick={() => actions.onRename(id, title)}>
+            <Pencil className="size-3.5" />
+          </FolderAction>
+        </div>
       </div>
 
       {expanded &&
-        node.children.map((child) => (
-          <TreeRow
-            key={child.doc.id}
-            node={child}
-            depth={depth + 1}
-            openPath={openPath}
-            onNavigate={onNavigate}
-          />
-        ))}
+        node.children.map((child) =>
+          child.kind === 'folder' ? (
+            <FolderRow
+              key={child.folder.id}
+              node={child}
+              depth={depth + 1}
+              openPath={openPath}
+              actions={actions}
+            />
+          ) : (
+            <DocRow
+              key={child.doc.id}
+              node={child}
+              depth={depth + 1}
+              onNavigate={actions.onNavigate}
+            />
+          ),
+        )}
     </>
   )
 }
 
-/** 1b 셸의 '워크스페이스' 섹션. 사이드바에 문서를 계층으로 보여준다. */
+/** 1b 셸의 '워크스페이스' 섹션. 폴더와 문서를 계층으로 보여준다. */
 export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
   const { docId } = useParams()
-  const { data, isPending } = useDocs('')
-  // data.items는 react-query 캐시 객체라 그대로가 안정적인 참조다. `?? []`를 memo 밖에 두면
-  // 매 렌더 새 배열이 되어 아래 memo가 전부 무효화된다.
-  const tree = useMemo(() => buildTree(data?.items ?? []), [data])
-  const openPath = useMemo(() => new Set(ancestorsOf(docId, data?.items ?? [])), [docId, data])
+  const navigate = useNavigate()
+  const toast = useToast()
+  const { data, isPending, isError } = useTree()
+  const createDoc = useCreateDoc()
+  const createFolder = useCreateFolder()
+  const renameFolder = useRenameFolder()
+
+  // data 는 react-query 캐시 객체라 그대로가 안정적인 참조다. `?? …`를 memo 밖에 두면
+  // 매 렌더 새 객체가 되어 아래 memo가 전부 무효화된다.
+  const empty = useMemo(() => ({ folders: [], docs: [] }), [])
+  const tree = useMemo(() => buildTree(data ?? empty), [data, empty])
+  const openPath = useMemo(() => new Set(ancestorsOf(docId, data ?? empty)), [docId, data, empty])
+
+  /** 열려 있는 이름 입력창. 새 폴더는 부모 id 를, 이름 변경은 그 폴더를 들고 있다. */
+  const [naming, setNaming] = useState<
+    | { mode: 'create'; parentId: string | null }
+    | { mode: 'rename'; id: string; title: string }
+    | null
+  >(null)
+  const [nameError, setNameError] = useState<string | null>(null)
+
+  const fail = (err: unknown, fallback: string) =>
+    toast.error(err instanceof ApiError ? err.message : fallback)
+  // 이름 입력창은 아직 열려 있다. 고칠 곳이 그 안에 있으니 토스트가 아니라 입력 옆에 낸다.
+  const failInline = (err: unknown, fallback: string) =>
+    setNameError(err instanceof ApiError ? err.message : fallback)
+
+  const actions: RowActions = {
+    onNavigate,
+    onAddDoc: (folderId) =>
+      createDoc.mutate(
+        { folder_id: folderId },
+        {
+          onSuccess: (doc) => {
+            onNavigate?.()
+            void navigate(`/docs/${doc.id}`)
+          },
+          onError: (err) => fail(err, '문서를 만들지 못했습니다.'),
+        },
+      ),
+    onAddFolder: (parentId) => {
+      setNameError(null)
+      setNaming({ mode: 'create', parentId })
+    },
+    onRename: (id, title) => {
+      setNameError(null)
+      setNaming({ mode: 'rename', id, title })
+    },
+  }
+
+  const submitName = (value: string) => {
+    if (!naming) return
+    if (naming.mode === 'create') {
+      createFolder.mutate(
+        { title: value, parent_id: naming.parentId },
+        {
+          onSuccess: () => {
+            setNaming(null)
+            toast.success('폴더를 만들었습니다.')
+          },
+          onError: (err) => failInline(err, '폴더를 만들지 못했습니다.'),
+        },
+      )
+      return
+    }
+    renameFolder.mutate(
+      { id: naming.id, title: value },
+      {
+        onSuccess: () => {
+          setNaming(null)
+          toast.success('폴더 이름을 바꿨습니다.')
+        },
+        onError: (err) => failInline(err, '이름을 바꾸지 못했습니다.'),
+      },
+    )
+  }
 
   if (isPending) {
     return (
@@ -124,21 +290,47 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
     )
   }
 
-  if (tree.length === 0) {
-    return <p className="text-subtle px-3 py-2 text-xs">문서가 없습니다.</p>
-  }
-
   return (
     <>
-      {tree.map((node) => (
-        <TreeRow
-          key={node.doc.id}
-          node={node}
-          depth={0}
-          openPath={openPath}
-          onNavigate={onNavigate}
+      {isError && <p className="text-subtle px-3 py-2 text-xs">문서 트리를 불러오지 못했습니다.</p>}
+      {!isError && tree.length === 0 && (
+        <p className="text-subtle px-3 py-2 text-xs">문서가 없습니다.</p>
+      )}
+
+      {tree.map((node) =>
+        node.kind === 'folder' ? (
+          <FolderRow
+            key={node.folder.id}
+            node={node}
+            depth={0}
+            openPath={openPath}
+            actions={actions}
+          />
+        ) : (
+          <DocRow key={node.doc.id} node={node} depth={0} onNavigate={onNavigate} />
+        ),
+      )}
+
+      <button
+        type="button"
+        onClick={() => actions.onAddFolder(null)}
+        className="text-subtle hover:bg-surface-hover hover:text-fg mt-1 flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-[13px] transition-colors"
+      >
+        <Plus className="size-3.5 shrink-0" />새 폴더
+      </button>
+
+      {naming && (
+        <FolderNameModal
+          title={naming.mode === 'create' ? '새 폴더' : '폴더 이름 변경'}
+          initial={naming.mode === 'rename' ? naming.title : ''}
+          submitLabel={naming.mode === 'create' ? '만들기' : '저장'}
+          pending={createFolder.isPending || renameFolder.isPending}
+          error={nameError}
+          onDirty={() => setNameError(null)}
+          onSubmit={submitName}
+          onClose={() => setNaming(null)}
         />
-      ))}
+      )}
     </>
   )
 }
