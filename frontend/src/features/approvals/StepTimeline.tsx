@@ -48,7 +48,12 @@ export function StepTimeline({
                 <span className="text-subtle mr-1.5 tabular-nums">{step.step_no}</span>
                 {step.approver.name}
                 {step.acted_by && step.acted_by.id !== step.approver.id && (
-                  <span className="text-muted"> ({step.acted_by.name} 대결)</span>
+                  <span className="text-muted">
+                    {' '}
+                    {/* 원 결재자가 아닌 사람이 처리한 두 경우. 위임은 대신 결재한 것이고,
+                        생략은 임원이 문서를 끊은 것이다. 둘을 같은 말로 적으면 감사 기록이 거짓이 된다. */}
+                    ({step.acted_by.name} {step.status === 'skipped' ? '강제 종결' : '대결'})
+                  </span>
                 )}
                 <span className={cn('ml-2 text-xs', isCurrent ? 'text-accent' : 'text-subtle')}>
                   {isCurrent ? '처리 중' : meta.label}

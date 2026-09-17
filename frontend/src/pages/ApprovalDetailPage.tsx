@@ -81,7 +81,8 @@ export function ApprovalDetailPage() {
   const myTurn = d.status === 'pending' && current?.approver.id === user.id
   const isDrafter = d.drafter.id === user.id
   // 임원은 남의 문서도 끝낼 수 있다. 결재자가 자리를 비워 영영 대기로 남는 문서를 끊는 길이다.
-  const canForceClose = d.status === 'pending' && ROLE_RANK[user.role] >= ROLE_RANK.exec
+  // 내 차례일 때는 안 보인다. 그건 부재가 아니라 내 판단이고, 승인·반려로 남겨야 이력이 정확하다.
+  const canForceClose = d.status === 'pending' && !myTurn && ROLE_RANK[user.role] >= ROLE_RANK.exec
   const busy =
     submit.isPending ||
     cancel.isPending ||
@@ -91,9 +92,9 @@ export function ApprovalDetailPage() {
   const onError = (err: unknown) =>
     toast.error(err instanceof ApiError ? err.message : '처리하지 못했습니다.')
 
+  // 보내는 중에 닫아도 안전하다. 요청을 건 `useMutation` 은 이 화면에 있고 창만 사라지므로
+  // 결과 콜백은 그대로 불린다. Esc·X·바깥 클릭을 말없이 무시하면 창이 고장 난 것처럼 보인다.
   const closeForm = () => {
-    // 보내는 중에 닫으면 성공·실패를 받을 곳이 사라진다.
-    if (reject.isPending || forceClose.isPending) return
     setAsking(null)
     setReason('')
     setError(null)
@@ -245,7 +246,7 @@ export function ApprovalDetailPage() {
           size="sm"
           footer={
             <>
-              <Button variant="secondary" size="sm" onClick={closeForm} disabled={busy}>
+              <Button variant="secondary" size="sm" onClick={closeForm}>
                 취소
               </Button>
               <Button

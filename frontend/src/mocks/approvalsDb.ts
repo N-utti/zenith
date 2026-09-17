@@ -277,9 +277,9 @@ export function forceClose(user: User, id: string, reason: string): ApprovalDocu
   const step = doc.steps.find((s) => s.status === 'waiting')
   if (step) {
     step.comment = reason.trim()
+    // 원 결재자가 아닌 사람이 처리했다는 뜻이다. 화면은 이걸 "강제 종결" 로 읽는다(위임은 "대결").
     step.acted_by = person(user)
     step.acted_at = at
-    step.version += 1
   }
   close(doc, 'closed', at)
   return expose(doc)

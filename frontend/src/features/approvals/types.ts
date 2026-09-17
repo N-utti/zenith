@@ -31,7 +31,7 @@ export interface ApprovalType {
  */
 export type DocumentStatus = 'draft' | 'pending' | 'approved' | 'rejected' | 'canceled' | 'closed'
 
-export const DOCUMENT_STATUS_LABEL: Record<DocumentStatus, string> = {
+const DOCUMENT_STATUS_LABEL: Record<DocumentStatus, string> = {
   draft: '임시저장',
   pending: '결재 대기',
   approved: '승인',
@@ -40,10 +40,10 @@ export const DOCUMENT_STATUS_LABEL: Record<DocumentStatus, string> = {
   closed: '강제 종결',
 }
 
-/** 13 §10 상태 색상: 대기 muted / 승인 success / 반려 danger / 회수 subtle. */
+/** 13 §10 상태 색상. 강제 종결(`closed`)의 색은 계약에 없어 경고색으로 뒀다(프론트 가정). */
 export type StatusTone = 'neutral' | 'accent' | 'success' | 'warning' | 'danger'
 
-export const DOCUMENT_STATUS_TONE: Record<DocumentStatus, StatusTone> = {
+const DOCUMENT_STATUS_TONE: Record<DocumentStatus, StatusTone> = {
   draft: 'neutral',
   pending: 'accent',
   approved: 'success',
@@ -57,11 +57,12 @@ export const DOCUMENT_STATUS_TONE: Record<DocumentStatus, StatusTone> = {
  * 바뀔 수 있는데, 그때 화면에서 배지가 빈칸이 되면 무슨 일이 일어난 문서인지 알 수 없게 된다.
  */
 export function statusLabel(status: DocumentStatus): string {
-  return DOCUMENT_STATUS_LABEL[status] ?? status
+  return DOCUMENT_STATUS_LABEL[status] ?? `알 수 없음(${status})`
 }
 
 export function statusTone(status: DocumentStatus): StatusTone {
-  return DOCUMENT_STATUS_TONE[status] ?? 'neutral'
+  // 모르는 상태는 눈에 걸려야 한다. 회색으로 두면 임시저장·회수와 섞여 아무도 못 알아챈다.
+  return DOCUMENT_STATUS_TONE[status] ?? 'warning'
 }
 
 /** 13 §6.2 단계 상태 */
@@ -75,7 +76,12 @@ export interface Person {
 export interface ApprovalStep {
   step_no: number
   approver: Person
-  /** 위임 시 실제 처리자(13 §4.2.3). 아니면 null */
+  /**
+   * 그 단계를 실제로 처리한 사람. 원 결재자가 처리했으면 `null` 이다.
+   *
+   * 위임 결재(대결, 13 §4.2.3)와 임원의 강제 종결이 여기 들어간다. 강제 종결은 백엔드가
+   * 결재 모듈을 안 만들어서 프론트 가정이다(PR 본문).
+   */
   acted_by: Person | null
   role: 'approve' | 'reference'
   status: StepStatus
