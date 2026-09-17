@@ -9,6 +9,7 @@ import {
   findVersion,
   listComments,
   listDocs,
+  listTrash,
   listVersions,
   purgeDoc,
   trashDoc,
@@ -88,4 +89,54 @@ it('영구 삭제는 버전·댓글까지 같이 지운다', () => {
   expect(findDoc(doc.id)).toBeUndefined()
   expect(listVersions(doc.id)).toHaveLength(0)
   expect(listComments(doc.id)).toHaveLength(0)
+})
+
+it('휴지통은 지운 지 최근 순이고 살아 있는 목록과 겹치지 않는다', () => {
+  const older = createDoc(user, 'f-1', '먼저 지운 문서')
+  const newer = createDoc(user, 'f-1', '나중에 지운 문서')
+  trashDoc(older, user)
+  trashDoc(newer, user)
+  // 한 테스트 안에서는 같은 밀리초에 지워질 수 있다. 서버는 그때 id 로 가른다.
+  newer.deleted_at = new Date(Date.parse(older.deleted_at!) + 1000).toISOString()
+
+  expect(
+    listTrash(200)
+      .map((d) => d.id)
+      .slice(0, 2),
+  ).toEqual([newer.id, older.id])
+  expect(listDocs('').map((d) => d.id)).not.toContain(older.id)
+
+  untrashDoc(older, user)
+  expect(listTrash(200).map((d) => d.id)).not.toContain(older.id)
+  expect(listDocs('').map((d) => d.id)).toContain(older.id)
+
+  purgeDoc(older.id)
+  purgeDoc(newer.id)
+})
+
+it('지운 시각이 같으면 id 로 가른다 (서버의 두 번째 정렬 기준)', () => {
+  const a = createDoc(user, 'f-1', '동시각 A')
+  const b = createDoc(user, 'f-1', '동시각 B')
+  trashDoc(a, user)
+  trashDoc(b, user)
+  // 문서 id 는 무작위(uuid)라 만든 순서와 사전순이 다르다. 비교 대상을 확정해 둔다.
+  a.id = 'd-same-1'
+  b.id = 'd-same-2'
+  b.deleted_at = a.deleted_at
+
+  expect(
+    listTrash(200)
+      .map((d) => d.id)
+      .slice(0, 2),
+  ).toEqual(['d-same-1', 'd-same-2'])
+
+  purgeDoc(a.id)
+  purgeDoc(b.id)
+})
+
+it('휴지통 목록은 limit 을 지킨다', () => {
+  const docs = [1, 2, 3].map((n) => createDoc(user, 'f-1', `상한 시험 ${n}`))
+  for (const doc of docs) trashDoc(doc, user)
+  expect(listTrash(2)).toHaveLength(2)
+  for (const doc of docs) purgeDoc(doc.id)
 })

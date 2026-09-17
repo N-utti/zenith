@@ -165,6 +165,18 @@ export function listDocs(query: string): DocSummary[] {
 }
 
 /**
+ * 휴지통(`GET /trash`). 지운 지 최근 순, 같은 시각이면 id 순. 서버와 같은 정렬이다.
+ * 살아 있는 문서 목록(`/tree`·`/docs`)의 여집합이라 겹치지 않는다.
+ */
+export function listTrash(limit: number): DocSummary[] {
+  return DOCS.filter((doc) => doc.deleted_at)
+    .sort(
+      (a, b) => (b.deleted_at ?? '').localeCompare(a.deleted_at ?? '') || a.id.localeCompare(b.id),
+    )
+    .slice(0, limit)
+}
+
+/**
  * 홈의 "이어서 작업". 백엔드 `RecentDoc` 과 같은 모양이다. 문서 목록의 `DocSummary` 와 달리
  * 폴더 경로(`path`)가 실려 있다.
  */

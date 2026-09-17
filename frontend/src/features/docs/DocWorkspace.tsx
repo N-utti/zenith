@@ -156,8 +156,8 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
   const [confirmTrash, setConfirmTrash] = useState(false)
 
   /**
-   * 휴지통으로 보내고 문서 목록으로 나간다. 되돌릴 길은 토스트의 버튼 하나뿐이다.
-   * 서버가 휴지통 목록을 주는 경로를 아직 열지 않아 따로 볼 화면을 만들 수 없다.
+   * 휴지통으로 보내고 문서 목록으로 나간다. 토스트의 버튼이 바로 되돌리는 길이고,
+   * 놓쳤으면 휴지통 화면(`/docs/trash`)에서 되돌린다.
    * 그래서 토스트를 오래 띄운다.
    */
   const moveToTrash = () =>

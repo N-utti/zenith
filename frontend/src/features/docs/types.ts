@@ -63,6 +63,19 @@ export const COMMENT_BODY_MAX = 10_000
 /** 블록 id 길이 상한(백엔드 `BlockId`). 공백을 턴 뒤 1~100자다. */
 export const BLOCK_ID_MAX = 100
 
+/** 서버가 휴지통 문서를 들고 있는 기간(백엔드 `TRASH_RETENTION`). 지나면 서버가 지운다. */
+export const TRASH_KEEP_DAYS = 30
+
+/**
+ * 영구 삭제 예정 시각. 휴지통 화면의 "n일 남음" 과 문서 화면의 "10월 17일에 삭제" 가 같은
+ * 계산을 봐야 한다. 두 벌로 두면 백엔드가 기간을 바꿨을 때 한쪽만 고치고 다른 쪽이 거짓말한다.
+ */
+export function purgeAt(deletedAt: string): Date {
+  const at = new Date(deletedAt)
+  at.setDate(at.getDate() + TRASH_KEEP_DAYS)
+  return at
+}
+
 /**
  * 버전 목록에 실리는 것. 백엔드 `VersionMeta` 와 같다.
  *

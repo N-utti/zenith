@@ -42,21 +42,26 @@ export function DocsPage() {
         title="문서"
         description="사내 위키와 회의록. 여러 명이 동시에 편집할 수 있습니다."
         actions={
-          <Button
-            size="sm"
-            onClick={create}
-            disabled={createDoc.isPending || treePending || !folderId}
-            title={
-              folderId || treePending ? undefined : '먼저 사이드바에서 폴더를 만들어 주세요.'
-            }
-          >
-            {createDoc.isPending ? (
-              <Spinner className="border-t-on-accent" />
-            ) : (
-              <Plus className="size-4" />
-            )}
-            새 문서
-          </Button>
+          <>
+            <Link to="/docs/trash" className="text-subtle hover:text-fg mr-1 text-sm">
+              휴지통
+            </Link>
+            <Button
+              size="sm"
+              onClick={create}
+              disabled={createDoc.isPending || treePending || !folderId}
+              title={
+                folderId || treePending ? undefined : '먼저 사이드바에서 폴더를 만들어 주세요.'
+              }
+            >
+              {createDoc.isPending ? (
+                <Spinner className="border-t-on-accent" />
+              ) : (
+                <Plus className="size-4" />
+              )}
+              새 문서
+            </Button>
+          </>
         }
       />
 
