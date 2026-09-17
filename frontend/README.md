@@ -104,7 +104,7 @@ Pretendard가 필요하면 self-host 후 `--font-sans` 스택 맨 앞에 넣는�
 | 화면 | 상태 |
 | --- | --- |
 | 홈 대시보드 | 공지·최근문서·안읽은채팅 |
-| 문서 | 목록·검색·생성, TipTap 에디터, Yjs 실시간 공동편집, 댓글, 버전 기록·되돌리기 |
+| 문서 | 목록·검색·생성, TipTap 에디터, Yjs 실시간 공동편집, 댓글, 버전 기록·되돌리기, 휴지통(`/docs/trash`: 되돌리기·영구 삭제(임원)) |
 | 채팅 | 채널·DM, 실시간 송수신, 안읽음, 타이핑 표시 |
 | AI | 어시스턴트(`/ai`): 04 §8 `/ai/chat` SSE 스트리밍 · 모델 표시 · 지식 소스 · 근거 패널 · 도움돼요(`/ai/feedback`) · ⌘K 팔레트의 "AI에게 물어보기". 문서 인라인 AI 팝오버(`/ai/doc-action`). "표로 정리" 초안은 표 미리보기로 보이고 삽입하면 실제 표 블록이 된다(`@tiptap/extension-table`). 근거(citations)는 백엔드 RAG 전까지 목에서만 보인다. "문서로 저장"은 빈 문서를 만들고 초안을 라우터 state 로 실어 편집기가 Y.Doc 에 심는다(근거 인용문은 싣지 않는다) |
 | 게시판 · 근태 상세 | 껍데기. 화면 안에 무엇이 들어올 자리인지 적어 뒀다 |
@@ -156,6 +156,8 @@ POST  /api/folders                     { title, parent_id?, sort? }
 PATCH /api/folders/:id                 이름·이동·정렬 (프론트는 아직 이름만 쓴다)
 
 GET   /api/docs?q=                     제목 필터 (04 에 없다. 본문 검색은 /api/search)
+GET   /api/trash?limit=                휴지통 목록. 트리의 여집합, 지운 지 최근 순
+                                       지운 사람은 `updated_by` 로 온다(따로 주는 칸이 없다)
 POST  /api/docs                        { folder_id, title } 생성
 DELETE /api/docs/:id                   휴지통으로(30일). ?hard=1 은 임원만, 버전·댓글까지 삭제
 POST  /api/docs/:id/untrash            휴지통에서 되돌리기

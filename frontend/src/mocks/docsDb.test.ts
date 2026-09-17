@@ -9,6 +9,7 @@ import {
   findVersion,
   listComments,
   listDocs,
+  listTrash,
   listVersions,
   purgeDoc,
   trashDoc,
@@ -88,4 +89,26 @@ it('영구 삭제는 버전·댓글까지 같이 지운다', () => {
   expect(findDoc(doc.id)).toBeUndefined()
   expect(listVersions(doc.id)).toHaveLength(0)
   expect(listComments(doc.id)).toHaveLength(0)
+})
+
+it('휴지통은 지운 지 최근 순이고 살아 있는 목록과 겹치지 않는다', () => {
+  const older = createDoc(user, 'f-1', '먼저 지운 문서')
+  const newer = createDoc(user, 'f-1', '나중에 지운 문서')
+  trashDoc(older, user)
+  // 같은 밀리초에 지워도 순서가 뒤집히지 않아야 한다. 서버는 (지운 시각, id) 로 정렬한다.
+  newer.deleted_at = new Date(Date.parse(older.deleted_at!) + 1000).toISOString()
+
+  const trash = listTrash(200)
+  expect(trash.map((d) => d.id).slice(0, 2)).toEqual([newer.id, older.id])
+  expect(listDocs('').map((d) => d.id)).not.toContain(older.id)
+
+  untrashDoc(older, user)
+  expect(listTrash(200).map((d) => d.id)).not.toContain(older.id)
+  expect(listDocs('').map((d) => d.id)).toContain(older.id)
+})
+
+it('휴지통 목록은 limit 을 지킨다', () => {
+  const docs = [1, 2, 3].map((n) => createDoc(user, 'f-1', `상한 시험 ${n}`))
+  for (const doc of docs) trashDoc(doc, user)
+  expect(listTrash(2)).toHaveLength(2)
 })

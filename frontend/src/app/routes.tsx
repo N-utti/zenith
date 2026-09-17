@@ -19,6 +19,7 @@ import { HomePage } from '@/pages/HomePage'
 import { NotFoundPage } from '@/pages/NotFoundPage'
 import { NotificationsPage } from '@/pages/NotificationsPage'
 import { SettingsPage } from '@/pages/SettingsPage'
+import { TrashPage } from '@/pages/TrashPage'
 
 /**
  * TipTap + ProseMirror + Yjs는 전체 번들의 절반을 넘는다.
@@ -62,6 +63,8 @@ export function AppRoutes() {
           <Route element={<AppLayout />}>
             <Route index element={<HomePage />} />
             <Route path="docs" element={<DocsPage />} />
+            {/* 편집기(`docs/:docId`)보다 먼저 잡힌다. 고정 조각이 매개변수보다 우선이다. */}
+            <Route path="docs/trash" element={<TrashPage />} />
             <Route path="board" element={<BoardPage />} />
             <Route path="board/:boardId" element={<BoardPage />} />
             <Route path="board/:boardId/:postId" element={<BoardPostPage />} />

@@ -79,6 +79,17 @@ export function formatISOYearDate(iso: string): string {
 }
 
 /**
+ * 오늘부터 `iso` 시각까지 남은 날. 지났으면 0 이다.
+ *
+ * 휴지통의 "n일 뒤 영구 삭제" 처럼 날짜 차이를 세는 자리에 쓴다. 시각이 아니라 **날짜**로
+ * 세기 때문에, 자정을 넘기면 시간 차이가 24시간이 안 돼도 하루가 준다.
+ */
+export function daysUntil(iso: string): number {
+  const days = Math.ceil((startOfDay(new Date(iso)) - startOfDay(new Date())) / 86_400_000)
+  return days > 0 ? days : 0
+}
+
+/**
  * `2026-08` → 그 달을 덮는 주 배열. 앞뒤 주는 이웃 달 날짜로 채운다.
  *
  * `new Date('2026-08-01')`은 UTC로 해석돼 KST에서 하루 밀린다. 숫자로 넘겨

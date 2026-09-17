@@ -46,6 +46,7 @@ import {
   findDoc,
   listComments,
   listDocs,
+  listTrash,
   recentDocs,
   listVersions,
   touchDoc,
@@ -1280,6 +1281,19 @@ data: ${JSON.stringify(data)}
     // 실제 서버는 보관 중인 Yjs 상태(`ydoc`)를 준다. 목에는 그게 없어 초안(`seedHtml`)으로 대신한다.
     return HttpResponse.json({ ...doc, ydoc: null, seedHtml: DOC_SEEDS[doc.id] })
   }),
+
+  // 휴지통 목록(04 §3, 2026-09-17 백엔드 구현). 트리의 여집합이라 살아 있는 문서와 안 겹친다.
+  http.get(
+    '/api/trash',
+    authed((_user, request) => {
+      const raw = new URL(request.url).searchParams.get('limit')
+      const limit = raw === null ? 200 : Number(raw)
+      if (!Number.isInteger(limit) || limit < 1 || limit > 500) {
+        return validationError('limit 는 1 이상 500 이하입니다.')
+      }
+      return HttpResponse.json({ items: listTrash(limit) })
+    }),
+  ),
 
   http.delete('/api/docs/:docId', ({ request, params }) => {
     const user = authenticate()

@@ -24,6 +24,7 @@ export const docKeys = {
   /** 버전 하나의 스냅샷. 목록 키 아래에 두면 새 버전이 저장될 때마다 같이 버려진다. */
   snapshot: (docId: string, versionId: string) =>
     ['documents', docId, 'snapshot', versionId] as const,
+  trash: ['trash'] as const,
 }
 
 /** 사이드바 트리. 폴더와 문서를 한 번에 받는다. */
@@ -140,17 +141,14 @@ export function useTouchDoc(docId: string) {
 function invalidateDocLists(qc: ReturnType<typeof useQueryClient>) {
   void qc.invalidateQueries({ queryKey: ['documents', 'list'] })
   void qc.invalidateQueries({ queryKey: docKeys.tree })
+  // 휴지통은 살아 있는 목록의 여집합이다. 한쪽이 바뀌면 다른 쪽도 바뀐다.
+  void qc.invalidateQueries({ queryKey: docKeys.trash })
   void qc.invalidateQueries({ queryKey: ['search'] })
   // 홈의 "이어서 작업" 도 같은 문서를 본다.
   void qc.invalidateQueries({ queryKey: homeKeys.home })
 }
 
-/**
- * 휴지통으로 보낸다. 30일 뒤 서버가 영구 삭제한다.
- *
- * `?hard=1`(임원만, 즉시 영구 삭제)은 아직 부르지 않는다. 휴지통 목록을 주는 경로가 04 에
- * 없어서 화면을 만들 수 없다(PR 본문에 백엔드로 공유).
- */
+/** 휴지통으로 보낸다. 30일 뒤 서버가 영구 삭제한다. 그 전에는 휴지통 화면에서 되돌릴 수 있다. */
 export function useTrashDoc(docId: string) {
   const qc = useQueryClient()
   return useMutation({
@@ -276,6 +274,41 @@ export function useAddComment(docId: string) {
       }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: docKeys.comments(docId) })
+    },
+  })
+}
+
+/** 휴지통 목록. 지운 지 최근 순으로 서버가 정렬해 준다. */
+export function useTrash() {
+  return useQuery({
+    queryKey: docKeys.trash,
+    queryFn: () => api<{ items: DocSummary[] }>('/trash'),
+  })
+}
+
+/**
+ * 휴지통에서 되돌리기. 위의 `untrashDoc` 을 훅으로 감싼 것이다.
+ *
+ * 토스트에서 부르는 쪽은 화면이 이미 사라진 뒤라 훅을 쓸 수 없었다. 휴지통 화면은 요청을 건
+ * 자리가 그대로 있으므로, 줄마다 진행 상태를 보이려고 훅으로 쓴다. 캐시 갱신은 함수가 한다.
+ */
+export function useUntrashDoc() {
+  return useMutation({ mutationFn: untrashDoc })
+}
+
+/**
+ * 영구 삭제(`?hard=1`). 임원만 할 수 있고 버전·댓글·색인까지 같이 지운다. 되돌릴 수 없다.
+ *
+ * 30일을 기다리지 않고 지금 지우는 길이다. 등급이 모자라면 서버가 403 을 주고 감사 기록에
+ * 거부가 남는다.
+ */
+export function usePurgeDoc() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (docId: string) => api<void>(`/docs/${docId}?hard=1`, { method: 'DELETE' }),
+    onSuccess: (_data, docId) => {
+      qc.removeQueries({ queryKey: docKeys.detail(docId) })
+      invalidateDocLists(qc)
     },
   })
 }
