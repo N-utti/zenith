@@ -1,4 +1,4 @@
-import type { InputHTMLAttributes, ReactNode } from 'react'
+import type { InputHTMLAttributes, ReactNode, Ref } from 'react'
 import { cn } from '@/lib/cn'
 
 /**
@@ -13,11 +13,13 @@ export const CONTROL_BASE =
 interface Props extends InputHTMLAttributes<HTMLInputElement> {
   /** 왼쪽에 붙는 아이콘. 검색처럼 종류가 한눈에 보여야 하는 입력에 쓴다. */
   icon?: ReactNode
+  /** 초점을 옮겨야 할 때. React 19 부터는 함수 컴포넌트도 `ref` 를 보통 속성으로 받는다. */
+  ref?: Ref<HTMLInputElement>
 }
 
-export function Input({ icon, className, ...props }: Props) {
+export function Input({ icon, className, ref, ...props }: Props) {
   if (!icon) {
-    return <input className={cn(CONTROL_BASE, 'h-10 px-3', className)} {...props} />
+    return <input ref={ref} className={cn(CONTROL_BASE, 'h-10 px-3', className)} {...props} />
   }
 
   return (
@@ -25,7 +27,7 @@ export function Input({ icon, className, ...props }: Props) {
       <span className="text-subtle pointer-events-none absolute top-1/2 left-3 -translate-y-1/2">
         {icon}
       </span>
-      <input className={cn(CONTROL_BASE, 'h-10 pr-3 pl-9', className)} {...props} />
+      <input ref={ref} className={cn(CONTROL_BASE, 'h-10 pr-3 pl-9', className)} {...props} />
     </div>
   )
 }

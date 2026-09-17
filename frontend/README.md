@@ -130,11 +130,16 @@ v0.2 전제로 만들어진 구현을 전부 걷어냈다. `features/attendance/
 >
 > - **댓글**: 프론트 `authorId`·`authorName`·`authorHue`·`createdAt` ↔ 백엔드 `author:{id,name}`·`created_at`·`block_id`
 > - **문서 상세**: `seedHtml` 은 목 전용이다. 백엔드는 그 자리에 `ydoc`(서버 보관 Yjs 상태)을 준다
-> - **홈 카드**: `/api/announcements`·`/api/mentions`·`/api/docs/recent`·`/api/tasks/today` 는 04 에 없다. 백엔드는 `GET /api/me/home` 하나로 준다
+> - **홈 카드**: `/api/announcements`·`/api/mentions`·`/api/docs/recent` 는 04 에 없다. 백엔드는 `GET /api/me/home` 하나로 준다(할 일은 옮겼다)
 
 ```
 GET   /api/announcements?limit=        권한 밖 등급 글은 목록에서 제외 (04 에 없다. 백엔드는 /api/me/home)
 GET   /api/mentions?limit=             알림에서 파생 (04 에 없다. 백엔드는 /api/me/home 의 mentions)
+
+GET   /api/me/todos                    오늘 할 일. 만든 순(완료 여부는 정렬에 안 들어간다)
+POST  /api/me/todos                    { text } 추가
+PATCH /api/me/todos/:id                { text?, done? } 수정. null 은 422
+DELETE /api/me/todos/:id               삭제, 204
 
 GET   /api/me/notifications?unread=1   알림함. 권한 밖 글 알림은 제목을 가려서 내려간다
 POST  /api/me/notifications/read       { ids[] } 읽음 처리, 204
