@@ -336,13 +336,18 @@ export const handlers = [
     }),
   ),
 
-  // ── 알림함 (FR-SHL-04) ────────────────────────────────────
+  // ── 알림함 (`/notifications`) ─────────────────────────────
   http.get(
     '/api/me/notifications',
     authed((user, request) => {
       const url = new URL(request.url)
       const unread = url.searchParams.get('unread') === '1'
-      const limit = Number(url.searchParams.get('limit') ?? 50)
+      const raw = url.searchParams.get('limit')
+      // 백엔드는 1 이상 200 이하만 받는다(`Query(50, ge=1, le=200)`). 숫자가 아니면 422.
+      const limit = raw === null ? 50 : Number(raw)
+      if (!Number.isInteger(limit) || limit < 1 || limit > 200) {
+        return validationError('limit 은 1 이상 200 이하의 정수여야 합니다.')
+      }
       return HttpResponse.json({ items: listNotifications(user, { unread, limit }) })
     }),
   ),

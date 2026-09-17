@@ -1,7 +1,7 @@
 import type { Notification } from '@/features/notifications/types'
 import type { Mention } from '@/features/home/types'
 import type { User } from '@/types'
-import { canRead, findPost } from './boardDb'
+import { BOARD_DEFS, canRead, findPost } from './boardDb'
 import { hueOf } from '@/lib/avatar'
 
 // 목 데이터는 "오늘"에 붙어 있어야 화면이 자연스럽다. 고정 날짜를 쓰지 않는다.
@@ -9,7 +9,7 @@ function minutesAgo(minutes: number): string {
   return new Date(Date.now() - minutes * 60_000).toISOString()
 }
 
-/** 04 §6 — 권한 밖 글은 제목부터 서버가 가린다. 백엔드 `me.py` 와 같은 문자열. */
+/** 권한 밖 글은 제목부터 서버가 가린다(04 §6). 백엔드 `me.py` 와 같은 문자열. */
 const MASKED_TITLE = '＿＿＿＿＿ 보고'
 
 /**
@@ -89,14 +89,18 @@ const NOTIFICATIONS: Notification[] = [
  * 글 알림의 제목은 알림을 만든 시점의 값이다. 등급이 내려갔거나 게시판 등급이 올라갔으면
  * 지금 기준으로 다시 판정해 가린다. 저장된 줄은 그대로 두고 응답만 바꾼다.
  * 백엔드 `me.py` 의 `_mask_post_notices` 와 같은 일이다.
+ *
+ * 글에 복사된 등급이 아니라 **게시판의 지금 등급**을 본다. 백엔드도 글과 게시판을 이어
+ * 붙여 `Board.min_role` 로 판정한다. 둘은 게시판 등급이 올라갔을 때 갈린다.
  */
 function maskForViewer(user: User, notification: Notification): Notification {
   const p = notification.payload
   if (notification.kind !== 'post' || !p?.post_id) return notification
 
   const post = findPost(p.post_id)
-  // 글이 지워졌으면 등급을 확인할 길이 없다. 가리는 쪽이 안전하다.
-  const allowed = post ? canRead(user, post.minRole) : false
+  const board = post && BOARD_DEFS.find((b) => b.id === post.boardId)
+  // 글이나 게시판이 사라졌으면 등급을 확인할 길이 없다. 가리는 쪽이 안전하다.
+  const allowed = board ? canRead(user, board.minRole) : false
   if (allowed) return notification
   return { ...notification, payload: { ...p, title: MASKED_TITLE, masked: true } }
 }
@@ -106,7 +110,7 @@ export function listNotifications(
   { unread = false, limit = 50 }: { unread?: boolean; limit?: number } = {},
 ): Notification[] {
   return NOTIFICATIONS.filter((n) => !unread || n.read_at === null)
-    .sort((a, b) => b.created_at.localeCompare(a.created_at))
+    .sort((a, b) => b.created_at.localeCompare(a.created_at) || b.id.localeCompare(a.id))
     .slice(0, limit)
     .map((n) => maskForViewer(user, n))
 }
@@ -125,13 +129,17 @@ export function markRead(ids: string[]): number {
 }
 
 /**
- * 홈의 멘션 카드가 쓰는 모양. 알림에서 파생시킨다 — 별도 데이터를 두면 두 벌이 되어 어긋난다
+ * 홈의 멘션 카드가 쓰는 모양. 알림에서 파생시킨다. 별도 데이터를 두면 두 벌이 되어 어긋난다
  * (게시판 공지와 같은 이유). 백엔드는 `GET /me/home` 의 `mentions` 로 알림 그대로를 주므로,
  * 그 경로를 붙일 때 이 변환은 화면 쪽으로 옮겨 간다.
  */
+const MENTION_KINDS = ['mention', 'comment', 'reply']
+
 export function listMentions(user: User, limit: number): Mention[] {
   return listNotifications(user, { limit: 50 })
-    .filter((n) => n.kind !== 'post' && n.payload)
+    // 허용 목록이다. 백엔드 `me.py` 의 `MENTION_KINDS` 와 같다. "글 알림만 빼고" 로 두면
+    // 근태·결재 알림이 붙는 순간 전부 멘션 카드로 흘러들어 빈 채널 링크를 만든다.
+    .filter((n) => MENTION_KINDS.includes(n.kind) && n.payload)
     .slice(0, limit)
     .map((n) => {
       const p = n.payload!

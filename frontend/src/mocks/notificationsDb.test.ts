@@ -27,7 +27,7 @@ it('읽음 처리는 안 읽은 것만 세고, 안 읽음 목록에서 빠진다
   expect(listNotifications(member).some((n) => n.id === target.id)).toBe(true)
 })
 
-it('홈 멘션 카드는 알림에서 파생된다. 글 알림은 멘션이 아니다', () => {
+it('홈 멘션 카드는 알림에서 파생된다. 멘션 종류만 실린다', () => {
   const mentions = listMentions(member, 3)
   expect(mentions.length).toBeGreaterThan(0)
   expect(mentions.every((m) => m.source.kind === 'doc' || m.source.kind === 'channel')).toBe(true)

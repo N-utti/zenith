@@ -1,13 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { docKeys } from '@/features/docs/api'
+import { homeKeys } from './keys'
 import type { DocSummary } from '@/features/docs/types'
 import type { BoardPost } from '@/features/board/types'
 import type { CalendarEvent, CalendarEventInput, Mention, TodayTask } from './types'
 
 export function useAnnouncements() {
   return useQuery({
-    queryKey: ['announcements', { limit: 4 }],
+    queryKey: [...homeKeys.announcements, { limit: 4 }],
     queryFn: () => api<{ items: BoardPost[] }>('/announcements?limit=4'),
   })
 }
@@ -21,7 +22,7 @@ export function useRecentDocs() {
 
 export function useMentions() {
   return useQuery({
-    queryKey: ['mentions', { limit: 3 }],
+    queryKey: [...homeKeys.mentions, { limit: 3 }],
     queryFn: () => api<{ items: Mention[] }>('/mentions?limit=3'),
   })
 }
@@ -58,7 +59,7 @@ export function useToggleTask() {
   })
 }
 
-const eventsKey = ['events'] as const
+const eventsKey = homeKeys.events
 
 /** 기간 안의 내 일정. `from`·`to` 는 ISO 날짜(양끝 포함). */
 export function useMyEvents(from: string, to: string) {

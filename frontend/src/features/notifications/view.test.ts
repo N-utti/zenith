@@ -34,11 +34,17 @@ it('권한 밖이라 가려진 글 알림은 누를 수 없다', () => {
   })
   expect(masked?.to).toBeNull()
   expect(masked?.summary).toBe('＿＿＿＿＿ 보고')
+  // 제목만 가리고 글쓴이를 남기면 누가 썼는지는 알려 주는 셈이다.
+  expect(masked?.detail).toBe('경영 보고')
+  expect(masked?.actorName).not.toBe('정성운')
+  expect(masked?.actorId).toBe('')
 })
 
 it('모르는 종류와 빈 payload 는 건너뛴다. 새 종류가 붙어도 목록이 깨지지 않는다', () => {
   // att_*·apv_* 는 아직 서버가 만들지 않는다. 붙었을 때 화면이 죽으면 안 된다.
-  expect(view('att_approved', { from })).toBeNull()
+  // 문서 id 도 채널 id 도 없으니 멘션으로 흘려보내면 빈 링크가 된다.
+  expect(view('att_approved', { from, doc_id: undefined })).toBeNull()
+  expect(view('apv_pending', { from, channel_id: 'c-1' })).toBeNull()
   expect(view('post', { from })).toBeNull()
   expect(view('mention', null)).toBeNull()
 })
