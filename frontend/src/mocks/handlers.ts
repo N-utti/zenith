@@ -3,6 +3,7 @@ import { PASSWORD_MIN, type User } from '@/types'
 import { BODY_MAX, TITLE_MAX } from '@/features/board/types'
 import { DEMO_PASSWORD } from './accounts'
 import { createAccount, emailTaken, findAccount, listAccounts, patchAccount } from './adminDb'
+import { badCursor, listAudit } from './auditDb'
 import { EMAIL_PATTERN, type UserCreate, type UserPatch } from '@/features/admin/types'
 import { clearMockSession, MOCK_USERS, setMockSession, userFromCookie } from './db'
 import { AI_MODELS, answer, DOC_ACTIONS, docActionDraft } from './aiDb'
@@ -627,6 +628,23 @@ export const handlers = [
     }
     return HttpResponse.json(patchAccount(target, patch))
   }),
+
+  http.get(
+    '/api/admin/audit',
+    authed((user, request) => {
+      if (user.role !== 'exec') return forbidden()
+
+      const params = new URL(request.url).searchParams
+      const cursor = params.get('cursor')
+      if (cursor && badCursor(cursor)) return validationError('cursor 형식이 잘못됐습니다.')
+
+      const limit = Number(params.get('limit') ?? 50)
+      if (!Number.isInteger(limit) || limit < 1 || limit > 200) {
+        return validationError('limit 는 1 이상 200 이하입니다.')
+      }
+      return HttpResponse.json(listAudit(params.get('kind'), cursor, limit))
+    }),
+  ),
 
   // ── 근태 · 공휴일·회사 휴일 (10 §9.6, 임원) ─────────────
   // `?year=` 와 DELETE 는 프론트 확장(PR 본문). 바꾸면 근무 달력이 바로 따라온다(§6.2).

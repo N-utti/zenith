@@ -1,11 +1,16 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { meQueryKey } from '@/features/auth/queries'
+import type { AuditPage } from './audit'
 import type { AdminUser, UserCreate, UserPatch } from './types'
 
 export const adminKeys = {
   users: ['admin', 'users'] as const,
+  audit: (kind: string) => ['admin', 'audit', kind] as const,
 }
+
+/** 한 번에 받는 줄 수. 서버 상한은 200 이다. */
+const AUDIT_LIMIT = 50
 
 /**
  * 계정 목록. 서버가 이름순으로 정렬해 준다(04 §9).
@@ -42,5 +47,26 @@ export function useUpdateUser() {
         void qc.invalidateQueries({ queryKey: meQueryKey })
       }
     },
+  })
+}
+
+/**
+ * 감사 기록. 최신순 커서 페이징이라 "더 보기" 로 이어 붙인다.
+ *
+ * 커서는 서버가 준 불투명 문자열이다. 안을 들여다보지 않는다(시각과 id 를 담은 base64 지만
+ * 그건 서버 사정이다). 첫 장은 커서 없이 부른다.
+ */
+export function useAudit(kind: string, enabled: boolean) {
+  return useInfiniteQuery({
+    queryKey: adminKeys.audit(kind),
+    queryFn: ({ pageParam }) => {
+      const params = new URLSearchParams({ limit: String(AUDIT_LIMIT) })
+      if (kind) params.set('kind', kind)
+      if (pageParam) params.set('cursor', pageParam)
+      return api<AuditPage>(`/admin/audit?${params}`)
+    },
+    initialPageParam: '',
+    getNextPageParam: (last) => last.next_cursor ?? undefined,
+    enabled,
   })
 }
