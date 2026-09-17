@@ -31,8 +31,13 @@ export function parseMarkdownTable(text: string): string[][] | null {
   return rows
 }
 
-/** 텍스트 자리에만 넣으므로 따옴표는 안 바꾼다. 속성 자리에 쓰게 되면 그때 추가. */
-function escapeHtml(text: string): string {
+/**
+ * 텍스트 자리에만 넣으므로 따옴표는 안 바꾼다. 속성 자리에 쓰게 되면 그때 추가.
+ *
+ * **`&` 를 먼저 바꾼다.** 안 그러면 `&lt;` 로 들어온 글자가 `<` 로 되살아나 태그가 된다.
+ * 이 함수는 편집기에 심는 HTML 의 유일한 방어선이라 한 벌만 둔다(템플릿도 이걸 쓴다).
+ */
+export function escapeHtml(text: string): string {
   return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 

@@ -1,13 +1,23 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import type { Editor } from '@tiptap/react'
 import { Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { api } from '@/lib/api'
 import { OPEN_INLINE_AI_EVENT } from './editorBlocks'
 import { parseMarkdownTable, tableToHtml } from './markdownTable'
+import { blocksToHtml, isBlockList } from './templateBlocks'
 
 /** 04 §8 `POST /ai/doc-action` 의 `action`. 자유 프롬프트는 계약에 없다. */
 type DocAction = 'summarize' | 'continue' | 'polish' | 'translate' | 'table'
+
+/** 04 §8 `POST /ai/template` 의 `template`. 자유 프롬프트는 계약에 없다. */
+type DocTemplate = 'minutes' | 'weekly' | 'notice'
+
+const TEMPLATES: { id: DocTemplate; label: string }[] = [
+  { id: 'minutes', label: '회의록' },
+  { id: 'weekly', label: '주간 보고' },
+  { id: 'notice', label: '공지' },
+]
 
 const QUICK_ACTIONS: { id: DocAction; label: string }[] = [
   { id: 'summarize', label: '요약' },
@@ -40,10 +50,14 @@ export function InlineAiPopover({ editor, docId }: { editor: Editor; docId: stri
   const [open, setOpen] = useState(false)
   const [pos, setPos] = useState({ top: 0, left: 0 })
   const [draft, setDraft] = useState<string | null>(null)
+  /** 템플릿 응답. 초안(`draft`)과 달리 블록 배열이라 편집기 노드로 바꿔 넣는다. */
+  const [blocks, setBlocks] = useState<string[] | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [lastAction, setLastAction] = useState<DocAction | null>(null)
+  /** 다시 생성이 무엇을 다시 부를지. 동작과 템플릿이 서로 다른 경로다. */
+  const [last, setLast] = useState<{ action: DocAction } | { template: DocTemplate } | null>(null)
 
+  const templateLabelId = useId()
   const ref = useRef<HTMLDivElement>(null)
   const firstChipRef = useRef<HTMLButtonElement>(null)
   const applyRef = useRef<HTMLButtonElement>(null)
@@ -56,6 +70,7 @@ export function InlineAiPopover({ editor, docId }: { editor: Editor; docId: stri
     reqId.current++
     setOpen(false)
     setDraft(null)
+    setBlocks(null)
     setError(null)
     setBusy(false)
     insertAt.current = null
@@ -66,7 +81,9 @@ export function InlineAiPopover({ editor, docId }: { editor: Editor; docId: stri
     const onOpen = () => {
       insertAt.current = editor.state.selection.from
       setPos(anchorAt(editor))
+      // 초안과 템플릿은 늘 같이 지운다. 하나만 지우면 지난 결과가 다음 팝오버에 남는다.
       setDraft(null)
+      setBlocks(null)
       setError(null)
       setOpen(true)
     }
@@ -105,37 +122,80 @@ export function InlineAiPopover({ editor, docId }: { editor: Editor; docId: stri
     }
   }, [open, close])
 
-  const generate = async (action: DocAction) => {
+  /** 두 경로가 요청·응답만 다르고 나머지(세대 관리·오류·바쁨)는 같다. */
+  const run = async (
+    what: { action: DocAction } | { template: DocTemplate },
+    fetcher: () => Promise<{ draft?: string; blocks?: string[] }>,
+  ) => {
     const id = ++reqId.current
     setBusy(true)
     setError(null)
-    setLastAction(action)
+    setDraft(null)
+    setBlocks(null)
+    setLast(what)
     try {
-      // block_id 는 편집기가 블록 id 를 갖지 않아 보내지 않는다. 서버는 문서 전체를 본다.
-      const result = await api<{ draft: string }>('/ai/doc-action', {
-        method: 'POST',
-        body: JSON.stringify({ doc_id: docId, action }),
-      })
-      if (reqId.current === id) setDraft(result.draft)
+      const result = await fetcher()
+      if (reqId.current !== id) return
+      // 응답 모양이 계약에 없다. 문자열 배열이 아니면 그리다가 터지는데, 그 예외는 렌더 중에
+      // 나서 이 화면의 오류 자리로 안 들어오고 편집기까지 같이 내려앉는다.
+      if (result.blocks !== undefined && !isBlockList(result.blocks)) {
+        setError('템플릿을 읽지 못했습니다. 다시 시도해 주세요.')
+        return
+      }
+      setDraft(result.draft ?? null)
+      setBlocks(result.blocks ?? null)
     } catch {
-      if (reqId.current === id) setError('초안을 만들지 못했습니다. 다시 시도해 주세요.')
+      if (reqId.current === id) {
+        setError(
+          'template' in what
+            ? '템플릿을 만들지 못했습니다. 다시 시도해 주세요.'
+            : '초안을 만들지 못했습니다. 다시 시도해 주세요.',
+        )
+      }
     } finally {
       if (reqId.current === id) setBusy(false)
     }
   }
 
+  const generate = (action: DocAction) =>
+    run({ action }, () =>
+      // block_id 는 편집기가 블록 id 를 갖지 않아 보내지 않는다. 서버는 문서 전체를 본다.
+      api<{ draft: string }>('/ai/doc-action', {
+        method: 'POST',
+        body: JSON.stringify({ doc_id: docId, action }),
+      }),
+    )
+
+  /**
+   * 문서 템플릿(04 §8 `/ai/template`). 빈 문서를 형식부터 채우는 자리다.
+   *
+   * 문서를 근거로 쓰는 위 동작들과 달리 본문을 안 본다. 그래서 `context` 도 안 보낸다.
+   * 계약에는 있지만 지금 화면이 실어 보낼 맥락이 없다(PR 본문).
+   */
+  const generateTemplate = (template: DocTemplate) =>
+    run({ template }, () =>
+      api<{ blocks: string[] }>('/ai/template', {
+        method: 'POST',
+        body: JSON.stringify({ template }),
+      }),
+    )
+
   // 생성 중엔 칩이 전부 비활성이라 포커스가 body 로 떨어진다. 초안이 뜨면 "삽입" 으로 되돌린다.
   useEffect(() => {
-    if (draft) applyRef.current?.focus()
-  }, [draft])
+    if (draft || blocks) applyRef.current?.focus()
+  }, [draft, blocks])
 
   // "표로 정리" 초안은 마크다운 표로 온다. 미리보기도 삽입도 실제 표로(05 SCR-03, FR-AI-09).
   const table = draft ? parseMarkdownTable(draft) : null
 
+  /** 편집기에 넣을 모양. 템플릿은 블록마다 노드가 되고, 초안은 표만 노드가 된다. */
+  // 빈 배열은 볼 것이 없다는 뜻이다. `''` 로 두면 제목·근거 문구가 초안 쪽으로 뒤집힌다.
+  const html = blocks?.length ? blocksToHtml(blocks) : null
+
   /** 삽입: 커서 자리에 / 아래에 추가: 커서가 든 최상위 블록 다음에. */
   const apply = (mode: 'inline' | 'below') => {
-    if (!draft) return
-    const content = table ? tableToHtml(table) : draft
+    if (draft === null && html === null) return
+    const content = html ?? (table ? tableToHtml(table) : (draft ?? ''))
     // 응답을 기다리는 동안 남의 편집으로 문서가 줄면 저장해 둔 좌표가 밖으로 나간다. 문서 끝으로 가둔다.
     // ponytail: 상대 좌표(Y.RelativePosition)로 들면 정확해진다. 어긋난 삽입이 문제가 되면 그때.
     const at = Math.min(
@@ -180,6 +240,28 @@ export function InlineAiPopover({ editor, docId }: { editor: Editor; docId: stri
         ))}
       </div>
 
+      {/* 템플릿은 문서를 안 보고 형식만 만든다. 위 동작들과 근거가 달라 줄을 나눈다. */}
+      <div
+        role="group"
+        aria-labelledby={templateLabelId}
+        className="border-line flex flex-wrap items-center gap-2 border-b px-4 py-3"
+      >
+        <span id={templateLabelId} className="text-subtle text-[11px] font-bold">
+          템플릿
+        </span>
+        {TEMPLATES.map((template) => (
+          <button
+            key={template.id}
+            type="button"
+            disabled={busy}
+            onClick={() => void generateTemplate(template.id)}
+            className="bg-sunken text-muted hover:text-fg cursor-pointer rounded-full px-3 py-1.5 text-xs transition-colors disabled:opacity-50"
+          >
+            {template.label}
+          </button>
+        ))}
+      </div>
+
       {busy && (
         <div aria-live="polite" className="bg-canvas flex items-center gap-2 px-4 py-4">
           <span className="flex gap-1">
@@ -201,11 +283,22 @@ export function InlineAiPopover({ editor, docId }: { editor: Editor; docId: stri
         </p>
       )}
 
-      {draft && !busy && (
+      {(draft !== null || html !== null) && !busy && (
         <>
           <div className="bg-canvas px-4 py-3.5">
-            <p className="text-subtle mb-2 text-[11px] font-bold">생성된 초안</p>
-            {table ? (
+            <p className="text-subtle mb-2 text-[11px] font-bold">
+              {html ? '생성된 템플릿' : '생성된 초안'}
+            </p>
+            {html ? (
+              /* 이 HTML 은 서버가 준 것이 아니라 `blocksToHtml` 이 만든다. 글자는 전부
+                 이스케이프되고 태그는 우리가 붙인 것뿐이다(`templateBlocks.test.ts`). */
+              <div
+                // 문서 서식 CSS 는 이 클래스 아래에 있다. 안 붙이면 제목도 목록도 밋밋한
+                // 글줄 더미로 보여서, 구조를 보여 주려던 미리보기가 구조를 안 보여 준다.
+                className="zenith-editor text-fg text-sm"
+                dangerouslySetInnerHTML={{ __html: html }}
+              />
+            ) : table ? (
               <div className="overflow-x-auto">
                 <table className="border-line w-full border-collapse border text-xs">
                   <tbody>
@@ -236,7 +329,7 @@ export function InlineAiPopover({ editor, docId }: { editor: Editor; docId: stri
             )}
             <p className="text-subtle mt-2.5 flex items-center gap-1.5 text-[11px]">
               <span className="bg-success size-1.5 rounded-full" />
-              Claude API · 사내 서버 경유 · 근거: 이 문서 본문
+              Claude API · 사내 서버 경유 · 근거: {html ? '없음(형식만 만듭니다)' : '이 문서 본문'}
             </p>
           </div>
 
@@ -250,7 +343,11 @@ export function InlineAiPopover({ editor, docId }: { editor: Editor; docId: stri
             <Button
               variant="secondary"
               size="sm"
-              onClick={() => lastAction && void generate(lastAction)}
+              onClick={() => {
+                if (!last) return
+                if ('action' in last) void generate(last.action)
+                else void generateTemplate(last.template)
+              }}
             >
               다시 생성
             </Button>

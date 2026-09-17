@@ -69,3 +69,31 @@ export function docActionDraft(action: (typeof DOC_ACTIONS)[number], title: stri
       return `[EN] ${title}`
   }
 }
+
+export const DOC_TEMPLATES = ['minutes', 'weekly', 'notice'] as const
+
+/**
+ * 문서 템플릿(04 §8 `/ai/template`). 블록 하나가 마크다운 한 덩이다(프론트 가정, PR 본문).
+ *
+ * 문서 본문을 안 본다. 형식만 만들어 주는 자리라 목도 고정 문안을 돌려준다. 실제 서버는
+ * `context` 를 받아 제목·참석자 같은 것을 채울 수 있다.
+ */
+export function templateBlocks(template: (typeof DOC_TEMPLATES)[number]): string[] {
+  switch (template) {
+    case 'minutes':
+      return [
+        '## 회의 개요',
+        '- 일시:\n- 장소:\n- 참석:',
+        '## 안건',
+        '1. \n2. ',
+        '## 결정 사항',
+        '| 안건 | 결정 | 담당 |\n| --- | --- | --- |\n|  |  |  |',
+        '## 다음 할 일',
+        '- [ ] \n- [ ] ',
+      ]
+    case 'weekly':
+      return ['## 이번 주 한 일', '- ', '## 다음 주 할 일', '- [ ] ', '## 막힌 것', '- ']
+    case 'notice':
+      return ['## 공지 내용', '', '## 적용 시점', '- ', '## 문의', '- ']
+  }
+}
