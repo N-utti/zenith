@@ -20,6 +20,7 @@ export function FolderNameModal({
   submitLabel,
   pending,
   error,
+  onDirty,
   onSubmit,
   onClose,
 }: {
@@ -28,6 +29,8 @@ export function FolderNameModal({
   submitLabel: string
   pending: boolean
   error: string | null
+  /** 다시 치기 시작하면 실패 문구를 지운다. 고친 것을 옆에서 계속 틀렸다고 말하면 안 된다. */
+  onDirty: () => void
   onSubmit: (value: string) => void
   onClose: () => void
 }) {
@@ -66,12 +69,22 @@ export function FolderNameModal({
             {...slot}
             autoFocus
             value={value}
-            onChange={(e) => setValue(e.target.value)}
+            onChange={(e) => {
+              setValue(e.target.value)
+              if (error) onDirty()
+            }}
             maxLength={FOLDER_TITLE_MAX}
             placeholder="예: 회의록"
             onKeyDown={(e) => {
               // 한글 조합 확정 Enter 는 거른다(팔레트·작성창과 같은 규약).
-              if (e.key === 'Enter' && !e.nativeEvent.isComposing && trimmed && !pending) {
+              const unchanged = trimmed === initial.trim()
+              if (
+                e.key === 'Enter' &&
+                !e.nativeEvent.isComposing &&
+                trimmed &&
+                !unchanged &&
+                !pending
+              ) {
                 e.preventDefault()
                 onSubmit(trimmed)
               }

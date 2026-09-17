@@ -18,7 +18,8 @@ import { FolderNameModal } from '@/features/docs/FolderNameModal'
 import { useCreateDoc, useCreateFolder, useRenameFolder, useTree } from '@/features/docs/api'
 import { ancestorsOf, buildTree, type TreeNode } from '@/features/docs/tree'
 
-const EXPANDED_KEY = 'zenith.docTreeExpanded'
+// 값의 의미가 문서 id 에서 폴더 id 로 바뀌었다. 옛 키를 그대로 쓰면 안 맞는 id 가 영원히 쌓인다.
+const EXPANDED_KEY = 'zenith.docTreeExpanded.v2'
 
 /**
  * 사용자가 직접 펼친 폴더 id. AppLayout 이 bleed 유무로 두 벌이라 에디터를 열고 닫을 때마다
@@ -53,7 +54,15 @@ interface RowActions {
   onRename: (folderId: string, title: string) => void
 }
 
-function DocRow({ node, depth, onNavigate }: { node: TreeNode & { kind: 'doc' }; depth: number; onNavigate?: () => void }) {
+function DocRow({
+  node,
+  depth,
+  onNavigate,
+}: {
+  node: TreeNode & { kind: 'doc' }
+  depth: number
+  onNavigate?: () => void
+}) {
   return (
     <div className="flex items-center">
       <span className="size-5 shrink-0" style={{ marginLeft: depth * 14 }} />
@@ -111,12 +120,17 @@ function FolderRow({
   actions: RowActions
 }) {
   const { id, title } = node.folder
-  // 열려 있는 문서까지의 경로는 기억과 무관하게 항상 펼친다. 접어 둔 폴더 안의 문서를 검색으로 열어도 보여야 한다.
-  const [expanded, setExpanded] = useState(() => openPath.has(id) || expandedIds.has(id))
+  const [opened, setOpened] = useState(() => expandedIds.has(id))
+  /*
+   * 열려 있는 문서까지의 경로는 기억과 무관하게 항상 펼친다. 접어 둔 폴더 안의 문서를 ⌘K 로
+   * 열어도 보여야 한다. 이 판정을 `useState` 초기값으로만 하면 안 된다. 편집 화면에서 다른
+   * 문서로 옮길 때는 트리가 다시 마운트되지 않아 `openPath` 만 바뀌고 펼쳐지지 않는다.
+   */
+  const expanded = opened || openPath.has(id)
 
   const toggle = () => {
     const next = !expanded
-    setExpanded(next)
+    setOpened(next)
     rememberExpanded(id, next)
   }
 
@@ -128,7 +142,7 @@ function FolderRow({
         <button
           type="button"
           onClick={toggle}
-          aria-label={expanded ? '접기' : '펼치기'}
+          aria-label={`${title} ${expanded ? '접기' : '펼치기'}`}
           aria-expanded={expanded}
           className="text-subtle hover:text-fg grid size-5 shrink-0 cursor-pointer place-items-center rounded transition-colors"
           style={{ marginLeft: depth * 14 }}
@@ -139,6 +153,7 @@ function FolderRow({
         <button
           type="button"
           onClick={toggle}
+          aria-expanded={expanded}
           className="text-muted hover:bg-surface-hover hover:text-fg flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13.5px] font-medium transition-colors"
         >
           <Icon className="size-3.5 shrink-0" strokeWidth={2} />
@@ -190,7 +205,7 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
   const { docId } = useParams()
   const navigate = useNavigate()
   const toast = useToast()
-  const { data, isPending } = useTree()
+  const { data, isPending, isError } = useTree()
   const createDoc = useCreateDoc()
   const createFolder = useCreateFolder()
   const renameFolder = useRenameFolder()
@@ -203,7 +218,9 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
 
   /** 열려 있는 이름 입력창. 새 폴더는 부모 id 를, 이름 변경은 그 폴더를 들고 있다. */
   const [naming, setNaming] = useState<
-    { mode: 'create'; parentId: string | null } | { mode: 'rename'; id: string; title: string } | null
+    | { mode: 'create'; parentId: string | null }
+    | { mode: 'rename'; id: string; title: string }
+    | null
   >(null)
   const [nameError, setNameError] = useState<string | null>(null)
 
@@ -275,7 +292,10 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
 
   return (
     <>
-      {tree.length === 0 && <p className="text-subtle px-3 py-2 text-xs">문서가 없습니다.</p>}
+      {isError && <p className="text-subtle px-3 py-2 text-xs">문서 트리를 불러오지 못했습니다.</p>}
+      {!isError && tree.length === 0 && (
+        <p className="text-subtle px-3 py-2 text-xs">문서가 없습니다.</p>
+      )}
 
       {tree.map((node) =>
         node.kind === 'folder' ? (
@@ -306,6 +326,7 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
           submitLabel={naming.mode === 'create' ? '만들기' : '저장'}
           pending={createFolder.isPending || renameFolder.isPending}
           error={nameError}
+          onDirty={() => setNameError(null)}
           onSubmit={submitName}
           onClose={() => setNaming(null)}
         />

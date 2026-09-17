@@ -8,7 +8,12 @@ const folder = (id: string, parent_id: string | null, title: string, sort = 0): 
   title,
   sort,
 })
-const doc = (id: string, folder_id: string, title: string, deleted_at: string | null = null): DocSummary => ({
+const doc = (
+  id: string,
+  folder_id: string,
+  title: string,
+  deleted_at: string | null = null,
+): DocSummary => ({
   id,
   folder_id,
   title,
@@ -18,8 +23,16 @@ const doc = (id: string, folder_id: string, title: string, deleted_at: string | 
 })
 
 const data: DocTreeData = {
-  folders: [folder('f-1', null, '회사 위키', 1), folder('f-0', null, '팀', 0), folder('f-2', 'f-1', '제품')],
-  docs: [doc('d-1', 'f-2', '로드맵'), doc('d-2', 'f-1', '규정'), doc('d-3', 'f-1', '지운 것', '2026-09-16T00:00:00Z')],
+  folders: [
+    folder('f-1', null, '회사 위키', 1),
+    folder('f-0', null, '팀', 0),
+    folder('f-2', 'f-1', '제품'),
+  ],
+  docs: [
+    doc('d-1', 'f-2', '로드맵'),
+    doc('d-2', 'f-1', '규정'),
+    doc('d-3', 'f-1', '지운 것', '2026-09-16T00:00:00Z'),
+  ],
 }
 
 it('폴더가 폴더를 담고 문서는 폴더에만 담긴다. 폴더가 문서보다 위', () => {
@@ -56,12 +69,23 @@ it('문서까지의 폴더 사슬과 펼칠 폴더 id', () => {
   expect(foldersTo('d-없음', data)).toEqual([])
 })
 
-it('순환 참조가 생겨도 멈춘다', () => {
+it('순환 참조가 생겨도 멈추고, 그 가지가 화면에서 사라지지 않는다', () => {
   const loop: DocTreeData = {
-    folders: [folder('a', 'b', 'A'), folder('b', 'a', 'B')],
+    folders: [folder('a', 'b', 'A'), folder('b', 'a', 'B'), folder('self', 'self', '자기참조')],
     docs: [doc('d', 'a', '문서')],
   }
-  expect(foldersTo('d', loop).length).toBeLessThanOrEqual(2)
+  expect(foldersTo('d', loop).length).toBeLessThanOrEqual(3)
+
+  // 서로를 부모로 삼으면 둘 다 "부모가 있으니" 최상위에 못 들어간다. 그대로 두면 안의 문서까지
+  // 열 방법이 없어진다. 최상위에서 닿지 않는 폴더는 끌어올린다.
+  const tree = buildTree(loop)
+  const titles = tree.map((n) => (n.kind === 'folder' ? n.folder.title : n.doc.title))
+  expect(titles).toContain('자기참조')
+  expect(titles.length).toBeGreaterThan(0)
+  // 고리가 끊겨 있어야 한다. 남아 있으면 자식을 따라 그리다 무한 재귀에 빠진다.
+  expect(titles).toEqual(expect.arrayContaining(['A', 'B', '자기참조']))
+  const a = tree.find((n) => n.kind === 'folder' && n.folder.title === 'A')
+  expect(a?.kind === 'folder' && a.children.some((c) => c.kind === 'doc')).toBe(true)
 })
 
 it('새 문서의 기본 자리는 최상위 폴더 중 첫 번째', () => {

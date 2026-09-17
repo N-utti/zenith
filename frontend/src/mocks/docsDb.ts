@@ -215,7 +215,7 @@ export function findDoc(id: string): DocSummary | undefined {
   return DOCS.find((doc) => doc.id === id)
 }
 
-export function createDoc(user: User, folderId: string, title = '제목 없는 문서'): DocSummary {
+export function createDoc(user: User, folderId: string, title: string): DocSummary {
   const doc: DocSummary = {
     // 새로고침해도 겹치지 않아야 한다. 브라우저 IndexedDB 가 문서 id 로 본문을 남기므로
     // 카운터를 쓰면 두 번째로 만든 문서에 이전 본문이 뜬다.
@@ -238,6 +238,8 @@ export function touchDoc(
 ): DocSummary | undefined {
   const doc = findDoc(id)
   if (!doc) return undefined
+  // 빈 본문으로 "이어서 작업" 순서를 흔들지 않는다. 백엔드도 아무것도 안 바꾸고 그대로 준다.
+  if (input.title === undefined && input.folder_id === undefined) return doc
   if (input.title !== undefined) doc.title = input.title
   if (input.folder_id !== undefined) doc.folder_id = input.folder_id
   doc.updated_at = new Date().toISOString()

@@ -66,6 +66,11 @@ export interface DocVersion {
 
 export interface DocDetail extends DocSummary {
   /**
+   * 서버가 보관한 Yjs 상태(base64). 아직 릴레이가 영속화하기 전이면 `null`.
+   * 지금 화면은 읽지 않는다. 본문 연동을 붙일 때 `seedHtml` 대신 이쪽을 쓴다.
+   */
+  ydoc: string | null
+  /**
    * 이 문서를 처음 여는 탭에서만 쓰는 초안.
    *
    * 본문의 원천은 Y.Doc이고 서버는 목록용 메타만 들고 있다. 실제 백엔드에서는

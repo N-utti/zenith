@@ -31,11 +31,25 @@ export function useTree() {
 
 /**
  * 새 문서를 넣을 기본 폴더. 문서는 폴더 안에만 생기는데, 홈·문서 목록·AI 답변 저장처럼
- * 폴더를 고를 자리가 없는 곳에서는 최상위 첫 폴더에 넣는다. 폴더가 하나도 없으면 `undefined`.
+ * 폴더를 고를 자리가 없는 곳에서는 최상위 첫 폴더에 넣는다.
+ *
+ * 아직 안 온 것과 하나도 없는 것을 갈라서 준다. 둘을 뭉치면 트리를 받는 동안 "폴더를 먼저
+ * 만들어 주세요" 라는 틀린 안내가 뜬다.
  */
-export function useDefaultFolderId(): string | undefined {
-  const { data } = useTree()
-  return data && defaultFolderId(data)
+export function useDefaultFolder(): {
+  folderId: string | undefined
+  folderName: string | undefined
+  isPending: boolean
+  isError: boolean
+} {
+  const { data, isPending, isError } = useTree()
+  const folderId = data && defaultFolderId(data)
+  return {
+    folderId,
+    folderName: data?.folders.find((f) => f.id === folderId)?.title,
+    isPending,
+    isError,
+  }
 }
 
 export function useCreateFolder() {
@@ -74,12 +88,15 @@ export function useDoc(docId: string) {
   })
 }
 
-/** 문서는 폴더 안에만 생긴다. 서버가 `folder_id` 를 요구한다. */
+/** 빈 문서의 제목. 서버가 제목을 **요구하므로**(`DocCreateIn`) 안 보내면 422 다. */
+export const UNTITLED_DOC = '제목 없는 문서'
+
+/** 문서는 폴더 안에만 생긴다. 서버가 `folder_id` 와 `title` 을 둘 다 요구한다. */
 export function useCreateDoc() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (input: { folder_id: string; title?: string }) =>
-      api<DocSummary>('/docs', { method: 'POST', body: JSON.stringify(input) }),
+    mutationFn: ({ folder_id, title = UNTITLED_DOC }: { folder_id: string; title?: string }) =>
+      api<DocSummary>('/docs', { method: 'POST', body: JSON.stringify({ folder_id, title }) }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['documents'] })
       void qc.invalidateQueries({ queryKey: docKeys.tree })

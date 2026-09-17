@@ -992,8 +992,10 @@ data: ${JSON.stringify(data)}
     if (typeof body.title !== 'string' || !body.title.trim() || body.title.trim().length > 200) {
       return validationError('폴더 이름은 1자 이상 200자 이하여야 합니다.')
     }
-    const parentId = body.parent_id === undefined || body.parent_id === null ? null : String(body.parent_id)
-    if (parentId !== null && !findFolder(parentId)) return notFound()
+    const parentId =
+      body.parent_id === undefined || body.parent_id === null ? null : String(body.parent_id)
+    // 없는 폴더는 404 가 아니라 422 다. 백엔드가 외래키 위반을 미리 잡아 422 로 돌려준다.
+    if (parentId !== null && !findFolder(parentId)) return validationError('없는 폴더입니다.')
 
     return HttpResponse.json(
       createFolder({
@@ -1013,6 +1015,12 @@ data: ${JSON.stringify(data)}
 
     const body = await readJson<{ title?: unknown; parent_id?: unknown; sort?: unknown }>(request)
     if (!body) return validationError('본문이 JSON 이 아닙니다.')
+    // null 은 "지움" 이 아니라 422 다. 문서·할 일 PATCH 와 같은 계약.
+    for (const key of ['title', 'parent_id', 'sort'] as const) {
+      if (body[key] === null && key !== 'parent_id') {
+        return validationError(`${key} 는 null 일 수 없습니다.`)
+      }
+    }
     if (body.title !== undefined) {
       if (typeof body.title !== 'string' || !body.title.trim() || body.title.trim().length > 200) {
         return validationError('폴더 이름은 1자 이상 200자 이하여야 합니다.')
@@ -1022,10 +1030,10 @@ data: ${JSON.stringify(data)}
     if (body.parent_id !== undefined) {
       parentId = body.parent_id === null ? null : String(body.parent_id)
       if (parentId !== null) {
-        if (!findFolder(parentId)) return notFound()
+        if (!findFolder(parentId)) return validationError('없는 폴더입니다.')
         // 자기 자신이나 자기 자손 아래로 옮기면 트리에서 통째로 사라진다.
         if (isDescendantFolder(parentId, folder.id)) {
-          return validationError('폴더를 자기 안으로 옮길 수 없습니다.')
+          return validationError('폴더를 자기 자신이나 하위 폴더로 옮길 수 없습니다.')
         }
       }
     }
@@ -1058,18 +1066,22 @@ data: ${JSON.stringify(data)}
     if (typeof body.folder_id !== 'string' || !findFolder(body.folder_id)) {
       return validationError('folder_id 가 필요합니다.')
     }
-    const title = typeof body.title === 'string' ? body.title.trim() : ''
+    // 백엔드는 제목도 요구한다. 목이 기본값을 채워 주면 서버에서만 422 가 나는 자리가 생긴다.
+    if (typeof body.title !== 'string' || !body.title.trim()) {
+      return validationError('제목이 필요합니다.')
+    }
+    const title = body.title.trim()
     if (title.length > 200) return validationError('제목은 200자를 넘을 수 없습니다.')
 
-    return HttpResponse.json(createDoc(user, body.folder_id, title || undefined), { status: 201 })
+    return HttpResponse.json(createDoc(user, body.folder_id, title), { status: 201 })
   }),
 
   http.get('/api/docs/:docId', ({ params }) => {
     if (!authenticate()) return unauthorized()
     const doc = findDoc(String(params.docId))
     if (!doc) return notFound()
-    // 실제 서버라면 보관 중인 Yjs 초기 상태를 줄 자리다.
-    return HttpResponse.json({ ...doc, seedHtml: DOC_SEEDS[doc.id] })
+    // 실제 서버는 보관 중인 Yjs 상태(`ydoc`)를 준다. 목에는 그게 없어 초안(`seedHtml`)으로 대신한다.
+    return HttpResponse.json({ ...doc, ydoc: null, seedHtml: DOC_SEEDS[doc.id] })
   }),
 
   http.patch('/api/docs/:docId', async ({ request, params }) => {
@@ -1077,7 +1089,12 @@ data: ${JSON.stringify(data)}
     if (!user) return unauthorized()
     const body = await readJson<{ title?: unknown; folder_id?: unknown }>(request)
     if (!body) return validationError('본문이 JSON 이 아닙니다.')
-    if (body.folder_id !== undefined && !findFolder(String(body.folder_id))) return notFound()
+    for (const key of ['title', 'folder_id'] as const) {
+      if (body[key] === null) return validationError(`${key} 는 null 일 수 없습니다.`)
+    }
+    if (body.folder_id !== undefined && !findFolder(String(body.folder_id))) {
+      return validationError('없는 폴더입니다.')
+    }
     const doc = touchDoc(String(params.docId), user, {
       title: typeof body.title === 'string' ? body.title : undefined,
       folder_id: typeof body.folder_id === 'string' ? body.folder_id : undefined,

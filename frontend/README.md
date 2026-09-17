@@ -126,9 +126,12 @@ v0.2 전제로 만들어진 구현을 전부 걷어냈다. `features/attendance/
 목 엔드포인트. 백엔드는 같은 스키마로 응답하면 된다. 근태 API는 설계서 §9로 재정의됐고
 아직 목이 없다.
 
-> 문서·폴더는 필드 표기까지 계약에 맞췄다(snake_case, `updated_by` 객체). 남은 어긋남은
-> 홈 카드용 `/api/announcements`·`/api/mentions`·`/api/docs/recent`·`/api/tasks/today` 로,
-> 백엔드는 이것들을 `GET /api/me/home` 하나로 준다.
+> 문서 목록·트리·폴더는 필드 표기까지 계약에 맞췄다(snake_case, `updated_by` 객체). 아직 남은 어긋남:
+>
+> - **댓글**: 프론트 `authorId`·`authorName`·`authorHue`·`createdAt` ↔ 백엔드 `author:{id,name}`·`created_at`·`block_id`
+> - **버전**: 프론트는 `snapshot` 을 필수로 두는데 백엔드 목록(`VersionMeta`)은 스냅샷을 아예 안 준다. 스냅샷은 `/restore` 로 받는다
+> - **문서 상세**: `seedHtml` 은 목 전용이다. 백엔드는 그 자리에 `ydoc`(서버 보관 Yjs 상태)을 준다
+> - **홈 카드**: `/api/announcements`·`/api/mentions`·`/api/docs/recent`·`/api/tasks/today` 는 04 에 없다. 백엔드는 `GET /api/me/home` 하나로 준다
 
 ```
 GET   /api/announcements?limit=        권한 밖 등급 글은 목록에서 제외 (04 에 없다. 백엔드는 /api/me/home)

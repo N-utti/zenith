@@ -6,8 +6,7 @@ import type { DocSummary, DocTreeData, Folder } from './types'
  * 서버는 폴더 목록과 문서 목록을 따로 준다(`GET /tree`). 화면이 그리려면 하나로 접어야 한다.
  */
 export type TreeNode =
-  | { kind: 'folder'; folder: Folder; children: TreeNode[] }
-  | { kind: 'doc'; doc: DocSummary }
+  { kind: 'folder'; folder: Folder; children: TreeNode[] } | { kind: 'doc'; doc: DocSummary }
 
 function titleOf(node: TreeNode): string {
   return node.kind === 'folder' ? node.folder.title : node.doc.title
@@ -31,13 +30,35 @@ function ordered(nodes: TreeNode[]): TreeNode[] {
  * 없어진다. 휴지통에 든 문서는 빼되, 그건 서버가 이미 빼고 주는 것이라 안전망이다.
  */
 export function buildTree({ folders, docs }: DocTreeData): TreeNode[] {
+  const source = new Map(folders.map((folder) => [folder.id, folder]))
+
+  /*
+   * 고리 안에 있는 폴더는 부모를 무시하고 최상위로 올린다.
+   *
+   * 서로를 부모로 삼은 폴더 둘은 각자 "부모가 있으니" 서로의 자식이 되어 최상위에 못 들어간다.
+   * 그대로 두면 그 가지가 화면에서 사라지고, 게다가 자식을 따라 그리다 무한 재귀에 빠진다.
+   * 서버가 막지만(`_assert_no_cycle`) 동시에 들어온 이동 두 건이 이미 고리를 만든 경우는
+   * 서버도 인정한다. 고아 노드와 같은 취급으로 끌어올린다.
+   */
+  const inCycle = (folder: Folder): boolean => {
+    const seen = new Set<string>([folder.id])
+    let current = folder.parent_id ? source.get(folder.parent_id) : undefined
+    while (current) {
+      if (seen.has(current.id)) return true
+      seen.add(current.id)
+      current = current.parent_id ? source.get(current.parent_id) : undefined
+    }
+    return false
+  }
+
   const byId = new Map<string, { kind: 'folder'; folder: Folder; children: TreeNode[] }>(
     folders.map((folder) => [folder.id, { kind: 'folder', folder, children: [] }]),
   )
   const roots: TreeNode[] = []
 
   for (const node of byId.values()) {
-    const parent = node.folder.parent_id ? byId.get(node.folder.parent_id) : undefined
+    const parentId = inCycle(node.folder) ? null : node.folder.parent_id
+    const parent = parentId ? byId.get(parentId) : undefined
     if (parent) parent.children.push(node)
     else roots.push(node)
   }
