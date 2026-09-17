@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { homeKeys } from './keys'
 import type { CalendarEvent, CalendarEventInput, HomeData, TodayTask } from './types'
@@ -17,6 +17,18 @@ export function useHome() {
 }
 
 const todosKey = homeKeys.home
+
+/**
+ * 홈 한 벌 안의 할 일만 바꾼다.
+ *
+ * 캐시에 들어 있는 것은 `{items}` 가 아니라 홈 한 벌이다. 할 일만 든 객체로 덮어쓰면
+ * 나머지 카드(문서·멘션·안 읽은 대화·공지)가 통째로 사라진다.
+ */
+function patchTodos(qc: QueryClient, change: (todos: TodayTask[]) => TodayTask[]) {
+  qc.setQueryData<HomeData>(homeKeys.home, (old) =>
+    old ? { ...old, todos: change(old.todos) } : old,
+  )
+}
 
 /** 홈 한 벌에서 카드가 쓸 조각만 꺼낸다. 로딩·실패 상태는 그대로 물려받는다. */
 function useHomeSlice<T>(pick: (data: HomeData) => T) {
@@ -64,14 +76,10 @@ export function useToggleTask() {
       api<TodayTask>(`/me/todos/${id}`, { method: 'PATCH', body: JSON.stringify({ done }) }),
     onMutate: async ({ id, done }) => {
       await qc.cancelQueries({ queryKey: todosKey })
-      qc.setQueryData<{ items: TodayTask[] }>(todosKey, (old) =>
-        old ? { items: old.items.map((t) => (t.id === id ? { ...t, done } : t)) } : old,
-      )
+      patchTodos(qc, (todos) => todos.map((t) => (t.id === id ? { ...t, done } : t)))
     },
     onError: (_error, { id, done }) => {
-      qc.setQueryData<{ items: TodayTask[] }>(todosKey, (old) =>
-        old ? { items: old.items.map((t) => (t.id === id ? { ...t, done: !done } : t)) } : old,
-      )
+      patchTodos(qc, (todos) => todos.map((t) => (t.id === id ? { ...t, done: !done } : t)))
     },
     onSettled: () => {
       void qc.invalidateQueries({ queryKey: todosKey })
@@ -94,26 +102,18 @@ export function useDeleteTask() {
     mutationFn: (id: string) => api<void>(`/me/todos/${id}`, { method: 'DELETE' }),
     onMutate: async (id) => {
       await qc.cancelQueries({ queryKey: todosKey })
-      const removed = qc
-        .getQueryData<{ items: TodayTask[] }>(todosKey)
-        ?.items.find((t) => t.id === id)
-      qc.setQueryData<{ items: TodayTask[] }>(todosKey, (old) =>
-        old ? { items: old.items.filter((t) => t.id !== id) } : old,
-      )
+      const removed = qc.getQueryData<HomeData>(todosKey)?.todos.find((t) => t.id === id)
+      patchTodos(qc, (todos) => todos.filter((t) => t.id !== id))
       return { removed }
     },
     onError: (_error, _id, context) => {
       if (!context?.removed) return
       // 지운 줄만 제자리로. 서버 정렬이 만든 순이라 그 기준으로 다시 끼운다.
       const removed = context.removed
-      qc.setQueryData<{ items: TodayTask[] }>(todosKey, (old) =>
-        old
-          ? {
-              items: [...old.items, removed].sort(
-                (a, b) => a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id),
-              ),
-            }
-          : old,
+      patchTodos(qc, (todos) =>
+        [...todos, removed].sort(
+          (a, b) => a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id),
+        ),
       )
     },
     onSettled: () => {
