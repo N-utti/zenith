@@ -11,9 +11,12 @@ import { useColleagues } from '@/features/people/colleagues'
 import { ApiError } from '@/lib/api'
 import { formatISOYearDate, toISODate } from '@/lib/datetime'
 import { useApprovalTypes, useCreateDelegation, useDelegations, useDeleteDelegation } from './api'
+import { Badge } from '@/components/ui/Badge'
 import { APPROVAL_TYPE_LABEL, type ApprovalTypeCode } from './types'
 
-const ALL_TYPES = ''
+/** 유형을 안 고른 상태와 "모든 유형" 을 가른다. 권한을 넘기는 폼이라 기본값이 전권이면 안 된다. */
+const UNSET = ''
+const ALL_TYPES = 'all'
 
 /**
  * 결재 위임(13 §4.2.3). 자리를 비우는 동안 대신 결재할 사람을 정한다.
@@ -26,7 +29,7 @@ const ALL_TYPES = ''
 export function DelegationSection() {
   const { data, isPending, isError } = useDelegations()
   const types = useApprovalTypes()
-  const { people, isError: peopleError } = useColleagues()
+  const { people, isPending: peoplePending, isError: peopleError } = useColleagues()
   const create = useCreateDelegation()
   const remove = useDeleteDelegation()
   const toast = useToast()
@@ -35,12 +38,19 @@ export function DelegationSection() {
   const [delegate, setDelegate] = useState('')
   const [start, setStart] = useState(today)
   const [end, setEnd] = useState('')
-  const [typeCode, setTypeCode] = useState<string>(ALL_TYPES)
+  const [typeCode, setTypeCode] = useState<string>(UNSET)
   const [error, setError] = useState<string | null>(null)
 
   const delegatable = (types.data?.items ?? []).filter((type) => type.allow_delegate_decision)
   const busy = create.isPending || remove.isPending
-  const ready = delegate !== '' && start !== '' && end !== '' && start <= end
+  // 유형 목록이 안 왔는데 고르게 두면 "모든 유형" 밖에 없어 보여 전권 위임으로 몰린다.
+  const ready =
+    delegate !== '' &&
+    typeCode !== UNSET &&
+    start !== '' &&
+    end !== '' &&
+    start <= end &&
+    !!types.data
 
   const add = () => {
     if (!ready || busy) return
@@ -56,7 +66,8 @@ export function DelegationSection() {
         onSuccess: (made) => {
           setDelegate('')
           setEnd('')
-          setTypeCode(ALL_TYPES)
+          setStart(today)
+          setTypeCode(UNSET)
           toast.success(`${made.delegate.name} 님에게 위임했습니다.`)
         },
         onError: (err) => setError(err instanceof ApiError ? err.message : '위임하지 못했습니다.'),
@@ -69,7 +80,7 @@ export function DelegationSection() {
       <h2 className="text-fg mb-1 text-sm font-semibold">결재 위임</h2>
       <p className="text-muted mb-4 text-sm">
         자리를 비우는 동안 대신 결재할 사람을 정합니다. 문서에는 원래 결재자 이름이 남고 실제
-        처리자가 함께 표시됩니다.
+        처리자가 함께 표시됩니다. 내가 결재자로 지정된 문서에만 효과가 있습니다.
       </p>
 
       {isPending && <SkeletonRows rows={2} />}
@@ -83,11 +94,15 @@ export function DelegationSection() {
             {data.items.map((item) => (
               <li key={item.id} className="flex items-center gap-3 px-4 py-3">
                 <div className="min-w-0 flex-1">
-                  <p className="text-fg text-sm font-medium">
-                    {item.delegate.name}
-                    <span className="text-muted ml-1.5 font-normal">
+                  <p className="flex items-center gap-1.5 text-sm">
+                    <span className="text-fg font-medium">{item.delegate.name}</span>
+                    <span className="text-muted">
                       {item.type_code ? APPROVAL_TYPE_LABEL[item.type_code] : '모든 유형'}
                     </span>
+                    {/* 해제하지 않으면 계속 쌓인다. 지금 누가 대신 결재하는지가 한눈에 보여야 한다. */}
+                    {item.start_date <= today && today <= item.end_date && (
+                      <Badge tone="accent">진행 중</Badge>
+                    )}
                   </p>
                   <p className="text-subtle text-xs">
                     {formatISOYearDate(item.start_date)} ~ {formatISOYearDate(item.end_date)}
@@ -102,7 +117,7 @@ export function DelegationSection() {
                     remove.mutate(item.id, {
                       onSuccess: () => toast.success('위임을 해제했습니다.'),
                       onError: (err) =>
-                        toast.error(err instanceof ApiError ? err.message : '해제하지 못했습니다.'),
+                        setError(err instanceof ApiError ? err.message : '해제하지 못했습니다.'),
                     })
                   }
                 >
@@ -120,7 +135,14 @@ export function DelegationSection() {
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
         <Field
           label="대신 결재할 사람"
-          error={peopleError ? '사람 목록을 불러오지 못했습니다.' : null}
+          hint={peoplePending ? '불러오는 중입니다.' : undefined}
+          error={
+            peopleError
+              ? '사람 목록을 불러오지 못했습니다.'
+              : !peoplePending && people.length === 0
+                ? '함께 채널을 쓰는 사람이 없습니다.'
+                : null
+          }
         >
           {(slot) => (
             <Select
@@ -128,14 +150,21 @@ export function DelegationSection() {
               placeholder="고르세요"
               value={delegate}
               onChange={(e) => setDelegate(e.target.value)}
+              disabled={peoplePending}
               options={people.map((person) => ({ value: person.id, label: person.name }))}
             />
           )}
         </Field>
-        <Field label="문서 유형" hint="위임할 수 있는 유형만 나옵니다.">
+        <Field
+          label="문서 유형"
+          hint="위임할 수 있는 유형만 나옵니다."
+          error={types.isError ? '문서 유형을 불러오지 못했습니다.' : null}
+        >
           {(slot) => (
             <Select
               {...slot}
+              placeholder="고르세요"
+              disabled={types.isPending}
               value={typeCode}
               onChange={(e) => setTypeCode(e.target.value)}
               options={[

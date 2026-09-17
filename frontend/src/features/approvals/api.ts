@@ -144,8 +144,8 @@ export function useCreateDelegation() {
   return useMutation({
     mutationFn: (input: DelegationInput) =>
       api<Delegation>('/approvals/delegations', { method: 'POST', body: JSON.stringify(input) }),
-    // 위임이 생기면 그 사람의 받은 결재함이 달라진다. 결재 캐시를 통째로 비운다.
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['approvals'] }),
+    // 내 받은 결재함도 달라진다(위임을 걸면 내 차례가 남에게 넘어간다). 결재 캐시를 통째로 비운다.
+    onSuccess: () => void qc.invalidateQueries({ queryKey: approvalsKey }),
   })
 }
 
@@ -153,6 +153,6 @@ export function useDeleteDelegation() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (id: string) => api<void>(`/approvals/delegations/${id}`, { method: 'DELETE' }),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['approvals'] }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: approvalsKey }),
   })
 }

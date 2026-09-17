@@ -78,7 +78,9 @@ export function ApprovalDetailPage() {
 
   const d = doc.data
   const current = d.steps.find((s) => s.step_no === d.current_step)
-  const myTurn = d.status === 'pending' && current?.approver.id === user.id
+  // 위임받아 대신 누르는 경우도 있어서 이름을 맞대 보지 않는다. 서버가 판정해 준 값을 쓴다.
+  const myTurn = d.status === 'pending' && d.can_decide
+  const actingForOther = myTurn && current !== undefined && current.approver.id !== user.id
   const isDrafter = d.drafter.id === user.id
   // 임원은 남의 문서도 끝낼 수 있다. 결재자가 자리를 비워 영영 대기로 남는 문서를 끊는 길이다.
   // 내 차례일 때는 안 보인다. 그건 부재가 아니라 내 판단이고, 승인·반려로 남겨야 이력이 정확하다.
@@ -175,6 +177,7 @@ export function ApprovalDetailPage() {
                 회수
               </Button>
             )}
+            {actingForOther && <Badge tone="warning">{current?.approver.name} 님 대신</Badge>}
             {myTurn && current && (
               <>
                 <Button

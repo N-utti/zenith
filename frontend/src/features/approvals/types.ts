@@ -123,6 +123,13 @@ export interface ApprovalDocument extends ApprovalListItem {
   subject: GeneralSubject
   steps: ApprovalStep[]
   closed_at: string | null
+  /**
+   * 지금 이 사람이 승인·반려를 누를 수 있는가. **서버가 판정해서 준다.**
+   *
+   * 내 차례일 때와, 지금 차례인 사람이 나에게 위임했을 때(대결)가 여기 다 들어간다. 화면이
+   * 위임 목록을 따로 받아 스스로 재면 권한 판정이 UI 로 내려온다. 계약에 없어서 정한 칸이다.
+   */
+  can_decide: boolean
 }
 
 export type ApprovalBox = 'inbox' | 'sent' | 'reference' | 'draft'

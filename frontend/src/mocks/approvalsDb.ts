@@ -10,6 +10,7 @@ import type {
   DraftInput,
   Person,
 } from '@/features/approvals/types'
+import { toISODate } from '@/lib/datetime'
 import type { User } from '@/types'
 import { DEMO_ACCOUNTS } from './accounts'
 import { MOCK_USERS } from './db'
@@ -77,7 +78,8 @@ function buildSteps(drafter: User): ApprovalStep[] {
   }))
 }
 
-interface Stored extends ApprovalDocument {
+/** 저장 행. `can_decide` 는 보는 사람마다 달라서 저장하지 않고 응답에서 만든다. */
+interface Stored extends Omit<ApprovalDocument, 'can_decide'> {
   drafter_id: string
 }
 
@@ -86,11 +88,16 @@ let seq = 1
 const now = () => new Date().toISOString()
 const daysAgo = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString()
 
-/** 저장 행 → 응답. `drafter_id` 는 목 내부용이라 뺀다. */
-function expose(doc: Stored): ApprovalDocument {
+/**
+ * 저장 행 → 응답. `drafter_id` 는 목 내부용이라 뺀다.
+ *
+ * `can_decide` 는 **서버가 판정해서 실어 준다.** 화면이 위임 목록을 따로 받아 스스로 재면
+ * 권한 판정이 UI 로 내려온다(루트 가드레일). 위임받은 사람에게 버튼을 그리려면 이 값이 필요하다.
+ */
+function expose(doc: Stored, viewer?: User): ApprovalDocument {
   const copy: Partial<Stored> = { ...doc }
   delete copy.drafter_id
-  return copy as ApprovalDocument
+  return { ...(copy as ApprovalDocument), can_decide: viewer ? !!actingFor(viewer, doc) : false }
 }
 
 function summarize(doc: Stored): ApprovalListItem {
@@ -98,6 +105,7 @@ function summarize(doc: Stored): ApprovalListItem {
   delete copy.subject
   delete copy.steps
   delete copy.closed_at
+  delete copy.can_decide
   return copy as ApprovalListItem
 }
 
@@ -212,7 +220,8 @@ export function listApprovals(user: User, box: ApprovalBox): ApprovalListItem[] 
   const mine = docs.filter((d) => {
     if (box === 'draft') return d.drafter_id === user.id && d.status === 'draft'
     if (box === 'sent') return d.drafter_id === user.id && d.status !== 'draft'
-    if (box === 'inbox') return d.status === 'pending' && d.waiting_on?.id === user.id
+    // 위임받은 사람도 여기서 본다. 안 그러면 대신 결재할 문서에 닿을 길이 없다.
+    if (box === 'inbox') return !!actingFor(user, d)
     // 상신하기 전에는 참조자에게 보이지 않는다. 기안자가 아직 고쳐 쓰는 중이다.
     return (
       d.status !== 'draft' &&
@@ -223,6 +232,9 @@ export function listApprovals(user: User, box: ApprovalBox): ApprovalListItem[] 
     .sort((a, b) => (b.submitted_at ?? b.created_at).localeCompare(a.submitted_at ?? a.created_at))
     .map(summarize)
 }
+
+/** 이미 처리가 끝난 단계. 회수 차단처럼 "누가 손댔는가" 를 묻는 자리는 전부 이걸 본다. */
+const DECIDED = new Set<ApprovalStep['status']>(['approved', 'rejected', 'delegated_done'])
 
 type StoredDelegation = Delegation & { owner_id: string }
 
@@ -236,9 +248,26 @@ function withoutOwner(row: StoredDelegation): Delegation {
 
 let delegationSeq = 1
 
-/** 오늘이 기간 안이고 유형이 맞는 위임. 없으면 `undefined`. */
+/**
+ * 유형이 위임을 허용하는지(13 §4.1). **모든 유형 위임이라도 꺼진 유형은 넘어가지 않는다.**
+ *
+ * 만들 때만 막고 쓸 때 안 보면, 특정 유형은 거부하면서 "모든 유형" 을 고르면 뚫리는 우회로가
+ * 된다. 지금 목에는 일반 기안 문서밖에 없어 이 줄이 실제로 걸리지는 않지만(다른 유형은
+ * `createDraft` 가 422 로 막는다), 이 목이 백엔드에 넘기는 규칙 제안서다.
+ */
+function delegatable(typeCode: ApprovalTypeCode): boolean {
+  return APPROVAL_TYPES.find((t) => t.code === typeCode)?.allow_delegate_decision ?? false
+}
+
+/**
+ * 오늘이 기간 안이고 유형이 맞는 위임. 없으면 `undefined`.
+ *
+ * 날짜는 **로컬 기준**이다(`toISODate`). UTC 로 재면 한국에서는 자정부터 오전 아홉 시까지 하루가
+ * 밀려, 오늘부터 건 위임이 아침 내내 안 먹고 끝난 위임이 다음 날 아침까지 살아 있다.
+ */
 function delegationFor(ownerId: string, delegateId: string, typeCode: ApprovalTypeCode) {
-  const today = new Date().toISOString().slice(0, 10)
+  if (!delegatable(typeCode)) return undefined
+  const today = toISODate(new Date())
   return delegations.find(
     (d) =>
       d.owner_id === ownerId &&
@@ -247,6 +276,21 @@ function delegationFor(ownerId: string, delegateId: string, typeCode: ApprovalTy
       today <= d.end_date &&
       (d.type_code === null || d.type_code === typeCode),
   )
+}
+
+/**
+ * 지금 이 문서를 처리할 수 있는 자리. 내 차례이거나, 지금 차례인 사람이 나에게 위임했을 때다.
+ *
+ * **받은 결재함·문서 열람·승인 처리가 같은 판정을 봐야 한다.** 세 곳이 따로 놀면 위임을 걸어도
+ * 그 사람은 문서에 닿지 못한다(목록에 없고, 주소로 들어가면 403 이고, 버튼이 안 그려진다).
+ */
+function actingFor(user: User, doc: Stored) {
+  if (doc.status !== 'pending') return undefined
+  const step = doc.steps.find((s) => s.status === 'waiting')
+  if (!step) return undefined
+  if (step.approver.id === user.id) return { step, delegation: undefined }
+  const delegation = delegationFor(step.approver.id, user.id, doc.type_code)
+  return delegation ? { step, delegation } : undefined
 }
 
 type Failure = { error: string; status: number; code: string }
@@ -259,6 +303,11 @@ export function getApproval(user: User, id: string): ApprovalDocument | Failure 
   if (!doc) return fail('문서를 찾을 수 없습니다.', 404, 'NOT_FOUND')
   const related =
     doc.drafter_id === user.id ||
+    // 대신 결재하려면 그 문서는 볼 수 있어야 한다. 지금 차례인 그 한 건만이다.
+    !!actingFor(user, doc) ||
+    // 대신 눌러 준 뒤에도 남는다. 누르자마자 다음 차례로 넘어가 그 문서를 잃으면,
+    // 방금 자기가 무엇을 승인했는지 확인할 길이 없다.
+    doc.steps.some((s) => s.acted_by?.id === user.id) ||
     // 참조자는 **상신한 뒤에만** 볼 수 있다. 목록도 같은 기준이다. 기안 때 고른 참조자가
     // `steps` 에 먼저 들어가므로, 여기서 안 막으면 주소만 바꿔 남의 초안을 열 수 있다.
     doc.steps.some(
@@ -266,7 +315,7 @@ export function getApproval(user: User, id: string): ApprovalDocument | Failure 
     ) ||
     user.role === 'exec'
   if (!related) return fail('열람 권한이 없습니다.', 403, 'FORBIDDEN')
-  return expose(doc)
+  return expose(doc, user)
 }
 
 /** 생성·갱신이 같은 검증을 탄다. 어느 경로로 들어와도 서버는 같은 것을 막는다. */
@@ -296,7 +345,7 @@ export function createDraft(user: User, input: DraftInput): ApprovalDocument | F
   seed()
   const invalid = validate(input)
   if (invalid) return invalid
-  return expose(create(user, input))
+  return expose(create(user, input), user)
 }
 
 export function updateDraft(user: User, id: string, input: DraftInput): ApprovalDocument | Failure {
@@ -311,7 +360,7 @@ export function updateDraft(user: User, id: string, input: DraftInput): Approval
   doc.related = input.subject.related
   // 안 보내면 그대로 둔다. 빈 배열은 "전부 해제" 라서 둘을 갈라야 한다.
   if (input.references !== undefined) doc.steps = referenceSteps(input.references, 1)
-  return expose(doc)
+  return expose(doc, user)
 }
 
 export function submitApproval(user: User, id: string): ApprovalDocument | Failure {
@@ -320,7 +369,7 @@ export function submitApproval(user: User, id: string): ApprovalDocument | Failu
   if (doc.status !== 'draft') return fail('이미 상신한 문서입니다.', 409, 'NOT_DRAFT')
   if (!doc.subject.body.trim()) return fail('본문을 입력해 주세요.', 422, 'VALIDATION')
   submit(doc)
-  return expose(doc)
+  return expose(doc, user)
 }
 
 /** 회수. 승인된 단계가 있으면 409(13 FR-APV-06). */
@@ -329,7 +378,9 @@ export function cancelApproval(user: User, id: string): ApprovalDocument | Failu
   if (!doc || doc.drafter_id !== user.id) return fail('문서를 찾을 수 없습니다.', 404, 'NOT_FOUND')
   if (doc.status !== 'pending')
     return fail('대기 중인 문서만 회수할 수 있습니다.', 409, 'NOT_PENDING')
-  if (doc.steps.some((s) => s.status === 'approved')) {
+  // 대결 승인은 `delegated_done` 이라 `approved` 만 보면 빠져나간다. 남이 대신 승인해 준 결재를
+  // 기안자가 조용히 거둘 수 있게 된다.
+  if (doc.steps.some((s) => DECIDED.has(s.status))) {
     return fail(
       '이미 승인된 단계가 있어 회수할 수 없습니다. 반려를 요청하세요.',
       409,
@@ -337,7 +388,7 @@ export function cancelApproval(user: User, id: string): ApprovalDocument | Failu
     )
   }
   close(doc, 'canceled')
-  return expose(doc)
+  return expose(doc, user)
 }
 
 /**
@@ -364,14 +415,20 @@ export function forceClose(user: User, id: string, reason: string): ApprovalDocu
     step.acted_at = at
   }
   close(doc, 'closed', at)
-  return expose(doc)
+  return expose(doc, user)
 }
 
 /** 내가 건 위임만 돌려준다. 남이 나에게 건 위임은 그 사람 설정이다. */
 export function listDelegations(user: User): Delegation[] {
   seed()
   // 저장소에만 있는 `owner_id` 는 응답에서 뺀다. 내 목록이라 누구 것인지는 물을 필요가 없다.
-  return delegations.filter((d) => d.owner_id === user.id).map(withoutOwner)
+  // 지금 유효한 것을 위로 올린다. 해제하지 않으면 지난 위임이 계속 쌓인다.
+  const today = toISODate(new Date())
+  const live = (d: StoredDelegation) => d.start_date <= today && today <= d.end_date
+  return delegations
+    .filter((d) => d.owner_id === user.id)
+    .sort((a, b) => Number(live(b)) - Number(live(a)) || b.start_date.localeCompare(a.start_date))
+    .map(withoutOwner)
 }
 
 export function createDelegation(user: User, input: DelegationInput): Delegation | Failure {
@@ -415,6 +472,7 @@ export function createDelegation(user: User, input: DelegationInput): Delegation
 }
 
 export function deleteDelegation(user: User, id: string): Failure | null {
+  seed()
   const index = delegations.findIndex((d) => d.id === id && d.owner_id === user.id)
   if (index < 0) return fail('위임을 찾을 수 없습니다.', 404, 'NOT_FOUND')
   delegations.splice(index, 1)
@@ -433,16 +491,11 @@ export function decide(
 ): ApprovalDocument | Failure {
   const doc = docs.find((d) => d.id === id)
   if (!doc) return fail('문서를 찾을 수 없습니다.', 404, 'NOT_FOUND')
-  const step = doc.steps.find((s) => s.status === 'waiting')
   // 위임받은 사람도 처리할 수 있다(대결, 13 §4.2.3). 원 결재자 이름은 단계에 그대로 남고
   // 실제 처리자만 `acted_by` 로 붙는다.
-  const delegated =
-    !!step && step.approver.id !== user.id
-      ? delegationFor(step.approver.id, user.id, doc.type_code)
-      : undefined
-  if (doc.status !== 'pending' || !step || (step.approver.id !== user.id && !delegated)) {
-    return fail('처리할 차례가 아닙니다.', 403, 'NOT_YOUR_TURN')
-  }
+  const acting = actingFor(user, doc)
+  if (!acting) return fail('처리할 차례가 아닙니다.', 403, 'NOT_YOUR_TURN')
+  const { step, delegation: delegated } = acting
   if (step.version !== version)
     return fail('문서가 그새 바뀌었습니다. 새로고침해 주세요.', 409, 'VERSION_CONFLICT')
   if (action === 'reject' && !text?.trim())
@@ -464,5 +517,5 @@ export function decide(
     if (doc.steps.some((s) => s.status === 'waiting')) currentOf(doc)
     else close(doc, 'approved', at)
   }
-  return expose(doc)
+  return expose(doc, user)
 }
