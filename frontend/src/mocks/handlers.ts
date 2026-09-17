@@ -53,6 +53,7 @@ import {
 } from './docsDb'
 import {
   attendanceMonth,
+  attendanceRange,
   companyAttendance,
   cancelException,
   createArrangement,
@@ -86,6 +87,7 @@ import { createEvent, deleteEvent, listEvents } from './eventsDb'
 import {
   cancelLeave,
   createLeave,
+  ISO_DATE,
   LEAVE_TYPES,
   leaveBalance,
   listBalances,
@@ -97,6 +99,9 @@ function authenticate(): User | undefined {
   // 세션은 쿠키다(04 §1). 핸들러는 페이지 안에서 돌므로 document.cookie 를 그대로 읽는다.
   return userFromCookie(document.cookie)
 }
+
+/** 기간 집계가 한 번에 훑는 최대 길이. 목이 달마다 근무일을 만들어 내서 무한정 늘릴 수 없다. */
+const RANGE_MAX_DAYS = 366
 
 /** 사내망 파일 업로드 상한. 실제 서버(FastAPI)도 같은 값을 강제해야 한다. */
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024
@@ -587,6 +592,25 @@ export const handlers = [
   }),
 
   // ── 근태 · 내 근태 (04 §10.1) ─────────────────────────────
+  // 기간 집계(04 §10.1). `/api/attendance/me` 보다 먼저 등록할 필요는 없다(세그먼트 수가 다르다).
+  http.get(
+    '/api/attendance/me/summary',
+    authed((user, request) => {
+      const params = new URL(request.url).searchParams
+      const from = params.get('from') ?? ''
+      const to = params.get('to') ?? ''
+      if (!ISO_DATE.test(from) || !ISO_DATE.test(to)) {
+        return validationError('from·to 는 YYYY-MM-DD 입니다.')
+      }
+      if (from > to) return validationError('from 이 to 보다 뒤입니다.')
+      const span = (Date.parse(to) - Date.parse(from)) / 86_400_000 + 1
+      if (span > RANGE_MAX_DAYS) {
+        return validationError(`기간은 ${RANGE_MAX_DAYS}일까지 볼 수 있습니다.`)
+      }
+      return HttpResponse.json(attendanceRange(user, from, to))
+    }),
+  ),
+
   http.get(
     '/api/attendance/me',
     authed((user, request) => {

@@ -9,6 +9,7 @@ import { HolidaySection } from '@/features/attendance/HolidaySection'
 import { LeaveAdminSection } from '@/features/attendance/LeaveAdminSection'
 import { LeaveSection } from '@/features/attendance/LeaveSection'
 import { MonthClosingSection } from '@/features/attendance/MonthClosingSection'
+import { RangeSummarySection } from '@/features/attendance/RangeSummarySection'
 import { MyAttendanceSection } from '@/features/attendance/MyAttendanceSection'
 import { useCurrentUser } from '@/features/auth/AuthContext'
 import { ROLE_RANK } from '@/types'
@@ -82,6 +83,7 @@ export function AttendancePage() {
           ) : (
             <div className="space-y-6">
               <MyAttendanceSection />
+              <RangeSummarySection />
               <PlaceholderPanel
                 icon={Clock}
                 milestone="일정 미확정 (설계서 §12)"

@@ -128,6 +128,19 @@ export interface AttendanceMonth {
 }
 
 /**
+ * `GET /attendance/me/summary?from=&to=` 응답. 기간 집계다(04 §10.1).
+ *
+ * **응답 모양은 계약에 없다**(경로만 스텁으로 있다). 달 조회와 같은 집계 키를 쓰고 날짜 범위를
+ * 되돌려 준다고 가정했다. 일자 배열은 싣지 않는다. 기간이 길면 그게 응답의 대부분이 되는데
+ * 화면은 합계만 그린다.
+ */
+export interface AttendanceRange {
+  from: string
+  to: string
+  summary: AttendanceMonth['summary']
+}
+
+/**
  * 전사 근태 그리드 한 행(임원). 사람마다 `GET /attendance/me` 와 같은 달력·집계에 누구인지가 붙는다.
  * 04 §10.5 `GET /attendance/team?month=&team_id=` 를 `team_id` 없이 부르면 전사(exec 전용)로 가정한 프론트 확장(PR 본문).
  * 이 회사에는 팀장이 없어(조직도) 팀 단위 조회는 쓰지 않는다.

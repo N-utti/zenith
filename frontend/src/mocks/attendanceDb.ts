@@ -5,6 +5,7 @@ import type {
   ArrangementOnCalendar,
   AttendanceDay,
   AttendanceMonth,
+  AttendanceRange,
   Correction,
   CorrectionInput,
   Overtime,
@@ -359,6 +360,33 @@ export function attendanceMonth(user: User, month: string): AttendanceMonth {
       night_minutes: days.reduce((sum, d) => sum + d.night_minutes, 0),
     },
   }
+}
+
+/**
+ * 기간 집계(`GET /attendance/me/summary`). 달 조회를 구간만큼 돌려 합친다.
+ *
+ * "근무" 는 달 집계와 같은 규칙으로 **지난 날만** 센다. 안 그러면 올해 전체를 고른 순간 남은
+ * 달의 근무일까지 미리 세어 실제보다 크게 나온다.
+ */
+export function attendanceRange(user: User, from: string, to: string): AttendanceRange {
+  const summary = { worked_days: 0, leave_days: 0, overtime_minutes: 0, night_minutes: 0 }
+  const today = toISODate(new Date())
+  const cursor = new Date(`${from.slice(0, 7)}-01T00:00:00`)
+  const last = to.slice(0, 7)
+
+  while (toISODate(cursor).slice(0, 7) <= last) {
+    const month = toISODate(cursor).slice(0, 7)
+    for (const day of attendanceMonth(user, month).days) {
+      if (day.work_date < from || day.work_date > to) continue
+      if (day.work_date <= today) summary.worked_days += day.worked_days
+      if (day.status === 'leave') summary.leave_days += 1
+      if (day.status === 'half_leave') summary.leave_days += 0.5
+      summary.overtime_minutes += day.overtime_minutes
+      summary.night_minutes += day.night_minutes
+    }
+    cursor.setMonth(cursor.getMonth() + 1)
+  }
+  return { from, to, summary }
 }
 
 /** 전 직원의 한 달(전사 근태 탭). 권한 판정은 핸들러가 한다. */
