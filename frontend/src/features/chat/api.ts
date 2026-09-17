@@ -54,3 +54,20 @@ export function useMarkRead() {
     },
   })
 }
+
+/**
+ * 공개 채널 또는 DM 을 만든다. 서버가 둘 중 하나만 받는다(`ChannelCreateIn`).
+ *
+ * 공개 채널은 만드는 순간 전원이 멤버다(15명 사내, 초대·탈퇴 없음). DM 은 같은 두 사람의
+ * 것이 이미 있으면 새로 만들지 않고 그것을 돌려준다.
+ */
+export function useCreateChannel() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { name: string } | { dm_user_id: string }) =>
+      api<ChatChannel>('/channels', { method: 'POST', body: JSON.stringify(input) }),
+    // 약속을 돌려준다. 목록이 갱신된 뒤에 호출부의 이동이 일어나야, 방금 만든 채널을
+    // 목록에서 못 찾아 "채널을 선택하세요" 가 한 번 스치는 일이 없다.
+    onSuccess: () => qc.invalidateQueries({ queryKey: chatKeys.channels }),
+  })
+}

@@ -168,9 +168,10 @@ export const handlers = [
   // 그대로 통과시킨다.
   //
   // 개발 릴레이(`scripts/chat.js`)가 실제로 여는 네 개만 넘긴다. `/api/channels/*` 로
-  // 뭉뚱그리면 아직 안 만든 채널 생성·첨부까지 삼켜 릴레이의 404로 조용히 떨어지고,
+  // 뭉뚱그리면 아직 안 만든 첨부까지 삼켜 릴레이의 404로 조용히 떨어지고,
   // 통과는 "처리됨"이라 onUnhandledRequest 경고도 안 뜬다.
   http.get('/api/channels', () => passthrough()),
+  http.post('/api/channels', () => passthrough()),
   http.all('/api/channels/:channelId/messages', () => passthrough()),
   http.post('/api/channels/:channelId/read', () => passthrough()),
 
