@@ -36,7 +36,11 @@ export function UnreadChatCard() {
                     }
                   >
                     {channel.is_dm ? (
-                      // 홈 한 벌에는 상대 이름만 오고 id 가 없다. 이름으로 색을 만든다.
+                      /*
+                       * 홈 한 벌의 `UnreadChannel` 에는 상대 id 가 없어 이름으로 색을 만든다.
+                       * 그래서 같은 사람이 채팅 사이드바(`hueOf(id)`)와 여기서 색이 다르다.
+                       * 백엔드에 `peer_id` 를 요청해 뒀다(PR 본문·README).
+                       */
                       <Avatar
                         name={channel.name}
                         hue={hueOf(channel.name)}

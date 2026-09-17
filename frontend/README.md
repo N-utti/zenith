@@ -133,6 +133,8 @@ v0.2 전제로 만들어진 구현을 전부 걷어냈다. `features/attendance/
 
 ```
 GET   /api/me/home                     대시보드 1콜 { recent_docs, mentions, unread, posts, todos }
+                                       `unread` 에 상대 id 가 없어 DM 아바타 색이 채팅 목록과 다르다
+                                       (백엔드에 `peer_id` 요청함)
                                        공지는 게시판에서, 멘션은 알림에서, 할 일은 할 일 저장소에서 온다
                                        안 읽은 대화만 개발 릴레이에 물어본다(목은 채팅 상태를 모른다)
 

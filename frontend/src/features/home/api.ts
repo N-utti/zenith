@@ -10,10 +10,7 @@ import type { CalendarEvent, CalendarEventInput, HomeData, TodayTask } from './t
  * `/tasks/today`) 넷 다 04 에 없는 프론트 전용 경로였다. 서버는 처음부터 한 벌로 준다.
  */
 export function useHome() {
-  return useQuery({
-    queryKey: homeKeys.home,
-    queryFn: () => api<HomeData>('/me/home'),
-  })
+  return useQuery({ queryKey: homeKeys.home, queryFn: fetchHome })
 }
 
 const todosKey = homeKeys.home
@@ -30,26 +27,39 @@ function patchTodos(qc: QueryClient, change: (todos: TodayTask[]) => TodayTask[]
   )
 }
 
-/** 홈 한 벌에서 카드가 쓸 조각만 꺼낸다. 로딩·실패 상태는 그대로 물려받는다. */
-function useHomeSlice<T>(pick: (data: HomeData) => T) {
-  const home = useHome()
-  return { ...home, data: home.data && pick(home.data) }
+/**
+ * 홈 한 벌에서 카드가 쓸 조각만 구독한다.
+ *
+ * `select` 로 꺼내면 react-query 가 구조적 공유 뒤에 그 조각만 비교하므로, 할 일 하나를
+ * 체크해도 조각이 안 바뀐 카드는 다시 그려지지 않는다. 고르는 함수는 모듈 상수여야 그 비교가
+ * 산다(매 렌더 새 함수면 매번 다시 고른다).
+ */
+function useHomeSlice<T>(select: (data: HomeData) => T) {
+  return useQuery({ queryKey: homeKeys.home, queryFn: fetchHome, select })
 }
 
+const fetchHome = () => api<HomeData>('/me/home')
+
+const pickPosts = (data: HomeData) => data.posts
+const pickRecentDocs = (data: HomeData) => data.recent_docs
+const pickMentions = (data: HomeData) => data.mentions
+const pickUnread = (data: HomeData) => data.unread
+const pickTodos = (data: HomeData) => data.todos
+
 export function useAnnouncements() {
-  return useHomeSlice((data) => data.posts)
+  return useHomeSlice(pickPosts)
 }
 
 export function useRecentDocs() {
-  return useHomeSlice((data) => data.recent_docs)
+  return useHomeSlice(pickRecentDocs)
 }
 
 export function useMentions() {
-  return useHomeSlice((data) => data.mentions)
+  return useHomeSlice(pickMentions)
 }
 
 export function useUnreadChannels() {
-  return useHomeSlice((data) => data.unread)
+  return useHomeSlice(pickUnread)
 }
 
 /**
@@ -59,7 +69,7 @@ export function useUnreadChannels() {
  * 같은 것을 두 번 받는다.
  */
 export function useTodayTasks() {
-  return useHomeSlice((data) => data.todos)
+  return useHomeSlice(pickTodos)
 }
 
 /*

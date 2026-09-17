@@ -1,5 +1,16 @@
 import type { Role } from '@/types'
 
+/**
+ * 게시판 목록·홈 공지에 붙는 짧은 표기. `min_role` 하나로 만든다.
+ *
+ * 홈 한 벌의 공지에는 게시판 목록이 따로 오지 않아, 등급에서 바로 뽑아야 한다.
+ */
+export const BOARD_BADGE: Record<Role, string> = {
+  member: '전체',
+  lead: '팀장↑',
+  exec: '임원',
+}
+
 export interface Board {
   id: string
   name: string

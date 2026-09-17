@@ -1,4 +1,4 @@
-import { delay, http, HttpResponse, passthrough } from 'msw'
+import { bypass, delay, http, HttpResponse, passthrough } from 'msw'
 import type { User } from '@/types'
 import { BODY_MAX, TITLE_MAX } from '@/features/board/types'
 import { DEMO_PASSWORD } from './accounts'
@@ -10,6 +10,7 @@ import {
   canRead,
   createPost,
   deletePost,
+  homePosts,
   findPost,
   listBoards,
   listPosts,
@@ -104,7 +105,10 @@ const notFound = (detail = '문서를 찾을 수 없습니다.') =>
  */
 async function unreadChannels() {
   try {
-    const res = await fetch('/api/channels')
+    // `bypass` 로 이 요청이 목을 다시 타지 않게 못 박는다. 지금은 `/api/channels` 가
+    // passthrough 라 우연히 맞지만, 나중에 거기 진짜 핸들러가 들어오면 목이 목을 부른다.
+    // 릴레이가 떠 있으면서 응답하지 않으면 홈 카드 다섯 장이 전부 스켈레톤에 묶이므로 끊어 준다.
+    const res = await fetch(bypass('/api/channels'), { signal: AbortSignal.timeout(2000) })
     if (!res.ok) return []
     const { items } = (await res.json()) as {
       items: { id: string; name: string; is_dm: boolean; unread: number }[]
@@ -379,11 +383,11 @@ export const handlers = [
     const user = authenticate()
     if (!user) return unauthorized()
     return HttpResponse.json({
-      recent_docs: recentDocs(8),
+      recent_docs: recentDocs(user, 8),
       mentions: listMentionNotifications(user, 10),
       unread: await unreadChannels(),
-      posts: listPosts(user).slice(0, 3),
-      todos: listTasks(),
+      posts: homePosts(user, 3),
+      todos: listTasks().slice(0, 200),
     })
   }),
 

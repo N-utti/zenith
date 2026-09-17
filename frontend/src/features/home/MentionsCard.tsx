@@ -16,10 +16,13 @@ export function MentionsCard() {
   const { data, isPending, isError } = useMentions()
 
   // 그릴 수 있는 것만 남긴다. 모르는 종류가 와도 빈 줄이 생기지 않는다.
-  const rows = (data ?? []).flatMap((notification) => {
-    const view = notificationView(notification)
-    return view?.to ? [{ notification, view }] : []
-  })
+  // 서버는 열 건까지 주지만 카드에는 세 줄만 둔다(12 UI 청사진).
+  const rows = (data ?? [])
+    .flatMap((notification) => {
+      const view = notificationView(notification)
+      return view?.to ? [{ notification, view }] : []
+    })
+    .slice(0, 3)
 
   return (
     <HomeSection title="나에게 온 멘션 & 댓글" to="/notifications">

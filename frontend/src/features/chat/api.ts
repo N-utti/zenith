@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
+import { homeKeys } from '@/features/home/keys'
 import type { ChatAttachment, ChatChannel, ChatMessage } from './types'
 
 /**
@@ -51,6 +52,8 @@ export function useMarkRead() {
       api<{ ok: true }>(`/channels/${channelId}/read`, { method: 'POST' }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: chatKeys.channels })
+      // 홈의 안 읽은 대화도 같은 숫자를 본다. 다 읽고 홈으로 가면 배지가 사라져야 한다.
+      void qc.invalidateQueries({ queryKey: homeKeys.home })
     },
   })
 }

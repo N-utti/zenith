@@ -171,16 +171,17 @@ export function listDocs(query: string): DocSummary[] {
  * 홈의 "이어서 작업". 백엔드 `RecentDoc` 과 같은 모양이다. 문서 목록의 `DocSummary` 와 달리
  * 폴더 경로(`path`)가 실려 있다.
  */
-export function recentDocs(limit: number): RecentDoc[] {
-  return listDocs('')
-    .slice(0, limit)
-    .map((doc) => ({
-      id: doc.id,
-      title: doc.title,
-      path: folderPath(doc.folder_id),
-      updated_at: doc.updated_at,
-      updated_by: doc.updated_by,
-    }))
+export function recentDocs(user: User, limit: number): RecentDoc[] {
+  const alive = listDocs('')
+  // 내가 마지막으로 손댄 문서가 먼저다. 하나도 없으면(신입) 전사 최근으로 채운다.
+  const mine = alive.filter((doc) => doc.updated_by?.id === user.id)
+  return (mine.length > 0 ? mine : alive).slice(0, limit).map((doc) => ({
+    id: doc.id,
+    title: doc.title,
+    path: folderPath(doc.folder_id),
+    updated_at: doc.updated_at,
+    updated_by: doc.updated_by,
+  }))
 }
 
 /** 최상위부터의 폴더 이름. 고리가 있어도 멈춘다. */

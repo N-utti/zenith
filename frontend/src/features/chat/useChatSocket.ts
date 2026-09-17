@@ -3,6 +3,7 @@ import { useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { useCurrentUser } from '@/features/auth/AuthContext'
 import { notify } from '@/lib/desktop'
 import { wsUrl } from '@/lib/serverOrigin'
+import { homeKeys } from '@/features/home/keys'
 import { chatKeys } from './api'
 import type { ChatChannel, ChatEvent, ChatMessage } from './types'
 
@@ -32,9 +33,7 @@ function notifyIncoming(qc: QueryClient, message: ChatMessage, currentUserId: st
 
   // DM은 채널명이 곧 상대 이름이라 "정성운 · 정성운"이 되므로 이름만 쓴다.
   const title =
-    channel && !channel.is_dm
-      ? `#${channel.name} · ${message.author.name}`
-      : message.author.name
+    channel && !channel.is_dm ? `#${channel.name} · ${message.author.name}` : message.author.name
 
   void notify({ title, body: message.body })
 }
@@ -102,12 +101,16 @@ export function useChatSocket(): ChatSocket {
             },
           )
           void qc.invalidateQueries({ queryKey: chatKeys.channels })
+          // 홈의 안 읽은 대화도 같은 숫자를 본다. 홈에 머무는 동안 배지가 안 늘면 안 된다.
+          void qc.invalidateQueries({ queryKey: homeKeys.home })
           notifyIncoming(qc, message, user.id)
           return
         }
 
         if (event.type === 'read') {
           void qc.invalidateQueries({ queryKey: chatKeys.channels })
+          // 홈의 안 읽은 대화도 같은 숫자를 본다. 홈에 머무는 동안 배지가 안 늘면 안 된다.
+          void qc.invalidateQueries({ queryKey: homeKeys.home })
           return
         }
 

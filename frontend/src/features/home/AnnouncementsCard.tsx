@@ -1,11 +1,10 @@
-import { Pin } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { Card, CardEmpty } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { MaskedRow } from '@/components/ui/MaskedRow'
 import { SkeletonRows } from '@/components/ui/Skeleton'
 import { formatRelative } from '@/lib/datetime'
-import { useBoards } from '@/features/board/api'
+import { BOARD_BADGE } from '@/features/board/types'
 import { HomeSection } from './HomeSection'
 import { useAnnouncements } from './api'
 
@@ -13,8 +12,6 @@ const ROW = 'block px-4 py-3.5'
 
 export function AnnouncementsCard() {
   const { data, isPending, isError } = useAnnouncements()
-  const { data: boards } = useBoards()
-  const badgeOf = (boardId: string) => boards?.items.find((b) => b.id === boardId)?.badge ?? ''
 
   return (
     <HomeSection title="공지 게시판" to="/board">
@@ -27,15 +24,12 @@ export function AnnouncementsCard() {
             <CardEmpty>새 공지가 없습니다.</CardEmpty>
           ) : (
             <ul>
-              {data.map((item, index) => {
+              {data.slice(0, 3).map((item, index) => {
                 const divider = index > 0 ? 'border-line border-t' : ''
 
                 const inner = (
                   <>
                     <p className="flex items-center gap-1.5">
-                      {item.pinned && !item.masked && (
-                        <Pin className="text-accent size-3.5 shrink-0" />
-                      )}
                       <span
                         className={cn(
                           'truncate text-[13px] font-semibold',
@@ -44,12 +38,12 @@ export function AnnouncementsCard() {
                       >
                         {item.title}
                       </span>
-                      <Badge className="ml-auto shrink-0">{badgeOf(item.boardId)}</Badge>
+                      <Badge className="ml-auto shrink-0">{BOARD_BADGE[item.min_role]}</Badge>
                     </p>
                     <p className="text-subtle mt-1 text-[11px]">
                       {item.masked
                         ? '열람 권한 없음'
-                        : `${item.author?.name ?? '알 수 없음'} · ${formatRelative(item.createdAt)}`}
+                        : `${item.author?.name ?? '알 수 없음'} · ${formatRelative(item.created_at)}`}
                     </p>
                   </>
                 )
@@ -59,7 +53,7 @@ export function AnnouncementsCard() {
                   <li key={item.id}>
                     <MaskedRow
                       masked={item.masked}
-                      to={item.masked ? undefined : `/board/${item.boardId}/${item.id}`}
+                      to={item.masked ? undefined : `/board/${item.board_id}/${item.id}`}
                       className={cn(ROW, divider)}
                     >
                       {inner}
