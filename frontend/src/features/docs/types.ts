@@ -50,7 +50,7 @@ export interface DocDetail extends DocSummary {
 
 /**
  * 새 문서를 열며 `navigate('/docs/:id', { state })` 로 실어 보내는 초안. AI 답변 "문서로 저장"이 쓴다.
- * 서버 `POST /documents` 가 본문을 받지 않아(backend/README §3 (d)) 초안은 브라우저가 Y.Doc 에 심는다.
+ * 서버 `POST /docs` 가 본문을 받지 않아(backend/README §3 (d)) 초안은 브라우저가 Y.Doc 에 심는다.
  */
 export interface DocSeedState {
   seedHtml: string

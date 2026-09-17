@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
+import { docKeys } from '@/features/docs/api'
 import type { DocSummary } from '@/features/docs/types'
 import type { BoardPost } from '@/features/board/types'
 import type { CalendarEvent, CalendarEventInput, Mention, TodayTask } from './types'
@@ -13,8 +14,8 @@ export function useAnnouncements() {
 
 export function useRecentDocs() {
   return useQuery({
-    queryKey: ['documents', 'recent', { limit: 4 }],
-    queryFn: () => api<{ items: DocSummary[] }>('/documents/recent?limit=4'),
+    queryKey: [...docKeys.recent, { limit: 4 }],
+    queryFn: () => api<{ items: DocSummary[] }>('/docs/recent?limit=4'),
   })
 }
 

@@ -14,14 +14,14 @@ export const chatKeys = {
 export function useChannels() {
   return useQuery({
     queryKey: chatKeys.channels,
-    queryFn: () => api<{ items: ChatChannel[] }>('/chat/channels'),
+    queryFn: () => api<{ items: ChatChannel[] }>('/channels'),
   })
 }
 
 export function useMessages(channelId: string | null) {
   return useQuery({
     queryKey: chatKeys.messages(channelId ?? ''),
-    queryFn: () => api<{ items: ChatMessage[] }>(`/chat/channels/${channelId}/messages?limit=50`),
+    queryFn: () => api<{ items: ChatMessage[] }>(`/channels/${channelId}/messages?limit=50`),
     enabled: channelId !== null,
   })
 }
@@ -29,7 +29,7 @@ export function useMessages(channelId: string | null) {
 export function useSendMessage(channelId: string) {
   return useMutation({
     mutationFn: (body: string) =>
-      api<ChatMessage>(`/chat/channels/${channelId}/messages`, {
+      api<ChatMessage>(`/channels/${channelId}/messages`, {
         method: 'POST',
         body: JSON.stringify({ body }),
       }),
@@ -41,7 +41,9 @@ export function useMarkRead() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (channelId: string) =>
-      api<{ ok: true }>(`/chat/channels/${channelId}/read`, { method: 'POST' }),
+      // 04 에 없는 경로. 백엔드는 읽음을 WS 의 read 이벤트로 받는다(realtime/chat.py ReadOp).
+      // 그때까지 실제 백엔드에서는 404 다. 화면은 안 죽지만 안읽음 배지가 지워지지 않는다.
+      api<{ ok: true }>(`/channels/${channelId}/read`, { method: 'POST' }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: chatKeys.channels })
     },

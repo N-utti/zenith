@@ -14,7 +14,7 @@ const RECONNECT_MS = 2000
 
 /** 누구인지는 핸드셰이크에 실리는 세션 쿠키가 말한다(11 §7.5). URL 에 사용자 id 를 싣지 않는다. */
 function socketUrl(): string {
-  return wsUrl('/api/chat/ws')
+  return wsUrl('/api/ws')
 }
 
 /**

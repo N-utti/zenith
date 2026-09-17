@@ -5,13 +5,13 @@
  * 메시지를 B의 MSW는 알지 못한다. 공유 상태를 들고 있는 프로세스가 필요하다.
  *
  * ── 백엔드가 구현해야 할 것 ────────────────────────────────────
- * 앱은 `/api/chat/*` 으로 호출한다. vite가 여기로 넘길 뿐이므로, FastAPI가
- * 같은 경로·같은 모양으로 응답하면 앱 코드는 그대로다.
+ * 앱은 백엔드와 같은 경로(`/api/channels*`, `/api/ws`)로 호출한다. vite가 앞의 `/api` 를
+ * `/chat` 으로 바꿔 여기로 넘길 뿐이므로, 백엔드에 붙일 때 앱 코드는 그대로다.
  *
  *   GET  /channels                    사용자별 목록 (안읽음·마지막 메시지 포함)
  *   GET  /channels/:id/messages       최근 메시지
- *   POST /channels/:id/messages       전송 → 구독자에게 WS 브로드캐스트
- *   POST /channels/:id/read           읽음 처리
+ *   POST /channels/:id/messages       전송 (04 에 없다. 백엔드는 WS 의 msg op)
+ *   POST /channels/:id/read           읽음 처리 (04 에 없다. 백엔드는 WS 의 read 이벤트로 받는다)
  *   WS   /ws                          message · typing · read 이벤트
  *
  * 인증은 MSW 로그인이 심는 세션 쿠키(zenith.mock.session=<userId>)로만 한다. 실제 백엔드가
