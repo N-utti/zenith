@@ -28,3 +28,13 @@ it('태그가 들어와도 글자일 뿐이다. HTML 로 그리지 않는다', (
     { text: '히트', hit: true },
   ])
 })
+
+it('서버가 이스케이프한 엔티티를 되돌린다. 글자로 그리기 때문이다', () => {
+  // 실제 서버가 보내는 모양이다(`escape(raw, quote=False)`).
+  expect(parseSnippet('&lt;svg onload=alert(1)&gt; **A&amp;B**')).toEqual([
+    { text: '<svg onload=alert(1)> ', hit: false },
+    { text: 'A&B', hit: true },
+  ])
+  // `&amp;` 를 먼저 풀면 `&amp;lt;` 가 `<` 로 잘못 접힌다. 본문에 적힌 «&lt;» 는 그대로 남아야 한다.
+  expect(parseSnippet('&amp;lt; 로 적힌 글자')).toEqual([{ text: '&lt; 로 적힌 글자', hit: false }])
+})

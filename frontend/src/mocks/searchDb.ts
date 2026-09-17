@@ -1,6 +1,6 @@
 import type { SearchHit } from '@/features/search/types'
 import type { User } from '@/types'
-import { canRead, POSTS } from './boardDb'
+import { BOARD_DEFS, canRead, POSTS } from './boardDb'
 import { DOC_SEEDS, DOCS } from './docsDb'
 
 /**
@@ -14,10 +14,15 @@ import { DOC_SEEDS, DOCS } from './docsDb'
  * 프로세스에 있다. 실제 백엔드에 붙으면 그때 함께 나온다.
  */
 
+/** 백엔드가 그러듯 `<>&` 를 엔티티로 바꾼다. 화면이 되돌려 글자로 그린다. */
+function escapeText(text: string): string {
+  return text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
+}
+
 /** 본문에서 일치 부분을 찾아 앞뒤를 잘라 준다. 일치는 `**` 로 감싼다(백엔드와 같은 마커). */
 function snippet(text: string, needle: string): string {
   const at = text.toLowerCase().indexOf(needle)
-  if (at === -1) return text.slice(0, 80)
+  if (at === -1) return escapeText(text.slice(0, 80))
 
   const from = Math.max(0, at - 30)
   const head = from > 0 ? '…' : ''
@@ -25,7 +30,7 @@ function snippet(text: string, needle: string): string {
   const before = text.slice(from, at)
   const hit = text.slice(at, at + needle.length)
   const after = text.slice(at + needle.length, at + needle.length + 50)
-  return `${head}${before}**${hit}**${after}${tail}`
+  return `${head}${escapeText(before)}**${escapeText(hit)}**${escapeText(after)}${tail}`
 }
 
 /** 문서 본문은 Y.Doc 에 있고 목이 읽을 수 없다. 처음 심어 둔 초안에서 글자만 뽑아 쓴다. */
@@ -62,7 +67,7 @@ export function search(user: User, query: string, limit = 20): SearchHit[] {
       type: 'post',
       id: post.id,
       title: post.title,
-      sub: post.boardId === 'all' ? '전체 공지' : post.boardId === 'lead' ? '팀장 회의록' : '경영 보고',
+      sub: BOARD_DEFS.find((b) => b.id === post.boardId)?.name ?? post.boardId,
       snippet: snippet(post.body, q),
       to: `/board/${post.boardId}/${post.id}`,
       at: post.createdAt,

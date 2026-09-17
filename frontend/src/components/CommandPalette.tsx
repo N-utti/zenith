@@ -4,7 +4,8 @@ import { CornerDownLeft, FileText, MessagesSquare, Megaphone, Search, Sparkles }
 import { cn } from '@/lib/cn'
 import { formatRelative } from '@/lib/datetime'
 import { ALL_NAV } from '@/app/navigation'
-import { SEARCH_MAX, useSearch } from '@/features/search/api'
+import { useSearch } from '@/features/search/api'
+import { hitRows, paletteRows } from '@/features/search/rows'
 import { parseSnippet } from '@/features/search/snippet'
 import { SEARCH_TYPE_LABEL, type SearchHit } from '@/features/search/types'
 import type { AskState } from '@/features/ai/types'
@@ -23,7 +24,7 @@ function Snippet({ text }: { text: string }) {
     <>
       {parseSnippet(text).map((part, i) =>
         part.hit ? (
-          <mark key={i} className="bg-accent-soft text-accent rounded-sm bg-transparent font-semibold">
+          <mark key={i} className="text-fg bg-transparent font-semibold underline decoration-dotted">
             {part.text}
           </mark>
         ) : (
@@ -35,7 +36,8 @@ function Snippet({ text }: { text: string }) {
 }
 
 function HitRow({ hit, active }: { hit: SearchHit; active: boolean }) {
-  const Icon = HIT_ICONS[hit.type]
+  // 모르는 종류가 와도 줄은 그려진다. 아이콘 하나 때문에 목록이 통째로 죽으면 안 된다.
+  const Icon = HIT_ICONS[hit.type] ?? FileText
   return (
     <>
       <Icon className="mt-0.5 size-4.5 shrink-0" />
@@ -74,21 +76,34 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
   const [settled, setSettled] = useState('')
   const [cursor, setCursor] = useState(0)
   const timer = useRef<number | undefined>(undefined)
+  const activeRow = useRef<HTMLButtonElement>(null)
 
   useEffect(() => () => window.clearTimeout(timer.current), [])
 
-  const { data: hits = [], isFetching } = useSearch(settled)
+  const { data, isFetching, isError } = useSearch(settled)
+  const searching = query.trim().length > 0
+  // 타자가 멈추기 전에는 아직 보내지도 않았다. 그 사이 "없습니다" 가 번쩍이면 안 된다.
+  const pending = isFetching || settled !== query.trim()
 
   const navItems = useMemo(() => {
     const q = query.trim().toLowerCase()
     return q ? ALL_NAV.filter((item) => item.label.toLowerCase().includes(q)) : ALL_NAV
   }, [query])
 
-  // 키보드 커서는 세 덩어리를 하나로 이어 센다. 화면 이동 → 검색 결과 → AI 행.
-  const askIndex = navItems.length + hits.length
-  const count = askIndex + 1
+  /*
+   * 그려지는 것과 커서가 세는 것이 같은 배열이어야 한다. 검색어를 지우면 결과 구획은
+   * 사라지는데 직전 결과는 캐시에 남으므로(`keepPreviousData` 는 꺼진 쿼리에도 걸린다),
+   * 둘을 따로 세면 아무것도 강조되지 않는 구간이 생기고 거기서 Enter 가 안 보이는 문서로 간다.
+   */
+  const rows = paletteRows(navItems, searching ? (data ?? []) : [])
+  const hits = hitRows(rows)
+  const askIndex = rows.length - 1
   // 필터로 목록이 줄어들면 커서가 범위를 벗어날 수 있다.
-  const active = Math.min(cursor, count - 1)
+  const active = Math.min(cursor, rows.length - 1)
+
+  // 결과가 20행까지 붙으면 강조된 행이 보이는 영역 밖으로 나간다. 커서가 어디 있는지
+  // 모른 채 Enter 를 누르게 된다.
+  useEffect(() => activeRow.current?.scrollIntoView({ block: 'nearest' }), [active])
 
   const go = (to: string, state?: AskState) => {
     onClose()
@@ -96,33 +111,34 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
   }
   const ask = () => go('/ai', query.trim() ? { ask: query.trim() } : undefined)
 
+  // 입력값 자체는 자르지 않는다. 이 값은 검색에만 쓰이는 게 아니라 "AI에게 물어보기" 가
+  // 그대로 넘기는 문장이기도 하다. 검색 API 의 200자 제한은 `useSearch` 가 혼자 본다.
   const onType = (value: string) => {
-    setQuery(value.slice(0, SEARCH_MAX))
+    setQuery(value)
     setCursor(0)
     window.clearTimeout(timer.current)
-    timer.current = window.setTimeout(() => setSettled(value.slice(0, SEARCH_MAX)), TYPING_PAUSE_MS)
+    timer.current = window.setTimeout(() => setSettled(value), TYPING_PAUSE_MS)
   }
 
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape') return onClose()
     if (e.key === 'ArrowDown') {
       e.preventDefault()
-      setCursor((active + 1) % count)
+      setCursor((active + 1) % rows.length)
     }
     if (e.key === 'ArrowUp') {
       e.preventDefault()
-      setCursor((active - 1 + count) % count)
+      setCursor((active - 1 + rows.length) % rows.length)
     }
     // 한글 조합 확정 Enter 는 거른다(Textarea 와 같은 규약).
     if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
       e.preventDefault()
-      if (active === askIndex) ask()
-      else if (active < navItems.length) go(navItems[active].to)
-      else go(hits[active - navItems.length].to)
+      const row = rows[active]
+      if (row.kind === 'ask') ask()
+      else if (row.kind === 'nav') go(row.nav.to)
+      else go(row.hit.to)
     }
   }
-
-  const searching = query.trim().length > 0
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-[12vh]">
@@ -163,6 +179,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
             return (
               <button
                 key={item.to}
+                ref={i === active ? activeRow : undefined}
                 type="button"
                 onMouseEnter={() => setCursor(i)}
                 onClick={() => go(item.to)}
@@ -182,9 +199,14 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
             <>
               <p className="text-subtle px-2.5 pt-3 pb-1 text-[11px] font-semibold tracking-wide uppercase">
                 문서·채팅·게시글
-                {isFetching && <span className="ml-1.5 font-normal normal-case">찾는 중…</span>}
+                {pending && <span className="ml-1.5 font-normal normal-case">찾는 중…</span>}
               </p>
-              {hits.length === 0 && !isFetching && (
+              {isError && !pending && (
+                <p className="text-muted px-2.5 py-4 text-center text-sm">
+                  검색에 실패했습니다. 잠시 뒤에 다시 시도해 주세요.
+                </p>
+              )}
+              {!isError && hits.length === 0 && !pending && (
                 <p className="text-muted px-2.5 py-4 text-center text-sm">
                   “{query.trim()}” 에 맞는 내용이 없습니다.
                 </p>
@@ -194,6 +216,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
                 return (
                   <button
                     key={`${hit.type}-${hit.id}`}
+                    ref={index === active ? activeRow : undefined}
                     type="button"
                     onMouseEnter={() => setCursor(index)}
                     onClick={() => go(hit.to)}
@@ -212,6 +235,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
           {/* 목록이 길어도 항상 보이게 스크롤 영역 바닥에 붙인다. */}
           <div className="border-line bg-surface sticky bottom-0 mt-1.5 border-t pt-1.5">
             <button
+              ref={active === askIndex ? activeRow : undefined}
               type="button"
               onMouseEnter={() => setCursor(askIndex)}
               onClick={ask}
