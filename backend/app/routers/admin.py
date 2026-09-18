@@ -85,6 +85,14 @@ class TeamOut(BaseModel):
     name: str
 
 
+# ponytail: `teams.lead_id`(팀장)는 받지 않는다 — 지금 그 칸을 읽는 코드가 없다(근태 §10.3 의 "내 팀만"
+# 승인이 보류 중). 그때 `lead_id` 를 여기 더한다. 주석으로 두는 건 docstring 이 계약서(openapi)로 나가기 때문.
+class TeamIn(BaseModel):
+    """팀 생성·이름 변경 공용 본문. 앞뒤 공백은 다듬어 저장한다."""
+
+    name: Name
+
+
 class AuditOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -115,6 +123,12 @@ async def _revoke_sessions(db: AsyncSession, user_id: uuid.UUID) -> None:
     )
 
 
+async def _require_free_name(db: AsyncSession, name: str) -> None:
+    # 친절한 409 — 경합은 uq_teams_name 이 막고 IntegrityError 핸들러가 409 로 돌려준다(채널과 같은 방식)
+    if (await db.execute(select(Team.id).where(Team.name == name))).first():
+        raise ApiError(409, "CONFLICT", "같은 이름의 팀이 있습니다.")
+
+
 async def _require_team(db: AsyncSession, team_id: uuid.UUID | None) -> None:
     # 외래키 위반을 commit 에서 맞으면 500 이 된다. 미리 확인해 422 로 돌려준다.
     if team_id is not None and await db.get(Team, team_id) is None:
@@ -127,8 +141,73 @@ async def _require_team(db: AsyncSession, team_id: uuid.UUID | None) -> None:
     summary="팀 목록 — 계정의 team_id 를 이름으로 풀고 배정 후보를 준다",
 )
 async def list_teams(db: AsyncSession = Depends(get_db)) -> list[Team]:
-    # 팀을 만들거나 이름을 바꾸는 경로는 없다(지금은 seed 가 넣는다) — 필요해지면 POST·PATCH 를 더한다.
     return list((await db.execute(select(Team).order_by(Team.name))).scalars())
+
+
+@router.post(
+    "/admin/teams",
+    status_code=201,
+    response_model=TeamOut,
+    summary="팀 생성 — 이름 중복 409",
+    responses={409: {"description": "CONFLICT — 같은 이름의 팀"}},
+)
+async def create_team(
+    body: TeamIn,
+    request: Request,
+    actor: User = Depends(require_exec),
+    db: AsyncSession = Depends(get_db),
+) -> Team:
+    await _require_free_name(db, body.name)
+    team = Team(name=body.name)
+    db.add(team)
+    await db.flush()  # id 를 받는다 — expire_on_commit=False 라 commit 뒤 refresh 는 필요 없다
+    audit.record(
+        db,
+        "admin.team_created",
+        request=request,
+        actor_id=actor.id,
+        target_id=team.id,
+        detail={"name": team.name},
+    )
+    await db.commit()
+    return team
+
+
+@router.patch(
+    "/admin/teams/{team_id}",
+    response_model=TeamOut,
+    summary="팀 이름 변경 — 소속 계정은 그대로",
+    responses={
+        404: {"description": "NOT_FOUND — 없는 팀"},
+        409: {"description": "CONFLICT — 같은 이름의 팀"},
+    },
+)
+async def update_team(
+    team_id: uuid.UUID,
+    body: TeamIn,
+    request: Request,
+    actor: User = Depends(require_exec),
+    db: AsyncSession = Depends(get_db),
+) -> Team:
+    team = await db.get(Team, team_id)
+    if team is None:
+        raise ApiError(404, "NOT_FOUND", "없는 팀입니다.")
+    before = team.name
+    if body.name == before:
+        return team  # 폼 전체를 보내는 화면이 저장을 누를 때마다 무변경 감사 줄이 쌓이지 않게
+    await _require_free_name(db, body.name)
+    team.name = body.name
+    await db.flush()
+    audit.record(
+        db,
+        "admin.team_updated",
+        request=request,
+        actor_id=actor.id,
+        target_id=team.id,
+        detail={"before": before, "after": team.name},
+    )
+    await db.commit()
+    return team
 
 
 @router.get("/admin/users", response_model=list[UserOut], summary="계정 목록")

@@ -239,3 +239,72 @@ async def test_explicit_null_is_422_not_409(client: AsyncClient, users: Users) -
         headers=csrf(client),
     )
     assert r.status_code == 200 and r.json()["team_id"] is None
+
+
+async def test_team_create_and_rename(client: AsyncClient, users: Users, app_db) -> None:
+    """팀을 만들 수 없으면 목록도 seed 의 한 줄뿐이라 관리자 화면의 팀 배정이 무의미하다."""
+    await login(client, "sujin@zenith.co.kr")
+    since = datetime.now(UTC) - timedelta(minutes=1)
+    r = await client.post("/api/admin/teams", json={"name": "영업팀"}, headers=csrf(client))
+    assert r.status_code == 403
+    assert await audit.count_since(app_db, "acl.denied", since, path="/api/admin/teams") == 1
+
+    await login(client, "jaeho@zenith.co.kr")
+    r = await client.post("/api/admin/teams", json={"name": "  영업팀 "}, headers=csrf(client))
+    assert r.status_code == 201 and r.json()["name"] == "영업팀"  # 앞뒤 공백은 다듬어 저장
+    sales = r.json()["id"]
+    for bad in ("   ", "영업팀"):  # 공백만 422 · 같은 이름 409
+        r = await client.post("/api/admin/teams", json={"name": bad}, headers=csrf(client))
+        assert r.status_code == (422 if bad.isspace() else 409), bad
+
+    # 배정을 먼저 — 이름을 바꿔도 소속이 끊기지 않는지 보려면 순서가 이래야 한다
+    r = await client.patch(
+        f"/api/admin/users/{users.member.id}", json={"team_id": sales}, headers=csrf(client)
+    )
+    assert r.status_code == 200 and r.json()["team_id"] == sales
+
+    r = await client.patch(
+        f"/api/admin/teams/{sales}", json={"name": "세일즈팀"}, headers=csrf(client)
+    )
+    assert r.status_code == 200 and r.json()["name"] == "세일즈팀"
+    # 자기 이름 그대로 보내는 것은 통과(중복 검사가 자기 자신을 잡지 않는다), 남의 이름은 409
+    assert (
+        await client.patch(
+            f"/api/admin/teams/{sales}", json={"name": "세일즈팀"}, headers=csrf(client)
+        )
+    ).status_code == 200
+    assert (
+        await client.patch(
+            f"/api/admin/teams/{sales}", json={"name": "개발팀"}, headers=csrf(client)
+        )
+    ).status_code == 409
+    assert (
+        await client.patch(
+            "/api/admin/teams/00000000-0000-0000-0000-000000000000",
+            json={"name": "x"},
+            headers=csrf(client),
+        )
+    ).status_code == 404
+
+    # 목록은 이름순, 소속 계정은 이름이 바뀌어도 그대로
+    assert [t["name"] for t in (await client.get("/api/admin/teams")).json()] == [
+        "개발팀",
+        "세일즈팀",
+    ]
+    mine = next(
+        u for u in (await client.get("/api/admin/users")).json() if u["id"] == str(users.member.id)
+    )
+    assert mine["team_id"] == sales  # 이름이 바뀌어도 소속은 그대로
+    r = await client.post("/api/admin/teams", json={"name": "가" * 101}, headers=csrf(client))
+    assert r.status_code == 422  # 100자 상한
+
+    # 이름 변경도 exec 만 — 상태를 바꾸는 경로마다 거부를 잰다
+    await login(client, "sujin@zenith.co.kr")
+    r = await client.patch(
+        f"/api/admin/teams/{sales}", json={"name": "훔친 팀"}, headers=csrf(client)
+    )
+    assert r.status_code == 403
+    assert await audit.count_since(app_db, "acl.denied", since) == 2
+    assert await audit.count_since(app_db, "admin.team_created", since) == 1
+    # 무변경 PATCH 는 감사에 안 남는다 — 폼 전체를 보내는 화면이 저장할 때마다 줄이 쌓이지 않게
+    assert await audit.count_since(app_db, "admin.team_updated", since) == 1
