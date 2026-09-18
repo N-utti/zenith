@@ -166,7 +166,10 @@ async def _members_of(
 
 
 async def join_public_channels(db: AsyncSession, user_id: uuid.UUID) -> None:
-    """사용자를 모든 공개 채널에 넣는다(이미 있으면 건너뜀) — admin.create_user 와 seed 가 부른다. commit 은 호출한 쪽이."""
+    """사용자를 모든 공개 채널에 넣는다(이미 있으면 건너뜀) — admin.create_user 와 seed 가 부른다. commit 은 호출한 쪽이.
+
+    이 정책(공개 채널 = 전원) 위에 `routers/people.py` 의 "사람 목록은 전사 공개" 가 서 있다 —
+    초대제나 비공개 채널을 들이면 거기도 같이 좁힌다."""
     rows = [
         {"channel_id": cid, "user_id": user_id}
         for cid in (await db.execute(select(Channel.id).where(Channel.is_dm.is_(False)))).scalars()

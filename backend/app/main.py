@@ -21,6 +21,7 @@ from app.routers import (
     docs,
     files,
     me,
+    people,
     search,
 )
 
@@ -118,6 +119,7 @@ def create_app() -> FastAPI:
         me,
         docs,
         files,
+        people,
         channels,
         boards,
         search,

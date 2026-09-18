@@ -190,6 +190,9 @@ async def test_home_aggregates_for_member(client: AsyncClient, users: Users, app
     unread = {u["name"]: u for u in home["unread"]}
     assert unread["일반"]["count"] == 2 and unread["일반"]["is_dm"] is False
     assert unread["최재호"]["count"] == 1 and unread["최재호"]["is_dm"] is True
+    # DM 은 상대 id 도 — 홈과 채팅이 같은 아바타 색을 쓰려면 이름이 아니라 사람이 기준이어야 한다
+    assert unread["최재호"]["peer_id"] == str(users.exec.id)
+    assert unread["일반"]["peer_id"] is None
 
     # 공지 3건 최신순, 권한 밖은 제목 마스킹 + 작성자 숨김 (FR-HOM-04 · TC-BRD-01)
     posts = home["posts"]
@@ -326,3 +329,39 @@ async def test_notifications_list_and_read(client: AsyncClient, users: Users, ap
         await client.post("/api/me/notifications/read", json=too_many, headers=csrf(client))
     ).status_code == 422
     assert (await client.get("/api/me/notifications", params={"limit": 0})).status_code == 422
+
+
+async def test_unread_dm_peer_id_edges(client: AsyncClient, users: Users, app_db) -> None:
+    """DM 이름과 `peer_id` 는 한 사람에서 같이 나와야 한다(3인 DM) — 상대가 없으면 둘 다 없다."""
+    now = datetime.now(UTC)
+    ws = Workspace(name="제니스")
+    app_db.add(ws)
+    await app_db.flush()
+    three = Channel(ws_id=ws.id, name="", is_dm=True)
+    empty = Channel(ws_id=ws.id, name="빈 DM", is_dm=True)  # 상대가 지워진 DM
+    app_db.add_all([three, empty])
+    await app_db.flush()
+    app_db.add_all(
+        [
+            ChannelMember(channel_id=three.id, user_id=u.id)
+            for u in (users.member, users.lead, users.exec)
+        ]
+        + [
+            ChannelMember(channel_id=empty.id, user_id=users.member.id),
+            Message(channel_id=three.id, author_id=users.lead.id, body="셋", created_at=now),
+            Message(channel_id=empty.id, author_id=users.exec.id, body="혼자", created_at=now),
+        ]
+    )
+    await app_db.flush()
+
+    await login(client, "sujin@zenith.co.kr")
+    unread = {u["channel_id"]: u for u in (await client.get("/api/me/home")).json()["unread"]}
+
+    # 3인 DM: 누가 뽑히든(이름순은 DB 정렬) 이름과 id 는 같은 사람이어야 한다
+    others = {str(users.lead.id): "박동현", str(users.exec.id): "최재호"}
+    shown = unread[str(three.id)]
+    assert others[shown["peer_id"]] == shown["name"]
+
+    # 상대가 없는 DM: 채널 이름으로 되돌아가고 peer_id 는 없다(키는 있다)
+    assert unread[str(empty.id)]["name"] == "빈 DM"
+    assert unread[str(empty.id)]["peer_id"] is None

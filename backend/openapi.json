@@ -1209,6 +1209,27 @@
         }
       }
     },
+    "/api/people": {
+      "get": {
+        "tags": [
+          "people"
+        ],
+        "summary": "사람 목록 — DM 상대·참조자·위임 대상 고르기. 이름순, 비활성 포함(active 로 구분)",
+        "operationId": "list_people_api_people_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Items_PersonOut_"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/channels": {
       "get": {
         "tags": [
@@ -2578,6 +2599,31 @@
         }
       }
     },
+    "/api/admin/teams": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "팀 목록 — 계정의 team_id 를 이름으로 풀고 배정 후보를 준다",
+        "operationId": "list_teams_api_admin_teams_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TeamOut"
+                  },
+                  "type": "array",
+                  "title": "Response List Teams Api Admin Teams Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/users": {
       "get": {
         "tags": [
@@ -3876,6 +3922,22 @@
         ],
         "title": "Items[NotificationOut]"
       },
+      "Items_PersonOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PersonOut"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "Items[PersonOut]"
+      },
       "Items_TodoOut_": {
         "properties": {
           "items": {
@@ -4297,6 +4359,30 @@
           "name"
         ],
         "title": "Person"
+      },
+      "PersonOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "active": {
+            "type": "boolean",
+            "title": "Active"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "active"
+        ],
+        "title": "PersonOut"
       },
       "PostCreateIn": {
         "properties": {
@@ -4774,6 +4860,18 @@
             "type": "boolean",
             "title": "Is Dm"
           },
+          "peer_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Peer Id"
+          },
           "count": {
             "type": "integer",
             "title": "Count"
@@ -4784,6 +4882,7 @@
           "channel_id",
           "name",
           "is_dm",
+          "peer_id",
           "count"
         ],
         "title": "UnreadChannel"
