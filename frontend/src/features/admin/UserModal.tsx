@@ -158,6 +158,8 @@ export function UserModal({
               value={form.name}
               onChange={(e) => set('name', e.target.value)}
               onKeyDown={onKeyDown}
+              // 서버 상한(`Name`, 100자). 넘겨 보내면 Pydantic 422 라 화면에 사정이 안 남는다.
+              maxLength={100}
               placeholder="예: 진수연"
             />
           )}

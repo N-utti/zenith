@@ -9,6 +9,11 @@ export interface ChatAttachment {
   url: string
   name: string
   size: number
+  /**
+   * 업로드가 저장한 형식. **보낸 쪽 값이라 판정에 쓰지 않는다**(`attachments.ts`).
+   * 2026-09-18 이전 메시지는 `null` 이라 `undefined` 만 분기하면 놓친다.
+   */
+  content_type?: string | null
 }
 
 /** 백엔드 `MessageOut`. 소켓이 밀어 주는 메시지도 같은 모양이다. */
