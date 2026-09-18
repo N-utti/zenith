@@ -32,7 +32,8 @@ function grouped(message: ChatMessage, previous: ChatMessage | undefined) {
  *
  * `url` 은 서버가 준 것을 그대로 쓴다. 내려받기는 쿠키로 인증되고 채널 멤버만 받을 수 있다.
  *
- * 미리보기 판정은 `attachments.ts` 의 `isImage` 가 한다(서버와 갈릴 수 있는 이유도 거기).
+ * 미리보기 판정은 `attachments.ts` 의 `isImage` 가 한다 — 응답의 형식(`content_type`)을
+ * 쓰지 않는 이유도 거기 적었다.
  */
 function Attachments({ files }: { files: ChatAttachment[] | null }) {
   /** 그리지 못한 이미지. 확장자 판정이 서버와 갈렸거나 못 받아 온 것이다. */

@@ -1442,7 +1442,7 @@ data: ${JSON.stringify(data)}
     if (raw !== null && ['1', 'true', 'yes', 'on'].includes(raw)) {
       if (user.role !== 'exec') {
         return HttpResponse.json(
-          { detail: '영구 삭제는 관리자만 할 수 있습니다.', code: 'FORBIDDEN' },
+          { detail: '영구 삭제는 임원만 할 수 있습니다.', code: 'FORBIDDEN' },
           { status: 403 },
         )
       }
