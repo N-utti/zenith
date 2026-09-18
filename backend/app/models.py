@@ -45,6 +45,9 @@ def created_at_col() -> Mapped[datetime]:
 
 class Team(Base):
     __tablename__ = "teams"
+    __table_args__ = (  # 이름 유일 — 같은 이름 팀 둘이면 배정 화면에서 구분이 안 된다(03 에 없는 제약)
+        Index("uq_teams_name", "name", unique=True),
+    )
 
     id: Mapped[uuid.UUID] = uuid_pk()
     name: Mapped[str] = mapped_column(Text, nullable=False)
