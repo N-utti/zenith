@@ -1,6 +1,7 @@
 import { bypass, delay, http, HttpResponse, passthrough } from 'msw'
 import { PASSWORD_MIN, type User } from '@/types'
 import { BODY_MAX, TITLE_MAX } from '@/features/board/types'
+import type { Person } from '@/features/chat/types'
 import { DEMO_PASSWORD } from './accounts'
 import { createAccount, emailTaken, findAccount, listAccounts, patchAccount } from './adminDb'
 import { badCursor, listAudit, push as recordAudit } from './auditDb'
@@ -125,7 +126,7 @@ const notFound = (detail = '문서를 찾을 수 없습니다.') =>
  *
  * 릴레이가 안 떠 있으면 빈 목록이다. 홈의 다른 카드까지 같이 죽으면 안 된다.
  */
-async function unreadChannels() {
+async function unreadChannels(meId: string) {
   try {
     // `bypass` 로 이 요청이 목을 다시 타지 않게 못 박는다. 지금은 `/api/channels` 가
     // passthrough 라 우연히 맞지만, 나중에 거기 진짜 핸들러가 들어오면 목이 목을 부른다.
@@ -133,7 +134,7 @@ async function unreadChannels() {
     const res = await fetch(bypass('/api/channels'), { signal: AbortSignal.timeout(2000) })
     if (!res.ok) return []
     const { items } = (await res.json()) as {
-      items: { id: string; name: string; is_dm: boolean; unread: number }[]
+      items: { id: string; name: string; is_dm: boolean; unread: number; members: Person[] }[]
     }
     return items
       .filter((channel) => channel.unread > 0)
@@ -141,6 +142,10 @@ async function unreadChannels() {
         channel_id: channel.id,
         name: channel.name,
         is_dm: channel.is_dm,
+        // DM 이면 상대, 채널이면 null. 홈과 채팅이 같은 사람을 같은 색으로 그린다.
+        peer_id: channel.is_dm
+          ? (channel.members.find((member) => member.id !== meId)?.id ?? null)
+          : null,
         count: channel.unread,
       }))
   } catch {
@@ -394,6 +399,25 @@ export const handlers = [
     )
   }),
 
+  // ── 사람 목록 ─────────────────────────────────────────────
+  /**
+   * 사람 고르는 자리가 쓰는 명단(#117). 계정 목록(`/admin/users`)과 달리 로그인하면 누구나.
+   *
+   * 관리 화면과 같은 저장소를 본다. 두 벌이면 계정을 비활성으로 바꿔도 대화 상대 목록에
+   * 그대로 남는다 — 실서버에서는 안 생기는 차이다.
+   *
+   * 반대 방향은 목에만 남는다: 여기서 **만든** 계정(`u-100`~)은 채팅 릴레이의 명단
+   * (`scripts/chat.js` 는 `users.json` 만 안다)에 없어서, DM 을 열면 릴레이가 422 를 준다.
+   */
+  http.get(
+    '/api/people',
+    authed(() =>
+      HttpResponse.json({
+        items: listAccounts().map(({ id, name, active }) => ({ id, name, active })),
+      }),
+    ),
+  ),
+
   // ── 홈 한 벌 ──────────────────────────────────────────────
   /**
    * 대시보드 1콜. 카드 다섯 개가 이것 하나를 나눠 쓴다.
@@ -407,7 +431,7 @@ export const handlers = [
     return HttpResponse.json({
       recent_docs: recentDocs(user, 8),
       mentions: listMentionNotifications(user, 10),
-      unread: await unreadChannels(),
+      unread: await unreadChannels(user.id),
       posts: homePosts(user, 3),
       todos: listTasks().slice(0, 200),
     })

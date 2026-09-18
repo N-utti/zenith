@@ -1,34 +1,38 @@
-import { useMemo } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { useCurrentUser } from '@/features/auth/AuthContext'
-import { useChannels } from '@/features/chat/api'
-import type { Person } from '@/features/chat/types'
+import { api } from '@/lib/api'
+
+/** 백엔드 `routers/people.py` 의 `Person`. 이메일·등급·팀은 주지 않는다. */
+export interface Colleague {
+  id: string
+  name: string
+  active: boolean
+}
 
 /**
- * 나와 채널을 같이 쓰는 사람들. 이름순, 나는 뺀다.
+ * 고를 수 있는 사람만 남긴다. 서버는 이름순으로, **자기 자신과 비활성 계정까지** 준다.
  *
- * **사원이 볼 수 있는 사용자 목록이 서버에 없다.** 계정 목록(`/admin/users`)은 임원 전용이라,
- * 채널 멤버가 지금 프론트가 사람을 알 수 있는 유일한 길이다. 공개 채널에 활성 사용자가 전원
- * 들어가므로(백엔드 `join_public_channels`) 실제로는 전 직원이 모인다.
- *
- * DM 만 주고받는 사람이 생기면 그 사람은 여기 안 나온다. 백엔드에 사원용 목록을 요청해 뒀다.
- *
- * **채널 목록은 목(MSW)을 타지 않는다.** 개발에서는 채팅 릴레이(`npm run server`)가 준다. 그래서
- * 릴레이가 안 켜져 있으면 여기도 빈다. 부르는 쪽은 "실패" 와 "아무도 없음" 을 갈라서 말해야
- * 한다. 안 그러면 서버를 하나만 켠 사람에게는 이 기능이 원래 없는 것처럼 보인다.
+ * 비활성을 남겨 두면 고를 수 있게 보이고 보낸 뒤에야 422 로 알게 된다.
  */
-export function useColleagues(): { people: Person[]; isPending: boolean; isError: boolean } {
+export function pickable(people: Colleague[], meId: string): Colleague[] {
+  return people.filter((person) => person.active && person.id !== meId)
+}
+
+/**
+ * 사람을 고르는 자리(새 대화·결재 참조자·위임 대상)가 쓰는 명단.
+ *
+ * 전에는 내가 속한 채널의 멤버를 긁었다(계정 목록 `/admin/users` 가 임원 전용이라 그게
+ * 유일한 길이었다). 그래서 **DM 만 주고받는 사람이 빠졌고**, 활성 여부를 몰라 비활성
+ * 계정을 고르면 422 를 맞았다. 백엔드 `GET /people`(#117)이 둘 다 닫는다.
+ *
+ * 명단·근무 상태 같은 표시용 자리는 여전히 채널 멤버를 쓴다 — 그쪽은 고르는 자리가 아니다.
+ */
+export function useColleagues(): { people: Colleague[]; isPending: boolean; isError: boolean } {
   const me = useCurrentUser()
-  const { data, isPending, isError } = useChannels()
+  const { data, isPending, isError } = useQuery({
+    queryKey: ['people'],
+    queryFn: () => api<{ items: Colleague[] }>('/people'),
+  })
 
-  const people = useMemo(() => {
-    const byId = new Map<string, Person>()
-    for (const channel of data?.items ?? []) {
-      for (const member of channel.members) {
-        if (member.id !== me.id) byId.set(member.id, member)
-      }
-    }
-    return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name))
-  }, [data, me.id])
-
-  return { people, isPending, isError }
+  return { people: pickable(data?.items ?? [], me.id), isPending, isError }
 }
