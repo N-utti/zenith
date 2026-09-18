@@ -24,7 +24,8 @@ export interface NotificationActor {
  * 어느 필드가 있느냐로 갈라지므로 전부 선택 항목이다.
  */
 export interface NotificationPayload {
-  from?: NotificationActor
+  /** 권한 밖 글이라 가려진 알림은 서버가 작성자까지 지운다(`masked` 와 같이 온다). */
+  from?: NotificationActor | null
   /** 멘션 공통. 본문 앞 120자. */
   preview?: string
   /** 문서 댓글 멘션 (`routers/docs.py`). */
@@ -34,6 +35,8 @@ export interface NotificationPayload {
   block_id?: string | null
   /** 채팅 멘션 (`realtime/chat.py`). */
   channel_id?: string
+  /** 공개 채널은 채널 이름, DM 은 보낸 사람 이름. 2026-09-18 이전에 쌓인 알림에는 없다. */
+  channel_name?: string | null
   message_id?: string
   /** 새 글 (`routers/boards.py`). */
   post_id?: string

@@ -11,7 +11,12 @@ it('글 알림의 제목은 지금 등급으로 다시 판정해 가린다', () 
     listNotifications(user).find((n) => n.payload?.board_id === 'exec')!
 
   // 알림을 만든 시점의 제목이 그대로 남아 있어도, 사원에게는 가려서 내려간다.
-  expect(execBoard(member).payload).toMatchObject({ masked: true, title: '＿＿＿＿＿ 보고' })
+  // 제목뿐 아니라 작성자도 지운다 — 남기면 누가 썼는지는 알려 주는 셈이다.
+  expect(execBoard(member).payload).toMatchObject({
+    masked: true,
+    title: '＿＿＿＿＿ 보고',
+    from: null,
+  })
   expect(execBoard(exec).payload?.masked).toBeUndefined()
   expect(execBoard(exec).payload?.title).toBe('4분기 예산안 검토 회의 자료')
 })
