@@ -67,6 +67,9 @@ class UnreadChannel(BaseModel):
     channel_id: uuid.UUID
     name: str
     is_dm: bool
+    # DM 상대 — 아바타 색을 이름이 아니라 사람으로 정하려면 id 가 있어야 한다(홈·채팅이 같은 색).
+    # 채널이면 null 이지만 키는 늘 있다(기본값을 두면 계약에서 선택 필드가 된다)
+    peer_id: uuid.UUID | None
     count: int
 
 
@@ -181,24 +184,29 @@ async def _unread_channels(db: AsyncSession, user: User) -> list[UnreadChannel]:
     )
     channels = rows.all()
     dm_ids = [c.id for c, _ in channels if c.is_dm]
-    peers: dict[uuid.UUID, str] = {}
+    peers: dict[uuid.UUID, tuple[uuid.UUID, str]] = {}
     if dm_ids:  # DM 은 상대 이름으로 — 한 번에 뽑는다. 3인 이상이면 이름순 첫 사람
-        for channel_id, name in await db.execute(
-            select(ChannelMember.channel_id, User.name)
+        for channel_id, peer_id, name in await db.execute(
+            select(ChannelMember.channel_id, User.id, User.name)
             .join(User, User.id == ChannelMember.user_id)
             .where(ChannelMember.channel_id.in_(dm_ids), User.id != user.id)
             .order_by(ChannelMember.channel_id, User.name)
         ):
-            peers.setdefault(channel_id, name)
-    return [
-        UnreadChannel(
-            channel_id=c.id,
-            name=peers.get(c.id, c.name) if c.is_dm else c.name,
-            is_dm=c.is_dm,
-            count=count,
+            peers.setdefault(channel_id, (peer_id, name))
+    out = []
+    for c, count in channels:
+        # 상대가 지워진 DM 이면 peers 에 없다 — 채널 이름으로 되돌아간다
+        peer = peers.get(c.id) if c.is_dm else None
+        out.append(
+            UnreadChannel(
+                channel_id=c.id,
+                name=peer[1] if peer else c.name,
+                is_dm=c.is_dm,
+                peer_id=peer[0] if peer else None,
+                count=count,
+            )
         )
-        for c, count in channels
-    ]
+    return out
 
 
 async def _posts(db: AsyncSession, user: User, limit: int) -> list[HomePost]:

@@ -62,6 +62,13 @@ class UserPatchIn(BaseModel):
     password: str | None = Field(default=None, min_length=settings.password_min_length)
 
 
+class TeamOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    name: str
+
+
 class AuditOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -96,6 +103,16 @@ async def _require_team(db: AsyncSession, team_id: uuid.UUID | None) -> None:
     # 외래키 위반을 commit 에서 맞으면 500 이 된다. 미리 확인해 422 로 돌려준다.
     if team_id is not None and await db.get(Team, team_id) is None:
         raise ApiError(422, "VALIDATION", "없는 팀입니다.")
+
+
+@router.get(
+    "/admin/teams",
+    response_model=list[TeamOut],
+    summary="팀 목록 — 계정의 team_id 를 이름으로 풀고 배정 후보를 준다",
+)
+async def list_teams(db: AsyncSession = Depends(get_db)) -> list[Team]:
+    # 팀을 만들거나 이름을 바꾸는 경로는 없다(지금은 seed 가 넣는다) — 필요해지면 POST·PATCH 를 더한다.
+    return list((await db.execute(select(Team).order_by(Team.name))).scalars())
 
 
 @router.get("/admin/users", response_model=list[UserOut], summary="계정 목록")

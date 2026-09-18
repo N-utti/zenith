@@ -188,3 +188,15 @@ async def test_audit_kind_prefix_and_cursor_paging(
     assert (await client.get("/api/admin/audit", params={"kind": "_cl"})).json()["items"] == []
     assert (await client.get("/api/admin/audit", params={"cursor": "!!"})).status_code == 422
     assert (await client.get("/api/admin/audit", params={"limit": 0})).status_code == 422
+
+
+async def test_team_list_is_exec_only(client: AsyncClient, users: Users, app_db) -> None:
+    """계정 응답은 team_id 만 준다 — 이름으로 풀고 배정 후보를 고르려면 목록이 있어야 한다(프론트 #102)."""
+    await login(client, "sujin@zenith.co.kr")
+    since = datetime.now(UTC) - timedelta(minutes=1)
+    assert (await client.get("/api/admin/teams")).status_code == 403
+    assert await audit.count_since(app_db, "acl.denied", since, path="/api/admin/teams") == 1
+    await login(client, "jaeho@zenith.co.kr")
+    r = await client.get("/api/admin/teams")
+    assert r.status_code == 200
+    assert r.json() == [{"id": str(users.team.id), "name": "개발팀"}]
