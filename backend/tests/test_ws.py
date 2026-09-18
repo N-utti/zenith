@@ -117,6 +117,7 @@ async def test_message_unread_read_roundtrip(app: FastAPI, users: Users, app_db)
             assert notice["kind"] == "mention"
             assert notice["payload"]["message_id"] == message["id"]
             assert notice["payload"]["from"]["name"] == "김수진"
+            assert notice["payload"]["channel_name"] == "일반"  # 알림함이 "어느 채널" 을 적는다
 
             own = await recv_until(a_ws, "msg")  # 보낸 사람도 같은 경로로 받는다
             assert own["message"]["id"] == message["id"]
@@ -346,3 +347,17 @@ async def test_mention_off_gets_message_but_no_notice(app: FastAPI, users: Users
             await silent(b_ws)  # notice 는 오지 않는다
 
     assert (await app_db.execute(select(Notification))).scalars().all() == []
+
+
+async def test_dm_mention_notice_has_no_channel_name(app: FastAPI, users: Users, app_db) -> None:
+    """DM 은 `channels.name` 이 "" — 받는 사람에게 이 DM 의 이름은 보낸 사람이다(channels._display_name 과 같은 기준)."""
+    channel = await make_channel(app_db, [users.member, users.lead], name="", is_dm=True)
+    async with ws_client(app) as a, ws_client(app) as b:
+        await login(a, "sujin@zenith.co.kr")
+        await login(b, "donghyun@zenith.co.kr")
+        async with aconnect_ws(WS, a) as a_ws, aconnect_ws(WS, b) as b_ws:
+            assert (await recv(a_ws))["ev"] == "presence"
+            await send(a_ws, op="msg", channel_id=str(channel.id), body="@박동현 잠깐 볼까요")
+            notice = await recv_until(b_ws, "notice")
+            assert notice["payload"]["channel_name"] == "김수진"  # 받는 사람이 보는 이 DM 의 이름
+            assert notice["payload"]["from"]["name"] == "김수진"

@@ -266,4 +266,23 @@ async def test_review_edges(client: AsyncClient, users: Users, app_db) -> None:
     items = (await client.get("/api/me/notifications")).json()["items"]
     hit = next(n for n in items if n["payload"].get("board_name") == "팀장 회의록")
     assert hit["payload"]["title"] == "＿＿＿＿＿ 보고" and hit["payload"]["masked"] is True
+    assert hit["payload"]["from"] is None  # 작성자도 가린다 — 목록의 author=None 과 같은 기준
     assert all(n["payload"].get("title") != "팀장 비밀 안건" for n in items)
+
+    # 등급이 돌아오면 다시 보이고, 글이 지워지면 등급과 무관하게 닫힌다(min_roles 에 없으면 "?"→99 로 fail-closed)
+    users.exec.role = "exec"
+    await app_db.flush()
+    items = (await client.get("/api/me/notifications")).json()["items"]
+    secret = next(n for n in items if n["payload"].get("title") == "팀장 비밀 안건")
+    await login(client, "donghyun@zenith.co.kr")  # 글쓴이가 지운다
+    r = await client.delete(f"/api/posts/{secret['payload']['post_id']}", headers=csrf(client))
+    assert r.status_code == 204, r.text
+    await login(client, "jaeho@zenith.co.kr")
+    items = (await client.get("/api/me/notifications")).json()["items"]
+    gone = next(n for n in items if n["id"] == secret["id"])
+    assert gone["payload"]["masked"] is True and gone["payload"]["from"] is None
+
+    # 마스킹은 응답만 바꾼다 — 세션에 붙은 알림 행은 dirty 가 되지 않는다(commit 이 끼면 원본이 지워진다)
+    rows = (await app_db.execute(select(Notification))).scalars().all()
+    row = next(n for n in rows if (n.payload or {}).get("post_id") == secret["payload"]["post_id"])
+    assert row.payload["title"] == "팀장 비밀 안건" and row.payload["from"]["name"] == "박동현"

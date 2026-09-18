@@ -343,13 +343,17 @@ async def list_notifications(
     if unread:
         stmt = stmt.where(Notification.read_at.is_(None))
     rows = list((await db.execute(stmt)).scalars())
-    await _mask_post_notices(db, user, rows)
-    return Items(items=[NotificationOut.model_validate(n) for n in rows])
+    items = [NotificationOut.model_validate(n) for n in rows]
+    await _mask_post_notices(db, user, items)
+    return Items(items=items)
 
 
-async def _mask_post_notices(db: AsyncSession, user: User, rows: list[Notification]) -> None:
+async def _mask_post_notices(db: AsyncSession, user: User, rows: list[NotificationOut]) -> None:
     """kind=post 알림의 제목은 만든 시점 값이다 — 강등·게시판 등급 상향 뒤에도 읽히면 안 되므로 지금 등급으로
-    다시 판정해 권한 밖(글이 지워진 것 포함)이면 제목을 가린다. 행은 바꾸지 않고 응답만 바꾼다."""
+    다시 판정해 권한 밖(글이 지워진 것 포함)이면 제목을 가린다.
+
+    ORM 행이 아니라 **응답 모델**을 바꾼다 — 세션에 붙은 Notification 을 고치면 이 라우트에 commit 이
+    한 줄만 들어와도(감사·자동 읽음 처리 같은) 원본 제목·작성자가 DB 에서 지워진다."""
     post_ids: list[uuid.UUID] = []
     for n in rows:
         if n.kind == "post" and n.payload and n.payload.get("post_id"):
@@ -377,7 +381,9 @@ async def _mask_post_notices(db: AsyncSession, user: User, rows: list[Notificati
         except ValueError:
             continue
         if rank < ROLE_RANK.get(min_roles.get(pid, "?"), 99):
-            n.payload = {**n.payload, "title": MASKED_TITLE, "masked": True}
+            # 작성자도 지운다 — 목록(_post_out)이 마스킹할 때 author=None 을 주는 것과 같은 기준이다.
+            # 제목만 가리면 "누가 임원 게시판에 글을 썼는지" 가 알림함으로 샌다.
+            n.payload = {**n.payload, "title": MASKED_TITLE, "masked": True, "from": None}
 
 
 @router.post(

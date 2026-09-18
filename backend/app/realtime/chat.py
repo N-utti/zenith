@@ -44,7 +44,7 @@ from app import audit
 from app.db import session_scope
 from app.deps import _own_origin, authenticate, origin_allowed
 from app.errors import ApiError
-from app.models import ChannelMember, Document, Message, Notification, User
+from app.models import Channel, ChannelMember, Document, Message, Notification, User
 from app.prefs import wants
 from app.routers.channels import MAX_ATTACHMENTS, AttachmentOut, parse_attachment_url
 
@@ -124,7 +124,12 @@ async def push(user_ids, event: dict, *, exclude: WebSocket | None = None) -> No
 
 
 async def push_notice(notification: Notification) -> None:
-    """알림 행 하나를 그 사용자의 열린 소켓들로(04 §4.1 notice). 행은 호출한 쪽이 commit 했어야 한다."""
+    """알림 행 하나를 그 사용자의 열린 소켓들로(04 §4.1 notice). 행은 호출한 쪽이 commit 했어야 한다.
+
+    payload 를 **그대로** 내보낸다 — `kind="post"` 의 읽기 시점 등급 재판정(me._mask_post_notices)은
+    여기에 없다. 권한 밖에게 가지 않는 것은 boards.create_post 가 `User.role.in_(readers)` 로 받을
+    사람을 미리 거르기 때문이고 그게 유일한 방어다. 그 필터를 넓히면 여기도 같이 고쳐야 한다.
+    """
     await push(
         [notification.user_id],
         {
@@ -259,7 +264,15 @@ async def _handle(ws: WebSocket, user: User, op: SubOp | MsgOp | ReadOp | Typing
             )
             await db.flush()  # id 를 받는다
             # 채널 밖 사람에게 열 수 없는 채널을 가리키는 알림은 만들지 않는다
-            for target in await mention_targets(db, op.body, user.id):
+            mentioned = await mention_targets(db, op.body, user.id)
+            channel_name = None
+            if mentioned:  # 멘션이 있을 때만 한 번 — 보통 메시지에는 질의를 늘리지 않는다
+                channel = await db.get(Channel, op.channel_id)
+                # DM 은 `channels.name` 이 "" 이고 이름이 보는 사람마다 다르다(channels._display_name).
+                # 받는 사람에게 이 DM 의 이름은 곧 보낸 사람 — DM 은 두 사람짜리라 질의 없이 안다.
+                # ponytail: 3인 이상 DM 이 생기면 받는 사람마다 _display_name 을 불러야 맞다(지금은 만들 길이 없다).
+                channel_name = channel.name if channel and not channel.is_dm else user.name
+            for target in mentioned:
                 if target.id in members and wants(target.preferences, "mention"):
                     notices.append(
                         Notification(
@@ -268,6 +281,7 @@ async def _handle(ws: WebSocket, user: User, op: SubOp | MsgOp | ReadOp | Typing
                             created_at=now,
                             payload={
                                 "channel_id": str(op.channel_id),
+                                "channel_name": channel_name,
                                 "message_id": str(message.id),
                                 "from": {"id": str(user.id), "name": user.name},
                                 "preview": op.body[:120],
