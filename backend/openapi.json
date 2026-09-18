@@ -1369,7 +1369,7 @@
         "tags": [
           "chat"
         ],
-        "summary": "multipart `file` 업로드 → MinIO. 10MB 초과·빈 파일 422. {url, name, size} 를 msg op 의 attachments[] 에 그대로 넣는다",
+        "summary": "multipart `file` 업로드 → MinIO. 10MB 초과·빈 파일 422. {url, name, size, content_type} 을 msg op 의 attachments[] 에 그대로 넣는다",
         "operationId": "upload_attachment_api_channels__id__attachments_post",
         "parameters": [
           {
@@ -2731,6 +2731,12 @@
               }
             }
           },
+          "400": {
+            "description": "ADMIN_SELF — 자기 자신의 등급·활성 상태"
+          },
+          "404": {
+            "description": "NOT_FOUND — 없는 계정"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -2990,6 +2996,19 @@
             "maximum": 10485760.0,
             "minimum": 0.0,
             "title": "Size"
+          },
+          "content_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100,
+                "pattern": "^[\\w.+-]+/[\\w.+-]+$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Type"
           }
         },
         "type": "object",
@@ -4891,6 +4910,7 @@
         "properties": {
           "name": {
             "type": "string",
+            "maxLength": 100,
             "minLength": 1,
             "title": "Name"
           },
@@ -5031,6 +5051,7 @@
             "anyOf": [
               {
                 "type": "string",
+                "maxLength": 100,
                 "minLength": 1
               },
               {

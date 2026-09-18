@@ -34,6 +34,18 @@ MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024  # FR-CHT-04 · TC-CHT-04
 MAX_ATTACHMENTS = 10  # 메시지 하나에
 # 브라우저가 인라인으로 그려도 스크립트가 돌지 않는 형식만 inline. SVG·HTML 은 같은 오리진에서 XSS 가 되므로 내려받기로.
 INLINE_TYPES = frozenset({"image/png", "image/jpeg", "image/gif", "image/webp"})
+# `type/subtype` 토큰만 — 업로드가 만드는 값(소문자·앞뒤 공백 없음)과 정확히 같은 모양이라야
+# 되돌아온 값도 같다. 대소문자를 남기면 프론트 허용목록이 `IMAGE/PNG` 로 우회된다.
+CONTENT_TYPE_RE = re.compile(r"[\w.+-]+/[\w.+-]+")
+CONTENT_TYPE = Annotated[
+    str,
+    StringConstraints(
+        to_lower=True,
+        strip_whitespace=True,
+        pattern=rf"^{CONTENT_TYPE_RE.pattern}$",
+        max_length=100,
+    ),
+]
 
 
 class AttachmentOut(BaseModel):
@@ -44,6 +56,17 @@ class AttachmentOut(BaseModel):
     )  # 한글 이름은 quote 로 글자당 9자 — 200자 이름이면 1900자 남짓
     name: str = Field(min_length=1, max_length=200)
     size: int = Field(ge=0, le=MAX_ATTACHMENT_BYTES)
+    # 아이콘·미리보기를 이름의 확장자로 짐작하지 않게. name·size 와 같이 **표시용**이다 — msg op 로 되돌아올 때
+    # 클라이언트가 바꿔 보낼 수 있고, 실제 내려받기는 MinIO 에 저장된 형식으로 판정한다(inline 여부도 거기서).
+    # `name` 과 달리 URL 로 대조할 수 없다(대조하면 표시만 갈리고 내려받기는 저장값이라 이득이 없다).
+    # 2026-09-18 이전 메시지는 저장된 JSONB 에 이 칸이 없어 응답에 null 로 나간다.
+    content_type: CONTENT_TYPE | None = None
+
+
+def _normalize_content_type(raw: str | None) -> str:
+    """multipart 헤더 값을 그대로 저장·반사하므로 `type/subtype` 토큰만 받는다 — 나머지는 octet-stream."""
+    value = (raw or "").split(";")[0].strip().lower()
+    return value if CONTENT_TYPE_RE.fullmatch(value) else "application/octet-stream"
 
 
 def attachment_key(channel_id: uuid.UUID, file_id: uuid.UUID, name: str) -> str:
@@ -368,7 +391,7 @@ async def list_messages(
     "/channels/{id}/attachments",
     status_code=201,
     response_model=AttachmentOut,
-    summary="multipart `file` 업로드 → MinIO. 10MB 초과·빈 파일 422. {url, name, size} 를 msg op 의 attachments[] 에 그대로 넣는다",
+    summary="multipart `file` 업로드 → MinIO. 10MB 초과·빈 파일 422. {url, name, size, content_type} 을 msg op 의 attachments[] 에 그대로 넣는다",
 )
 async def upload_attachment(
     id: uuid.UUID,
@@ -389,12 +412,14 @@ async def upload_attachment(
         raise ApiError(422, "VALIDATION", "빈 파일입니다.")
     name = storage.safe_name(file.filename)
     file_id = uuid.uuid4()
-    # multipart 헤더 값을 그대로 저장·반사하므로 토큰/토큰 모양만 받는다 — 나머지는 octet-stream
-    content_type = (file.content_type or "").split(";")[0].strip().lower()
-    if not re.fullmatch(r"[\w.+-]+/[\w.+-]+", content_type):
-        content_type = "application/octet-stream"
+    content_type = _normalize_content_type(file.content_type)
     await storage.put(attachment_key(id, file_id, name), data, content_type)
-    return AttachmentOut(url=attachment_url(id, file_id, name), name=name, size=len(data))
+    return AttachmentOut(
+        url=attachment_url(id, file_id, name),
+        name=name,
+        size=len(data),
+        content_type=content_type,
+    )
 
 
 @router.get(
@@ -425,6 +450,9 @@ async def download_attachment(
             # RFC 6266 — 한글 파일명은 filename* 로. 브라우저에서 스크립트가 돌 수 있는 형식은 내려받기만.
             "Content-Disposition": f"{disposition}; filename*=UTF-8''{quote(name, safe='')}",
             "X-Content-Type-Options": "nosniff",
+            # 주소창에 직접 열어도 실행 없음 — files.py 와 같은 헤더. 첨부는 형식 제한도 매직바이트 검사도
+            # 없어서(15(d)) 방어가 INLINE_TYPES 허용목록과 nosniff 뿐이었다. <img src> 표시에는 영향 없다.
+            "Content-Security-Policy": "default-src 'none'; sandbox",
             # 키에 랜덤 file_id 가 있어 불변 — 인라인 이미지가 스크롤마다 MinIO 를 다시 타지 않게(main.py 의 no-store 는 setdefault)
             "Cache-Control": "private, max-age=86400",
         },
