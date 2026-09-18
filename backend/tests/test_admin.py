@@ -200,3 +200,42 @@ async def test_team_list_is_exec_only(client: AsyncClient, users: Users, app_db)
     r = await client.get("/api/admin/teams")
     assert r.status_code == 200
     assert r.json() == [{"id": str(users.team.id), "name": "개발팀"}]
+
+
+async def test_blank_name_is_rejected_and_stored_trimmed(client: AsyncClient, users: Users) -> None:
+    """`min_length=1` 을 다듬기 전에 재면 공백만 있는 이름이 통과해 빈 이름으로 저장됐다(프론트 #102)."""
+    await login(client, "jaeho@zenith.co.kr")
+    blank = {"name": "   ", "email": "new@zenith.co.kr", "password": "zenith1234"}
+    assert (
+        await client.post("/api/admin/users", json=blank, headers=csrf(client))
+    ).status_code == 422
+    r = await client.patch(
+        f"/api/admin/users/{users.member.id}", json={"name": " \t "}, headers=csrf(client)
+    )
+    assert r.status_code == 422
+
+    r = await client.post(
+        "/api/admin/users", json={**blank, "name": "  새 사람  "}, headers=csrf(client)
+    )
+    assert r.status_code == 201 and r.json()["name"] == "새 사람"  # 앞뒤 공백은 다듬어 저장
+    r = await client.patch(
+        f"/api/admin/users/{users.member.id}", json={"name": "  김수진2 "}, headers=csrf(client)
+    )
+    assert r.status_code == 200 and r.json()["name"] == "김수진2"
+
+
+async def test_explicit_null_is_422_not_409(client: AsyncClient, users: Users) -> None:
+    """`null` 은 "안 보냈다"가 아니다 — NOT NULL 위반이 409 로 튀어나오던 것을 422 로 막는다."""
+    await login(client, "jaeho@zenith.co.kr")
+    for field in ("name", "role", "active"):
+        r = await client.patch(
+            f"/api/admin/users/{users.member.id}", json={field: None}, headers=csrf(client)
+        )
+        assert r.status_code == 422, (field, r.text)
+    # 팀·입사일은 진짜로 비울 수 있는 칸이다
+    r = await client.patch(
+        f"/api/admin/users/{users.member.id}",
+        json={"team_id": None, "hire_date": None},
+        headers=csrf(client),
+    )
+    assert r.status_code == 200 and r.json()["team_id"] is None

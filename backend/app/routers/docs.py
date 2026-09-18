@@ -392,7 +392,8 @@ async def delete_doc(
             detail={"path": request.url.path, "min_role": "exec"},
         )
         await db.commit()
-        raise ApiError(403, "FORBIDDEN", "영구 삭제는 관리자만 할 수 있습니다.")
+        # 등급 이름은 화면 표기대로 — 프론트가 서버 문구를 그대로 띄운다(exec = "임원")
+        raise ApiError(403, "FORBIDDEN", "영구 삭제는 임원만 할 수 있습니다.")
     await _purge(db, doc)
     audit.record(
         db,

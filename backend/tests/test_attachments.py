@@ -4,6 +4,7 @@
 """
 
 import uuid
+from datetime import UTC, datetime
 
 import pytest
 from fastapi import FastAPI
@@ -49,6 +50,7 @@ async def test_upload_and_download(
     assert r.status_code == 201, r.text
     body = r.json()
     assert body["name"] == "회의 사진.png" and body["size"] == len(PNG)
+    assert body["content_type"] == "image/png"  # 프론트가 아이콘·미리보기를 이름으로 짐작하지 않게
     assert body["url"].startswith(f"/api/channels/{channel.id}/attachments/")
 
     got = await client.get(body["url"])
@@ -93,6 +95,7 @@ async def test_upload_and_download(
     r = await _upload(
         client, channel.id, "weird.bin", b"x", "not a type"
     )  # 깨진 헤더 값은 octet-stream
+    assert r.json()["content_type"] == "application/octet-stream"  # 응답도 저장된 값과 같다
     assert (await client.get(r.json()["url"])).headers["content-type"] == "application/octet-stream"
 
 
@@ -184,11 +187,45 @@ async def test_message_with_attachments(app: FastAPI, users: Users, app_db, mini
                 a_ws, op="msg", channel_id=str(mine.id), attachments=[{**att, "name": "연봉.pdf"}]
             )
             assert (await recv_until(a_ws, "error"))["code"] == "VALIDATION"
+            # content_type 은 표시용이지만 모양은 지킨다 — 헤더로 반사되지 않아도 화면이 그걸로 가른다
+            await send(
+                a_ws,
+                op="msg",
+                channel_id=str(mine.id),
+                attachments=[{**att, "content_type": "not a type"}],
+            )
+            assert (await recv_until(a_ws, "error"))["code"] == "VALIDATION"
+            # 우긴 content_type 은 저장되기만 하고 **헤더로 반사되지 않는다** — 내려받기는 MinIO 값이 정한다
+            await send(
+                a_ws,
+                op="msg",
+                channel_id=str(mine.id),
+                attachments=[{**att, "content_type": "TEXT/HTML"}],
+            )
+            spoofed = (await recv_until(b_ws, "msg"))["message"]["attachments"][0]
+            assert spoofed["content_type"] == "text/html"  # 대소문자는 업로드 규칙대로 내린다
+            got = await b.get(att["url"])
+            assert got.headers["content-type"] == "image/png"
+            assert got.headers["content-disposition"].startswith("inline;")
+            assert got.headers["content-security-policy"] == "default-src 'none'; sandbox"
+
+        # content_type 이 없던 시절의 행도 읽힌다 — 응답엔 null 로 나간다(키가 빠지지 않는다)
+        app_db.add(
+            Message(
+                channel_id=mine.id,
+                author_id=users.member.id,
+                body="",
+                attachments=[{k: att[k] for k in ("url", "name", "size")}],
+                created_at=datetime.now(UTC),
+            )
+        )
+        await app_db.flush()
 
         page = (await b.get(f"/api/channels/{mine.id}/messages")).json()
-        assert [m["attachments"] for m in page["items"]] == [[att]]
+        assert page["items"][-1]["attachments"][0]["content_type"] is None
+        assert [m["attachments"] for m in page["items"][:2]] == [[att], [spoofed]]
     rows = (await app_db.execute(select(Message))).scalars().all()
-    assert len(rows) == 1 and rows[0].attachments == [att]
+    assert len(rows) == 3 and rows[0].attachments == [att]
 
 
 async def test_storage_down_is_503(client: AsyncClient, users: Users, app_db, monkeypatch) -> None:

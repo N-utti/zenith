@@ -5,9 +5,10 @@ FR-AUTH-03: 셀프 가입이 없다. 계정은 여기서만 만들고 비활성�
 
 import uuid
 from datetime import UTC, date, datetime
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Request
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 from sqlalchemy import select, tuple_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -26,6 +27,10 @@ require_exec = require_role("exec")
 router = APIRouter(tags=["admin"], dependencies=[Depends(require_exec)])
 
 EMAIL_PATTERN = r"^[^@\s]+@[^@\s]+\.[^@\s]+$"
+# 공백만 있는 이름을 막는다 — 다듬기 전에 길이를 재면 "   " 이 통과해 빈 이름으로 저장됐다.
+
+# 제로폭 문자(​)처럼 '보이지 않지만 공백이 아닌' 글자는 그대로 통과한다 — exec 전용이고 감사가 남아 감수.
+Name = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
 
 
 class UserOut(BaseModel):
@@ -43,7 +48,7 @@ class UserOut(BaseModel):
 
 
 class UserCreateIn(BaseModel):
-    name: str = Field(min_length=1)
+    name: Name
     email: str = Field(pattern=EMAIL_PATTERN)
     password: str = Field(min_length=settings.password_min_length)
     role: Role = "member"
@@ -54,12 +59,23 @@ class UserCreateIn(BaseModel):
 class UserPatchIn(BaseModel):
     """보낸 필드만 바꾼다. password 를 보내면 임시 비밀번호로 재설정하고 그 사람의 세션을 전부 닫는다."""
 
-    name: str | None = Field(default=None, min_length=1)
+    name: Name | None = None
     role: Role | None = None
     active: bool | None = None
     team_id: uuid.UUID | None = None
     hire_date: date | None = None
     password: str | None = Field(default=None, min_length=settings.password_min_length)
+
+    @model_validator(mode="after")
+    def _no_explicit_null(self) -> "UserPatchIn":
+        # `None` 은 "안 보냈다" 는 뜻이다. 대놓고 null 을 보내면 NOT NULL 위반이 409 로 튀어나왔다 — 422 로 막는다.
+        # team_id·hire_date 는 진짜로 비울 수 있는 칸이라 뺀다(팀 없음·입사일 모름).
+        nulled = [
+            f for f in self.model_fields_set - {"team_id", "hire_date"} if getattr(self, f) is None
+        ]
+        if nulled:
+            raise ValueError(f"null 로 지울 수 없는 칸입니다: {', '.join(sorted(nulled))}")
+        return self
 
 
 class TeamOut(BaseModel):
@@ -138,7 +154,7 @@ async def create_user(
         raise ApiError(409, "CONFLICT", "이미 있는 이메일입니다.")
     await _require_team(db, body.team_id)
     user = User(
-        name=body.name.strip(),
+        name=body.name,
         email=email,
         pw_hash=await hash_password_async(body.password),
         role=body.role,
@@ -165,6 +181,10 @@ async def create_user(
     "/admin/users/{user_id}",
     response_model=UserOut,
     summary="등급 변경·비활성화·임시 비밀번호. 자기 자신의 등급·활성 상태는 못 바꾼다",
+    responses={
+        400: {"description": "ADMIN_SELF — 자기 자신의 등급·활성 상태"},
+        404: {"description": "NOT_FOUND — 없는 계정"},
+    },
 )
 async def update_user(
     user_id: uuid.UUID,
@@ -184,7 +204,7 @@ async def update_user(
     before = {"role": user.role, "active": user.active}
     password = changes.pop("password", None)
     for key, value in changes.items():
-        setattr(user, key, value.strip() if key == "name" else value)
+        setattr(user, key, value)  # name 은 스키마(Name)가 이미 다듬었다
     if password:
         user.pw_hash = await hash_password_async(password)
     if password or changes.get("active") is False:

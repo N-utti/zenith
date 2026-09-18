@@ -176,6 +176,8 @@ async def test_trash_untrash_and_hard_delete(client: AsyncClient, users: Users, 
     # member 의 영구 삭제는 403 + acl.denied
     r = await client.delete(f"/api/docs/{doc['id']}", params={"hard": 1}, headers=csrf(client))
     assert (r.status_code, r.json()["code"]) == (403, "FORBIDDEN")
+    # 등급 이름은 화면 표기대로 — 프론트가 서버 문구를 그대로 띄운다
+    assert "임원" in r.json()["detail"]
     since = datetime.now(UTC) - timedelta(minutes=1)
     assert await audit.count_since(app_db, "acl.denied", since, min_role="exec") == 1
     assert (await client.get(f"/api/docs/{doc['id']}")).status_code == 200
