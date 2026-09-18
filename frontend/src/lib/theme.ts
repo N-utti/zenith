@@ -23,7 +23,7 @@ export function setTheme(theme: Theme) {
   listeners.forEach((fn) => fn())
 }
 
-/** index.html 인라인 스크립트가 초기 테마를 이미 확정해 둔다. 여기서는 읽고 토글만 한다. */
+/** `public/theme.js` 가 초기 테마를 이미 확정해 둔다. 여기서는 읽고 토글만 한다. */
 export function useTheme() {
   const theme = useSyncExternalStore(
     subscribe,
