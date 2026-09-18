@@ -35,10 +35,25 @@ const NOTIFICATIONS: Notification[] = [
     read_at: null,
     created_at: minutesAgo(62),
     payload: {
-      channel_id: 'c-1',
+      channel_id: 'c-dev',
+      channel_name: '개발',
       message_id: 'cm-1',
       from: { id: 'u-4', name: '장지윤' },
       preview: '권한 필터 기준 한 번만 확인 부탁드려요',
+    },
+  },
+  {
+    // DM 멘션. 채널 이름(`channel_name`)이 보낸 사람 이름이라 요약에 «»로 들어가면 안 된다.
+    id: 'n-6',
+    kind: 'mention',
+    read_at: null,
+    created_at: minutesAgo(95),
+    payload: {
+      channel_id: 'dm-u1-u2',
+      channel_name: '정성운',
+      message_id: 'cm-2',
+      from: { id: 'u-2', name: '정성운' },
+      preview: '어제 얘기한 알림 문구 초안 보냈어요',
     },
   },
   {
@@ -100,7 +115,8 @@ function maskForViewer(user: User, notification: Notification): Notification {
   // 글이나 게시판이 사라졌으면 등급을 확인할 길이 없다. 가리는 쪽이 안전하다.
   const allowed = board ? canRead(user, board.minRole) : false
   if (allowed) return notification
-  return { ...notification, payload: { ...p, title: MASKED_TITLE, masked: true } }
+  // 제목만 가리고 작성자를 남기면 누가 임원 게시판에 글을 썼는지가 샌다. 서버도 같이 지운다.
+  return { ...notification, payload: { ...p, title: MASKED_TITLE, masked: true, from: null } }
 }
 
 export function listNotifications(

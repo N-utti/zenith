@@ -55,8 +55,14 @@ function mentionView(p: NotificationPayload): NotificationView | null {
     return {
       actorId,
       actorName,
-      // 채널 이름은 payload 에 없다(`realtime/chat.py`). 백엔드에 요청해 둔 상태다.
-      summary: `${actorName}님이 채팅에서 회원님을 불렀습니다`,
+      /*
+       * DM 이면 `channel_name` 이 보낸 사람 이름이라(`realtime/chat.py`) 「홍길동님이 «홍길동»에서」
+       * 가 된다. 같으면 채널 이름을 빼서 DM 을 가려낸다 — payload 에 DM 표시가 따로 없다.
+       */
+      summary:
+        p.channel_name && p.channel_name !== actorName
+          ? `${actorName}님이 «${p.channel_name}»에서 회원님을 불렀습니다`
+          : `${actorName}님이 채팅에서 회원님을 불렀습니다`,
       detail: p.preview ?? null,
       to: `/chat/${p.channel_id}`,
       icon: 'chat',
@@ -71,10 +77,9 @@ function postView(p: NotificationPayload): NotificationView | null {
   const actorName = p.from?.name ?? UNKNOWN
 
   /*
-   * 가려진 글이면 글쓴이를 지운다. 백엔드 마스킹(`_mask_post_notices`)은 제목만 바꾸고
-   * 보낸 사람은 payload 에 남겨 두는데, 같은 서버의 홈 공지 목록(`_posts`)은 권한 밖이면
-   * 글쓴이를 `null` 로 지운다. 두 경로가 엇갈린 자리라 좁은 쪽을 따른다.
-   * 백엔드에도 공유했다(PR 본문).
+   * 가려진 글이면 글쓴이를 지운다. 백엔드 마스킹(`_mask_post_notices`)도 2026-09-18 부터
+   * `from` 을 `null` 로 지우지만(홈 공지 목록 `_posts` 와 같은 기준), 그전에 쌓인 알림 행은
+   * 작성자를 그대로 싣고 있다. 여기서 한 번 더 지운다.
    */
   if (p.masked) {
     return {
