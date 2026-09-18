@@ -18,6 +18,8 @@ export interface UnreadChannel {
   /** DM 은 상대 이름. */
   name: string
   is_dm: boolean
+  /** DM 이면 상대, 채널이면 `null`(키는 항상 있다). 아바타 색을 이름이 아니라 사람으로 정한다. */
+  peer_id: string | null
   count: number
 }
 

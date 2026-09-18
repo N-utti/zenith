@@ -140,7 +140,7 @@ export function DelegationSection() {
             peopleError
               ? '사람 목록을 불러오지 못했습니다.'
               : !peoplePending && people.length === 0
-                ? '함께 채널을 쓰는 사람이 없습니다.'
+                ? '고를 수 있는 사람이 없습니다.'
                 : null
           }
         >

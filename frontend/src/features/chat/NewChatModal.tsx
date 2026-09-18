@@ -18,13 +18,9 @@ const NAME_MAX = 100
 /**
  * 채널을 만들거나 DM 을 연다.
  *
- * DM 상대 목록은 **내가 속한 채널의 멤버**를 합쳐 만든다. 04 에 일반 사용자용 사용자 목록
- * 경로가 없기 때문이다. 공개 채널에는 전원이 들어가므로 이게 사실상 전체 명단이다.
- *
- * 다만 그 "전원" 에는 **비활성 계정도 들어간다**(백엔드가 일부러 넣는다. 복직하면 그 사이
- * 생긴 채널도 보여야 하므로). 그런데 DM 을 만들 때는 비활성이면 422 다. 지금은 `Person` 에
- * 활성 여부가 없어 프론트가 미리 거를 수 없다. 백엔드에 `Person.active` 를 요청해 뒀다
- * (PR 본문). 그때까지는 실패 문구로 사정을 밝힌다.
+ * DM 상대 목록은 `GET /people`(#117) 이다. 서버가 비활성 계정까지 주고(복직하면 그 사이
+ * 생긴 채널도 보여야 하므로 백엔드가 일부러 남긴다), DM 은 비활성이면 422 라 `pickable` 이
+ * 미리 거른다.
  *
  * 부르는 쪽은 열 때 마운트한다(`{open && <NewChatModal .../>}`). 폼 리셋을 닫기 함수에 두면
  * Esc·바깥 클릭처럼 그 함수를 안 거치는 닫기에서 지난 입력이 남는다.
@@ -47,7 +43,7 @@ export function NewChatModal({
   const [name, setName] = useState('')
   const [error, setError] = useState<string | null>(null)
 
-  const { people } = useColleagues()
+  const { people, isPending: peoplePending, isError: peopleError } = useColleagues()
 
   /** 이미 DM 이 있는 사람. 고르면 그 대화가 열린다. 사이드바에도 이미 있으니 그렇다고 알린다. */
   const talkingTo = useMemo(
@@ -81,7 +77,7 @@ export function NewChatModal({
       // 실패는 토스트가 아니라 입력 옆에 낸다. 고칠 곳이 이 폼 안에 있다(같은 이름의 채널 409).
       onError: (err) => {
         // 목록에 보이는 사람을 눌렀는데 서버가 "없는 사용자입니다" 라고 하면 화면과 모순된다.
-        // 비활성 계정이 목록에 남아 있어서 생기는 일이라 사정을 밝힌다(위 주석).
+        // 목록을 받은 뒤 그 사람이 비활성으로 바뀌면 남는 경합이다. 드물지만 사정을 밝힌다.
         if (mode === 'dm' && err instanceof ApiError && err.status === 422) {
           setError('지금은 이 사람과 대화를 시작할 수 없습니다. 비활성 계정일 수 있습니다.')
           return
@@ -100,9 +96,13 @@ export function NewChatModal({
           </p>
         )}
         <ul className="-mx-2 max-h-80 overflow-y-auto">
-          {people.length === 0 && (
+          {(peoplePending || peopleError || people.length === 0) && (
             <li className="text-muted px-2 py-6 text-center text-sm">
-              아직 같은 채널에 있는 사람이 없습니다.
+              {peoplePending
+                ? '불러오는 중입니다.'
+                : peopleError
+                  ? '사람 목록을 불러오지 못했습니다.'
+                  : '대화할 수 있는 사람이 없습니다.'}
             </li>
           )}
           {people.map((person) => (
