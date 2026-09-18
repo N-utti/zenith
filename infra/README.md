@@ -45,8 +45,13 @@ docker compose cp caddy:/data/caddy/pki/authorities/local/root.crt ./zenith-root
 
 ### CSP
 
-`Caddyfile` 이 `Content-Security-Policy-Report-Only` 를 붙인다(2026-09-16) — **아무것도 막지 않는다**. 브라우저 devtools 콘솔에 `[Report Only]` 로 위반만 찍힌다(report-uri 는 두지 않았다 — 15명 규모에서 콘솔 확인이면 된다).
-승격 절차: (1) 프론트가 로그인·문서 편집·채팅 첨부(이미지 미리보기)·AI 답변·⌘K 를 한 바퀴 돌며 콘솔에 CSP 위반이 없는지 본다, (2) 위반이 있으면 규칙을 고친다(정당한 리소스) 또는 코드를 고친다(인라인 스크립트 등), (3) 헤더 이름에서 `-Report-Only` 를 뗀다. `script-src` 의 sha256 은 `frontend/index.html` 의 인라인 테마 스크립트 해시라 그 스크립트를 고치면 해시를 다시 뽑는다(`docker compose exec caddy cat /srv/index.html` 의 `<script>…</script>` 안쪽 **바이트 그대로**(개행 포함) sha256 → base64. 개행은 `.gitattributes` 가 LF 로 고정한다 — Windows 에서 CRLF 로 빌드하면 해시가 어긋나 거짓 위반이 찍힌다) — 스크립트를 외부 파일로 빼면 해시가 필요 없어진다(프론트 제안).
+`Caddyfile` 이 `Content-Security-Policy` 를 붙인다 — **2026-09-18 에 Report-Only 를 뗐다**(이슈 #105). 이제 실제로 막는다.
+
+승격의 근거: (1) 유일한 인라인 스크립트였던 테마 FOUC 스크립트를 프론트가 `public/theme.js` 로 뺐고(프론트 PR #119 — Tauri 셸은 인라인 해시가 없어 데스크톱에서 다크모드가 통째로 안 먹던 버그도 같이 고쳤다), (2) `npm run build` 산출물을 검사해 **인라인 `<script>` 0개 · `eval`/`new Function` 0개 · 외부 오리진 fetch 없음 · 워커 없음**을 확인했다(번들에 남은 `https://…` 문자열은 SVG/XML 네임스페이스와 라이브러리 오류 메시지의 문서 링크다), (3) `caddy validate` 통과 + caddy 를 띄워 응답 헤더를 실제로 확인했다. 그래서 `script-src` 의 sha256 도 같이 뺐다 — 이제 가리키는 스크립트가 없고, 남겨 두면 다음 사람이 그 해시를 맞추려 든다.
+
+**아직 안 한 것**: 사람이 브라우저로 화면을 한 바퀴 도는 확인(로그인·문서 편집·채팅 첨부 미리보기·AI 답변·⌘K). 정적 검사가 못 보는 것은 런타임에만 생기는 리소스다 — 파일럿 스모크 때 콘솔을 한 번 본다. **막히면 되돌리기는 헤더 이름에 `-Report-Only` 를 붙이는 한 줄**(`docker compose restart caddy`). 자주 나올 후보: 새 외부 폰트·CDN(루트 CLAUDE.md 가 금지하므로 나오면 코드가 틀린 것), `<img src=blob:>` 미리보기(그때 `img-src` 에 `blob:` 추가), iframe 임베드(`frame-src`).
+`report-uri` 는 두지 않았다 — 15명 규모에서 콘솔 확인이면 된다.
+
 - api 는 `COOKIE_SECURE=true` 가 기본이다. caddy 없이 api 에 평문 http 로 붙는 실험에서만 `ZENITH_COOKIE_SECURE=false`.
 
 ### 백업 · 복구
