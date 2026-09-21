@@ -77,6 +77,18 @@ describe('auditView', () => {
     expect(view.detail).toBeUndefined()
   })
 
+  it('팀 생성·이름 변경은 우리말로 적는다', () => {
+    const created = auditView(event({ kind: 'admin.team_created', detail: { name: '기획팀' } }))
+    expect(created.summary).toBe('팀 생성')
+    expect(created.detail).toBe('기획팀')
+
+    const updated = auditView(
+      event({ kind: 'admin.team_updated', detail: { before: '개발팀', after: '플랫폼팀' } }),
+    )
+    expect(updated.summary).toBe('팀 이름 변경')
+    expect(updated.detail).toBe('개발팀 → 플랫폼팀')
+  })
+
   it('세션 토큰 재사용은 가장 센 색으로 표시한다', () => {
     expect(auditView(event({ kind: 'auth.refresh_reuse' })).tone).toBe('danger')
   })
