@@ -7,8 +7,10 @@ FTS 는 Postgres 'simple' 설정(documents.tsv 와 같다 — 한국어 형태�
 스니펫의 강조는 HTML 이 아니라 `**…**` 마커다. 본문에 든 태그는 ts_headline 이 **일부만** 버리므로(`<svg onload=` 같은
 조각이 남는다) 서버가 `<>&` 를 이스케이프해 보낸다(TC-SEC-04) — 프론트는 스니펫을 textContent 로 그리고 `**` 만 파싱한다.
 
-ponytail: messages·posts 는 tsv 컬럼·GIN 인덱스 없이 to_tsvector 를 즉석에서 만든다 — 15명 규모의 수천 행은
-순차 스캔이 더 싸다. 느려지면 03 §2.4 식으로 tsv 컬럼 + GIN 을 붙인다(README "설계와 어긋나는 것" 13).
+messages·posts 의 `tsv` 는 DB 가 본문에서 만들어 저장하는 생성 컬럼 + GIN 이다(2026-09-21, README "설계와 어긋나는 것" 13(d)).
+그전에는 to_tsvector 를 즉석에서 만들어 순차 스캔했다 — 메시지 6만 건에서 ⌘K 한 번이 약 300ms 였다.
+ponytail: 문서는 `tsv || to_tsvector(title)` 식이라 있는 GIN(idx_documents_tsv)을 못 탄다. 600건에 3~8ms 라 둔다 —
+느려지면 같은 식의 표현식 GIN, 또는 제목을 tsv 에 넣고 PATCH 가 tsv 를 같이 고친다.
 """
 
 import re
@@ -134,8 +136,7 @@ async def search(
             )
 
     if "chat" in wanted:
-        tsv = func.to_tsvector("simple", Message.body)
-        score = _score(func.ts_rank(tsv, tsq), Message.created_at).label("score")
+        score = _score(func.ts_rank(Message.tsv, tsq), Message.created_at).label("score")
         # DM 이름은 상대 이름 — 채널당 한 번 뽑는다(아래)
         rows = (
             await db.execute(
@@ -153,7 +154,7 @@ async def search(
                     (ChannelMember.channel_id == Message.channel_id)
                     & (ChannelMember.user_id == user.id),
                 )
-                .where(tsv.op("@@")(tsq))
+                .where(Message.tsv.op("@@")(tsq))
                 .order_by(score.desc(), Message.created_at.desc(), Message.id)
                 .limit(limit)
             )
@@ -194,8 +195,7 @@ async def search(
         allowed = [
             role for role, r in ROLE_RANK.items() if r <= my_rank
         ]  # 권한 필터: 내 등급 이상 게시판만
-        tsv = func.to_tsvector("simple", Post.title).op("||")(func.to_tsvector("simple", Post.body))
-        score = _score(func.ts_rank(tsv, tsq), Post.created_at).label("score")
+        score = _score(func.ts_rank(Post.tsv, tsq), Post.created_at).label("score")
         rows = await db.execute(
             select(
                 Post,
@@ -204,7 +204,7 @@ async def search(
                 func.ts_headline("simple", Post.body, tsq, HEADLINE_OPTS),
             )
             .join(Board, Board.id == Post.board_id)
-            .where(Board.min_role.in_(allowed), tsv.op("@@")(tsq))  # 빈 목록이면 항상 거짓
+            .where(Board.min_role.in_(allowed), Post.tsv.op("@@")(tsq))  # 빈 목록이면 항상 거짓
             .order_by(score.desc(), Post.created_at.desc(), Post.id)
             .limit(limit)
         )

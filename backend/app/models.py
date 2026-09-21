@@ -12,6 +12,7 @@ from typing import Literal
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     Boolean,
+    Computed,
     Date,
     DateTime,
     ForeignKey,
@@ -217,7 +218,13 @@ class ChannelMember(Base):
 
 class Message(Base):
     __tablename__ = "messages"
-    __table_args__ = (Index("idx_messages_channel", "channel_id", sql_text("created_at DESC")),)
+    # tsv(생성 컬럼)는 서버 기본값으로 잡혀, 기본 설정이면 INSERT 의 RETURNING 에 tsvector 가 통째로 딸려 온다.
+    # deferred 는 SELECT 만 막는다. id 는 PK 라 따로 돌아오고, created_at 은 만드는 쪽이 항상 채운다.
+    __mapper_args__ = {"eager_defaults": False}
+    __table_args__ = (
+        Index("idx_messages_channel", "channel_id", sql_text("created_at DESC")),
+        Index("idx_messages_tsv", "tsv", postgresql_using="gin"),
+    )
 
     id: Mapped[uuid.UUID] = uuid_pk()
     channel_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("channels.id"), nullable=False)
@@ -226,6 +233,14 @@ class Message(Base):
     doc_ref: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("documents.id"))  # 문서 카드
     attachments: Mapped[list | None] = mapped_column(JSONB)
     created_at: Mapped[datetime] = created_at_col()
+    # 검색용 파생(03 §2.4 식). DB 가 본문에서 만들어 저장한다 — 앱은 쓰지 않고, 읽을 때도 딸려 오지 않는다
+    # (deferred + 위 eager_defaults). 즉석 to_tsvector 는 일치한 행마다 ts_rank 가 다시 계산해 흔한 단어에서 느렸다.
+    tsv: Mapped[str | None] = mapped_column(
+        TSVECTOR,
+        Computed("to_tsvector('simple', body)", persisted=True),
+        deferred=True,
+        deferred_raiseload=True,
+    )
 
 
 class Board(Base):
@@ -238,6 +253,10 @@ class Board(Base):
 
 class Post(Base):
     __tablename__ = "posts"
+    # Message 와 같다. tsv(생성 컬럼)는 서버 기본값으로 잡혀, 기본 설정이면 INSERT 의 RETURNING 에 tsvector 가 통째로 딸려 온다.
+    # deferred 는 SELECT 만 막는다. id 는 PK 라 따로 돌아오고, created_at 은 만드는 쪽이 항상 채운다.
+    __mapper_args__ = {"eager_defaults": False}
+    __table_args__ = (Index("idx_posts_tsv", "tsv", postgresql_using="gin"),)
 
     id: Mapped[uuid.UUID] = uuid_pk()
     board_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("boards.id"), nullable=False)
@@ -245,6 +264,13 @@ class Post(Base):
     body: Mapped[str] = mapped_column(Text, nullable=False)
     author_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
     created_at: Mapped[datetime] = created_at_col()
+    # Message.tsv 와 같은 이유. 제목도 검색 대상이라 함께 넣는다
+    tsv: Mapped[str | None] = mapped_column(
+        TSVECTOR,
+        Computed("to_tsvector('simple', title) || to_tsvector('simple', body)", persisted=True),
+        deferred=True,
+        deferred_raiseload=True,
+    )
 
 
 class Todo(Base):
