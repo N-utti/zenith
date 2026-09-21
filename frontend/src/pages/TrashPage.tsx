@@ -58,7 +58,7 @@ export function TrashPage() {
       )}
 
       {data && (
-        <Table>
+        <Table label="휴지통 목록">
           <THead>
             <TR>
               <TH>제목</TH>

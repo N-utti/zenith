@@ -72,7 +72,7 @@ export function AuditLog() {
 
       {data && (
         <>
-          <Table>
+          <Table label="감사 기록">
             <THead>
               <TR>
                 <TH className="w-44">시각</TH>
