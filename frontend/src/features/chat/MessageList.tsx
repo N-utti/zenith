@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Paperclip } from 'lucide-react'
+import { Download, Paperclip } from 'lucide-react'
 import { Avatar } from '@/components/ui/Avatar'
 import { Spinner } from '@/components/ui/Spinner'
 import { hueOf } from '@/lib/avatar'
@@ -45,16 +45,29 @@ function Attachments({ files }: { files: ChatAttachment[] | null }) {
       {files.map((file, index) => (
         <li key={`${file.url}-${index}`}>
           {isImage(file.name) && !broken.has(file.url) ? (
-            <a href={httpUrl(file.url)} target="_blank" rel="noreferrer">
-              <img
-                src={httpUrl(file.url)}
-                alt={file.name}
-                loading="lazy"
-                // 못 그리면 파일 링크로 떨어뜨린다. 깨진 그림 아이콘만 남으면 이름조차 안 보인다.
-                onError={() => setBroken((prev) => new Set(prev).add(file.url))}
-                className="border-line max-h-60 max-w-full rounded-lg border object-contain"
-              />
-            </a>
+            <div className="group/image relative w-fit">
+              <a href={httpUrl(file.url)} target="_blank" rel="noreferrer" className="block">
+                <img
+                  src={httpUrl(file.url)}
+                  alt={file.name}
+                  loading="lazy"
+                  // 못 그리면 파일 링크로 떨어뜨린다. 깨진 그림 아이콘만 남으면 이름조차 안 보인다.
+                  onError={() => setBroken((prev) => new Set(prev).add(file.url))}
+                  className="border-line max-h-60 max-w-full rounded-lg border object-contain"
+                />
+              </a>
+              {/* 이미지는 새 탭으로 열릴 뿐이라 저장할 길이 없었다. 파일 칩과 같은 `download` 를 얹는다.
+                  숨어 있을 때는 눌리지도 않는다. 그림을 열려고 누른 것이 내려받기가 되면 안 된다. */}
+              <a
+                href={httpUrl(file.url)}
+                download={file.name}
+                aria-label={`${file.name} 내려받기`}
+                title="내려받기"
+                className="border-line bg-surface text-muted hover:text-fg pointer-events-none absolute top-1.5 right-1.5 grid size-7 place-items-center rounded-md border opacity-0 transition-opacity group-focus-within/image:pointer-events-auto group-focus-within/image:opacity-100 group-hover/image:pointer-events-auto group-hover/image:opacity-100 max-[1024px]:pointer-events-auto max-[1024px]:opacity-100"
+              >
+                <Download className="size-3.5" />
+              </a>
+            </div>
           ) : (
             <a
               href={httpUrl(file.url)}
