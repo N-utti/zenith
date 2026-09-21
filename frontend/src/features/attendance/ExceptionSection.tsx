@@ -168,7 +168,7 @@ export function ExceptionSection() {
         </div>
       </Card>
 
-      <Table label="예외 근무 신청 목록">
+      <Table label="예외 근무 신청 목록" wide>
         <THead>
           <tr>
             <TH>종류</TH>
@@ -195,8 +195,13 @@ export function ExceptionSection() {
               <TR key={`${row.kind}:${row.id}`} muted={row.status === 'canceled'}>
                 <TD>{row.label}</TD>
                 <TD className="whitespace-nowrap">{row.period}</TD>
-                <TD className="text-muted max-w-xs truncate" title={row.detail}>
-                  {row.detail}
+                {/* 폭 제한을 칸이 아니라 안쪽 블록에 건다. 표 칸의 max-width 는 규격이 «제안»
+                    으로만 두어 엔진이 무시해도 되는데, 이 표는 열을 한 줄로 세우므로(wide)
+                    그때 사유 전체가 펴져 표를 끌고 간다. 블록의 max-width 는 어디서나 지켜진다. */}
+                <TD className="text-muted">
+                  <span className="block max-w-xs truncate" title={row.detail}>
+                    {row.detail}
+                  </span>
                 </TD>
                 <TD>
                   <Badge tone={REQUEST_STATUS_TONE[row.status]}>

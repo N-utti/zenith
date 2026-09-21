@@ -82,7 +82,7 @@ export function HolidaySection() {
       {/* 연도를 옮기면 폼도 비운다. 남은 날짜가 새 연도의 min/max 밖에 걸려 브라우저 말풍선이 뜬다. */}
       <AddHolidayForm key={year} year={year} />
 
-      <Table label={`${year}년 회사 휴일 목록`}>
+      <Table label={`${year}년 회사 휴일 목록`} wide>
         <THead>
           <tr>
             <TH>날짜</TH>

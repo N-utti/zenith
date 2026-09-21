@@ -55,7 +55,7 @@ export function AccountList() {
       )}
 
       {data && (
-        <Table label="계정 목록">
+        <Table label="계정 목록" wide>
           <THead>
             <TR>
               <TH>이름</TH>

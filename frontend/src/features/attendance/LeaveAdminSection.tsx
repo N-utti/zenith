@@ -54,7 +54,7 @@ export function LeaveAdminSection() {
         </Card>
       )}
 
-      <Table label="직원별 연차 목록">
+      <Table label="직원별 연차 목록" wide>
         <THead>
           <tr>
             <TH>이름</TH>
