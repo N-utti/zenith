@@ -39,8 +39,22 @@ export interface ChatChannel {
   last_message: ChatMessage | null
 }
 
-/** 서버가 WebSocket으로 밀어 주는 이벤트. */
+/**
+ * 서버가 WebSocket 으로 밀어 주는 이벤트(04 §4.1). 봉투 키는 `ev` 이고 필드는 snake_case 다.
+ *
+ * `presence`(재실)·`notice`(알림)도 같은 소켓으로 오지만 여기에 없다. 받을 화면이 없어서다.
+ * 재실은 근태 모듈이 판정하고(`components/layout/WorkStatus.tsx`), 알림함은 아직 소켓을 읽지
+ * 않고 `GET /me/notifications` 만 본다. 그래서 둘은 받아서 버린다. 화면이 생기면 union 에 더한다.
+ */
 export type ChatEvent =
-  | { type: 'message'; message: ChatMessage }
-  | { type: 'typing'; channelId: string; userId: string; name: string }
-  | { type: 'read'; channelId: string; userId: string }
+  | { ev: 'msg'; channel_id: string; message: ChatMessage }
+  /** 내 안읽음 숫자. 새 메시지 때는 사람마다 자기 숫자, `read` 뒤에는 본인에게 0. */
+  | { ev: 'unread'; channel_id: string; count: number }
+  | { ev: 'typing'; channel_id: string; user_id: string; name: string }
+  /**
+   * 보낸 것이 거절됐다. 소켓은 닫히지 않는다.
+   *
+   * `detail` 은 문구 하나일 때도 있고 필드별 오류 배열일 때도 있다(프레임이 스키마에 안 맞으면
+   * pydantic 오류가 그대로 온다). 사람에게 보일 문구는 `events.ts` 의 `errorText()` 가 고른다.
+   */
+  | { ev: 'error'; code: string; detail: unknown; channel_id?: string }

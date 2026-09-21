@@ -6,13 +6,7 @@ import { DEMO_PASSWORD } from './accounts'
 import { createAccount, emailTaken, findAccount, listAccounts, patchAccount } from './adminDb'
 import { badCursor, listAudit, push as recordAudit } from './auditDb'
 import { EMAIL_PATTERN, type UserCreate, type UserPatch } from '@/features/admin/types'
-import {
-  clearMockSession,
-  MOCK_TEAM_LIST,
-  MOCK_USERS,
-  setMockSession,
-  userFromCookie,
-} from './db'
+import { clearMockSession, MOCK_TEAM_LIST, MOCK_USERS, setMockSession, userFromCookie } from './db'
 import {
   AI_MODELS,
   answer,
@@ -236,15 +230,15 @@ export const handlers = [
   // 공유되지 않기 때문이다. vite가 개발 서버(`npm run server`)로 넘기도록
   // 그대로 통과시킨다.
   //
-  // 개발 릴레이(`scripts/chat.js`)가 실제로 여는 네 개만 넘긴다. `/api/channels/*` 로
+  // 개발 릴레이(`scripts/chat.js`)가 실제로 여는 다섯 개만 넘긴다. `/api/channels/*` 로
   // 뭉뚱그리면 아직 안 만든 경로까지 삼켜 릴레이의 404로 조용히 떨어지고,
   // 통과는 "처리됨"이라 onUnhandledRequest 경고도 안 뜬다.
   http.get('/api/channels', () => passthrough()),
   http.post('/api/channels', () => passthrough()),
-  http.all('/api/channels/:channelId/messages', () => passthrough()),
+  // 메시지는 GET 만. 보내기·읽음은 REST 가 아니라 소켓 op 이다(04 §4.1, 이슈 #128).
+  http.get('/api/channels/:channelId/messages', () => passthrough()),
   http.post('/api/channels/:channelId/attachments', () => passthrough()),
   http.get('/api/channels/:channelId/attachments/*', () => passthrough()),
-  http.post('/api/channels/:channelId/read', () => passthrough()),
 
   // ── 인증 ──────────────────────────────────────────────────
   http.post('/api/auth/login', async ({ request }) => {

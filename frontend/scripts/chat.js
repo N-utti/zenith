@@ -10,9 +10,12 @@
  *
  *   GET  /channels                    사용자별 목록 (안읽음·마지막 메시지 포함)
  *   GET  /channels/:id/messages       최근 메시지
- *   POST /channels/:id/messages       전송 (04 에 없다. 백엔드는 WS 의 msg op)
- *   POST /channels/:id/read           읽음 처리 (04 에 없다. 백엔드는 WS 의 read 이벤트로 받는다)
- *   WS   /ws                          message · typing · read 이벤트
+ *   WS   /ws                          보내는 op: sub · msg · read · typing
+ *                                     받는 ev: msg · unread · typing · error
+ *
+ * 보내기·읽음은 REST 가 아니라 소켓 op 이다(04 §4.1). 실서버가 그렇게만 받으므로 릴레이도
+ * 같게 맞춘다. 갈라 두면 목 모드에서 되는 것이 실서버에서 405 로 죽는다(이슈 #128).
+ * presence · notice 는 실서버가 보내지만 릴레이는 보내지 않는다. 받을 화면이 아직 없다.
  *
  * 인증은 MSW 로그인이 심는 세션 쿠키(zenith.mock.session=<userId>)로만 한다. 실제 백엔드가
  * HttpOnly 쿠키의 JWT 에서 사용자를 꺼내는 것과 같은 자리다. URL·본문의 userId 는 보지 않는다
@@ -66,17 +69,30 @@ function makeMessage(channelId, authorId, body, createdAt, files) {
 const messages = new Map([
   [
     'c-notice',
-    [
-      makeMessage('c-notice', 'u-3', '워크숍 참석 여부 회신 부탁드립니다.', minutesAgo(175)),
-    ],
+    [makeMessage('c-notice', 'u-3', '워크숍 참석 여부 회신 부탁드립니다.', minutesAgo(175))],
   ],
   [
     'c-dev',
     [
       makeMessage('c-dev', 'u-2', '문서 모듈 어디까지 됐나요?', minutesAgo(95)),
-      makeMessage('c-dev', 'u-1', '에디터랑 공동편집까지 붙였고 버전 기록 작업 중입니다.', minutesAgo(92)),
-      makeMessage('c-dev', 'u-2', '좋네요. 백엔드 붙기 전에 목으로 확인 가능한가요?', minutesAgo(90)),
-      makeMessage('c-dev', 'u-1', 'Yjs 커서 동기화 이슈 재현됐습니다. 스크린샷 올릴게요', minutesAgo(4)),
+      makeMessage(
+        'c-dev',
+        'u-1',
+        '에디터랑 공동편집까지 붙였고 버전 기록 작업 중입니다.',
+        minutesAgo(92),
+      ),
+      makeMessage(
+        'c-dev',
+        'u-2',
+        '좋네요. 백엔드 붙기 전에 목으로 확인 가능한가요?',
+        minutesAgo(90),
+      ),
+      makeMessage(
+        'c-dev',
+        'u-1',
+        'Yjs 커서 동기화 이슈 재현됐습니다. 스크린샷 올릴게요',
+        minutesAgo(4),
+      ),
     ],
   ],
   ['c-random', []],
@@ -86,7 +102,14 @@ const messages = new Map([
   ],
   [
     'dm-u2-u5',
-    [makeMessage('dm-u2-u5', 'u-5', '오늘 재택이라 펀드 보고서는 메일로 드릴게요.', minutesAgo(140))],
+    [
+      makeMessage(
+        'dm-u2-u5',
+        'u-5',
+        '오늘 재택이라 펀드 보고서는 메일로 드릴게요.',
+        minutesAgo(140),
+      ),
+    ],
   ],
 ])
 
@@ -158,13 +181,35 @@ const sockets = new Map()
 function publish(channelId, event) {
   const channel = CHANNELS.find((c) => c.id === channelId)
   if (!channel) return
-  const payload = JSON.stringify(event)
+  publishTo(channel.memberIds, event)
+}
 
+/** 특정 사람들에게만. `unread` 는 사람마다 숫자가 달라 채널 전체로 뿌릴 수 없다. */
+function publishTo(userIds, event) {
+  const payload = JSON.stringify(event)
   for (const [socket, userId] of sockets) {
-    if (!channel.memberIds.includes(userId)) continue
+    if (!userIds.includes(userId)) continue
     if (socket.readyState !== socket.OPEN) continue
     socket.send(payload)
   }
+}
+
+/** 멤버마다 자기 안읽음 숫자를 보낸다. 백엔드 `_unread_counts` 와 같은 뜻. */
+function publishUnread(channel) {
+  for (const uid of channel.memberIds) {
+    publishTo([uid], {
+      ev: 'unread',
+      channel_id: channel.id,
+      count: channelView(channel, uid).unread,
+    })
+  }
+}
+
+function sendError(conn, code, detail, channelId) {
+  if (conn.readyState !== conn.OPEN) return
+  const event = { ev: 'error', code, detail }
+  if (channelId) event.channel_id = channelId
+  conn.send(JSON.stringify(event))
 }
 
 export function handleChatConnection(conn, userId) {
@@ -173,22 +218,57 @@ export function handleChatConnection(conn, userId) {
   sockets.set(conn, userId)
   console.log(`[chat] 접속: ${USERS[userId].name} (${sockets.size}명)`)
 
+  // 보내기·읽음·타이핑은 전부 여기로 온다(04 §4.1). 실서버(`realtime/chat.py`)와 같은 규약이라야
+  // 목 모드에서 되는 것이 실서버에서도 된다. 갈라지면 실서버에서만 터지는 버그가 생긴다(이슈 #128).
   conn.on('message', (raw) => {
-    let event
+    let op
     try {
-      event = JSON.parse(String(raw))
+      op = JSON.parse(String(raw))
     } catch {
-      return
+      return sendError(conn, 'VALIDATION', '프레임을 읽을 수 없습니다.')
     }
+
+    // 구독 범위는 멤버십이 정한다. 받아들이기만 한다(백엔드 SubOp 과 같다).
+    if (op.op === 'sub') return
+
+    const channelId = op.channel_id
+    const channel = CHANNELS.find((c) => c.id === channelId)
+    // 없는 채널도 멤버 아님과 같은 답을 준다. 존재를 새지 않는다.
+    if (!channel || !channel.memberIds.includes(userId)) {
+      return sendError(conn, 'FORBIDDEN', '권한이 부족합니다.', channelId)
+    }
+
+    if (op.op === 'msg') {
+      const body = typeof op.body === 'string' ? op.body.trim() : ''
+      const checked = checkAttachments(op.attachments, channelId)
+      if (checked.error) return sendError(conn, 'VALIDATION', checked.error, channelId)
+      // 첨부만 보내는 메시지도 있다. 둘 다 없을 때만 막는다.
+      if (!body && checked.files.length === 0) {
+        return sendError(conn, 'VALIDATION', '본문이나 첨부 중 하나는 있어야 한다.', channelId)
+      }
+
+      const message = makeMessage(channelId, userId, body, undefined, checked.files)
+      messages.get(channelId)?.push(message) ?? messages.set(channelId, [message])
+      // 보낸 사람은 그 채널을 보고 있다. 서버도 보낸 사람의 last_read_at 을 같이 올린다.
+      markRead(userId, channelId)
+      publish(channelId, { ev: 'msg', channel_id: channelId, message })
+      return publishUnread(channel)
+    }
+
+    if (op.op === 'read') {
+      markRead(userId, channelId)
+      return publishTo([userId], { ev: 'unread', channel_id: channelId, count: 0 })
+    }
+
     // 타이핑은 서버에 남기지 않는다. 같은 채널의 다른 사람에게 흘려보내기만 한다.
-    if (event.type === 'typing' && event.channelId) {
-      publish(event.channelId, {
-        type: 'typing',
-        channelId: event.channelId,
-        userId,
-        name: USERS[userId].name,
-      })
+    if (op.op === 'typing') {
+      return publishTo(
+        channel.memberIds.filter((id) => id !== userId),
+        { ev: 'typing', channel_id: channelId, user_id: userId, name: USERS[userId].name },
+      )
     }
+
+    return sendError(conn, 'VALIDATION', `모르는 op: ${op.op}`, channelId)
   })
 
   conn.on('close', () => {
@@ -243,7 +323,12 @@ export function sessionUserId(req) {
  * 엉뚱한 주소로 요청한다. 200자는 글자가 아니라 **바이트** 기준이다(한글은 3바이트).
  */
 function safeName(raw) {
-  const base = String(raw || 'file').split('/').pop().split(String.fromCharCode(92)).pop() || 'file'
+  const base =
+    String(raw || 'file')
+      .split('/')
+      .pop()
+      .split(String.fromCharCode(92))
+      .pop() || 'file'
   const banned = '"*/:<>?|' + String.fromCharCode(92)
   let cleaned = [...base]
     // 제어·서식 문자를 뺀다. U+202E 같은 것이 남으면 파일명 표시를 뒤집을 수 있다.
@@ -263,11 +348,7 @@ function readMultipartFile(req) {
   /** 파트의 헤더와 본문 사이. 빈 줄 하나다. */
   const CRLF2 = '\r\n\r\n'
   const type = req.headers['content-type'] ?? ''
-  const boundary = /boundary=(?:"([^"]+)"|([^;]+))/i
-    .exec(type)
-    ?.slice(1)
-    .find(Boolean)
-    ?.trim()
+  const boundary = /boundary=(?:"([^"]+)"|([^;]+))/i.exec(type)?.slice(1).find(Boolean)?.trim()
   if (!boundary) return Promise.resolve(null)
 
   return new Promise((resolve, reject) => {
@@ -531,41 +612,10 @@ export async function handleChatRequest(req, res, url) {
       return json(res, 200, { items: list.slice(-limit), next_cursor: null })
     }
 
-    if (req.method === 'POST') {
-      const payload = await readBody(req)
-      const body = typeof payload?.body === 'string' ? payload.body : ''
-      const userId = viewerId
-      if (!USERS[userId]) {
-        return json(res, 401, { detail: '알 수 없는 사용자입니다.', code: 'AUTH_REQUIRED' })
-      }
-      if (!channel.memberIds.includes(userId)) {
-        return json(res, 403, { detail: '이 채널의 멤버가 아닙니다.', code: 'FORBIDDEN' })
-      }
-      const checked = checkAttachments(payload?.attachments, channelId)
-      if (checked.error) return json(res, 422, { detail: checked.error, code: 'VALIDATION' })
-      const files = checked.files
-      // 첨부만 보내는 메시지도 있다. 둘 다 없을 때만 막는다.
-      if (!body.trim() && files.length === 0) {
-        return json(res, 422, { detail: '내용을 입력하세요.', code: 'VALIDATION' })
-      }
-
-      const message = makeMessage(channelId, userId, body.trim(), undefined, files)
-      messages.get(channelId)?.push(message) ?? messages.set(channelId, [message])
-      // 보낸 사람 기준으로는 읽은 상태다.
-      markRead(userId, channelId)
-      publish(channelId, { type: 'message', message })
-      return json(res, 201, message)
-    }
+    // POST 는 없다. 보내기는 소켓 `msg` op 이다(04 §4.1). 실서버도 이 경로에 405 를 준다.
   }
 
-  const readMatch = path.match(/^\/channels\/([^/]+)\/read$/)
-  if (readMatch && req.method === 'POST') {
-    const userId = viewerId
-    if (!USERS[userId]) return json(res, 401, { detail: '알 수 없는 사용자입니다.' })
-    markRead(userId, readMatch[1])
-    publish(readMatch[1], { type: 'read', channelId: readMatch[1], userId })
-    return json(res, 200, { ok: true })
-  }
+  // `/channels/{id}/read` 도 없다. 읽음은 소켓 `read` op 이다.
 
   return json(res, 404, { detail: '없는 경로입니다.' })
 }

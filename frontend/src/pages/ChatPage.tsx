@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { useParams } from 'react-router'
 import { AtSign, Hash, MessagesSquare, WifiOff } from 'lucide-react'
-import { useChannels, useMarkRead, useMessages } from '@/features/chat/api'
+import { useChannels, useMessages } from '@/features/chat/api'
 import { ChannelList } from '@/features/chat/ChannelList'
 import { Composer } from '@/features/chat/Composer'
 import { MessageList } from '@/features/chat/MessageList'
@@ -20,17 +20,23 @@ function TypingLine({ names }: { names: string[] }) {
 export function ChatPage() {
   const { channelId } = useParams()
   const { data: channels } = useChannels()
-  const { connected, typingByChannel, notifyTyping } = useChatSocketContext()
-  const { mutate: markRead } = useMarkRead()
+  const { connected, typingByChannel, notifyTyping, sendRead } = useChatSocketContext()
 
   const channel = channels?.items.find((c) => c.id === channelId)
   const { data: messages } = useMessages(channelId ?? null)
   const latestId = messages?.items.at(-1)?.id
 
-  // 채널을 열거나 보고 있는 동안 새 메시지가 오면 읽음으로 처리한다.
+  // 채널을 열거나 보고 있는 동안 새 메시지가 오면 읽음으로 처리한다. 읽음도 소켓이라
+  // 아직 연결되기 전이면 보낼 수 없다. connected 를 deps 에 둬서 연결된 뒤 한 번 더 보낸다.
+  //
+  // channelId 가 아니라 channel 로 가른다. 주소에 멤버가 아닌(또는 없는) 채널 id 가 들어오면
+  // 서버가 읽음을 FORBIDDEN 으로 거절하고, 그 거절이 토스트로 뜬다. 아무것도 안 썼는데
+  // 실패 알림이 반복되므로, 내 목록에 있는 채널일 때만 보낸다.
+  // deps 에 channel 객체를 넣으면 목록을 다시 받을 때마다 새 객체가 되어 읽음이 또 나간다. id 로.
+  const readableId = channel?.id
   useEffect(() => {
-    if (channelId) markRead(channelId)
-  }, [channelId, latestId, markRead])
+    if (readableId && connected) sendRead(readableId)
+  }, [readableId, latestId, connected, sendRead])
 
   return (
     <div className="flex h-full flex-col">
@@ -58,7 +64,7 @@ export function ChatPage() {
                 className="text-warning ml-auto flex items-center gap-1.5 text-xs"
               >
                 <WifiOff className="size-3.5" />
-                연결 끊김. 새 메시지가 오지 않습니다
+                연결 끊김. 메시지를 주고받을 수 없습니다
               </span>
             )}
           </header>
@@ -69,7 +75,10 @@ export function ChatPage() {
             <TypingLine names={typingByChannel[channelId] ?? []} />
           </div>
 
+          {/* key 로 채널마다 새로 만든다. 없으면 올려 둔 첨부가 채널을 옮겨도 남아, A 채널에
+              올린 파일을 B 채널로 보내다 서버가 거절한다(그 URL 은 B 의 것이 아니다). */}
           <Composer
+            key={channelId}
             channelId={channelId}
             channelName={channel.name}
             onTyping={() => notifyTyping(channelId)}

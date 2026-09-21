@@ -1,6 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
-import { homeKeys } from '@/features/home/keys'
 import type { ChatAttachment, ChatChannel, ChatMessage } from './types'
 
 /**
@@ -10,6 +9,8 @@ import type { ChatAttachment, ChatChannel, ChatMessage } from './types'
 export const chatKeys = {
   channels: ['chat', 'channels'] as const,
   messages: (channelId: string) => ['chat', 'messages', channelId] as const,
+  /** 채널 구분 없이 모든 메시지 목록. 재연결 때 한꺼번에 다시 받는 데 쓴다. */
+  allMessages: ['chat', 'messages'] as const,
 }
 
 export function useChannels() {
@@ -32,31 +33,8 @@ export function useMessages(channelId: string | null) {
   })
 }
 
-export function useSendMessage(channelId: string) {
-  return useMutation({
-    mutationFn: ({ body, attachments }: { body: string; attachments?: ChatAttachment[] }) =>
-      api<ChatMessage>(`/channels/${channelId}/messages`, {
-        method: 'POST',
-        body: JSON.stringify({ body, attachments }),
-      }),
-    // 캐시 반영은 WebSocket 이벤트가 한다. 내가 보낸 것도 같은 경로로 돌아온다.
-  })
-}
-
-export function useMarkRead() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (channelId: string) =>
-      // 04 에 없는 경로. 백엔드는 읽음을 WS 의 read 이벤트로 받는다(realtime/chat.py ReadOp).
-      // 그때까지 실제 백엔드에서는 404 다. 화면은 안 죽지만 안읽음 배지가 지워지지 않는다.
-      api<{ ok: true }>(`/channels/${channelId}/read`, { method: 'POST' }),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: chatKeys.channels })
-      // 홈의 안 읽은 대화도 같은 숫자를 본다. 다 읽고 홈으로 가면 배지가 사라져야 한다.
-      void qc.invalidateQueries({ queryKey: homeKeys.home })
-    },
-  })
-}
+// 보내기·읽음은 REST 가 아니라 소켓 op 이다(04 §4.1). `useChatSocket` 의 sendMessage·sendRead.
+// 전에 여기 있던 `POST /channels/{id}/messages`·`/read` 는 실서버에 없는 경로였고 405·404 가 났다.
 
 /**
  * 공개 채널 또는 DM 을 만든다. 서버가 둘 중 하나만 받는다(`ChannelCreateIn`).
@@ -80,6 +58,19 @@ export const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024
 
 /** 메시지 하나에 붙일 수 있는 파일 수. 백엔드 `MAX_ATTACHMENTS`. */
 export const MAX_ATTACHMENTS = 10
+
+/**
+ * 본문 글자 수 상한. 백엔드 `MsgOp.body` 의 `max_length` 와 같다(앞뒤 공백을 다듬은 뒤 센다).
+ *
+ * 여기서 먼저 막아야 한다. 넘겨 보내면 서버가 스키마 위반으로 필드별 오류 배열을 돌려주는데,
+ * 그건 사람이 읽을 문구가 없고 이미 입력창을 비운 뒤라 쓴 글이 사라진다.
+ *
+ * 이 상한이 프레임 상한(백엔드 `MAX_FRAME` 64,000바이트)도 같이 막는다. 본문 1만 자를 전부
+ * 4바이트 글자로 채워도 40KB 고, 첨부는 10개 × 약 1KB(이름은 서버가 200바이트로 자른다)라
+ * 최악이 50KB 다. 프레임 상한을 넘으면 서버가 거절 이벤트도 없이 소켓을 닫으므로(1009) 그쪽은
+ * 아예 도달하지 않게 두는 것이 맞다. 이 상한이나 첨부 개수를 올리면 그 계산이 깨진다.
+ */
+export const MAX_BODY_CHARS = 10_000
 
 /**
  * 첨부를 먼저 올리고 `{url, name, size}` 를 받는다. 그 값을 메시지의 `attachments[]` 에
