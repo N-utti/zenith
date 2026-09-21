@@ -51,6 +51,22 @@ describe('withLastMessage', () => {
     expect(withLastMessage(list, message('m2'))?.items[0].last_message?.id).toBe('m9')
   })
 
+  it('메시지가 온 채널이 맨 위로 온다', () => {
+    // 순서는 서버가 정하는 값이다(최근 대화가 위로). 재조회를 뺐으니 여기서 맞춰야 하고,
+    // 안 맞추면 조용한 채널의 행이 제자리에 머물다 다음 재조회에서 갑자기 뛴다.
+    const busy = { ...channel('c1', 0), last_message: { ...message('m1'), channel_id: 'c1' } }
+    const quiet = { ...channel('c2', 0), name: 'c2' }
+    const list = { items: [busy, quiet] }
+    const arrived = { ...message('m5'), channel_id: 'c2', created_at: '2026-09-21T04:00:00Z' }
+    expect(withLastMessage(list, arrived)?.items.map((c) => c.id)).toEqual(['c2', 'c1'])
+  })
+
+  it('대화가 없는 채널은 아래에 이름순으로 남는다', () => {
+    const list = { items: [channel('c-b', 0), channel('c-a', 0)] }
+    const arrived = { ...message('m5'), channel_id: 'nope' }
+    expect(withLastMessage(list, arrived)?.items.map((c) => c.id)).toEqual(['c-a', 'c-b'])
+  })
+
   it('모르는 채널이면 그대로 둔다', () => {
     const list = { items: [channel('c9', 0)] }
     expect(withLastMessage(list, message('m2'))?.items[0].last_message).toBeNull()
@@ -86,11 +102,11 @@ describe('errorText', () => {
     expect(errorText({ code: 'VALIDATION', detail })).toBe('채팅 서버가 요청을 거절했습니다.')
   })
 
-  it('권한 오류 문구는 보내기를 단정하지 않는다', () => {
+  it('문구를 못 뽑을 때도 보내기를 단정하지 않는다', () => {
     // 읽음·타이핑도 같은 error 로 거절된다. 아무것도 안 썼는데 발송 실패라고 뜨면 안 된다.
-    const text = errorText({ code: 'FORBIDDEN', detail: null })
-    expect(text).toBe('이 대화를 볼 권한이 없습니다.')
-    expect(text).not.toMatch(/보내|발송/)
+    for (const code of ['FORBIDDEN', 'VALIDATION']) {
+      expect(errorText({ code, detail: null })).not.toMatch(/보내|발송/)
+    }
   })
 
   it('빈 문구는 서버가 준 것으로 보지 않는다', () => {

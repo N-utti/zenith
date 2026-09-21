@@ -9,6 +9,9 @@ import { MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, MAX_BODY_CHARS, uploadAttachment
 import { useChatSocketContext } from './ChatSocketContext'
 import type { ChatAttachment } from './types'
 
+/** 끊겨서 못 보냈다는 문구. 다시 연결되면 이 문구만 지운다. */
+const DISCONNECTED = '연결이 끊겨 보내지 못했습니다. 연결되면 다시 시도하세요.'
+
 export function Composer({
   channelId,
   channelName,
@@ -25,6 +28,11 @@ export function Composer({
   /** 올라가는 중인 개수. 개수 상한은 이것까지 세야 한다. */
   const [uploading, setUploading] = useState(0)
   const [error, setError] = useState<string | null>(null)
+  /**
+   * 끊겨서 못 보낸 적이 있는지. 문구를 상태에 담지 않고 이 깃발과 `connected` 로 만든다.
+   * 담아 두면 다시 연결된 뒤에도 지울 곳이 없어 빨간 문구가 남는다.
+   */
+  const [triedOffline, setTriedOffline] = useState(false)
   const picker = useRef<HTMLInputElement>(null)
 
   const pick = async (list: FileList | null) => {
@@ -70,12 +78,11 @@ export function Composer({
       body: text,
       attachments: files.length > 0 ? files : undefined,
     })
-    if (!sent) {
-      return setError('연결이 끊겨 보내지 못했습니다. 연결되면 다시 시도하세요.')
-    }
+    if (!sent) return setTriedOffline(true)
 
     // 보낸 뒤에 비운다. 못 보냈을 때 입력창을 되살릴 일이 없다.
     setError(null)
+    setTriedOffline(false)
     setBody('')
     setFiles([])
   }
@@ -85,8 +92,13 @@ export function Composer({
     dispatch()
   }
 
-  // 끊긴 동안은 보낼 길이 없다. 전에는 REST 라 끊겨도 보내졌지만 이제 전송이 소켓이다.
-  const busy = uploading > 0 || !connected
+  // 끊김 문구는 끊겨 있는 동안만 보인다. 다시 연결되면 저절로 사라진다.
+  const shown = error ?? (triedOffline && !connected ? DISCONNECTED : null)
+
+  // 끊겼다고 보내기 버튼을 잠그지 않는다. 잠그면 누른 사람은 아무 반응도 못 보고, Enter 로
+  // 보낸 사람만 이유를 읽는다. 눌러 보고 실패 문구를 읽는 쪽으로 통일한다. 끊겼다는 사실
+  // 자체는 헤더 배너가 이미 알린다(`ChatPage`).
+  const busy = uploading > 0
 
   return (
     <form onSubmit={submit} className="border-line bg-surface border-t px-4 py-3">
@@ -159,9 +171,9 @@ export function Composer({
         </div>
       </div>
 
-      {error && (
+      {shown && (
         <p role="alert" className="text-danger mx-auto mt-2 max-w-3xl text-xs">
-          {error}
+          {shown}
         </p>
       )}
     </form>

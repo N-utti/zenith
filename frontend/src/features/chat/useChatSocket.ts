@@ -78,6 +78,8 @@ export function useChatSocket(): ChatSocket {
   const [typingByChannel, setTypingByChannel] = useState<Record<string, string[]>>({})
 
   const socketRef = useRef<WebSocket | null>(null)
+  /** 한 번이라도 열린 적이 있는지. 재접속 때만 놓친 것을 다시 받으려고 본다. */
+  const reconnectedRef = useRef(false)
   const lastTypingSentRef = useRef(0)
   const typingTimersRef = useRef(new Map<string, number>())
 
@@ -99,9 +101,14 @@ export function useChatSocket(): ChatSocket {
         // 끊긴 동안 온 메시지는 아무도 안 받아 왔다. 소켓이 유일한 수신 경로다. 다시 받지
         // 않으면 `ChatPage` 가 연결 직후 읽음을 보내 서버의 안읽음이 0 이 되고, 그 메시지는
         // 화면에도 배지에도 없이 사라진다. 그래서 먼저 다시 받는다.
-        void qc.invalidateQueries({ queryKey: chatKeys.allMessages })
-        void qc.invalidateQueries({ queryKey: chatKeys.channels })
-        void qc.invalidateQueries({ queryKey: homeKeys.home })
+        //
+        // 첫 연결에는 건너뛴다. 방금 화면이 받아 온 것을 한 번 더 받을 뿐이다.
+        if (reconnectedRef.current) {
+          void qc.invalidateQueries({ queryKey: chatKeys.allMessages })
+          void qc.invalidateQueries({ queryKey: chatKeys.channels })
+          void qc.invalidateQueries({ queryKey: homeKeys.home })
+        }
+        reconnectedRef.current = true
       }
 
       socket.onclose = () => {
@@ -135,8 +142,8 @@ export function useChatSocket(): ChatSocket {
           } else {
             void qc.invalidateQueries({ queryKey: chatKeys.channels })
           }
-          // 홈의 안 읽은 대화도 같은 숫자를 본다. 홈에 머무는 동안 배지가 안 늘면 안 된다.
-          void qc.invalidateQueries({ queryKey: homeKeys.home })
+          // 홈은 여기서 안 받는다. `msg` 뒤에는 늘 `unread` 가 따라오고(서버가 멤버마다 자기
+          // 숫자를 보낸다) 그쪽이 홈을 다시 받는다. 둘 다 하면 메시지 한 통에 홈을 두 번 받는다.
           notifyIncoming(qc, message, user.id)
           return
         }
