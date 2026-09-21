@@ -52,7 +52,7 @@ export function CommentPanel({ docId }: { docId: string }) {
       <form onSubmit={submit} className="border-line border-t p-3">
         <div className="flex gap-2.5">
           <Avatar name={user.name} hue={hueOf(user.id)} size="sm" />
-          {/* 줄바꿈은 Shift+Enter. 댓글은 짧게 여러 번 쓰는 쪽이 많다. */}
+          {/* Enter 로 등록하고 줄바꿈은 Shift+Enter. 댓글은 짧게 여러 번 쓰는 쪽이 많다. */}
           <Textarea
             value={body}
             onChange={(e) => setBody(e.target.value)}
@@ -61,11 +61,17 @@ export function CommentPanel({ docId }: { docId: string }) {
             rows={2}
             maxLength={COMMENT_BODY_MAX}
             aria-label="댓글"
-            placeholder="댓글 남기기…  (Enter 등록 · Shift+Enter 줄바꿈)"
+            placeholder="댓글 남기기…"
             className="min-h-16 flex-1"
           />
         </div>
-        <div className="mt-2 flex justify-end">
+        {/* 안내를 자리글에 같이 넣으면 좁은 화면에서 두 줄이 되며 아랫줄이 잘린다.
+            컴포저들과 같이 입력창 아래로 뺐다. 좁은 폭에서는 감춘다(물리 키보드가 없고,
+            이 패널은 모바일에서 화면의 45% 안에서 접었다 편다). */}
+        <div className="mt-2 flex items-center justify-end gap-3">
+          <span className="text-subtle hidden text-[11px] sm:inline">
+            Enter 등록 · Shift+Enter 줄바꿈
+          </span>
           <Button type="submit" size="sm" disabled={!body.trim() || addComment.isPending}>
             {addComment.isPending ? <Spinner className="border-t-on-accent" /> : '등록'}
           </Button>
