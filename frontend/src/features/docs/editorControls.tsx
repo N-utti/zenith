@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import type { Editor } from '@tiptap/react'
 import { Check, ChevronDown, Link2, Link2Off } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
@@ -52,8 +53,41 @@ export function ToolDivider() {
 /* ── 드롭다운 ───────────────────────────────────────────────── */
 
 /**
+ * 팝오버를 띄울 자리. 트리거 바로 아래, 화면 밖으로는 나가지 않게.
+ *
+ * 아래가 모자라면 위로 뒤집고, 그래도 모자라면 남은 높이만큼만 쓰고 안에서 구른다.
+ * 가로 모드 휴대폰은 세로가 360px 남짓이라 항목 여덟 개짜리 블록 메뉴가 잘린다.
+ *
+ * `InlineAiPopover` 의 `anchorAt` 도 같은 일을 한다. 그쪽은 DOM 이 아니라 편집기 커서 좌표를
+ * 받고 폭이 고정이라 지금 합치려면 양쪽 호출부를 다 고쳐야 해서 두 벌로 둔다.
+ */
+function menuPosition(trigger: DOMRect, menu: DOMRect, align: 'start' | 'end') {
+  const GAP = 4
+  const EDGE = 8
+  // innerWidth 는 스크롤바를 포함한다. 여백 계산에는 내용 폭을 쓴다.
+  const { clientWidth: vw, clientHeight: vh } = document.documentElement
+
+  const below = vh - trigger.bottom - GAP - EDGE
+  const above = trigger.top - GAP - EDGE
+  const flip = menu.height > below && above > below
+  const wanted = align === 'end' ? trigger.right - menu.width : trigger.left
+
+  return {
+    top: flip ? Math.max(EDGE, trigger.top - GAP - menu.height) : trigger.bottom + GAP,
+    left: Math.max(EDGE, Math.min(wanted, vw - menu.width - EDGE)),
+    maxHeight: Math.max(flip ? above : below, 120),
+  }
+}
+
+/**
  * 툴바용 팝오버. 바깥 클릭·Esc로 닫히고, 트리거를 눌러도 에디터 선택이 풀리지 않는다.
  * 내용은 열렸을 때만 마운트되므로 안에서 autoFocus를 써도 안전하다.
+ *
+ * **body 로 내보내 띄운다.** 툴바 안에 두면 툴바의 `overflow-x-auto`(좁은 화면에서 서식을
+ * 가로로 굴리는 그것)가 세로 방향까지 잘라 메뉴가 통째로 사라진다. `position: fixed` 로는
+ * 못 피한다. 툴바에 `backdrop-blur` 가 걸려 있고 `backdrop-filter` 는 자기 자신을 fixed 의
+ * 기준 상자로 만들기 때문이다. 자리는 열 때 트리거 위치를 재서 잡고, 화면이 움직이면
+ * (스크롤·리사이즈) 어긋나므로 닫는다.
  */
 export function ToolMenu({
   label,
@@ -69,36 +103,89 @@ export function ToolMenu({
   children: (close: () => void) => ReactNode
 }) {
   const [open, setOpen] = useState(false)
-  const wrapRef = useRef<HTMLDivElement>(null)
+  const [spot, setSpot] = useState<ReturnType<typeof menuPosition> | null>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  /** 닫고 포커스를 트리거로 되돌린다. 키보드로 들어왔으면 되돌려 줘야 이어서 쓸 수 있다. */
+  const close = (focusTrigger = false) => {
+    setOpen(false)
+    if (focusTrigger) triggerRef.current?.focus()
+  }
+
+  // 자리는 메뉴를 그린 뒤에야 잴 수 있다(폭·높이를 알아야 화면 끝을 넘는지 판정한다).
+  // 페인트 전에 옮겨야 첫 프레임이 엉뚱한 자리에 번쩍이지 않는다.
+  useLayoutEffect(() => {
+    if (!open) return
+    const button = triggerRef.current
+    const menu = menuRef.current
+    if (!button || !menu) return
+    setSpot(menuPosition(button.getBoundingClientRect(), menu.getBoundingClientRect(), align))
+    // 포털로 나간 메뉴는 트리거의 다음 형제가 아니라서 Tab 으로 들어갈 수 없다. 열면서
+    // 첫 항목으로 옮겨 준다. 입력칸이 있는 메뉴(링크)는 그쪽 autoFocus 가 이미 가져갔으므로
+    // 뺏지 않는다.
+    if (!menu.contains(document.activeElement)) {
+      menu.querySelector<HTMLElement>('[role="menuitem"]')?.focus()
+    }
+  }, [open, align])
 
   useEffect(() => {
     if (!open) return
 
+    const inside = (target: EventTarget | null) =>
+      triggerRef.current?.contains(target as globalThis.Node) ||
+      menuRef.current?.contains(target as globalThis.Node)
+
     const onPointerDown = (e: PointerEvent) => {
-      if (!wrapRef.current?.contains(e.target as globalThis.Node)) setOpen(false)
+      // 메뉴는 이제 툴바 바깥(body)에 있다. 둘 다 봐야 메뉴 안을 눌러도 안 닫힌다.
+      if (!inside(e.target)) setOpen(false)
     }
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false)
+      if (e.key === 'Escape') close(true)
     }
+    const onFocusOut = (e: FocusEvent) => {
+      // Tab 으로 메뉴 밖으로 나가면 닫는다. 메뉴는 body 끝에 있어서 마지막 항목에서 Tab 을
+      // 누르면 갈 곳이 없고(relatedTarget 이 비어 온다), 그때도 닫아야 열린 채로 안 남는다.
+      if (!inside(e.relatedTarget)) setOpen(false)
+    }
+    const onScroll = (e: Event) => {
+      // 메뉴가 제 안에서 구르는 것(긴 목록, 링크 입력칸의 가로 스크롤)까지 닫으면,
+      // 주소를 몇 자 치자마자 메뉴가 사라진다.
+      if (!menuRef.current?.contains(e.target as globalThis.Node)) setOpen(false)
+    }
+    const onResize = () => setOpen(false)
 
     document.addEventListener('pointerdown', onPointerDown)
     document.addEventListener('keydown', onKeyDown)
+    document.addEventListener('focusout', onFocusOut)
+    // 트리거가 움직이면 잡아 둔 자리가 틀어진다. 따라다니게 만드는 것보다 닫는 쪽이 싸다.
+    window.addEventListener('resize', onResize)
+    document.addEventListener('scroll', onScroll, true)
     return () => {
       document.removeEventListener('pointerdown', onPointerDown)
       document.removeEventListener('keydown', onKeyDown)
+      document.removeEventListener('focusout', onFocusOut)
+      window.removeEventListener('resize', onResize)
+      document.removeEventListener('scroll', onScroll, true)
     }
   }, [open])
 
   return (
-    <div ref={wrapRef} className="relative shrink-0">
+    <div className="relative shrink-0">
       <button
+        ref={triggerRef}
         type="button"
         title={label}
         aria-label={label}
         aria-expanded={open}
         aria-haspopup="menu"
         onMouseDown={(e) => e.preventDefault()}
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => {
+          // 열 때 지난번 자리를 지운다. 안 지우면 다시 열리는 첫 프레임에 이전 자리로
+          // 한 번 번쩍인 뒤 제자리를 찾는다. 트리거가 툴바 가로 스크롤을 따라 움직인다.
+          if (!open) setSpot(null)
+          setOpen(!open)
+        }}
         className={cn(
           'flex h-8 cursor-pointer items-center gap-1 rounded-md px-1.5 transition-colors',
           open ? 'bg-surface-hover text-fg' : 'text-muted hover:bg-surface-hover hover:text-fg',
@@ -108,18 +195,27 @@ export function ToolMenu({
         <ChevronDown className="size-3 opacity-60" />
       </button>
 
-      {open && (
-        <div
-          role="menu"
-          className={cn(
-            'border-line bg-surface absolute top-full z-30 mt-1 rounded-xl border p-1 shadow-lg',
-            align === 'end' ? 'right-0' : 'left-0',
-            className,
-          )}
-        >
-          {children(() => setOpen(false))}
-        </div>
-      )}
+      {open &&
+        createPortal(
+          <div
+            ref={menuRef}
+            role="menu"
+            style={spot ?? undefined}
+            className={cn(
+              'border-line bg-surface fixed z-50 max-w-[calc(100vw-1rem)] overflow-y-auto rounded-xl border p-1 shadow-lg',
+              // 자리를 재기 전 한 프레임은 숨긴다. 안 그러면 왼쪽 위에서 제자리로 튄다.
+              // visibility 가 아니라 opacity 로 숨긴다. visibility:hidden 인 요소는 포커스를
+              // 받지 못해서, 그 한 프레임에 거는 첫 항목 포커스가 통째로 무시된다.
+              spot ? 'opacity-100' : 'pointer-events-none opacity-0',
+              className,
+            )}
+          >
+            {/* 항목을 고른 뒤에는 포커스를 되돌리지 않는다. 블록·색·정렬은 실행하면서
+                편집기로 포커스를 가져가는데, 여기서 트리거로 뺏으면 이어서 타이핑을 못 한다. */}
+            {children(() => setOpen(false))}
+          </div>,
+          document.body,
+        )}
     </div>
   )
 }
@@ -171,9 +267,8 @@ export function BlockMenu({ editor, blockKey }: { editor: Editor; blockKey: stri
       trigger={
         <span className="flex items-center gap-1.5">
           <current.icon className="size-4" />
-          {/* 라벨 길이에 따라 툴바 전체가 밀려 줄바꿈되지 않도록 폭을 고정한다.
-              모바일에서는 이 80px 가 툴바 한 줄을 넘기므로 아이콘만 남긴다. */}
-          <span className="hidden w-20 truncate text-left text-sm lg:block">{current.label}</span>
+          {/* 고른 블록 이름이 길어도 트리거 폭이 들썩이지 않게 고정한다. */}
+          <span className="w-20 truncate text-left text-sm">{current.label}</span>
         </span>
       }
     >
