@@ -102,6 +102,27 @@
   --zenith-info: oklch(0.72 0.1 200);
 }
 
+/**
+ * 테일윈드 기본 `sr-only` 에 `left` 를 채운다.
+ *
+ * 기본값은 자리를 안 잡은 `position: absolute` 라, 가로로 구르는 상자 안에 놓이면 그 상자의
+ * 오른쪽 끝(스크롤 폭만큼 바깥)에 박혀 문서 전체를 그만큼 가로로 민다. 표 캡션과 칸 안의
+ * 읽기용 라벨이 실제로 그랬다: 375px 화면에서 `scrollWidth` 가 638 이 됐다.
+ * 쓰는 자리마다 막는 대신 정의 한 곳에서 막는다. 나머지는 테일윈드 기본값 그대로다.
+ */
+@utility sr-only {
+  position: absolute;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
 @layer base {
   * {
     border-color: var(--color-line);

@@ -47,7 +47,7 @@ export function MonthClosingSection() {
         }
       />
 
-      <Table label={`${year}년 월 마감 목록`}>
+      <Table label={`${year}년 월 마감 목록`} wide>
         <THead>
           <tr>
             <TH>달</TH>
@@ -90,9 +90,11 @@ export function MonthClosingSection() {
                   ) : (
                     !reopen && '-'
                   )}
-                  {/* 해제는 드문 일이라 열을 따로 두지 않는다. 해제된 적 있는 달에만 한 줄 붙인다. */}
+                  {/* 해제는 드문 일이라 열을 따로 두지 않는다. 해제된 적 있는 달에만 한 줄 붙인다.
+                      해제 사유는 사람이 자유로 쓰는 문장이라 길이를 모른다. 이 표는 열을 한 줄로
+                      세우므로(wide) 폭을 묶지 않으면 이 한 줄이 표 전체를 그만큼 넓힌다. */}
                   {reopen && (
-                    <span className="text-subtle block text-xs">
+                    <span className="text-subtle block max-w-xs text-xs whitespace-normal">
                       {formatDateTime(reopen.at)} {reopen.by.name} 해제
                       {reopen.reason && ` · ${reopen.reason}`}
                     </span>

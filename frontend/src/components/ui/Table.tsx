@@ -36,10 +36,15 @@ export function Table({
   /**
    * 열을 줄바꿈 없이 한 줄로 세운다.
    *
-   * 기본값은 `w-full` 이라 좁아지면 열이 짜부라지고 셀 안에서 줄바꿈된다. 게시판처럼 좁은
-   * 폭에서 열을 접고 제목을 두세 줄로 흘리도록 설계한 화면이 그 동작에 기대고 있다.
-   * 반대로 결재함처럼 한 줄로 읽혀야 하는 표는 짜부라지면 제목이 한 글자씩 세로로 쏟아진다.
-   * 그런 화면만 켠다. **폭이 아니라 내용 길이가 기준이라** 넓은 화면에서도 내용이 길면 구른다.
+   * 기본값은 `w-full` 이라 좁아지면 열이 짜부라지고 셀 안에서 줄바꿈된다.
+   *
+   * **셀에 든 것이 토막말이냐 문장이냐로 가른다.** 「오후 반차」·「펀드팀」·「2026-09-18」 같은
+   * 토막말은 줄바꿈할 자리가 없어 한 글자씩 세로로 쏟아진다(「오 / 후 / 반 / 차」). 그런 표는
+   * 켠다. 반대로 감사 기록의 「무슨 일」처럼 문장이 든 칸은 줄바꿈이 제 모습이라 끈다.
+   * 게시판은 한 발 더 나아가 좁은 폭에서 열을 접고 제목을 두세 줄로 흘리도록 설계했고,
+   * 휴지통은 `max-w-0` + `truncate` 관용구라 켜면 제목 열이 실낱으로 눌린다. 둘 다 끈 채 둔다.
+   *
+   * **폭이 아니라 내용 길이가 기준이라** 넓은 화면에서도 내용이 길면 구른다.
    */
   wide?: boolean
   children: ReactNode
@@ -182,8 +187,10 @@ export function TD({ className, children, ...props }: TdHTMLAttributes<HTMLTable
 export function TableEmpty({ colSpan, children }: { colSpan: number; children: ReactNode }) {
   return (
     <tr>
-      <td colSpan={colSpan} className="text-subtle px-4 py-10 text-center text-sm">
-        {children}
+      {/* 안내는 안쪽 블록에서 접는다. 열을 한 줄로 세운 표(wide)에서는 이 칸의 한 줄 길이도
+          표의 최소 폭에 들어가므로, 서버가 준 긴 에러 문구 하나가 빈 화면을 가로로 굴린다. */}
+      <td colSpan={colSpan} className="px-4 py-10 text-center">
+        <span className="text-subtle mx-auto block max-w-sm text-sm">{children}</span>
       </td>
     </tr>
   )
