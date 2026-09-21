@@ -42,7 +42,7 @@ export function EditorToolbar({
     // 05·SCR-08: 모바일 서식 툴바는 가로로 구르는 한 줄이다. 줄바꿈을 허용하면 375px 에서
     // 세 줄로 접혀 본문 자리를 먹는다. 여기 overflow-x 가 세로까지 자르기 때문에 ToolMenu 의
     // 팝오버는 body 로 내보내 띄운다(editorControls).
-    <div className="border-line bg-surface/90 sticky top-14 z-20 flex items-center gap-0.5 overflow-x-auto border-b px-2 py-1.5 backdrop-blur">
+    <div className="border-line bg-surface/90 z-20 flex items-center gap-0.5 overflow-x-auto border-b px-2 py-1.5 backdrop-blur">
       <BlockMenu editor={editor} blockKey={state.blockKey} />
 
       <ToolDivider />

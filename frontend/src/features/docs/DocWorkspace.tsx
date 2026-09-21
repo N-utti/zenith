@@ -147,6 +147,29 @@ function DocSidebar({
 
 type SidebarTab = 'comments' | 'versions'
 
+/**
+ * 손가락으로 쓰는 기기인지.
+ *
+ * 마우스가 없으면 드래그 손잡이를 띄우지 않는다. 손잡이는 포인터가 지나가는 자리를 따라다니며
+ * pointer 이벤트를 다루는데, 터치에서는 본문을 처음 누른 것이 그 손잡이를 띄우는 데 쓰여
+ * 커서가 잡히지 않는다. 한 번 더 눌러야 커서가 온다(아이폰 사파리에서 확인).
+ * 끌어서 옮기는 동작 자체도 손가락으로는 잡기 어려워, 빼는 쪽이 얻는 게 많다.
+ * 05·SCR-08 은 모바일에도 손잡이를 두라고 하지만 그건 커서를 막지 않을 때의 이야기다.
+ */
+function useCoarsePointer(): boolean {
+  const [coarse, setCoarse] = useState(false)
+
+  useEffect(() => {
+    const mq = window.matchMedia('(pointer: coarse)')
+    const update = () => setCoarse(mq.matches)
+    update()
+    mq.addEventListener('change', update)
+    return () => mq.removeEventListener('change', update)
+  }, [])
+
+  return coarse
+}
+
 /** 문단 왼쪽에 뜨는 손잡이. 끌어서 블록을 옮기고, 누르면 그 블록을 통째로 고른다. */
 function BlockDragHandle({ editor }: { editor: Editor }) {
   const posRef = useRef(-1)
@@ -262,6 +285,7 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
   // 사진을 끌어 옮길 때 화면 끝에 닿으면 본문이 그 방향으로 굴러야 한다.
   const scrollRef = useRef<HTMLDivElement>(null)
   useDragAutoScroll(scrollRef)
+  const coarsePointer = useCoarsePointer()
 
   // 제목의 원천도 Y.Doc이다. 비어 있으면 서버 사본으로 한 번 채운다.
   useEffect(() => {
@@ -456,7 +480,7 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
                 {editor ? (
                   <>
                     <EditorBubbleMenu editor={editor} />
-                    <BlockDragHandle editor={editor} />
+                    {!coarsePointer && <BlockDragHandle editor={editor} />}
                     <EditorContent editor={editor} className="mt-4" />
                     <InlineAiPopover editor={editor} docId={meta.id} />
                   </>
