@@ -109,7 +109,11 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
 
   // 결과가 20행까지 붙으면 강조된 행이 보이는 영역 밖으로 나간다. 커서가 어디 있는지
   // 모른 채 Enter 를 누르게 된다.
-  useEffect(() => activeRow.current?.scrollIntoView({ block: 'nearest' }), [active])
+  // 중괄호 본문이어야 한다. 한 줄 화살표로 두면 scrollIntoView 의 반환값이 effect 의
+  // 반환값이 되고, React 가 그것을 정리 함수로 알고 다음 실행 때 부른다(이슈 #137).
+  useEffect(() => {
+    activeRow.current?.scrollIntoView({ block: 'nearest' })
+  }, [active])
 
   const go = (to: string, state?: AskState) => {
     onClose()
