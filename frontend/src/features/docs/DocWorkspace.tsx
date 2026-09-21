@@ -74,14 +74,23 @@ function PresenceBar({ session }: { session: CollabSession }) {
   )
 }
 
-/** 댓글과 버전 기록이 같은 자리를 나눠 쓴다. */
+/**
+ * 댓글과 버전 기록이 같은 자리를 나눠 쓴다.
+ *
+ * 데스크톱에서는 본문 오른쪽 320px 에 늘 펼쳐져 있다. 모바일에서는 본문 아래로 내려오는데,
+ * 늘 펼쳐 두면 본문이 화면의 1/3 로 줄어든다. 그래서 좁은 폭에서는 탭 줄만 남기고 접어 두고,
+ * 탭을 눌러 펼친다(같은 탭을 다시 누르면 접힌다).
+ */
 function DocSidebar({
   tab,
   onTabChange,
+  onCollapse,
   children,
 }: {
   tab: SidebarTab
   onTabChange: (tab: SidebarTab) => void
+  /** 좁은 폭에서 접을 때. 본문을 넓게 보려는 것이므로 본문을 가린 미리보기도 같이 닫는다. */
+  onCollapse: () => void
   children: ReactNode
 }) {
   const TABS: { key: SidebarTab; label: string }[] = [
@@ -89,14 +98,32 @@ function DocSidebar({
     { key: 'versions', label: '버전 기록' },
   ]
 
+  const [open, setOpen] = useState(false)
+
   return (
-    <aside className="border-line bg-surface flex min-h-0 w-full flex-col border-t lg:w-80 lg:border-t-0 lg:border-l">
-      <div className="border-line flex border-b">
+    // max-h: 펼쳐도 본문이 절반 넘게 남아야 «본문을 넓게» 라는 목적이 유지된다.
+    // shrink-0 은 접힌 탭 줄이 본문에 눌려 사라지지 않게 하는 것이라 좁은 폭에만 건다.
+    <aside className="border-line bg-surface flex min-h-0 w-full flex-col border-t max-lg:max-h-[45%] max-lg:shrink-0 lg:w-80 lg:border-t-0 lg:border-l">
+      <div role="tablist" className="border-line flex shrink-0 border-b">
         {TABS.map(({ key, label }) => (
           <button
             key={key}
             type="button"
-            onClick={() => onTabChange(key)}
+            role="tab"
+            aria-selected={tab === key}
+            aria-controls="doc-side-panel"
+            // 접힌 상태에서 어느 탭을 누르든 그 탭으로 펼친다. 펼쳐진 탭을 다시 누르면 접는다.
+            // 접기는 탭을 바꾸지 않으므로 onTabChange 를 부르지 않는다. 부르면 그 안의
+            // dropPendingPreview 가 돌고 있던 버전 스냅샷 요청을 말없이 버린다.
+            onClick={() => {
+              if (tab !== key) {
+                onTabChange(key)
+                setOpen(true)
+                return
+              }
+              if (open) onCollapse()
+              setOpen(!open)
+            }}
             className={cn(
               '-mb-px cursor-pointer border-b-2 px-4 py-3 text-sm font-medium transition-colors',
               tab === key ? 'border-accent text-fg' : 'text-muted hover:text-fg border-transparent',
@@ -106,7 +133,14 @@ function DocSidebar({
           </button>
         ))}
       </div>
-      {children}
+      {/* 좁은 폭에서 접히면 패널 자체가 사라진다(hidden). 데스크톱은 늘 펼쳐져 있다. */}
+      <div
+        id="doc-side-panel"
+        role="tabpanel"
+        className={cn('min-h-0 flex-1 flex-col lg:flex', open ? 'flex' : 'hidden')}
+      >
+        {children}
+      </div>
     </aside>
   )
 }
@@ -441,6 +475,7 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
             dropPendingPreview()
             setTab(next)
           }}
+          onCollapse={closePreview}
         >
           {tab === 'comments' ? (
             <CommentPanel docId={meta.id} />
