@@ -158,7 +158,7 @@ export function Composer({
             onSubmitEnter={dispatch}
             rows={1}
             aria-label={`${channelName}에 메시지 보내기`}
-            placeholder={`${channelName}에 메시지 보내기…  (Enter 전송 · Shift+Enter 줄바꿈)`}
+            placeholder={`${channelName}에 메시지 보내기…`}
             className="max-h-40 min-h-11 flex-1"
           />
           <Button
@@ -169,6 +169,14 @@ export function Composer({
             <Send className="size-4" />
           </Button>
         </div>
+
+        {/* 단축키 안내는 자리글이 아니라 입력창 아래 한 줄로 둔다(AI 컴포저와 같은 자리).
+            자리글에 같이 넣으면 좁은 화면에서 두 줄이 되는데 입력창은 한 줄 높이(min-h-11)라
+            아랫줄이 잘린다. 좁은 폭에서는 아예 감춘다. 물리 키보드가 없어 알릴 내용이 없고,
+            메시지 목록의 세로를 상시로 먹을 이유도 없다. */}
+        <p className="text-subtle mt-2 hidden text-center text-[11px] sm:block">
+          Enter 전송 · Shift+Enter 줄바꿈
+        </p>
       </div>
 
       {shown && (
