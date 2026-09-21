@@ -5,7 +5,8 @@ import { Spinner } from '@/components/ui/Spinner'
 import { Textarea } from '@/components/ui/Textarea'
 import { ApiError } from '@/lib/api'
 import { formatBytes } from '@/lib/format'
-import { MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, uploadAttachment, useSendMessage } from './api'
+import { MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, uploadAttachment } from './api'
+import { useChatSocketContext } from './ChatSocketContext'
 import type { ChatAttachment } from './types'
 
 export function Composer({
@@ -17,7 +18,7 @@ export function Composer({
   channelName: string
   onTyping: () => void
 }) {
-  const send = useSendMessage(channelId)
+  const { connected, sendMessage } = useChatSocketContext()
   const [body, setBody] = useState('')
   /** 올려 둔 파일. 보내기 전까지는 서버에만 있고 어느 메시지에도 안 붙어 있다. */
   const [files, setFiles] = useState<ChatAttachment[]>([])
@@ -56,22 +57,22 @@ export function Composer({
   const dispatch = () => {
     const text = body.trim()
     // 첨부만 보내는 메시지도 있다. 둘 다 없을 때만 막는다.
-    if ((!text && files.length === 0) || send.isPending || uploading > 0) return
-    const sending = files
-    // 성공은 WebSocket 이벤트로 확인된다. 입력창은 먼저 비워도 안전하다.
+    if ((!text && files.length === 0) || uploading > 0) return
+
+    // 소켓 전송은 응답이 없다. 닫혀 있으면 여기서 false 가 오고, 그때만 실패를 안다.
+    // 서버가 거절하는 경우(멤버 아님 등)는 error 이벤트 → 토스트다(`useChatSocket`).
+    const sent = sendMessage(channelId, {
+      body: text,
+      attachments: files.length > 0 ? files : undefined,
+    })
+    if (!sent) {
+      return setError('연결이 끊겨 보내지 못했습니다. 연결되면 다시 시도하세요.')
+    }
+
+    // 보낸 뒤에 비운다. 못 보냈을 때 입력창을 되살릴 일이 없다.
     setError(null)
     setBody('')
     setFiles([])
-    send.mutate(
-      { body: text, attachments: sending.length > 0 ? sending : undefined },
-      {
-        onError: () => {
-          setBody(text)
-          // 보내는 사이에 올라온 파일이 있으면 그것도 남긴다.
-          setFiles((prev) => [...sending, ...prev])
-        },
-      },
-    )
   }
 
   const submit = (e: FormEvent) => {
@@ -79,7 +80,8 @@ export function Composer({
     dispatch()
   }
 
-  const busy = send.isPending || uploading > 0
+  // 끊긴 동안은 보낼 길이 없다. 전에는 REST 라 끊겨도 보내졌지만 이제 전송이 소켓이다.
+  const busy = uploading > 0 || !connected
 
   return (
     <form onSubmit={submit} className="border-line bg-surface border-t px-4 py-3">
@@ -147,19 +149,14 @@ export function Composer({
             disabled={(!body.trim() && files.length === 0) || busy}
             aria-label="보내기"
           >
-            {send.isPending ? (
-              <Spinner className="border-t-on-accent" />
-            ) : (
-              <Send className="size-4" />
-            )}
+            <Send className="size-4" />
           </Button>
         </div>
       </div>
 
-      {(error || send.isError) && (
+      {error && (
         <p role="alert" className="text-danger mx-auto mt-2 max-w-3xl text-xs">
-          {error ??
-            (send.error instanceof ApiError ? send.error.message : '메시지를 보내지 못했습니다.')}
+          {error}
         </p>
       )}
     </form>

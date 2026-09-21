@@ -1,6 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
-import { homeKeys } from '@/features/home/keys'
 import type { ChatAttachment, ChatChannel, ChatMessage } from './types'
 
 /**
@@ -32,31 +31,8 @@ export function useMessages(channelId: string | null) {
   })
 }
 
-export function useSendMessage(channelId: string) {
-  return useMutation({
-    mutationFn: ({ body, attachments }: { body: string; attachments?: ChatAttachment[] }) =>
-      api<ChatMessage>(`/channels/${channelId}/messages`, {
-        method: 'POST',
-        body: JSON.stringify({ body, attachments }),
-      }),
-    // 캐시 반영은 WebSocket 이벤트가 한다. 내가 보낸 것도 같은 경로로 돌아온다.
-  })
-}
-
-export function useMarkRead() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (channelId: string) =>
-      // 04 에 없는 경로. 백엔드는 읽음을 WS 의 read 이벤트로 받는다(realtime/chat.py ReadOp).
-      // 그때까지 실제 백엔드에서는 404 다. 화면은 안 죽지만 안읽음 배지가 지워지지 않는다.
-      api<{ ok: true }>(`/channels/${channelId}/read`, { method: 'POST' }),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: chatKeys.channels })
-      // 홈의 안 읽은 대화도 같은 숫자를 본다. 다 읽고 홈으로 가면 배지가 사라져야 한다.
-      void qc.invalidateQueries({ queryKey: homeKeys.home })
-    },
-  })
-}
+// 보내기·읽음은 REST 가 아니라 소켓 op 이다(04 §4.1). `useChatSocket` 의 sendMessage·sendRead.
+// 전에 여기 있던 `POST /channels/{id}/messages`·`/read` 는 실서버에 없는 경로였고 405·404 가 났다.
 
 /**
  * 공개 채널 또는 DM 을 만든다. 서버가 둘 중 하나만 받는다(`ChannelCreateIn`).

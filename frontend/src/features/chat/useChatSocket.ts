@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useQueryClient, type QueryClient } from '@tanstack/react-query'
+import { useToast } from '@/components/ui/ToastContext'
 import { useCurrentUser } from '@/features/auth/AuthContext'
 import { notify } from '@/lib/desktop'
 import { wsUrl } from '@/lib/serverOrigin'
 import { homeKeys } from '@/features/home/keys'
 import { chatKeys } from './api'
-import type { ChatChannel, ChatEvent, ChatMessage } from './types'
+import { appendMessage, errorText, withUnread } from './events'
+import type { ChatAttachment, ChatChannel, ChatEvent, ChatMessage } from './types'
 
 /** 타이핑 표시는 이 시간 동안만 유지한다. 상대가 멈춰도 서버가 알려 주지 않는다. */
 const TYPING_TTL_MS = 3000
@@ -43,16 +45,34 @@ export interface ChatSocket {
   /** 채널별로 지금 입력 중인 사람 이름. 본인은 빠진다. */
   typingByChannel: Record<string, string[]>
   notifyTyping: (channelId: string) => void
+  /**
+   * 메시지를 보낸다(04 §4.1 `msg`). 본문이나 첨부 중 하나는 있어야 한다.
+   *
+   * 소켓이 닫혀 있으면 아무것도 보내지 않고 `false` 를 준다. 호출부는 그때 입력창을 비우지
+   * 말아야 한다. 응답이 없는 단방향이라 이 `false` 가 유일한 즉시 실패 신호다.
+   */
+  sendMessage: (
+    channelId: string,
+    input: { body: string; attachments?: ChatAttachment[] },
+  ) => boolean
+  /**
+   * 여기까지 읽었다고 알린다(04 §4.1 `read`). 닫혀 있으면 버린다. 다시 열릴 때 호출부가
+   * 또 보내므로(`ChatPage`) 재시도를 여기서 쌓아 두지 않는다.
+   */
+  sendRead: (channelId: string) => void
 }
 
 /**
- * 채팅 실시간 채널. 메시지 전송은 REST로 하고, 반영은 전부 이 소켓이 한다.
- * 내가 보낸 메시지도 서버를 한 바퀴 돌아 같은 경로로 돌아온다. 낙관적 추가를
- * 하지 않으므로 다른 탭·다른 사람과 순서가 어긋날 일이 없다.
+ * 채팅 실시간 채널. 보내기·읽음·타이핑을 전부 이 소켓의 `op` 로 보내고, 화면 반영도 전부
+ * 이 소켓의 `ev` 로 받는다(04 §4.1). REST 로 남는 것은 채널 목록·과거 메시지·첨부뿐이다.
+ *
+ * 내가 보낸 메시지도 서버를 한 바퀴 돌아 `msg` 로 돌아온다. 낙관적 추가를 하지 않으므로
+ * 다른 탭·다른 사람과 순서가 어긋날 일이 없다.
  */
 export function useChatSocket(): ChatSocket {
   const user = useCurrentUser()
   const qc = useQueryClient()
+  const toast = useToast()
 
   const [connected, setConnected] = useState(false)
   const [typingByChannel, setTypingByChannel] = useState<Record<string, string[]>>({})
@@ -89,17 +109,12 @@ export function useChatSocket(): ChatSocket {
           return
         }
 
-        if (event.type === 'message') {
+        if (event.ev === 'msg') {
           const { message } = event
-          qc.setQueryData<{ items: ChatMessage[] }>(
-            chatKeys.messages(message.channel_id),
-            (old) => {
-              if (!old) return old
-              // 탭이 여러 개면 같은 이벤트를 중복으로 받을 수 있다.
-              if (old.items.some((item) => item.id === message.id)) return old
-              return { items: [...old.items, message] }
-            },
+          qc.setQueryData<{ items: ChatMessage[] }>(chatKeys.messages(message.channel_id), (old) =>
+            appendMessage(old, message),
           )
+          // 목록의 마지막 메시지가 바뀐다. 안읽음 숫자는 뒤따라오는 `unread` 가 정한다.
           void qc.invalidateQueries({ queryKey: chatKeys.channels })
           // 홈의 안 읽은 대화도 같은 숫자를 본다. 홈에 머무는 동안 배지가 안 늘면 안 된다.
           void qc.invalidateQueries({ queryKey: homeKeys.home })
@@ -107,16 +122,26 @@ export function useChatSocket(): ChatSocket {
           return
         }
 
-        if (event.type === 'read') {
-          void qc.invalidateQueries({ queryKey: chatKeys.channels })
-          // 홈의 안 읽은 대화도 같은 숫자를 본다. 홈에 머무는 동안 배지가 안 늘면 안 된다.
+        if (event.ev === 'unread') {
+          const { channel_id, count } = event
+          qc.setQueryData<{ items: ChatChannel[] }>(chatKeys.channels, (old) =>
+            withUnread(old, channel_id, count),
+          )
+          // 홈은 안 읽은 대화를 카드 목록으로 그려서 숫자만 꽂을 자리가 없다. 다시 받는다.
           void qc.invalidateQueries({ queryKey: homeKeys.home })
           return
         }
 
-        if (event.type === 'typing') {
-          if (event.userId === user.id) return
-          const { channelId, name } = event
+        if (event.ev === 'error') {
+          // 되돌아가 고칠 입력이 없는 실패라 토스트다(`ui/Toast.tsx`). 소켓이 닫혀서
+          // 못 보낸 경우는 sendMessage 가 false 로 알리고 Composer 가 입력 옆에 낸다.
+          toast.error(errorText(event))
+          return
+        }
+
+        if (event.ev === 'typing') {
+          if (event.user_id === user.id) return
+          const { channel_id: channelId, name } = event
 
           setTypingByChannel((current) => {
             const names = current[channelId] ?? []
@@ -136,7 +161,10 @@ export function useChatSocket(): ChatSocket {
               typingTimers.delete(key)
             }, TYPING_TTL_MS),
           )
+          return
         }
+
+        // presence·notice 는 받을 화면이 없어 여기서 떨어진다(`types.ts` 의 ChatEvent).
       }
     }
 
@@ -150,17 +178,41 @@ export function useChatSocket(): ChatSocket {
       socket?.close()
       if (socketRef.current === socket) socketRef.current = null
     }
-  }, [user.id, qc])
+    // toast 는 `ui/Toast.tsx` 의 모듈 상수라 렌더마다 바뀌지 않는다. 바뀌게 되면 이 effect 가
+    // 매 렌더 다시 돌아 소켓이 끊겼다 붙는다. 그 파일에서 api 를 렌더 안으로 옮기면 안 된다.
+  }, [user.id, qc, toast])
 
-  const notifyTyping = useCallback((channelId: string) => {
+  /** 프레임 하나를 던진다. 닫혀 있으면 안 보내고 false. 응답은 없다(단방향). */
+  const sendOp = useCallback((op: Record<string, unknown>): boolean => {
     const socket = socketRef.current
-    if (socket?.readyState !== WebSocket.OPEN) return
-
-    const now = Date.now()
-    if (now - lastTypingSentRef.current < TYPING_THROTTLE_MS) return
-    lastTypingSentRef.current = now
-    socket.send(JSON.stringify({ type: 'typing', channelId }))
+    if (socket?.readyState !== WebSocket.OPEN) return false
+    socket.send(JSON.stringify(op))
+    return true
   }, [])
 
-  return { connected, typingByChannel, notifyTyping }
+  const sendMessage = useCallback<ChatSocket['sendMessage']>(
+    (channelId, { body, attachments }) =>
+      // attachments 가 undefined 면 JSON 에서 키가 빠진다. 서버 기본값이 None 이라 그대로 맞다.
+      sendOp({ op: 'msg', channel_id: channelId, body, attachments }),
+    [sendOp],
+  )
+
+  const sendRead = useCallback<ChatSocket['sendRead']>(
+    (channelId) => {
+      sendOp({ op: 'read', channel_id: channelId })
+    },
+    [sendOp],
+  )
+
+  const notifyTyping = useCallback(
+    (channelId: string) => {
+      const now = Date.now()
+      if (now - lastTypingSentRef.current < TYPING_THROTTLE_MS) return
+      // 못 보냈으면 시각을 갱신하지 않는다. 다시 열린 직후 2초를 기다리지 않게.
+      if (sendOp({ op: 'typing', channel_id: channelId })) lastTypingSentRef.current = now
+    },
+    [sendOp],
+  )
+
+  return { connected, typingByChannel, notifyTyping, sendMessage, sendRead }
 }
