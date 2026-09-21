@@ -118,7 +118,9 @@ async def _open_room(doc_id: uuid.UUID) -> Room | None:
         if room is not None:
             return room
         async with session_scope() as db:
-            row = await db.get(Document, doc_id)
+            # populate_existing: 세션이 본문 없이 읽어 둔 행(models.DOC_LIST_OPTS)을 들고 있어도 다시 읽는다.
+            # 운영은 새 세션이라 차이가 없고, 세션을 공유하는 테스트에서만 갈린다.
+            row = await db.get(Document, doc_id, populate_existing=True)
             if row is None or row.deleted_at is not None:
                 return (
                     None  # 휴지통 문서는 HTTP GET 으로만 읽는다 — 소켓으로 쓰면 색인에 되살아난다

@@ -23,7 +23,7 @@ from sqlalchemy import (
 )
 from sqlalchemy import text as sql_text
 from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR, UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, defer, mapped_column
 
 from app.db import Base
 
@@ -152,6 +152,16 @@ class Document(Base):
         onupdate=func.now(),
     )
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # 휴지통
+
+
+# 문서 **목록**(트리·휴지통·홈·검색)에 붙이는 로더 옵션. 목록은 제목·시각만 쓰는데, 엔티티를 그냥 뽑으면
+# 본문 원본(Y.Doc, gc 가 꺼져 있어 줄지 않는다)·평문·tsv 까지 문서 수만큼 끌고 온다(2026-09-21 측정:
+# 600건 `/tree` 111ms → 16ms). raiseload 라 목록 경로에서 이 칸을 읽으면 MissingGreenlet 대신 칸 이름이 찍힌 오류가 난다.
+DOC_LIST_OPTS = (
+    defer(Document.ydoc_snapshot, raiseload=True),
+    defer(Document.text_cache, raiseload=True),
+    defer(Document.tsv, raiseload=True),
+)
 
 
 class DocVersion(Base):
