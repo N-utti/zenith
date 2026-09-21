@@ -9,6 +9,8 @@ import type { ChatAttachment, ChatChannel, ChatMessage } from './types'
 export const chatKeys = {
   channels: ['chat', 'channels'] as const,
   messages: (channelId: string) => ['chat', 'messages', channelId] as const,
+  /** 채널 구분 없이 모든 메시지 목록. 재연결 때 한꺼번에 다시 받는 데 쓴다. */
+  allMessages: ['chat', 'messages'] as const,
 }
 
 export function useChannels() {
@@ -56,6 +58,19 @@ export const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024
 
 /** 메시지 하나에 붙일 수 있는 파일 수. 백엔드 `MAX_ATTACHMENTS`. */
 export const MAX_ATTACHMENTS = 10
+
+/**
+ * 본문 글자 수 상한. 백엔드 `MsgOp.body` 의 `max_length` 와 같다(앞뒤 공백을 다듬은 뒤 센다).
+ *
+ * 여기서 먼저 막아야 한다. 넘겨 보내면 서버가 스키마 위반으로 필드별 오류 배열을 돌려주는데,
+ * 그건 사람이 읽을 문구가 없고 이미 입력창을 비운 뒤라 쓴 글이 사라진다.
+ *
+ * 이 상한이 프레임 상한(백엔드 `MAX_FRAME` 64,000바이트)도 같이 막는다. 본문 1만 자를 전부
+ * 4바이트 글자로 채워도 40KB 고, 첨부는 10개 × 약 1KB(이름은 서버가 200바이트로 자른다)라
+ * 최악이 50KB 다. 프레임 상한을 넘으면 서버가 거절 이벤트도 없이 소켓을 닫으므로(1009) 그쪽은
+ * 아예 도달하지 않게 두는 것이 맞다. 이 상한이나 첨부 개수를 올리면 그 계산이 깨진다.
+ */
+export const MAX_BODY_CHARS = 10_000
 
 /**
  * 첨부를 먼저 올리고 `{url, name, size}` 를 받는다. 그 값을 메시지의 `attachments[]` 에

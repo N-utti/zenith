@@ -1,8 +1,12 @@
 import type { ChatChannel, ChatMessage } from './types'
 
 /**
- * 소켓 이벤트를 캐시에 반영하는 순수 변환들. 훅에서 떼어 둔 이유는 테스트 때문이다 —
- * 봉투 규약(04 §4.1)이 바뀌면 여기가 먼저 깨져야 한다.
+ * 소켓 이벤트를 캐시에 반영하는 순수 변환들. 훅에서 떼어 둔 이유는 테스트 때문이다.
+ *
+ * 다만 이 테스트가 지키는 것은 변환의 경계 조건(중복 id, 모르는 채널, 순서가 뒤집힌 도착)
+ * 이지 **봉투 규약 자체가 아니다.** 서버가 `ev` 나 `channel_id` 같은 키 이름을 바꾸면 이
+ * 테스트는 전부 초록불인 채로 화면이 죽는다. #128 이 정확히 그 종류였다. 봉투를 지키는 것은
+ * `types.ts` 의 ChatEvent 와 실서버 확인뿐이니, 규약을 건드릴 때는 실서버로 붙여서 봐야 한다.
  */
 
 /**
@@ -18,6 +22,30 @@ export function appendMessage(
   if (!page) return page
   if (page.items.some((item) => item.id === message.id)) return page
   return { items: [...page.items, message] }
+}
+
+/**
+ * `msg` 로 받은 메시지를 채널 목록의 「마지막 메시지」로 꽂는다.
+ *
+ * 전에는 목록을 다시 받아서 갱신했는데, 그 재조회가 뒤따라오는 `unread` patch 를 덮어
+ * 읽고 있는 채널에 배지가 남는 일이 있었다. 목록에 쓰는 주체를 소켓 하나로 줄인다.
+ *
+ * 더 최신일 때만 바꾼다. 이벤트는 순서대로 오지만, 두 탭이 붙었다 끊기는 사이에 늦게 도착한
+ * 옛 메시지가 마지막 줄을 과거로 되돌리면 목록이 거짓이 된다.
+ */
+export function withLastMessage(
+  list: { items: ChatChannel[] } | undefined,
+  message: ChatMessage,
+): { items: ChatChannel[] } | undefined {
+  if (!list) return list
+  return {
+    items: list.items.map((item) => {
+      if (item.id !== message.channel_id) return item
+      const last = item.last_message
+      if (last && last.created_at > message.created_at) return item
+      return { ...item, last_message: message }
+    }),
+  }
 }
 
 /**
@@ -43,9 +71,13 @@ export function withUnread(
  *
  * `detail` 은 문구 하나일 때도 있고 필드별 오류 배열일 때도 있다. 프레임이 스키마에 안 맞으면
  * pydantic 오류가 배열로 그대로 오는데, 그건 사용자에게 뜻이 없어 일반 문구로 바꾼다.
+ *
+ * 어느 op 이 거절됐는지는 이벤트에 없다. 보내기만이 아니라 읽음·타이핑도 같은 모양으로
+ * 거절되므로(`realtime/chat.py` 는 op 종류를 가리기 전에 멤버십부터 본다) 문구가 "보내기"를
+ * 단정하면 안 된다. 아무것도 안 썼는데 발송 실패라고 뜨는 일이 생긴다.
  */
 export function errorText(event: { code: string; detail: unknown }): string {
   if (typeof event.detail === 'string' && event.detail.trim()) return event.detail
-  if (event.code === 'FORBIDDEN') return '이 대화에 글을 쓸 수 없습니다.'
-  return '메시지를 보내지 못했습니다.'
+  if (event.code === 'FORBIDDEN') return '이 대화를 볼 권한이 없습니다.'
+  return '채팅 서버가 요청을 거절했습니다.'
 }

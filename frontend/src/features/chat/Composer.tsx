@@ -5,7 +5,7 @@ import { Spinner } from '@/components/ui/Spinner'
 import { Textarea } from '@/components/ui/Textarea'
 import { ApiError } from '@/lib/api'
 import { formatBytes } from '@/lib/format'
-import { MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, uploadAttachment } from './api'
+import { MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, MAX_BODY_CHARS, uploadAttachment } from './api'
 import { useChatSocketContext } from './ChatSocketContext'
 import type { ChatAttachment } from './types'
 
@@ -58,6 +58,11 @@ export function Composer({
     const text = body.trim()
     // 첨부만 보내는 메시지도 있다. 둘 다 없을 때만 막는다.
     if ((!text && files.length === 0) || uploading > 0) return
+
+    // 상한은 서버도 강제하지만, 넘겨 보내면 입력창을 비운 뒤에 거절당해 쓴 글이 사라진다.
+    if (text.length > MAX_BODY_CHARS) {
+      return setError(`메시지는 ${MAX_BODY_CHARS.toLocaleString()}자까지 보낼 수 있습니다.`)
+    }
 
     // 소켓 전송은 응답이 없다. 닫혀 있으면 여기서 false 가 오고, 그때만 실패를 안다.
     // 서버가 거절하는 경우(멤버 아님 등)는 error 이벤트 → 토스트다(`useChatSocket`).

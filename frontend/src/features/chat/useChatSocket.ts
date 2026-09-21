@@ -6,7 +6,7 @@ import { notify } from '@/lib/desktop'
 import { wsUrl } from '@/lib/serverOrigin'
 import { homeKeys } from '@/features/home/keys'
 import { chatKeys } from './api'
-import { appendMessage, errorText, withUnread } from './events'
+import { appendMessage, errorText, withLastMessage, withUnread } from './events'
 import type { ChatAttachment, ChatChannel, ChatEvent, ChatMessage } from './types'
 
 /** 타이핑 표시는 이 시간 동안만 유지한다. 상대가 멈춰도 서버가 알려 주지 않는다. */
@@ -94,7 +94,15 @@ export function useChatSocket(): ChatSocket {
       socket = new WebSocket(socketUrl())
       socketRef.current = socket
 
-      socket.onopen = () => setConnected(true)
+      socket.onopen = () => {
+        setConnected(true)
+        // 끊긴 동안 온 메시지는 아무도 안 받아 왔다. 소켓이 유일한 수신 경로다. 다시 받지
+        // 않으면 `ChatPage` 가 연결 직후 읽음을 보내 서버의 안읽음이 0 이 되고, 그 메시지는
+        // 화면에도 배지에도 없이 사라진다. 그래서 먼저 다시 받는다.
+        void qc.invalidateQueries({ queryKey: chatKeys.allMessages })
+        void qc.invalidateQueries({ queryKey: chatKeys.channels })
+        void qc.invalidateQueries({ queryKey: homeKeys.home })
+      }
 
       socket.onclose = () => {
         setConnected(false)
@@ -114,8 +122,19 @@ export function useChatSocket(): ChatSocket {
           qc.setQueryData<{ items: ChatMessage[] }>(chatKeys.messages(message.channel_id), (old) =>
             appendMessage(old, message),
           )
-          // 목록의 마지막 메시지가 바뀐다. 안읽음 숫자는 뒤따라오는 `unread` 가 정한다.
-          void qc.invalidateQueries({ queryKey: chatKeys.channels })
+          // 목록의 마지막 메시지를 직접 꽂는다. 안읽음 숫자는 뒤따라오는 `unread` 가 정한다.
+          // 여기서 목록을 다시 받으면 그 응답이 `unread` patch 를 덮어(읽는 중인 채널에도
+          // 배지가 남는다) 숫자가 어긋난다. 목록에 없는 채널일 때만 받아 온다.
+          const known = qc
+            .getQueryData<{ items: ChatChannel[] }>(chatKeys.channels)
+            ?.items.some((item) => item.id === message.channel_id)
+          if (known) {
+            qc.setQueryData<{ items: ChatChannel[] }>(chatKeys.channels, (old) =>
+              withLastMessage(old, message),
+            )
+          } else {
+            void qc.invalidateQueries({ queryKey: chatKeys.channels })
+          }
           // 홈의 안 읽은 대화도 같은 숫자를 본다. 홈에 머무는 동안 배지가 안 늘면 안 된다.
           void qc.invalidateQueries({ queryKey: homeKeys.home })
           notifyIncoming(qc, message, user.id)
@@ -182,7 +201,14 @@ export function useChatSocket(): ChatSocket {
     // 매 렌더 다시 돌아 소켓이 끊겼다 붙는다. 그 파일에서 api 를 렌더 안으로 옮기면 안 된다.
   }, [user.id, qc, toast])
 
-  /** 프레임 하나를 던진다. 닫혀 있으면 안 보내고 false. 응답은 없다(단방향). */
+  /**
+   * 프레임 하나를 던진다. 닫혀 있으면 안 보내고 false. 응답은 없다(단방향).
+   *
+   * ponytail: `true` 는 보냈다는 뜻이 아니라 로컬 버퍼에 넣었다는 뜻이다. 죽었지만 아직
+   * 닫히지 않은 소켓은 readyState 가 OPEN 으로 남아 있어 그 사이 보낸 것이 조용히 사라진다.
+   * uvicorn 의 웹소켓 핑(기본 20초)이 그 창을 ~40초로 묶는다. 더 좁히려면 보낸 초안을 들고
+   * 있다가 내 에코(`msg` 중 author 가 나)가 N초 안에 안 오면 입력창에 되돌리는 장치가 필요하다.
+   */
   const sendOp = useCallback((op: Record<string, unknown>): boolean => {
     const socket = socketRef.current
     if (socket?.readyState !== WebSocket.OPEN) return false
