@@ -171,8 +171,9 @@ export function BlockMenu({ editor, blockKey }: { editor: Editor; blockKey: stri
       trigger={
         <span className="flex items-center gap-1.5">
           <current.icon className="size-4" />
-          {/* 라벨 길이에 따라 툴바 전체가 밀려 줄바꿈되지 않도록 폭을 고정한다. */}
-          <span className="w-20 truncate text-left text-sm">{current.label}</span>
+          {/* 라벨 길이에 따라 툴바 전체가 밀려 줄바꿈되지 않도록 폭을 고정한다.
+              모바일에서는 이 80px 가 툴바 한 줄을 넘기므로 아이콘만 남긴다. */}
+          <span className="hidden w-20 truncate text-left text-sm lg:block">{current.label}</span>
         </span>
       }
     >
@@ -268,7 +269,10 @@ export function ColorMenu({
       className="w-56"
       trigger={
         <span className="grid size-5 place-items-center">
-          <span className="text-[13px] leading-none font-semibold" style={{ color: color ?? undefined }}>
+          <span
+            className="text-[13px] leading-none font-semibold"
+            style={{ color: color ?? undefined }}
+          >
             A
           </span>
           <span
@@ -406,9 +410,7 @@ function LinkForm({
         aria-label="링크 주소"
         className="bg-sunken text-fg placeholder:text-subtle min-w-0 flex-1 rounded-lg px-2.5 py-1.5 text-sm outline-none"
       />
-      {onRemove && (
-        <ToolButton icon={Link2Off} label="링크 제거" onClick={onRemove} />
-      )}
+      {onRemove && <ToolButton icon={Link2Off} label="링크 제거" onClick={onRemove} />}
       <button
         type="button"
         onMouseDown={(e) => e.preventDefault()}
