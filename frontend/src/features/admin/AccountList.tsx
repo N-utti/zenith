@@ -22,7 +22,17 @@ export function AccountList() {
   const { data, isPending, isError } = useUsers()
   // 계정 줄은 팀 id 만 들고 온다(`UserOut`). 이름은 팀 목록에서 맞춘다.
   const teams = useTeams()
-  const teamName = (id: string | null) => teams.data?.find((team) => team.id === id)?.name
+  /**
+   * 소속 없음과 **아직 모름** 을 가른다.
+   *
+   * 팀 목록은 계정 목록과 따로 뜨는 요청이라 늦게 오고, 실패하면 4xx 는 다시 부르지 않는다.
+   * 둘을 다 `-` 로 적으면 팀이 있는 사람까지 소속 없음으로 보이고, 실패했을 때는 그 거짓이
+   * 영영 남는다.
+   */
+  const teamCell = (id: string | null) => {
+    if (!id) return '-'
+    return teams.data?.find((team) => team.id === id)?.name ?? (teams.isError ? '확인 불가' : '…')
+  }
   /** 열려 있는 대화상자. `new` 는 새 계정, 그 밖에는 고치는 계정. */
   const [editing, setEditing] = useState<AdminUser | 'new' | null>(null)
 
@@ -72,7 +82,7 @@ export function AccountList() {
                 <TD>
                   <Badge>{ROLE_LABEL[user.role]}</Badge>
                 </TD>
-                <TD className="text-muted">{teamName(user.team_id) ?? '-'}</TD>
+                <TD className="text-muted">{teamCell(user.team_id)}</TD>
                 <TD className="text-muted">
                   {user.hire_date ? formatISOYearDate(user.hire_date) : '-'}
                 </TD>

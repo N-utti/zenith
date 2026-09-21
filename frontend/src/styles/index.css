@@ -121,6 +121,7 @@
   [role='button']:not([aria-disabled='true']),
   a[href],
   summary,
+  select:not(:disabled),
   label[for] {
     cursor: pointer;
   }

@@ -233,7 +233,8 @@ export function UserModal({
 
           <Field
             label="소속 팀"
-            hint={teams.isError ? '팀 목록을 불러오지 못했습니다.' : '비워 두면 소속 없음입니다.'}
+            hint="비워 두면 소속 없음입니다."
+            error={teams.isError ? '팀 목록을 불러오지 못했습니다.' : null}
           >
             {(slot) => (
               <Select
