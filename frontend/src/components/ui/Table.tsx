@@ -16,7 +16,12 @@ export function Table({ className, children }: { className?: string; children: R
   return (
     // 좁은 화면에서 표가 페이지를 밀어내지 않도록 자기 안에서 가로로 구른다.
     <div className="border-line bg-surface overflow-x-auto rounded-xl border">
-      <table className={cn('w-full border-collapse text-left text-sm', className)}>{children}</table>
+      {/* min-w-max 가 없으면 w-full 때문에 표가 컨테이너를 넘는 일이 없어 가로 스크롤이 영영
+          생기지 않는다. 대신 열이 짜부라져 긴 제목이 한 글자씩 세로로 쏟아진다(375px 결재함).
+          둘을 같이 두면 넓은 화면에서는 100%, 좁은 화면에서는 내용 폭만큼이 된다. */}
+      <table className={cn('w-full min-w-max border-collapse text-left text-sm', className)}>
+        {children}
+      </table>
     </div>
   )
 }

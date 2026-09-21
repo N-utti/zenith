@@ -155,7 +155,7 @@ function Legend({
           aria-pressed={show[kind]}
           onClick={() => onToggle(kind)}
           className={cn(
-            'text-subtle hover:bg-surface-hover hover:text-fg flex items-center gap-1 rounded-md px-1.5 py-1 text-xs transition-colors',
+            'text-subtle hover:bg-surface-hover hover:text-fg flex items-center gap-1 rounded-md px-1.5 py-1 text-xs whitespace-nowrap transition-colors',
             !show[kind] && 'opacity-50',
           )}
         >
