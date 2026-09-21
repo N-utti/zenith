@@ -6,7 +6,13 @@ import { DEMO_PASSWORD } from './accounts'
 import { createAccount, emailTaken, findAccount, listAccounts, patchAccount } from './adminDb'
 import { badCursor, listAudit, push as recordAudit } from './auditDb'
 import { EMAIL_PATTERN, type UserCreate, type UserPatch } from '@/features/admin/types'
-import { clearMockSession, MOCK_USERS, setMockSession, userFromCookie } from './db'
+import {
+  clearMockSession,
+  MOCK_TEAM_LIST,
+  MOCK_USERS,
+  setMockSession,
+  userFromCookie,
+} from './db'
 import {
   AI_MODELS,
   answer,
@@ -676,6 +682,13 @@ export const handlers = [
       }
       return HttpResponse.json(companyAttendance(month))
     }),
+  ),
+
+  // ── 관리자 · 팀 (04 §9, 임원) ──────────────────
+  // 계정의 소속을 고르는 자리가 쓴다. 다른 목록과 달리 `{items}` 가 아니라 배열 그대로다.
+  http.get(
+    '/api/admin/teams',
+    authed((user) => (user.role === 'exec' ? HttpResponse.json(MOCK_TEAM_LIST) : forbidden())),
   ),
 
   // ── 관리자 · 계정 (04 §9, 임원) ──────────────────

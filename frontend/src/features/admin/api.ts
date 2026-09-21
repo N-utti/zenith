@@ -2,10 +2,12 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tansta
 import { api } from '@/lib/api'
 import { meQueryKey } from '@/features/auth/queries'
 import type { AuditPage } from './audit'
+import type { Team } from '@/types'
 import type { AdminUser, UserCreate, UserPatch } from './types'
 
 export const adminKeys = {
   users: ['admin', 'users'] as const,
+  teams: ['admin', 'teams'] as const,
   /** 거르개마다 따로 캐시한다. 앞머리(`['admin','audit']`)로 한 번에 무효화한다. */
   audit: (kind: string) => ['admin', 'audit', kind] as const,
   allAudit: ['admin', 'audit'] as const,
@@ -23,6 +25,19 @@ export function useUsers() {
   return useQuery({
     queryKey: adminKeys.users,
     queryFn: () => api<AdminUser[]>('/admin/users'),
+  })
+}
+
+/**
+ * 팀 목록. 계정의 소속을 고르는 자리에서만 쓴다.
+ *
+ * 다른 목록과 달리 `{items}` 가 아니라 **배열 그대로** 온다(04 §9). 임원 전용이라 그 아래
+ * 등급은 403 인데, 관리 화면 자체가 임원에게만 열리므로 여기서 또 막지 않는다.
+ */
+export function useTeams() {
+  return useQuery({
+    queryKey: adminKeys.teams,
+    queryFn: () => api<Team[]>('/admin/teams'),
   })
 }
 

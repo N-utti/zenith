@@ -5,6 +5,8 @@ export interface UserForm {
   name: string
   password: string
   role: Role
+  /** 팀 id. 비우면 빈 문자열이고, 소속 없음이라 `null` 로 바꿔 보낸다. */
+  teamId: string
   /** `YYYY-MM-DD`. 비우면 빈 문자열이고, 그대로 보내면 안 되므로 `null` 로 바꾼다. */
   hireDate: string
   active: boolean
@@ -23,6 +25,7 @@ export function userPatch(user: AdminUser, form: UserForm): UserPatch {
   if (name !== user.name) patch.name = name
   if (form.role !== user.role) patch.role = form.role
   if (form.active !== user.active) patch.active = form.active
+  if (form.teamId !== (user.team_id ?? '')) patch.team_id = form.teamId || null
   if (form.hireDate !== (user.hire_date ?? '')) patch.hire_date = form.hireDate || null
   if (form.password) patch.password = form.password
   return patch

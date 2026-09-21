@@ -9,7 +9,7 @@ import { Spinner } from '@/components/ui/Spinner'
 import { useToast } from '@/components/ui/ToastContext'
 import { ApiError } from '@/lib/api'
 import { PASSWORD_MIN, ROLE_LABEL, type Role } from '@/types'
-import { useCreateUser, useUpdateUser } from './api'
+import { useCreateUser, useTeams, useUpdateUser } from './api'
 import { userPatch, type UserForm } from './patch'
 import { EMAIL_PATTERN, type AdminUser } from './types'
 
@@ -44,12 +44,14 @@ export function UserModal({
 }) {
   const create = useCreateUser()
   const update = useUpdateUser()
+  const teams = useTeams()
   const toast = useToast()
   const [form, setForm] = useState<Form>({
     name: user?.name ?? '',
     email: '',
     password: '',
     role: user?.role ?? 'member',
+    teamId: user?.team_id ?? '',
     hireDate: user?.hire_date ?? '',
     active: user?.active ?? true,
   })
@@ -59,6 +61,13 @@ export function UserModal({
     setForm((prev) => ({ ...prev, [key]: value }))
     setError(null)
   }
+
+  // 목록이 오기 전에는 고르지 못하게 둔다. 지금 소속이 보기에 없는 채로 열어 두면
+  // 건드리지 않아도 「팀 없음」이 골라진 것처럼 보인다.
+  const teamOptions = [
+    { value: '', label: '팀 없음' },
+    ...(teams.data ?? []).map((team) => ({ value: team.id, label: team.name })),
+  ]
 
   const pending = create.isPending || update.isPending
   const name = form.name.trim()
@@ -113,6 +122,7 @@ export function UserModal({
         email,
         password: form.password,
         role: form.role,
+        team_id: form.teamId || null,
         hire_date: form.hireDate || null,
       },
       {
@@ -217,6 +227,21 @@ export function UserModal({
                 value={form.role}
                 disabled={isSelf}
                 onChange={(e) => set('role', e.target.value as Role)}
+              />
+            )}
+          </Field>
+
+          <Field
+            label="소속 팀"
+            hint={teams.isError ? '팀 목록을 불러오지 못했습니다.' : '비워 두면 소속 없음입니다.'}
+          >
+            {(slot) => (
+              <Select
+                {...slot}
+                options={teamOptions}
+                value={form.teamId}
+                disabled={teams.isPending || teams.isError}
+                onChange={(e) => set('teamId', e.target.value)}
               />
             )}
           </Field>
