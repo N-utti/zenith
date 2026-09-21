@@ -134,7 +134,9 @@ export function YearHeader({
   actions?: ReactNode
 }) {
   return (
-    <div className="flex items-center gap-2">
+    // MonthHeader 와 같은 이유로 접는다. 여기 곁가지는 더 무겁다(휴일 설정은 설명문 두 줄 +
+    // 버튼). 안 접으면 좁은 폭에서 「2026 / 년」으로 쪼개진다.
+    <div className="flex flex-wrap items-center gap-2">
       <div className="flex items-center gap-0.5">
         <MonthButton label="이전 해" onClick={() => onYearChange(Math.max(2000, year - 1))}>
           <ChevronLeft className="size-4" />
@@ -143,7 +145,7 @@ export function YearHeader({
           <ChevronRight className="size-4" />
         </MonthButton>
       </div>
-      <h2 className="text-fg text-base font-semibold">{year}년</h2>
+      <h2 className="text-fg text-base font-semibold whitespace-nowrap">{year}년</h2>
       {actions && <div className="ml-auto flex items-center gap-2">{actions}</div>}
     </div>
   )

@@ -52,11 +52,12 @@ export function Header({
         <span className="text-fg text-[14.5px] font-bold tracking-tight">제니스</span>
       </Link>
 
+      {/* min-w-0: 이게 없으면 flex 항목이 제 내용 폭(약 164px) 밑으로 줄지 않아, 좁은 화면에서
+          오른쪽의 테마·아바타를 화면 밖으로 밀어낸다. 375px 에서 문서 전체가 15px 넘쳤다
+          (scrollWidth 390). 안쪽 span 은 truncate 라 0 까지 줄지만 버튼 자신이 안 줄었다. */}
       <button
         type="button"
         onClick={onOpenCommandPalette}
-        // min-w-0: 이게 없으면 flex 항목이 제 내용 폭(약 164px) 밑으로 줄지 않아, 좁은 화면에서
-        // 오른쪽의 테마·아바타를 화면 밖으로 밀어낸다. 375px 에서 문서 전체가 27px 가로로 밀렸다.
         className="border-line bg-canvas text-subtle hover:border-line-strong mx-auto flex h-[34px] min-w-0 max-w-[460px] flex-1 cursor-pointer items-center gap-2 rounded-lg border px-3 text-[13px] transition-colors"
       >
         <Search className="size-4 shrink-0" />
