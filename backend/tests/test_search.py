@@ -3,7 +3,7 @@
 from datetime import UTC, datetime, timedelta
 
 from httpx import AsyncClient
-from sqlalchemy import func
+from sqlalchemy import func, inspect, select, update
 
 from app.models import (
     Board,
@@ -175,3 +175,33 @@ async def test_lead_boundary(client: AsyncClient, users: Users, app_db) -> None:
     await login(client, "donghyun@zenith.co.kr")
     r = await client.get("/api/search", params={"q": "로드맵", "types": "post", "limit": 50})
     assert {h["title"] for h in r.json()} == {"전사 로드맵 공유", "팀장 로드맵"}
+
+
+async def test_tsv_is_generated_by_the_db(client: AsyncClient, users: Users, app_db) -> None:
+    """messages·posts 의 tsv 는 DB 생성 컬럼이다 — 앱이 손으로 유지하지 않아도 본문을 따라가고(앞 절반: 즉석 계산이던
+    때도 통과하던 계약), 행을 읽거나 만들 때 tsvector 가 오가지 않는다(뒤 절반: 이 변경의 회귀 가드)."""
+    seeded = await _seed(app_db, users)
+    await login(client, "donghyun@zenith.co.kr")
+
+    async def chat_hits(q: str) -> int:
+        return len((await client.get("/api/search", params={"q": q, "types": "chat"})).json())
+
+    assert (await chat_hits("로드맵"), await chat_hits("결산")) == (1, 0)
+    await app_db.execute(  # 본문이 바뀌면 색인도 따라간다(ORM 을 거치지 않은 UPDATE 도)
+        update(Message)
+        .where(Message.channel_id == seeded["general"].id)
+        .values(body="분기 결산 회의")
+    )
+    assert (await chat_hits("로드맵"), await chat_hits("결산")) == (0, 1)
+
+    message_id = await app_db.scalar(select(Message.id).limit(1))
+    loaded = await app_db.get(Message, message_id, populate_existing=True)
+    assert "tsv" in inspect(loaded).unloaded  # 메시지를 읽을 때마다 tsvector 가 오가면 안 된다
+
+    # 만들 때도 마찬가지 — eager_defaults 가 켜져 있으면 INSERT 의 RETURNING 에 딸려 와 loaded 가 된다
+    post = Post(board_id=seeded["notice"].id, title="새 글", body="본문", author_id=users.exec.id)
+    message = Message(channel_id=seeded["general"].id, author_id=users.lead.id, body="새 메시지")
+    app_db.add_all([post, message])
+    await app_db.flush()
+    assert "tsv" in inspect(post).unloaded and "tsv" in inspect(message).unloaded
+    assert post.id is not None and message.id is not None  # id 는 여전히 돌아온다
