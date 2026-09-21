@@ -240,6 +240,11 @@ export function handleChatConnection(conn, userId) {
 
     if (op.op === 'msg') {
       const body = typeof op.body === 'string' ? op.body.trim() : ''
+      // 백엔드 `MsgOp.body` 의 상한과 같다. 릴레이가 이걸 모르면 프론트의 선검사가 나중에
+      // 헐거워졌을 때 목에서는 계속 통과하고 실서버에서만 죽는다.
+      if (body.length > 10_000) {
+        return sendError(conn, 'VALIDATION', '본문이 너무 깁니다.', channelId)
+      }
       const checked = checkAttachments(op.attachments, channelId)
       if (checked.error) return sendError(conn, 'VALIDATION', checked.error, channelId)
       // 첨부만 보내는 메시지도 있다. 둘 다 없을 때만 막는다.
