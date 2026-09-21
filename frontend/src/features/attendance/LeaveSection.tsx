@@ -69,7 +69,7 @@ export function LeaveSection() {
         )}
       </Card>
 
-      <Table>
+      <Table label="내 휴가 목록">
         <THead>
           <tr>
             <TH>종류</TH>

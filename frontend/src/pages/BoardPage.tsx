@@ -69,7 +69,7 @@ function PostTable({ boardId, badge }: { boardId: string; badge: string }) {
   }
 
   return (
-    <Table>
+    <Table label="게시글 목록">
       <THead>
         <TR>
           <TH className="w-full">제목</TH>

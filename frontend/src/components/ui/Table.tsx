@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react'
 import type { ReactNode, ThHTMLAttributes, TdHTMLAttributes } from 'react'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import { cn } from '@/lib/cn'
@@ -14,41 +15,84 @@ import { cn } from '@/lib/cn'
  */
 export function Table({
   className,
-  scrollLabel,
+  label,
+  wide,
   children,
 }: {
   className?: string
   /**
-   * 열을 줄바꿈 없이 한 줄로 세우고, 좁아지면 표가 자기 안에서 가로로 구르게 한다.
+   * 표 이름. 늘 `<caption>` 으로 들어가고(화면에는 안 보인다), 좁아져서 표가 구르기 시작하면
+   * 스크롤 상자도 이 이름을 단 영역이 된다.
    *
-   * 기본값(주지 않음)은 `w-full` 이라 표가 컨테이너를 넘지 않는다. 열이 짜부라지는 대신
-   * 셀 안에서 줄바꿈된다. 게시판처럼 좁은 폭에서 열을 접고 제목을 두세 줄로 흘리도록
-   * 설계한 화면이 이 동작에 기대고 있다.
+   * 구르는 상자는 안에 포커스 받을 것이 없으면 키보드로 넘길 수 없다. 오른쪽 열을 마우스
+   * 없이는 볼 방법이 사라진다(WCAG 2.1.1). 그래서 구르는 동안만 상자 자신이 포커스를 받고,
+   * 이름 없는 포커스 정지는 스크린리더에서 «그룹» 으로만 읽히므로 이름을 같이 준다.
+   * `CompanyAttendanceSection` 이 공용 표를 안 쓰고 직접 하던 처리가 이것이다.
    *
-   * 반대로 결재함처럼 한 줄로 읽혀야 하는 표는 짜부라지면 제목이 한 글자씩 세로로 쏟아진다.
-   * 그런 화면만 이 값을 준다. **폭이 아니라 내용 길이가 기준이므로** 넓은 화면에서도 내용이
-   * 길면 구른다. 값은 스크린리더가 읽을 표 이름이다. 구르는 상자는 안에 포커스 받을 것이
-   * 없으면 키보드로 넘길 수 없어서, 영역 자체가 포커스를 받아야 한다
-   * (`CompanyAttendanceSection` 과 같은 처리).
+   * 필수다. 선택으로 두면 이름 없는 포커스 정지가 조용히 만들어진다. 컴파일도 통과하고
+   * 런타임 경고도 없어서, 타입이 막아 주지 않으면 아무도 눈치채지 못한다.
    */
-  scrollLabel?: string
+  label: string
+  /**
+   * 열을 줄바꿈 없이 한 줄로 세운다.
+   *
+   * 기본값은 `w-full` 이라 좁아지면 열이 짜부라지고 셀 안에서 줄바꿈된다. 게시판처럼 좁은
+   * 폭에서 열을 접고 제목을 두세 줄로 흘리도록 설계한 화면이 그 동작에 기대고 있다.
+   * 반대로 결재함처럼 한 줄로 읽혀야 하는 표는 짜부라지면 제목이 한 글자씩 세로로 쏟아진다.
+   * 그런 화면만 켠다. **폭이 아니라 내용 길이가 기준이라** 넓은 화면에서도 내용이 길면 구른다.
+   */
+  wide?: boolean
   children: ReactNode
 }) {
+  const boxRef = useRef<HTMLDivElement>(null)
+  const tableRef = useRef<HTMLTableElement>(null)
+  const [scrollable, setScrollable] = useState(false)
+
+  /**
+   * 지금 실제로 구르고 있는지 본다. 넘치지도 않는데 늘 포커스를 받게 하면 데스크톱에서
+   * 표 개수만큼 탭 정지가 늘어난다. 폭은 창 크기뿐 아니라 행이 늘거나 줄어도 바뀌므로
+   * 상자와 표를 같이 지켜본다.
+   */
+  useEffect(() => {
+    const box = boxRef.current
+    const table = tableRef.current
+    if (!box || !table) return
+
+    const check = () =>
+      setScrollable(
+        // 이 상자가 지금 포커스를 쥐고 있으면 탭 정지를 뺏지 않는다. 창을 넓히거나 브라우저를
+        // 확대하는 순간 tabindex 가 사라지면 포커스가 body 로 떨어지고, 다음 Tab 이 문서 맨
+        // 위에서 다시 시작해 여기까지 오던 이동이 통째로 날아간다.
+        (prev) =>
+          (prev && box === document.activeElement) ||
+          // scrollWidth·clientWidth 는 정수로 반올림된 값이라, 열 폭이 소수로 떨어지면 안
+          // 구르는데도 1 차이가 난다. 그 1px 로 탭 정지가 도로 늘어나지 않게 여유를 둔다.
+          box.scrollWidth - box.clientWidth > 1,
+      )
+
+    check()
+    const observer = new ResizeObserver(check)
+    observer.observe(box)
+    observer.observe(table)
+    return () => observer.disconnect()
+  }, [])
+
   return (
     <div
-      {...(scrollLabel ? { tabIndex: 0, role: 'region', 'aria-label': scrollLabel } : {})}
+      ref={boxRef}
+      {...(scrollable ? { tabIndex: 0, role: 'region', 'aria-label': label } : {})}
       className={cn(
         'border-line bg-surface overflow-x-auto rounded-xl border',
-        scrollLabel && 'focus-visible:ring-accent focus-visible:ring-2 focus-visible:outline-none',
+        scrollable && 'focus-visible:ring-accent focus-visible:ring-2 focus-visible:outline-none',
       )}
     >
       <table
-        className={cn(
-          'w-full border-collapse text-left text-sm',
-          scrollLabel && 'min-w-max',
-          className,
-        )}
+        ref={tableRef}
+        className={cn('w-full border-collapse text-left text-sm', wide && 'min-w-max', className)}
       >
+        {/* 구르지 않는 폭에서는 위 aria-label 이 붙지 않는다. 표 자체의 이름은 여기서 준다.
+            스크린리더의 표 목록·표 단축키 이동이 이 이름을 읽는다. */}
+        <caption className="sr-only">{label}</caption>
         {children}
       </table>
     </div>

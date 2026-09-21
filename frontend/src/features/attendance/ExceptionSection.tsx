@@ -168,7 +168,7 @@ export function ExceptionSection() {
         </div>
       </Card>
 
-      <Table>
+      <Table label="예외 근무 신청 목록">
         <THead>
           <tr>
             <TH>종류</TH>

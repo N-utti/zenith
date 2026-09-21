@@ -47,7 +47,7 @@ export function MonthClosingSection() {
         }
       />
 
-      <Table>
+      <Table label={`${year}년 월 마감 목록`}>
         <THead>
           <tr>
             <TH>달</TH>
