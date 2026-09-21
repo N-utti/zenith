@@ -7,11 +7,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    database_url: str = "postgresql+asyncpg://zenith:zenith@localhost:5432/zenith"
+    database_url: str = "postgresql+asyncpg://zenith:zenith@127.0.0.1:5432/zenith"
     # ponytail: Redis(presence·PubSub)는 아직 코드가 쓰지 않는다. compose와 짝을 맞춘 자리만 둔다.
-    redis_url: str = "redis://localhost:6379/0"
+    redis_url: str = "redis://127.0.0.1:6379/0"
     # MinIO — 채팅 첨부(app/storage.py). 브라우저는 여기 직접 붙지 않는다.
-    minio_endpoint: str = "localhost:9000"
+    minio_endpoint: str = "127.0.0.1:9000"
     minio_access_key: str = "zenith"
     minio_secret_key: str = "zenith-minio"
     minio_bucket: str = "zenith"
