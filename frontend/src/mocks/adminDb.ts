@@ -1,5 +1,5 @@
 import type { AdminUser, UserCreate, UserPatch } from '@/features/admin/types'
-import { MOCK_USERS } from './db'
+import { MOCK_TEAM_LIST, MOCK_USERS } from './db'
 
 /**
  * 계정 관리용 저장소. 명단은 `db.ts` 의 `MOCK_USERS`(users.json) 를 그대로 쓰고, 여기에
@@ -48,7 +48,7 @@ export function createAccount(body: UserCreate): AdminUser {
     role: body.role,
     avatar: null,
     active: true,
-    team_id: null,
+    team_id: body.team_id,
     hire_date: body.hire_date,
     created_at: new Date().toISOString(),
   }
@@ -67,12 +67,15 @@ export function patchAccount(account: AdminUser, patch: UserPatch): AdminUser {
   if (patch.name !== undefined) account.name = patch.name.trim()
   if (patch.role !== undefined) account.role = patch.role
   if (patch.active !== undefined) account.active = patch.active
+  if (patch.team_id !== undefined) account.team_id = patch.team_id
   if (patch.hire_date !== undefined) account.hire_date = patch.hire_date
 
   const mirror = MOCK_USERS.find((user) => user.id === account.id)
   if (mirror) {
     mirror.name = account.name
     mirror.role = account.role
+    // 소속도 같이 심는다. 갈라져 있으면 소속을 옮겨 놓고 오른쪽 위 프로필은 옛 팀을 들고 있다.
+    mirror.team = MOCK_TEAM_LIST.find((team) => team.id === account.team_id) ?? null
   }
   return account
 }

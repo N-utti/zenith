@@ -7,7 +7,7 @@ import { Card, CardEmpty } from '@/components/ui/Card'
 import { SkeletonRows } from '@/components/ui/Skeleton'
 import { Table, TBody, TD, TH, THead, TR, TableEmpty } from '@/components/ui/Table'
 import { useCurrentUser } from '@/features/auth/AuthContext'
-import { useUsers } from './api'
+import { useTeams, useUsers } from './api'
 import { UserModal } from './UserModal'
 import type { AdminUser } from './types'
 import { hueOf } from '@/lib/avatar'
@@ -15,11 +15,24 @@ import { formatISOYearDate } from '@/lib/datetime'
 import { ROLE_LABEL } from '@/types'
 
 /** 열 수: 표가 비었을 때 가운데 문구가 걸칠 칸 수. */
-const COLUMNS = 5
+const COLUMNS = 6
 
 export function AccountList() {
   const me = useCurrentUser()
   const { data, isPending, isError } = useUsers()
+  // 계정 줄은 팀 id 만 들고 온다(`UserOut`). 이름은 팀 목록에서 맞춘다.
+  const teams = useTeams()
+  /**
+   * 소속 없음과 **아직 모름** 을 가른다.
+   *
+   * 팀 목록은 계정 목록과 따로 뜨는 요청이라 늦게 오고, 실패하면 4xx 는 다시 부르지 않는다.
+   * 둘을 다 `-` 로 적으면 팀이 있는 사람까지 소속 없음으로 보이고, 실패했을 때는 그 거짓이
+   * 영영 남는다.
+   */
+  const teamCell = (id: string | null) => {
+    if (!id) return '-'
+    return teams.data?.find((team) => team.id === id)?.name ?? (teams.isError ? '확인 불가' : '…')
+  }
   /** 열려 있는 대화상자. `new` 는 새 계정, 그 밖에는 고치는 계정. */
   const [editing, setEditing] = useState<AdminUser | 'new' | null>(null)
 
@@ -48,6 +61,7 @@ export function AccountList() {
               <TH>이름</TH>
               <TH>이메일</TH>
               <TH className="w-24">등급</TH>
+              <TH className="w-36">소속</TH>
               <TH className="w-28">입사일</TH>
               <TH className="w-24 text-right">관리</TH>
             </TR>
@@ -68,6 +82,7 @@ export function AccountList() {
                 <TD>
                   <Badge>{ROLE_LABEL[user.role]}</Badge>
                 </TD>
+                <TD className="text-muted">{teamCell(user.team_id)}</TD>
                 <TD className="text-muted">
                   {user.hire_date ? formatISOYearDate(user.hire_date) : '-'}
                 </TD>

@@ -6,7 +6,13 @@ import { DEMO_PASSWORD } from './accounts'
 import { createAccount, emailTaken, findAccount, listAccounts, patchAccount } from './adminDb'
 import { badCursor, listAudit, push as recordAudit } from './auditDb'
 import { EMAIL_PATTERN, type UserCreate, type UserPatch } from '@/features/admin/types'
-import { clearMockSession, MOCK_USERS, setMockSession, userFromCookie } from './db'
+import {
+  clearMockSession,
+  MOCK_TEAM_LIST,
+  MOCK_USERS,
+  setMockSession,
+  userFromCookie,
+} from './db'
 import {
   AI_MODELS,
   answer,
@@ -173,6 +179,10 @@ const forbidden = () =>
 
 const validationError = (detail: string) =>
   HttpResponse.json({ detail, code: 'VALIDATION' }, { status: 422 })
+
+/** 서버 `_require_team` 과 같은 판정. 없는 팀이면 422 라 목도 같이 막아야 한다. */
+const unknownTeam = (teamId: string | null | undefined) =>
+  typeof teamId === 'string' && !MOCK_TEAM_LIST.some((team) => team.id === teamId)
 
 /** 본문이 JSON 이 아니면 500 대신 422 로 떨어뜨린다. 백엔드도 422 다. */
 async function readJson<T>(request: Request): Promise<T | null> {
@@ -678,6 +688,13 @@ export const handlers = [
     }),
   ),
 
+  // ── 관리자 · 팀 (04 §9, 임원) ──────────────────
+  // 계정의 소속을 고르는 자리가 쓴다. 다른 목록과 달리 `{items}` 가 아니라 배열 그대로다.
+  http.get(
+    '/api/admin/teams',
+    authed((user) => (user.role === 'exec' ? HttpResponse.json(MOCK_TEAM_LIST) : forbidden())),
+  ),
+
   // ── 관리자 · 계정 (04 §9, 임원) ──────────────────
   http.get(
     '/api/admin/users',
@@ -701,6 +718,7 @@ export const handlers = [
     if (String(body.password ?? '').length < PASSWORD_MIN) {
       return validationError(`비밀번호는 ${PASSWORD_MIN}자 이상이어야 합니다.`)
     }
+    if (unknownTeam(body.team_id)) return validationError('없는 팀입니다.')
     if (emailTaken(email)) {
       return HttpResponse.json(
         { detail: '이미 있는 이메일입니다.', code: 'CONFLICT' },
@@ -743,6 +761,7 @@ export const handlers = [
     if (patch.password !== undefined && patch.password.length < PASSWORD_MIN) {
       return validationError(`비밀번호는 ${PASSWORD_MIN}자 이상이어야 합니다.`)
     }
+    if (unknownTeam(patch.team_id)) return validationError('없는 팀입니다.')
     const before = { role: target.role, active: target.active }
     const updated = patchAccount(target, patch)
     recordAudit({

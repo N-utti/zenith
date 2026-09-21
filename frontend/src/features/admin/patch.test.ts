@@ -9,7 +9,7 @@ const USER: AdminUser = {
   role: 'member',
   avatar: null,
   active: true,
-  team_id: 'team-dev',
+  team_id: '5f8d0c31-6a24-4b93-9e10-2c7a4f0b8d15',
   hire_date: '2021-03-02',
   created_at: '2026-01-02T00:00:00Z',
 }
@@ -18,6 +18,7 @@ const form = (over: Partial<UserForm> = {}): UserForm => ({
   name: USER.name,
   password: '',
   role: USER.role,
+  teamId: USER.team_id ?? '',
   hireDate: USER.hire_date ?? '',
   active: USER.active,
   ...over,
@@ -46,6 +47,14 @@ describe('userPatch', () => {
     expect(userPatch(USER, form({ password: 'zenith-temp-1' }))).toEqual({
       password: 'zenith-temp-1',
     })
+  })
+
+  it('소속을 비우면 null 을 보낸다', () => {
+    // 팀과 입사일만 null 을 대놓고 보내도 되는 칸이다. 다른 칸에 null 은 422.
+    expect(userPatch(USER, form({ teamId: '' }))).toEqual({ team_id: null })
+
+    const moved = userPatch(USER, form({ teamId: 'a3e91b47-0d5c-4f28-8a63-1b9e5d2c7048' }))
+    expect(moved).toEqual({ team_id: 'a3e91b47-0d5c-4f28-8a63-1b9e5d2c7048' })
   })
 
   it('비활성화는 active 만 바꾼다', () => {

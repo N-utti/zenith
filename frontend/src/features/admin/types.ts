@@ -24,6 +24,7 @@ export interface UserCreate {
   email: string
   password: string
   role: Role
+  team_id: string | null
   hire_date: string | null
 }
 
@@ -38,6 +39,8 @@ export interface UserPatch {
   name?: string
   role?: Role
   active?: boolean
+  /** 입사일과 함께 `null` 을 대놓고 보내도 되는 칸이다(= 소속 없음). 다른 칸에 `null` 은 422. */
+  team_id?: string | null
   hire_date?: string | null
   /** 보내면 임시 비밀번호로 재설정하고 그 사람의 세션을 전부 닫는다. */
   password?: string
