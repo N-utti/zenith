@@ -26,6 +26,7 @@ from app.db import get_db
 from app.deps import current_user
 from app.errors import ApiError
 from app.models import (
+    DOC_LIST_OPTS,
     ROLE_RANK,
     Board,
     Channel,
@@ -108,6 +109,7 @@ async def search(
                     "simple", func.coalesce(Document.text_cache, ""), tsq, HEADLINE_OPTS
                 ),
             )
+            .options(*DOC_LIST_OPTS)  # 평문·tsv 는 SQL 식에서만 쓴다. 행으로는 안 가져온다
             .join(Folder, Folder.id == Document.folder_id)
             .where(Document.deleted_at.is_(None), tsv.op("@@")(tsq))
             .order_by(

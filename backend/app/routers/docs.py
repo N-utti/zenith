@@ -17,12 +17,14 @@ from fastapi import APIRouter, Depends, Query, Request, Response
 from pydantic import BaseModel, ConfigDict, StringConstraints
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import defer
 
 from app import audit
 from app.db import get_db, session_scope
 from app.deps import current_user
 from app.errors import ApiError
 from app.models import (
+    DOC_LIST_OPTS,
     ROLE_RANK,
     DocChunk,
     DocComment,
@@ -185,8 +187,14 @@ def _doc_out(doc: Document, editor: User | None) -> DocOut:
     )
 
 
-async def _get_doc(db: AsyncSession, doc_id: uuid.UUID, *, trashed_ok: bool = False) -> Document:
-    doc = await db.get(Document, doc_id)
+async def _get_doc(
+    db: AsyncSession, doc_id: uuid.UUID, *, trashed_ok: bool = False, body: bool = False
+) -> Document:
+    # 본문(Y.Doc)을 쓰는 곳은 상세 하나다. 나머지(수정·삭제·버전·댓글)는 있는지와 휴지통 여부만 본다.
+    # populate_existing: 같은 세션이 목록에서 본문 없이 읽어 둔 행이 있어도 다시 읽는다(테스트는 세션을 공유한다).
+    doc = await db.get(
+        Document, doc_id, options=() if body else DOC_LIST_OPTS, populate_existing=body
+    )
     if doc is None or (doc.deleted_at is not None and not trashed_ok):
         raise ApiError(404, "NOT_FOUND", "없는 문서입니다.")
     return doc
@@ -238,6 +246,7 @@ async def tree(db: AsyncSession = Depends(get_db)) -> TreeOut:
     ).scalars()
     rows = await db.execute(
         select(Document, User)
+        .options(*DOC_LIST_OPTS)
         .outerjoin(User, User.id == Document.updated_by)
         .where(Document.deleted_at.is_(None))
         .order_by(Document.title, Document.id)  # folder_id 는 무작위 UUID 라 정렬 기준이 못 된다
@@ -261,6 +270,7 @@ async def list_trash(
 ) -> Items[DocOut]:
     rows = await db.execute(
         select(Document, User)
+        .options(*DOC_LIST_OPTS)
         .outerjoin(User, User.id == Document.updated_by)
         .where(Document.deleted_at.is_not(None))
         .order_by(Document.deleted_at.desc(), Document.id)
@@ -328,7 +338,7 @@ async def create_doc(
 )
 async def get_doc(id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> DocDetail:
     # 휴지통에 있는 문서도 연다 — 복구하려면 열 수 있어야 한다. 트리에서만 빠진다.
-    doc = await _get_doc(db, id, trashed_ok=True)
+    doc = await _get_doc(db, id, trashed_ok=True, body=True)
     editor = await db.get(User, doc.updated_by) if doc.updated_by else None
     return DocDetail(**_doc_out(doc, editor).model_dump(), ydoc=_b64(doc.ydoc_snapshot))
 
@@ -422,7 +432,10 @@ async def purge_trash(db: AsyncSession, *, now: datetime | None = None) -> int:
     exec 의 ?hard=1 과 같은 캐스케이드, 감사는 actor 없는 `docs.purged`. 지운 수를 돌려준다.
     ponytail: SELECT 와 commit 사이에 untrash 되면 그 문서도 지워진다 — 창은 배치 한 번 길이, 15명 규모에서 감수."""
     cutoff = (now or _now()) - TRASH_RETENTION
-    rows = await db.execute(select(Document).where(Document.deleted_at <= cutoff))
+    # 지우는 데 본문은 필요 없다. 없으면 30일치 Y.Doc 이 한꺼번에 메모리에 올라온다
+    rows = await db.execute(
+        select(Document).options(*DOC_LIST_OPTS).where(Document.deleted_at <= cutoff)
+    )
     docs = list(rows.scalars())
     for doc in docs:
         await _purge(db, doc)
@@ -478,12 +491,22 @@ async def list_versions(id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> It
     doc = await _get_doc(db, id, trashed_ok=True)
     rows = await db.execute(
         select(DocVersion, User)
+        # 스냅샷은 읽지 않는다. 전에는 버전마다 읽어 base64 로 만든 뒤 응답에서 버렸다(60개×500KB 에 233ms·32MB).
+        .options(defer(DocVersion.snapshot, raiseload=True))
         .outerjoin(User, User.id == DocVersion.author_id)
         .where(DocVersion.doc_id == doc.id)
         .order_by(DocVersion.created_at.desc(), DocVersion.id.desc())
     )
     return Items(
-        items=[VersionMeta(**_version_out(v, a).model_dump(exclude={"snapshot"})) for v, a in rows]
+        items=[
+            VersionMeta(
+                id=v.id,
+                created_at=v.created_at,
+                author=Person.model_validate(a) if a else None,
+                label=v.label,
+            )
+            for v, a in rows
+        ]
     )
 
 
@@ -504,6 +527,7 @@ async def create_version(
     latest = (
         await db.execute(
             select(DocVersion)
+            .options(defer(DocVersion.snapshot))  # 접을지 판정에는 안 쓴다. 접으면 덮어쓸 값이다
             .where(DocVersion.doc_id == doc.id)
             .order_by(DocVersion.created_at.desc(), DocVersion.id.desc())
             .limit(1)
@@ -528,8 +552,8 @@ async def create_version(
             doc_id=doc.id, snapshot=snapshot, author_id=user.id, label=body.label, created_at=_now()
         )
         db.add(version)
+    # refresh 하지 않는다. 칸은 전부 위에서 채웠고(id 는 INSERT 의 RETURNING), 하면 방금 쓴 스냅샷을 다시 읽는다.
     await db.commit()
-    await db.refresh(version)
     return _version_out(version, user)
 
 

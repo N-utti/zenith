@@ -17,6 +17,7 @@ from app.db import get_db
 from app.deps import current_user
 from app.errors import ApiError
 from app.models import (
+    DOC_LIST_OPTS,
     ROLE_RANK,
     Board,
     Channel,
@@ -128,6 +129,7 @@ async def _recent_docs(db: AsyncSession, user: User, limit: int) -> list[RecentD
     """
     base = (
         select(Document, User)
+        .options(*DOC_LIST_OPTS)
         .outerjoin(User, User.id == Document.updated_by)
         .where(Document.deleted_at.is_(None))
         .order_by(Document.updated_at.desc(), Document.id)

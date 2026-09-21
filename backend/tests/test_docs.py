@@ -1,11 +1,13 @@
 """04-API §3 문서 트리·문서 — FR-DOC-03~05 · TC-DOC-05·06·07 · TC-AUTH-04. 전부 실 Postgres."""
 
 import base64
+import re
 import uuid
 from datetime import UTC, datetime, timedelta
 
 from httpx import AsyncClient
-from sqlalchemy import select
+from sqlalchemy import event, select
+from sqlalchemy.engine import Engine
 
 from app import audit
 from app.models import (
@@ -477,3 +479,58 @@ async def test_purge_trash_after_30_days(client: AsyncClient, users: Users, app_
     assert await purge_trash(app_db, now=now) == 0  # 두 번 돌려도 더 지울 게 없다
     trash = (await client.get("/api/trash")).json()["items"]  # 지워진 것은 목록에서도 사라진다
     assert [d["id"] for d in trash] == [fresh["id"]]
+
+
+async def test_lists_do_not_load_doc_bodies(client: AsyncClient, users: Users, app_db) -> None:
+    """목록 경로(트리·휴지통·홈·검색·버전 목록)는 본문 원본·평문·스냅샷을 DB 에서 읽지 않는다.
+
+    문서 수·버전 수에 비례해 커지는 칸이다(models.DOC_LIST_OPTS). 목록을 읽은 뒤에도 상세는 본문을 준다.
+    """
+    root = await _root(app_db)
+    await login(client, "sujin@zenith.co.kr")
+    doc = await _doc(client, root.id, "로드맵 문서")
+    trashed = await _doc(client, root.id, "지울 문서")
+    await client.delete(f"/api/docs/{trashed['id']}", headers=csrf(client))
+    await client.post(
+        f"/api/docs/{doc['id']}/versions", json={"snapshot": SNAP}, headers=csrf(client)
+    )
+
+    selected: list[str] = []
+
+    def record(conn, cursor, statement, parameters, context, executemany) -> None:
+        if statement.lstrip().upper().startswith("SELECT"):
+            selected.append(
+                statement.split("FROM")[0]
+            )  # 뽑는 칸만. WHERE 의 tsv·text_cache 식은 괜찮다
+
+    event.listen(Engine, "before_cursor_execute", record)
+    try:
+        for path in (
+            "/api/tree",
+            "/api/trash",
+            "/api/me/home",
+            "/api/search?q=로드맵",
+            f"/api/docs/{doc['id']}/versions",
+        ):
+            r = await client.get(path)
+            assert r.status_code == 200, path
+            if "search" in path:  # 토큰이 안 잡히면 문서 SELECT 가 아예 안 나가 검사가 비어 버린다
+                assert [h["type"] for h in r.json()] == ["doc"]
+    finally:
+        event.remove(Engine, "before_cursor_execute", record)
+
+    # 뽑는 칸으로 나온 것만 잡는다(SELECT 바로 뒤거나 콤마 뒤). 검색의 ts_rank(coalesce(documents.tsv, …))·
+    # ts_headline(… text_cache …) 은 DB 안에서 계산되고 행으로 오지 않는다.
+    heavy = re.compile(
+        r"(?:SELECT|,)\s+documents\.(?:ydoc_snapshot|text_cache|tsv)\b|doc_versions\.snapshot"
+    )
+    offenders = [cols for cols in selected if heavy.search(cols)]
+    assert not offenders, " | ".join(offenders)
+
+    detail = (await client.get(f"/api/docs/{doc['id']}")).json()  # 같은 세션에서도 상세는 멀쩡하다
+    assert "ydoc" in detail
+    # 목록이 스냅샷 없이 읽어 둔 버전을 접어 저장해도 응답은 새 스냅샷을 싣는다(리뷰 M2)
+    r = await client.post(
+        f"/api/docs/{doc['id']}/versions", json={"snapshot": SNAP}, headers=csrf(client)
+    )
+    assert (r.status_code, r.json()["snapshot"]) == (201, SNAP)
