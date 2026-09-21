@@ -159,7 +159,9 @@
    본문 색을 앱 토큰과 정확히 맞출 수 있다. */
 @layer components {
   .zenith-editor {
-    @apply text-fg text-[15px] leading-7;
+    /* 터치 기기에서 16px: iOS Safari 는 그보다 작은 글자의 편집 영역에 포커스가 가면 화면을
+       확대한다. 좌우가 잘리고 첫 탭이 먹지 않는 원인이 된다(공용 입력칸도 같은 이유). */
+    @apply text-fg text-[15px] leading-7 pointer-coarse:text-base;
   }
 
   .zenith-editor > * + * {

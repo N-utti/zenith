@@ -65,15 +65,24 @@ function menuPosition(trigger: DOMRect, menu: DOMRect, align: 'start' | 'end') {
   const GAP = 4
   const EDGE = 8
   // innerWidth 는 스크롤바를 포함한다. 여백 계산에는 내용 폭을 쓴다.
-  const { clientWidth: vw, clientHeight: vh } = document.documentElement
+  const { clientWidth: vw, clientHeight: layoutHeight } = document.documentElement
 
-  const below = vh - trigger.bottom - GAP - EDGE
-  const above = trigger.top - GAP - EDGE
+  /**
+   * 세로로 쓸 수 있는 구간. 키보드가 올라오면 레이아웃 높이는 그대로인데 실제로 보이는
+   * 영역만 줄어든다. 레이아웃 높이로 재면 «아래가 넉넉하다» 고 판단해 메뉴를 키보드 뒤에
+   * 그린다. 툴바가 키보드 위로 올라가 있을 때(05·SCR-08) 늘 그 상황이 된다.
+   */
+  const visual = window.visualViewport
+  const viewTop = visual ? visual.offsetTop : 0
+  const viewBottom = visual ? visual.offsetTop + visual.height : layoutHeight
+
+  const below = viewBottom - trigger.bottom - GAP - EDGE
+  const above = trigger.top - viewTop - GAP - EDGE
   const flip = menu.height > below && above > below
   const wanted = align === 'end' ? trigger.right - menu.width : trigger.left
 
   return {
-    top: flip ? Math.max(EDGE, trigger.top - GAP - menu.height) : trigger.bottom + GAP,
+    top: flip ? Math.max(viewTop + EDGE, trigger.top - GAP - menu.height) : trigger.bottom + GAP,
     left: Math.max(EDGE, Math.min(wanted, vw - menu.width - EDGE)),
     maxHeight: Math.max(flip ? above : below, 120),
   }
