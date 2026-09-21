@@ -26,7 +26,7 @@ export const AUDIT_FILTERS = [
   { value: '', label: '전체' },
   { value: 'auth', label: '로그인·세션' },
   { value: 'acl', label: '권한 거부' },
-  { value: 'admin', label: '계정 관리' },
+  { value: 'admin', label: '계정·팀 관리' },
   { value: 'boards', label: '게시판' },
   { value: 'docs', label: '문서' },
   { value: 'files', label: '첨부 파일' },
@@ -165,6 +165,19 @@ export function auditView(event: AuditEvent): AuditView {
         detail:
           [changedFields(detail, state.covered), state.text].filter(Boolean).join(' · ') ||
           undefined,
+        tone: 'neutral',
+      }
+    }
+
+    case 'admin.team_created':
+      return { summary: '팀 생성', detail: text(detail, 'name'), tone: 'neutral' }
+
+    case 'admin.team_updated': {
+      const before = text(detail, 'before')
+      const after = text(detail, 'after')
+      return {
+        summary: '팀 이름 변경',
+        detail: before && after ? `${before} → ${after}` : after || before,
         tone: 'neutral',
       }
     }
