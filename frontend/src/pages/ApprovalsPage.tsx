@@ -57,7 +57,11 @@ export function ApprovalsPage() {
         }
       >
         {() => (
-          <Table>
+          <Table
+            // 제목이 길다. 열이 짜부라지면 «9월 워크숍 장소 대관 지출» 이 375px 에서 한 글자씩
+            // 세로로 쏟아진다. 한 줄로 세우고 좁으면 표가 자기 안에서 구르게 한다.
+            scrollLabel={`${BOX_LABEL[box]} 목록`}
+          >
             <THead>
               <tr>
                 <TH>유형</TH>

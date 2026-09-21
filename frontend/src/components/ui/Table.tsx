@@ -12,11 +12,45 @@ import { cn } from '@/lib/cn'
  *
  * `<table>` 시맨틱은 유지한다. div 그리드로 만들면 스크린리더가 행·열 관계를 잃는다.
  */
-export function Table({ className, children }: { className?: string; children: ReactNode }) {
+export function Table({
+  className,
+  scrollLabel,
+  children,
+}: {
+  className?: string
+  /**
+   * 열을 줄바꿈 없이 한 줄로 세우고, 좁아지면 표가 자기 안에서 가로로 구르게 한다.
+   *
+   * 기본값(주지 않음)은 `w-full` 이라 표가 컨테이너를 넘지 않는다. 열이 짜부라지는 대신
+   * 셀 안에서 줄바꿈된다. 게시판처럼 좁은 폭에서 열을 접고 제목을 두세 줄로 흘리도록
+   * 설계한 화면이 이 동작에 기대고 있다.
+   *
+   * 반대로 결재함처럼 한 줄로 읽혀야 하는 표는 짜부라지면 제목이 한 글자씩 세로로 쏟아진다.
+   * 그런 화면만 이 값을 준다. **폭이 아니라 내용 길이가 기준이므로** 넓은 화면에서도 내용이
+   * 길면 구른다. 값은 스크린리더가 읽을 표 이름이다. 구르는 상자는 안에 포커스 받을 것이
+   * 없으면 키보드로 넘길 수 없어서, 영역 자체가 포커스를 받아야 한다
+   * (`CompanyAttendanceSection` 과 같은 처리).
+   */
+  scrollLabel?: string
+  children: ReactNode
+}) {
   return (
-    // 좁은 화면에서 표가 페이지를 밀어내지 않도록 자기 안에서 가로로 구른다.
-    <div className="border-line bg-surface overflow-x-auto rounded-xl border">
-      <table className={cn('w-full border-collapse text-left text-sm', className)}>{children}</table>
+    <div
+      {...(scrollLabel ? { tabIndex: 0, role: 'region', 'aria-label': scrollLabel } : {})}
+      className={cn(
+        'border-line bg-surface overflow-x-auto rounded-xl border',
+        scrollLabel && 'focus-visible:ring-accent focus-visible:ring-2 focus-visible:outline-none',
+      )}
+    >
+      <table
+        className={cn(
+          'w-full border-collapse text-left text-sm',
+          scrollLabel && 'min-w-max',
+          className,
+        )}
+      >
+        {children}
+      </table>
     </div>
   )
 }
