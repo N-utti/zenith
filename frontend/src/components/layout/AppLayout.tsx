@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
-import { Outlet } from 'react-router'
+import { Outlet, useLocation } from 'react-router'
 import { CommandPalette } from '@/components/CommandPalette'
+import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { cn } from '@/lib/cn'
 import { Header } from './Header'
 import { MobileTabBar } from './MobileTabBar'
@@ -24,6 +25,7 @@ function readCollapsed() {
  * 문서 에디터처럼 화면을 꽉 채우고 영역별로 따로 스크롤해야 하는 화면용.
  */
 export function AppLayout({ bleed = false }: { bleed?: boolean }) {
+  const location = useLocation()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [collapsed, setCollapsed] = useState(readCollapsed)
   const [paletteOpen, setPaletteOpen] = useState(false)
@@ -49,6 +51,13 @@ export function AppLayout({ bleed = false }: { bleed?: boolean }) {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [])
 
+  /* 본문이 터져도 상단바·사이드바는 남긴다. 주소가 바뀌면 key 로 새로 만들어져 저절로 풀린다. */
+  const body = (
+    <ErrorBoundary key={location.pathname} inline>
+      <Outlet />
+    </ErrorBoundary>
+  )
+
   return (
     <div className="bg-canvas flex h-full flex-col">
       <Header
@@ -70,11 +79,9 @@ export function AppLayout({ bleed = false }: { bleed?: boolean }) {
           )}
         >
           {bleed ? (
-            <Outlet />
+            body
           ) : (
-            <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
-              <Outlet />
-            </div>
+            <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">{body}</div>
           )}
         </main>
       </div>
