@@ -1111,7 +1111,7 @@ export const handlers = [
     }
     if (result === 'conflict') {
       return HttpResponse.json(
-        { detail: '이미 처리된 신청은 취소할 수 없습니다.', code: 'LEAVE_DECIDED' },
+        { detail: '이미 처리된 신청은 취소할 수 없습니다.', code: 'REQUEST_DECIDED' },
         { status: 409 },
       )
     }

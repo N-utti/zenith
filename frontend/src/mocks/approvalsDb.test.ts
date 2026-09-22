@@ -319,7 +319,7 @@ describe('결재 위임 (13 §4.2.3)', () => {
         start_date: today,
         end_date: tomorrow,
       }),
-    ).toMatchObject({ code: 'CONFLICT' })
+    ).toMatchObject({ code: 'DELEGATION_OVERLAP' })
 
     // 해제하면 다시 아무나 못 누른다.
     const gone = deleteDelegation(senior, made.id)
