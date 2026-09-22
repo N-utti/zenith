@@ -25,6 +25,19 @@
   --color-brand-950: oklch(0.22 0.08 265);
 
   --radius-card: 0.75rem;
+
+  /* 검색으로 찾아온 곳을 잠깐 밝혔다 끈다(`animate-flash`). 켜고 끄는 시각을 자바스크립트가
+     재면 타이머와 상태가 따라붙는다. 몇 초인지는 스타일이 알면 되는 일이다. */
+  --animate-flash: zenith-flash 2s ease-out;
+}
+
+@keyframes zenith-flash {
+  from {
+    background-color: var(--color-accent-soft);
+  }
+  to {
+    background-color: transparent;
+  }
 }
 
 /* ── 2) 시맨틱 토큰 ──────────────────────────────────────────────

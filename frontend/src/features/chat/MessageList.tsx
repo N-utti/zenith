@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useLocation, useSearchParams } from 'react-router'
 import { Download, Paperclip } from 'lucide-react'
 import { Avatar } from '@/components/ui/Avatar'
 import { Spinner } from '@/components/ui/Spinner'
@@ -90,6 +91,14 @@ export function MessageList({ channelId }: { channelId: string }) {
   const bottomRef = useRef<HTMLDivElement>(null)
   const count = data?.items.length ?? 0
 
+  // ⌘K 통합검색은 채팅 결과의 갈 곳을 `/chat/{채널}?m={메시지}` 로 준다. 채널만 열고 말면
+  // 찾던 말은 위쪽 어딘가에 묻힌 채로 남는다.
+  const [params] = useSearchParams()
+  const focusId = params.get('m')
+  // 같은 결과를 두 번 고르면 주소가 글자 그대로 같아 `focusId` 가 안 바뀐다. 그 사이 손으로
+  // 스크롤해 놓친 줄을 다시 찾아 준다. 라우터는 같은 주소로 밀어도 위치마다 새 열쇠를 준다.
+  const { key: visitKey } = useLocation()
+
   // 새 메시지가 오면 아래로 붙인다. 위를 읽고 있는 중이면 방해하지 않는다.
   useEffect(() => {
     const anchor = bottomRef.current
@@ -99,6 +108,26 @@ export function MessageList({ channelId }: { channelId: string }) {
     const distanceFromBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight
     if (distanceFromBottom < 200) anchor.scrollIntoView({ block: 'end' })
   }, [count, channelId])
+
+  // 찾아온 메시지로 내려 주고 잠깐 밝힌다. 아래 붙이기보다 뒤에 둬야 한다: 같은 로딩에
+  // 둘 다 돌면 나중에 부른 쪽이 자리를 정하고, 위로 올라간 뒤에는 아래 붙이기가 200px
+  // 조건에 걸려 스스로 비킨다.
+  //
+  // 목록에 그 메시지가 실린 뒤에 한 번만 움직인다(`found`). 응답 전에는 붙을 자리가 없고,
+  // 새 메시지가 올 때마다 다시 튀면 읽던 자리를 뺏는다. 최근 몇 건만 내려오는 목록이라
+  // 오래된 메시지는 `found` 가 끝내 거짓이고, 그때는 채널만 열린다(종전 동작).
+  //
+  // 포커스도 같이 옮긴다. 밝히는 것은 눈으로만 읽히는 신호라, 화면낭독기는 아무것도 못 듣고
+  // 키보드는 탭 순서가 ⌘K 를 눌렀던 자리에 남아 다음 탭이 화면 밖으로 튄다. 자리 이동은
+  // `scrollIntoView` 에 맡기고(`preventScroll`), 전역 스타일이 외곽선을 `:focus-visible` 에만
+  // 걸어 두어 프로그램이 옮긴 포커스에는 테가 생기지 않는다.
+  const found = data?.items.some((message) => message.id === focusId) ?? false
+  useEffect(() => {
+    if (!focusId || !found) return
+    const target = document.getElementById(`m-${focusId}`)
+    target?.focus({ preventScroll: true })
+    target?.scrollIntoView({ block: 'center' })
+  }, [focusId, found, visitKey])
 
   if (isPending) {
     return (
@@ -140,7 +169,11 @@ export function MessageList({ channelId }: { channelId: string }) {
                 </div>
               )}
 
-              <div className={cnRow(compact)}>
+              <div
+                id={`m-${message.id}`}
+                tabIndex={-1}
+                className={cnRow(compact, message.id === focusId)}
+              >
                 {compact ? (
                   <span className="text-subtle w-9 shrink-0 pt-0.5 text-right text-[11px] opacity-0 group-hover:opacity-100">
                     {formatTime(message.created_at)}
@@ -176,6 +209,8 @@ export function MessageList({ channelId }: { channelId: string }) {
   )
 }
 
-function cnRow(compact: boolean) {
-  return `group flex gap-3 ${compact ? 'mt-0.5' : 'mt-4'}`
+// 가로 여백은 밝힐 때만 주면 글줄이 옆으로 밀린다. 항상 물려 두고 색만 오간다.
+function cnRow(compact: boolean, flash: boolean) {
+  const spacing = compact ? 'mt-0.5' : 'mt-4'
+  return `group -mx-2 flex gap-3 rounded-lg px-2 ${spacing} ${flash ? 'animate-flash' : ''}`
 }
