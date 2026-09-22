@@ -243,6 +243,19 @@ IndexedDB에 남는다.
 한쪽에서 타이핑하면 다른 쪽에 즉시 반영되고, 상대 커서와 이름표, 헤더의
 "N명 편집 중"이 나타난다.
 
+반영 시간은 `scripts/collab-latency.js` 가 잰다 — 클라이언트 두 개를 같은 방에 붙여
+A 의 편집이 B 의 Y.Doc 에 도착할 때까지와, 같은 자리 동시 입력이 수렴하는지를 확인한다.
+성공 기준 "2인 동시편집 시 1초 이내 변경·커서 반영 (충돌 0)"(01 PRD §5)의 근거는
+백엔드 릴레이를 대상으로 잰 값이어야 한다.
+
+```sh
+node scripts/collab-latency.js                                # 개발 릴레이(:1234)
+node scripts/collab-latency.js --url ws://<서버>/api/yjs \
+  --room <문서UUID> --cookie "session=..."                    # 백엔드
+```
+
+릴레이 왕복만 잰다. 기준의 "반영"에는 tiptap 렌더도 들어가므로 화면 확인은 위 방법으로 따로 해야 한다.
+
 ### 백엔드가 구현해야 할 것
 
 `scripts/collab.js`가 그 명세다. y-websocket 프로토콜(바이너리, 첫 varuint가
