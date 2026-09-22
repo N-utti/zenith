@@ -56,8 +56,9 @@ function mentionView(p: NotificationPayload): NotificationView | null {
       actorId,
       actorName,
       /*
-       * DM 이면 `channel_name` 이 보낸 사람 이름이라(`realtime/chat.py`) 「홍길동님이 «홍길동»에서」
-       * 가 된다. 같으면 채널 이름을 빼서 DM 을 가려낸다 — payload 에 DM 표시가 따로 없다.
+       * DM 이면 `channel_name` 이 `null` 이다(`realtime/chat.py`, #150). payload 에 DM 표시가
+       * 따로 없어 이름 유무로 가려낸다. `!== actorName` 은 #150 이전(09-18~21)에 쌓인 알림 행이
+       * 보낸 사람 이름을 담고 있어서 남겨 둔다 — 그 행들이 다 읽히면 빼도 된다.
        */
       summary:
         p.channel_name && p.channel_name !== actorName

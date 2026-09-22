@@ -43,14 +43,14 @@ const NOTIFICATIONS: Notification[] = [
     },
   },
   {
-    // DM 멘션. 채널 이름(`channel_name`)이 보낸 사람 이름이라 요약에 «»로 들어가면 안 된다.
+    // DM 멘션. 채널 이름(`channel_name`)이 `null` 이라 요약에 «»가 들어가지 않는다.
     id: 'n-6',
     kind: 'mention',
     read_at: null,
     created_at: minutesAgo(95),
     payload: {
       channel_id: 'dm-u1-u2',
-      channel_name: '정성운',
+      channel_name: null,
       message_id: 'cm-2',
       from: { id: 'u-2', name: '정성운' },
       preview: '어제 얘기한 알림 문구 초안 보냈어요',
