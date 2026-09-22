@@ -35,7 +35,7 @@ export interface NotificationPayload {
   block_id?: string | null
   /** 채팅 멘션 (`realtime/chat.py`). */
   channel_id?: string
-  /** 공개 채널은 채널 이름, DM 은 보낸 사람 이름. 2026-09-18 이전에 쌓인 알림에는 없다. */
+  /** 공개 채널은 채널 이름, DM 은 `null`(#150). 2026-09-18 이전에 쌓인 알림에는 없다. */
   channel_name?: string | null
   message_id?: string
   /** 새 글 (`routers/boards.py`). */

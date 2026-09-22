@@ -25,7 +25,11 @@ it('채팅 멘션은 채널 이름을 요약에 넣는다. DM 은 넣지 않는�
   expect(view('mention', { channel_id: 'c-1', channel_name: '개발', from })?.summary).toBe(
     '정성운님이 «개발»에서 회원님을 불렀습니다',
   )
-  // DM 은 `channel_name` 이 보낸 사람 이름이라 그대로 쓰면 「정성운님이 «정성운»에서」가 된다.
+  // DM 은 `channel_name` 이 `null`(#150).
+  expect(view('mention', { channel_id: 'dm-1', channel_name: null, from })?.summary).toBe(
+    '정성운님이 채팅에서 회원님을 불렀습니다',
+  )
+  // #150 이전에 쌓인 DM 알림 행에는 보낸 사람 이름이 들어 있다. 그것도 DM 으로 그린다.
   expect(view('mention', { channel_id: 'dm-1', channel_name: '정성운', from })?.summary).toBe(
     '정성운님이 채팅에서 회원님을 불렀습니다',
   )
