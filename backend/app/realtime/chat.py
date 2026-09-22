@@ -269,9 +269,8 @@ async def _handle(ws: WebSocket, user: User, op: SubOp | MsgOp | ReadOp | Typing
             if mentioned:  # 멘션이 있을 때만 한 번 — 보통 메시지에는 질의를 늘리지 않는다
                 channel = await db.get(Channel, op.channel_id)
                 # DM 은 `channels.name` 이 "" 이고 이름이 보는 사람마다 다르다(channels._display_name).
-                # 받는 사람에게 이 DM 의 이름은 곧 보낸 사람 — DM 은 두 사람짜리라 질의 없이 안다.
-                # ponytail: 3인 이상 DM 이 생기면 받는 사람마다 _display_name 을 불러야 맞다(지금은 만들 길이 없다).
-                channel_name = channel.name if channel and not channel.is_dm else user.name
+                # 프론트가 DM 을 판별할 수 있게 null 로 준다 — 보낸 사람은 `from` 에 이미 있다.
+                channel_name = channel.name if channel and not channel.is_dm else None
             for target in mentioned:
                 if target.id in members and wants(target.preferences, "mention"):
                     notices.append(
