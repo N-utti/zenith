@@ -456,7 +456,7 @@ export function createDelegation(user: User, input: DelegationInput): Delegation
       d.start_date <= input.end_date &&
       input.start_date <= d.end_date,
   )
-  if (overlap) return fail('기간이 겹치는 위임이 이미 있습니다.', 409, 'CONFLICT')
+  if (overlap) return fail('기간이 겹치는 위임이 이미 있습니다.', 409, 'DELEGATION_OVERLAP')
 
   const made: Delegation & { owner_id: string } = {
     id: `dlg-${delegationSeq++}`,
