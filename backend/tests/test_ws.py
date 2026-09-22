@@ -350,7 +350,7 @@ async def test_mention_off_gets_message_but_no_notice(app: FastAPI, users: Users
 
 
 async def test_dm_mention_notice_has_no_channel_name(app: FastAPI, users: Users, app_db) -> None:
-    """DM 은 `channels.name` 이 "" — 받는 사람에게 이 DM 의 이름은 보낸 사람이다(channels._display_name 과 같은 기준)."""
+    """DM 은 `channels.name` 이 "" — `channel_name` 을 null 로 줘서 프론트가 DM 인지 안다(보낸 사람은 `from`)."""
     channel = await make_channel(app_db, [users.member, users.lead], name="", is_dm=True)
     async with ws_client(app) as a, ws_client(app) as b:
         await login(a, "sujin@zenith.co.kr")
@@ -359,5 +359,5 @@ async def test_dm_mention_notice_has_no_channel_name(app: FastAPI, users: Users,
             assert (await recv(a_ws))["ev"] == "presence"
             await send(a_ws, op="msg", channel_id=str(channel.id), body="@박동현 잠깐 볼까요")
             notice = await recv_until(b_ws, "notice")
-            assert notice["payload"]["channel_name"] == "김수진"  # 받는 사람이 보는 이 DM 의 이름
+            assert notice["payload"]["channel_name"] is None  # DM 표식 — 이름은 from 에
             assert notice["payload"]["from"]["name"] == "김수진"
