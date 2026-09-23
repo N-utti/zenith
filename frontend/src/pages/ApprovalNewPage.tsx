@@ -158,8 +158,8 @@ export function ApprovalNewPage() {
         title={trip ? '출장비 결의서' : '새 기안'}
         description={
           trip
-            ? `${tripPeriod} 출장에 딸린 지출 결의서입니다. 결재선: 팀장 → 임원.`
-            : `일반 기안. 결재선은 상신할 때 정해집니다(팀장 → 임원). 기안자: ${user.name}`
+            ? `${tripPeriod} 출장에 딸린 지출 결의서입니다.`
+            : `일반 기안. 결재선은 상신할 때 정해집니다. 기안자: ${user.name}`
         }
       />
       <Card>

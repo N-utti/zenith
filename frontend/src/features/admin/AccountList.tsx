@@ -19,7 +19,7 @@ const COLUMNS = 6
 
 export function AccountList() {
   const me = useCurrentUser()
-  const { data, isPending, isError } = useUsers()
+  const { data, isPending, isError, refetch } = useUsers()
   // 계정 줄은 팀 id 만 들고 온다(`UserOut`). 이름은 팀 목록에서 맞춘다.
   const teams = useTeams()
   /**
@@ -48,9 +48,9 @@ export function AccountList() {
       </div>
 
       {isPending && <SkeletonRows />}
-      {isError && (
+      {isError && !data && (
         <Card>
-          <CardEmpty>계정 목록을 불러오지 못했습니다.</CardEmpty>
+          <CardEmpty onRetry={refetch}>계정 목록을 불러오지 못했습니다.</CardEmpty>
         </Card>
       )}
 

@@ -25,7 +25,7 @@ const COLUMNS = 5
  */
 export function TrashPage() {
   const me = useCurrentUser()
-  const { data, isPending, isError } = useTrash()
+  const { data, isPending, isError, refetch } = useTrash()
   const untrash = useUntrashDoc()
   const purge = usePurgeDoc()
   const toast = useToast()
@@ -51,9 +51,9 @@ export function TrashPage() {
       />
 
       {isPending && <SkeletonRows rows={4} />}
-      {isError && (
+      {isError && !data && (
         <Card>
-          <CardEmpty>휴지통을 불러오지 못했습니다.</CardEmpty>
+          <CardEmpty onRetry={refetch}>휴지통을 불러오지 못했습니다.</CardEmpty>
         </Card>
       )}
 

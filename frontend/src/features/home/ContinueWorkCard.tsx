@@ -12,7 +12,7 @@ const THUMBNAIL =
 const RECENT_LIMIT = 4
 
 export function ContinueWorkCard() {
-  const { data, isPending, isError } = useRecentDocs()
+  const { data, isPending, isError, refetch } = useRecentDocs()
 
   return (
     <HomeSection title="이어서 작업" to="/docs">
@@ -27,9 +27,9 @@ export function ContinueWorkCard() {
         </div>
       )}
 
-      {isError && (
+      {isError && !data && (
         <Card>
-          <CardEmpty>문서를 불러오지 못했습니다.</CardEmpty>
+          <CardEmpty onRetry={refetch}>문서를 불러오지 못했습니다.</CardEmpty>
         </Card>
       )}
 

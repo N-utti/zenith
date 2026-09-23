@@ -13,7 +13,7 @@ import { useAddTask, useDeleteTask, useTodayTasks, useToggleTask } from './api'
 import { TODO_TEXT_MAX } from './types'
 
 export function TodayTasksCard() {
-  const { data, isPending, isError } = useTodayTasks()
+  const { data, isPending, isError, refetch } = useTodayTasks()
   const toggle = useToggleTask()
   const add = useAddTask()
   const remove = useDeleteTask()
@@ -42,7 +42,7 @@ export function TodayTasksCard() {
     <HomeSection title="오늘 할 일">
       <Card>
         {isPending && <SkeletonRows />}
-        {isError && <CardEmpty>할 일을 불러오지 못했습니다.</CardEmpty>}
+        {isError && !data && <CardEmpty onRetry={refetch}>할 일을 불러오지 못했습니다.</CardEmpty>}
 
         {data &&
           (data.length === 0 ? (

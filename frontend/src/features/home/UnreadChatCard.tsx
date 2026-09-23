@@ -13,13 +13,13 @@ import { useUnreadChannels } from './api'
  * 서버가 0인 채널을 빼고 주므로 여기서 거르지 않는다. DM 은 상대 이름이 실려 온다.
  */
 export function UnreadChatCard() {
-  const { data: unread, isPending, isError } = useUnreadChannels()
+  const { data: unread, isPending, isError, refetch } = useUnreadChannels()
 
   return (
     <HomeSection title="안 읽은 메시지" to="/chat">
       <Card>
         {isPending && <SkeletonRows />}
-        {isError && <CardEmpty>채팅을 불러오지 못했습니다.</CardEmpty>}
+        {isError && !unread && <CardEmpty onRetry={refetch}>채팅을 불러오지 못했습니다.</CardEmpty>}
 
         {unread &&
           (unread.length === 0 ? (

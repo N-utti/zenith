@@ -11,13 +11,13 @@ import { useAnnouncements } from './api'
 const ROW = 'block px-4 py-3.5'
 
 export function AnnouncementsCard() {
-  const { data, isPending, isError } = useAnnouncements()
+  const { data, isPending, isError, refetch } = useAnnouncements()
 
   return (
     <HomeSection title="공지 게시판" to="/board">
       <Card>
         {isPending && <SkeletonRows />}
-        {isError && <CardEmpty>공지를 불러오지 못했습니다.</CardEmpty>}
+        {isError && !data && <CardEmpty onRetry={refetch}>공지를 불러오지 못했습니다.</CardEmpty>}
 
         {data &&
           (data.length === 0 ? (

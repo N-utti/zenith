@@ -1,7 +1,5 @@
 import { useSearchParams } from 'react-router'
-import { Clock } from 'lucide-react'
 import { PageHeader } from '@/components/ui/PageHeader'
-import { PlaceholderPanel } from '@/components/ui/PlaceholderPanel'
 import { Tabs } from '@/components/ui/Tabs'
 import { CompanyAttendanceSection } from '@/features/attendance/CompanyAttendanceSection'
 import { ExceptionSection } from '@/features/attendance/ExceptionSection'
@@ -28,7 +26,7 @@ const EXEC_TABS = [
   ...TABS,
   { key: 'company', label: '전사 근태' },
   { key: 'leave-admin', label: '연차 관리' },
-  // 근태 관리(05 SCR-ATT-06 상당): 지금은 월 마감만. 리포트 내보내기·결근 확정은 뒤에 붙는다.
+  // 근태 관리(05 SCR-ATT-06 상당): 월 마감과 리포트 내보내기. 결근 확정·정합성 검증은 아직 없다.
   { key: 'admin', label: '근태 관리' },
   // 근태 설정(05 SCR-ATT-07 상당): 회사 휴일만. 법정 공휴일(2026-09-16)·휴가 종류·연차 부여 기준(2026-09-15)은 사용자가 뺐다.
   { key: 'settings', label: '근태 설정' },
@@ -47,9 +45,7 @@ export function AttendancePage() {
       <PageHeader
         title="근태"
         description={
-          canSeeOthers
-            ? '본인 근태와 팀 근태를 확인합니다.'
-            : '본인 근태만 조회할 수 있습니다. (설계서 NFR-ATT-01)'
+          canSeeOthers ? '본인 근태와 전사 근태를 확인합니다.' : '본인 근태만 조회할 수 있습니다.'
         }
       />
       <Tabs
@@ -84,14 +80,6 @@ export function AttendancePage() {
             <div className="space-y-6">
               <MyAttendanceSection />
               <RangeSummarySection />
-              <PlaceholderPanel
-                icon={Clock}
-                milestone="일정 미확정 (설계서 §12)"
-                items={[
-                  '신청 승인 흐름(전자결재 편입, 설계서 13)',
-                  canSeeOthers ? '신청 승인/반려' : '연차 사용촉진 안내',
-                ]}
-              />
             </div>
           )
         }

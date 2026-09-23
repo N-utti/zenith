@@ -15,7 +15,7 @@ import { useCreateDoc, useDefaultFolder, useDocs } from '@/features/docs/api'
 
 export function DocsPage() {
   const [query, setQuery] = useState('')
-  const { data, isPending, isError } = useDocs(query)
+  const { data, isPending, isError, refetch } = useDocs(query)
   const createDoc = useCreateDoc()
   // 문서는 폴더 안에만 생긴다. 여기서는 고를 자리가 없어 최상위 첫 폴더에 넣는다.
   const { folderId, folderName, isPending: treePending } = useDefaultFolder()
@@ -77,7 +77,7 @@ export function DocsPage() {
 
       <Card>
         {isPending && <SkeletonRows rows={5} />}
-        {isError && <CardEmpty>문서를 불러오지 못했습니다.</CardEmpty>}
+        {isError && !data && <CardEmpty onRetry={refetch}>문서를 불러오지 못했습니다.</CardEmpty>}
 
         {data &&
           (data.items.length === 0 ? (

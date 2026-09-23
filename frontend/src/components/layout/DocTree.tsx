@@ -12,6 +12,7 @@ import {
   Plus,
 } from 'lucide-react'
 import { cn } from '@/lib/cn'
+import { RetryButton } from '@/components/ui/Card'
 import { useToast } from '@/components/ui/ToastContext'
 import { ApiError } from '@/lib/api'
 import { FolderNameModal } from '@/features/docs/FolderNameModal'
@@ -205,7 +206,7 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
   const { docId } = useParams()
   const navigate = useNavigate()
   const toast = useToast()
-  const { data, isPending, isError } = useTree()
+  const { data, isPending, isError, refetch } = useTree()
   const createDoc = useCreateDoc()
   const createFolder = useCreateFolder()
   const renameFolder = useRenameFolder()
@@ -292,7 +293,12 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
 
   return (
     <>
-      {isError && <p className="text-subtle px-3 py-2 text-xs">문서 트리를 불러오지 못했습니다.</p>}
+      {isError && !data && (
+        <div className="space-y-1 px-3 py-2">
+          <p className="text-danger text-xs">문서 트리를 불러오지 못했습니다.</p>
+          <RetryButton onClick={refetch} />
+        </div>
+      )}
       {!isError && tree.length === 0 && (
         <p className="text-subtle px-3 py-2 text-xs">문서가 없습니다.</p>
       )}

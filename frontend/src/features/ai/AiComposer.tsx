@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Cpu, FileText, Plus, SendHorizontal } from 'lucide-react'
+import { Cpu, FileText, SendHorizontal } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Dropdown } from '@/components/ui/Dropdown'
 import { Textarea } from '@/components/ui/Textarea'
@@ -45,14 +45,6 @@ export function AiComposer({
               {template.label}
             </button>
           ))}
-          <button
-            type="button"
-            title="템플릿 관리는 M3에서 붙습니다"
-            className="border-line text-subtle flex cursor-pointer items-center gap-1 rounded-full border border-dashed px-3 py-1.5 text-[12.5px]"
-          >
-            <Plus className="size-3.5" />
-            템플릿 선택
-          </button>
         </div>
 
         <div className="border-line bg-surface focus-within:border-line-strong rounded-xl border p-3 transition-colors">

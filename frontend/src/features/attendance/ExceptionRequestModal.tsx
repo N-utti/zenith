@@ -120,8 +120,8 @@ export function ExceptionRequestModal({ onClose }: { onClose: () => void }) {
         }
       >
         <p className="text-muted text-sm">
-          결의서는 별도 결재 문서입니다(팀장 → 임원). 출장 승인과 따로 진행되며, 출장 기간과 목적이
-          미리 채워집니다.
+          결의서는 별도 결재 문서입니다. 출장 승인과 따로 진행되며, 출장 기간과 목적이 미리
+          채워집니다.
         </p>
       </Modal>
     )

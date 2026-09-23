@@ -1,6 +1,6 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
-import { ChevronRight } from 'lucide-react'
+import { ChevronRight, RefreshCw } from 'lucide-react'
 import { cn } from '@/lib/cn'
 
 export function Card({ className, children }: { className?: string; children: ReactNode }) {
@@ -43,6 +43,41 @@ export function CardHeader({
   )
 }
 
-export function CardEmpty({ children }: { children: ReactNode }) {
-  return <p className="text-subtle px-5 py-8 text-center text-sm">{children}</p>
+/** `onRetry` 를 주면 오류 표시가 된다. danger 톤 문구 + 다시 시도(12 §5 오류 규약). */
+export function CardEmpty({
+  children,
+  onRetry,
+}: {
+  children: ReactNode
+  onRetry?: () => Promise<unknown>
+}) {
+  if (!onRetry) return <p className="text-subtle px-5 py-8 text-center text-sm">{children}</p>
+  return (
+    <div className="flex flex-col items-center gap-2 px-5 py-8 text-sm">
+      <p className="text-danger text-center">{children}</p>
+      <RetryButton onClick={onRetry} />
+    </div>
+  )
+}
+
+/**
+ * 누르면 요청이 끝날 때까지 스스로 잠근다. 실패한 쿼리는 재조회 중에도 `isError` 가 그대로라
+ * 화면만 보면 눌렸는지 알 수 없고, queryClient 의 자동 재시도 때문에 몇 초 걸린다.
+ */
+export function RetryButton({ onClick }: { onClick: () => Promise<unknown> }) {
+  const [busy, setBusy] = useState(false)
+  return (
+    <button
+      type="button"
+      disabled={busy}
+      onClick={() => {
+        setBusy(true)
+        void onClick().finally(() => setBusy(false))
+      }}
+      className="text-subtle hover:text-fg flex cursor-pointer items-center gap-1 text-xs transition-colors disabled:cursor-default disabled:opacity-60"
+    >
+      <RefreshCw className={cn('size-3', busy && 'animate-spin')} />
+      다시 시도
+    </button>
+  )
 }
