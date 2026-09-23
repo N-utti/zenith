@@ -36,7 +36,7 @@ const TONE: Record<AuditTone, string> = {
 export function AuditLog() {
   const [kind, setKind] = useState('')
   const { data: users } = useUsers()
-  const { data, isPending, isError, fetchNextPage, hasNextPage, isFetchingNextPage } =
+  const { data, isPending, isError, refetch, fetchNextPage, hasNextPage, isFetchingNextPage } =
     useAudit(kind)
 
   const nameOf = (event: { actor_id: string | null; kind: string }) => {
@@ -66,7 +66,7 @@ export function AuditLog() {
       {/* 이미 받아 둔 장이 있으면 표를 지우지 않는다. "더 보기" 실패는 버튼 옆에서 말한다. */}
       {isError && !data && (
         <Card>
-          <CardEmpty>감사 기록을 불러오지 못했습니다.</CardEmpty>
+          <CardEmpty onRetry={refetch}>감사 기록을 불러오지 못했습니다.</CardEmpty>
         </Card>
       )}
 

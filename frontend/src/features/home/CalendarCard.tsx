@@ -54,6 +54,8 @@ export function CalendarCard() {
   const types = useLeaveTypes()
   const typeName = (code: string) => types.data?.items.find((t) => t.code === code)?.name ?? code
   const isError = leaves.isError || arrangements.isError || events.isError
+  const retry = () =>
+    Promise.all([leaves, arrangements, events].filter((q) => q.isError).map((q) => q.refetch()))
   const isPending = leaves.isPending || arrangements.isPending || events.isPending
 
   const days = itemsByDay(
@@ -67,7 +69,7 @@ export function CalendarCard() {
   return (
     <HomeSection title="캘린더" to="/attendance" linkLabel="근태">
       <Card className="p-4">
-        {isError && <CardEmpty>일정을 불러오지 못했습니다.</CardEmpty>}
+        {isError && <CardEmpty onRetry={retry}>일정을 불러오지 못했습니다.</CardEmpty>}
         <Calendar
           month={month}
           onMonthChange={setMonth}

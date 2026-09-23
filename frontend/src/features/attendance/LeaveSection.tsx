@@ -39,7 +39,9 @@ export function LeaveSection() {
       <Card>
         <CardHeader title="연차" />
         {balance.isPending && <SkeletonRows rows={1} />}
-        {balance.isError && <CardEmpty>연차 잔여를 불러오지 못했습니다.</CardEmpty>}
+        {balance.isError && !balance.data && (
+          <CardEmpty onRetry={balance.refetch}>연차 잔여를 불러오지 못했습니다.</CardEmpty>
+        )}
         {balance.data && (
           <div className="flex flex-wrap items-end justify-between gap-4 px-5 pb-4">
             <dl className="flex gap-6">

@@ -39,11 +39,12 @@ export function LeaveRequestModal({
   // 반차는 하루짜리다. 종료일 입력을 보이지 않고 시작일과 같게 보낸다.
   const endDate = type?.unit === 'half' ? start : end
   // 날짜 입력은 지울 수 있다. 빈 값은 문자열 비교를 통과하므로 따로 잡는다.
-  const rangeError = !start || !endDate
-    ? '날짜를 선택해 주세요.'
-    : endDate < start
-      ? '종료일이 시작일보다 앞설 수 없습니다.'
-      : null
+  const rangeError =
+    !start || !endDate
+      ? '날짜를 선택해 주세요.'
+      : endDate < start
+        ? '종료일이 시작일보다 앞설 수 없습니다.'
+        : null
   const days = type && !rangeError ? leaveDays(type, start, endDate) : 0
   const overBalance = days > balance.remaining
   // 연차인데 주말만 골라 차감이 0 이면 신청할 게 없다. 공가(차감 0 종류)와는 다른 상태다.
@@ -103,7 +104,7 @@ export function LeaveRequestModal({
       open
       onClose={close}
       title="휴가 신청"
-      description={`${balance.year}년 잔여 연차 ${balance.remaining}일. 팀장 승인 후 반영됩니다.`}
+      description={`${balance.year}년 잔여 연차 ${balance.remaining}일. 결재가 끝나면 반영됩니다.`}
       footer={
         <>
           <Button variant="secondary" size="sm" onClick={close}>

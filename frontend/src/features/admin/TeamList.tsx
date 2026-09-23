@@ -21,7 +21,7 @@ const COLUMNS = 3
  * 인원은 계정 목록에서 센다. 팀 목록은 id·이름만 준다.
  */
 export function TeamList() {
-  const { data, isPending, isError } = useTeams()
+  const { data, isPending, isError, refetch } = useTeams()
   const users = useUsers()
   const save = useSaveTeam()
   const toast = useToast()
@@ -70,9 +70,9 @@ export function TeamList() {
       </div>
 
       {isPending && <SkeletonRows />}
-      {isError && (
+      {isError && !data && (
         <Card>
-          <CardEmpty>팀 목록을 불러오지 못했습니다.</CardEmpty>
+          <CardEmpty onRetry={refetch}>팀 목록을 불러오지 못했습니다.</CardEmpty>
         </Card>
       )}
 
