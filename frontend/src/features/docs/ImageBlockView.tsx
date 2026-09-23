@@ -7,7 +7,11 @@ const MIN_WIDTH = 96
 
 /** 사진 한 장 + 캡션. 오른쪽 아래 손잡이를 끌면 폭이 바뀐다. */
 export function ImageBlockView({ node, updateAttributes, selected, editor }: NodeViewProps) {
-  const { src, alt, width } = node.attrs as { src: string; alt: string | null; width: number | null }
+  const { src, alt, width } = node.attrs as {
+    src: string
+    alt: string | null
+    width: number | null
+  }
   const frameRef = useRef<HTMLDivElement>(null)
   // 끄는 동안은 화면만 바꾸고, 손을 뗄 때 한 번만 문서에 쓴다.
   // 매 픽셀마다 쓰면 Yjs 업데이트와 버전 기록이 폭주한다.
@@ -39,7 +43,13 @@ export function ImageBlockView({ node, updateAttributes, selected, editor }: Nod
   const shownWidth = dragWidth ?? width
 
   return (
-    <NodeViewWrapper as="figure" className="zenith-image group" data-type="imageBlock">
+    // 노드 뷰는 renderHTML 을 거치지 않는다. 댓글 닻(blockId.ts)이 DOM 에서 찾을 수 있게 직접 싣는다.
+    <NodeViewWrapper
+      as="figure"
+      className="zenith-image group"
+      data-type="imageBlock"
+      data-block-id={(node.attrs.blockId as string | null) ?? undefined}
+    >
       <div ref={frameRef} contentEditable={false} className="relative w-full">
         <span className="relative inline-block max-w-full align-bottom">
           <img

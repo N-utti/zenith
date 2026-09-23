@@ -1,9 +1,9 @@
 import { hueOf } from '@/lib/avatar'
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { EditorContent, useEditor, type Editor } from '@tiptap/react'
 import DragHandle from '@tiptap/extension-drag-handle-react'
-import { GripVertical, Trash2, WifiOff, X } from 'lucide-react'
-import { useNavigate } from 'react-router'
+import { GripVertical, MessageSquarePlus, Trash2, WifiOff, X } from 'lucide-react'
+import { useNavigate, useSearchParams } from 'react-router'
 import { Avatar } from '@/components/ui/Avatar'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
@@ -22,7 +22,8 @@ import {
   useTrashDoc,
   useVersionSnapshot,
 } from './api'
-import { CommentPanel } from './CommentPanel'
+import { anchorBlock, flashBlock } from './blockId'
+import { CommentPanel, type CommentTarget } from './CommentPanel'
 import { DocBreadcrumb } from './DocBreadcrumb'
 import { EditorBubbleMenu } from './EditorBubbleMenu'
 import { InlineAiPopover } from './InlineAiPopover'
@@ -91,11 +92,16 @@ function PresenceBar({ session }: { session: CollabSession }) {
 function DocSidebar({
   tab,
   onTabChange,
+  open,
+  onOpenChange,
   onCollapse,
   children,
 }: {
   tab: SidebarTab
   onTabChange: (tab: SidebarTab) => void
+  /** 좁은 폭에서 펼쳐져 있는지. 블록 댓글·알림으로 들어올 때 바깥에서 펼친다. */
+  open: boolean
+  onOpenChange: (open: boolean) => void
   /** 좁은 폭에서 접을 때. 본문을 넓게 보려는 것이므로 본문을 가린 미리보기도 같이 닫는다. */
   onCollapse: () => void
   children: ReactNode
@@ -104,8 +110,6 @@ function DocSidebar({
     { key: 'comments', label: '댓글' },
     { key: 'versions', label: '버전 기록' },
   ]
-
-  const [open, setOpen] = useState(false)
 
   return (
     // max-h: 펼쳐도 본문이 절반 넘게 남아야 «본문을 넓게» 라는 목적이 유지된다.
@@ -125,11 +129,11 @@ function DocSidebar({
             onClick={() => {
               if (tab !== key) {
                 onTabChange(key)
-                setOpen(true)
+                onOpenChange(true)
                 return
               }
               if (open) onCollapse()
-              setOpen(!open)
+              onOpenChange(!open)
             }}
             className={cn(
               '-mb-px cursor-pointer border-b-2 px-4 py-3 text-sm font-medium transition-colors',
@@ -177,8 +181,17 @@ function useCoarsePointer(): boolean {
   return coarse
 }
 
-/** 문단 왼쪽에 뜨는 손잡이. 끌어서 블록을 옮기고, 누르면 그 블록을 통째로 고른다. */
-function BlockDragHandle({ editor }: { editor: Editor }) {
+/**
+ * 문단 왼쪽에 뜨는 손잡이. 끌어서 블록을 옮기고, 누르면 그 블록을 통째로 고른다.
+ * 옆의 말풍선은 그 블록에 댓글을 단다(05 SCR-02).
+ */
+function BlockDragHandle({
+  editor,
+  onComment,
+}: {
+  editor: Editor
+  onComment: (pos: number) => void
+}) {
   const posRef = useRef(-1)
 
   return (
@@ -188,8 +201,19 @@ function BlockDragHandle({ editor }: { editor: Editor }) {
       onNodeChange={({ pos }) => {
         posRef.current = pos
       }}
-      className="pr-1"
+      className="flex items-center pr-1"
     >
+      <button
+        type="button"
+        title="이 블록에 댓글"
+        aria-label="이 블록에 댓글"
+        className="text-subtle hover:bg-surface-hover hover:text-muted grid size-6 cursor-pointer place-items-center rounded"
+        onClick={() => {
+          if (posRef.current >= 0) onComment(posRef.current)
+        }}
+      >
+        <MessageSquarePlus className="size-4" />
+      </button>
       <button
         type="button"
         title="드래그해서 옮기기 · 클릭해서 블록 선택"
@@ -254,6 +278,10 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
     })
 
   const [tab, setTab] = useState<SidebarTab>('comments')
+  // 멘션 알림(`?comment=`)으로 들어오면 좁은 폭에서도 댓글을 펼쳐 둔다.
+  const [params] = useSearchParams()
+  const [sideOpen, setSideOpen] = useState(() => params.has('comment'))
+  const [commentTarget, setCommentTarget] = useState<CommentTarget | null>(null)
   /**
    * 스냅샷 요청의 세대. 늦게 온 응답이 지금 화면을 덮어쓰지 않게 막는다.
    *
@@ -379,6 +407,30 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
     })
   }
 
+  /** `pos`(없으면 커서)가 든 최상위 블록에 댓글을 달러 간다. */
+  const startBlockComment = (pos?: number) => {
+    if (!editor) return
+    const target = anchorBlock(editor, pos)
+    if (!target) return
+    dropPendingPreview()
+    setTab('comments')
+    setSideOpen(true)
+    setCommentTarget(target)
+  }
+
+  /**
+   * 댓글의 닻 블록으로 간다. 버전 미리보기가 본문을 가리고 있으면 닫고, 편집기가 다시 붙은 뒤에
+   * 찾는다. 좁은 폭에서는 댓글이 본문 아래를 덮지만, 굴리는 것은 본문 쪽이라 블록이 위에 보인다.
+   */
+  const jumpToBlock = useCallback(
+    (blockId: string) => {
+      if (!editor) return
+      setPreview(null)
+      requestAnimationFrame(() => flashBlock(editor, blockId))
+    },
+    [editor],
+  )
+
   const restore = () => {
     if (!editor || !preview) return
     // 되감기가 아니라 새 편집이다. 그래야 접속 중인 다른 사람과도 같은
@@ -447,8 +499,16 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
             restoring={savingVersion}
           />
         ) : (
-          <div className="flex min-h-0 flex-1 flex-col">
-            {editor && <EditorToolbar editor={editor} uploadingImage={uploading} />}
+          // min-w-0: 서식 툴바는 가로로 구르는 한 줄인데, 이게 없으면 툴바 전체 폭이 이 열의 최소 폭이 되어
+          // 좁은 데스크톱 폭에서 오른쪽 댓글 패널을 화면 밖으로 민다.
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+            {editor && (
+              <EditorToolbar
+                editor={editor}
+                uploadingImage={uploading}
+                onComment={() => startBlockComment()}
+              />
+            )}
 
             {imageError && (
               <p
@@ -490,7 +550,9 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
                 {editor ? (
                   <>
                     <EditorBubbleMenu editor={editor} />
-                    {!coarsePointer && <BlockDragHandle editor={editor} />}
+                    {!coarsePointer && (
+                      <BlockDragHandle editor={editor} onComment={startBlockComment} />
+                    )}
                     <EditorContent editor={editor} className="mt-4" />
                     <InlineAiPopover editor={editor} docId={meta.id} />
                   </>
@@ -509,10 +571,18 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
             dropPendingPreview()
             setTab(next)
           }}
+          open={sideOpen}
+          onOpenChange={setSideOpen}
           onCollapse={closePreview}
         >
           {tab === 'comments' ? (
-            <CommentPanel docId={meta.id} />
+            <CommentPanel
+              docId={meta.id}
+              editor={editor}
+              target={commentTarget}
+              onClearTarget={() => setCommentTarget(null)}
+              onJump={jumpToBlock}
+            />
           ) : (
             <>
               {previewError && (

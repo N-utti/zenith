@@ -268,10 +268,11 @@ export function useComments(docId: string) {
 export function useAddComment(docId: string) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (body: string) =>
+    // `block_id` 가 없으면 문서 전체에 다는 댓글이다.
+    mutationFn: (input: { body: string; block_id?: string }) =>
       api<DocComment>(`/docs/${docId}/comments`, {
         method: 'POST',
-        body: JSON.stringify({ body }),
+        body: JSON.stringify(input),
       }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: docKeys.comments(docId) })

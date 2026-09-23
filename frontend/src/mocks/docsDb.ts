@@ -137,6 +137,25 @@ export const DOC_SEEDS: Record<string, string> = {
 }
 
 const comments: Record<string, DocComment[]> = {
+  // 멘션 알림 목(notificationsDb n-1·n-4)이 가리키는 댓글. 알림을 누르면 이 댓글로 간다.
+  'd-1': [
+    {
+      id: 'dc-1',
+      block_id: null,
+      author: { id: 'u-2', name: '정성운' },
+      body: '예산 표에 근거 자료 링크 걸어주세요 @김철성',
+      created_at: minutesAgo(34),
+    },
+  ],
+  'd-3': [
+    {
+      id: 'dc-2',
+      block_id: null,
+      author: { id: 'u-1', name: '진수연' },
+      body: '회의록에 결정사항 정리해 뒀습니다 @정성운',
+      created_at: minutesAgo(1400),
+    },
+  ],
   'd-2': [
     {
       id: 'cm-1',

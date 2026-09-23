@@ -1,4 +1,4 @@
-import type { TextareaHTMLAttributes } from 'react'
+import type { ComponentProps } from 'react'
 import { cn } from '@/lib/cn'
 import { CONTROL_BASE } from './Input'
 
@@ -15,7 +15,7 @@ export function Textarea({
   onSubmitEnter,
   onKeyDown,
   ...props
-}: TextareaHTMLAttributes<HTMLTextAreaElement> & {
+}: ComponentProps<'textarea'> & {
   submitOnEnter?: boolean
   onSubmitEnter?: () => void
 }) {
@@ -24,6 +24,8 @@ export function Textarea({
       className={cn(CONTROL_BASE, 'resize-y px-3 py-2.5', className)}
       onKeyDown={(e) => {
         onKeyDown?.(e)
+        // 바깥 onKeyDown 이 Enter 를 먹었으면(멘션 목록에서 고르기) 보내지 않는다.
+        if (e.defaultPrevented) return
         if (submitOnEnter && e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
           e.preventDefault()
           onSubmitEnter?.()

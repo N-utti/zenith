@@ -159,7 +159,7 @@ export function InlineAiPopover({ editor, docId }: { editor: Editor; docId: stri
 
   const generate = (action: DocAction) =>
     run({ action }, () =>
-      // block_id 는 편집기가 블록 id 를 갖지 않아 보내지 않는다. 서버는 문서 전체를 본다.
+      // block_id 는 보내지 않는다. 블록 id 는 댓글 단 블록에만 있다(blockId.ts). 서버는 문서 전체를 본다.
       api<{ draft: string }>('/ai/doc-action', {
         method: 'POST',
         body: JSON.stringify({ doc_id: docId, action }),
