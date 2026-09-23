@@ -8,6 +8,7 @@ import {
   ListOrdered,
   ListTodo,
   LoaderCircle,
+  MessageSquarePlus,
   Minus,
   Quote,
   Redo2,
@@ -31,9 +32,12 @@ import { useFormatState } from './editorFormats'
 export function EditorToolbar({
   editor,
   uploadingImage,
+  onComment,
 }: {
   editor: Editor
   uploadingImage: boolean
+  /** 커서가 든 블록에 댓글 달기. */
+  onComment: () => void
 }) {
   const state = useFormatState(editor)
   const run = (key: string) => () => BLOCK_BY_KEY[key].run(editor)
@@ -44,6 +48,9 @@ export function EditorToolbar({
     // 팝오버는 body 로 내보내 띄운다(editorControls).
     <div className="border-line bg-surface/90 z-20 flex items-center gap-0.5 overflow-x-auto border-b px-2 py-1.5 backdrop-blur">
       <BlockMenu editor={editor} blockKey={state.blockKey} />
+      {/* 블록 댓글(05 SCR-02). 손가락 기기에는 손잡이가 없어 이 자리가 유일한 입구다.
+          가로로 구르는 줄이라 뒤에 두면 모바일에서 밀려나 안 보인다. 키보드 사용자도 여기로 온다. */}
+      <ToolButton icon={MessageSquarePlus} label="이 블록에 댓글" onClick={onComment} />
 
       <ToolDivider />
 

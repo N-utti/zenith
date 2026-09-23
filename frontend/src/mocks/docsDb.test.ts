@@ -91,6 +91,14 @@ it('영구 삭제는 버전·댓글까지 같이 지운다', () => {
   expect(listComments(doc.id)).toHaveLength(0)
 })
 
+it('댓글의 block_id 를 저장했다가 그대로 돌려준다', () => {
+  const doc = createDoc(user, 'f-1', '블록 댓글 시험')
+  addComment(doc.id, user, '이 문단 확인', 'blk-1')
+  addComment(doc.id, user, '문서 전체', null)
+  expect(listComments(doc.id).map((c) => c.block_id)).toEqual(['blk-1', null])
+  purgeDoc(doc.id)
+})
+
 it('휴지통은 지운 지 최근 순이고 살아 있는 목록과 겹치지 않는다', () => {
   const older = createDoc(user, 'f-1', '먼저 지운 문서')
   const newer = createDoc(user, 'f-1', '나중에 지운 문서')

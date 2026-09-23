@@ -10,14 +10,19 @@ function view(kind: string, payload: Notification['payload']) {
 }
 
 it('같은 mention 이라도 payload 로 문서와 채팅이 갈린다', () => {
-  expect(view('mention', { doc_id: 'd-1', doc_title: '로드맵', from, preview: '확인 부탁' }))
-    .toMatchObject({ to: '/docs/d-1', icon: 'doc', detail: '확인 부탁' })
+  expect(
+    view('mention', { doc_id: 'd-1', doc_title: '로드맵', from, preview: '확인 부탁' }),
+  ).toMatchObject({ to: '/docs/d-1', icon: 'doc', detail: '확인 부탁' })
   expect(view('mention', { channel_id: 'c-1', from, preview: '확인 부탁' })).toMatchObject({
     to: '/chat/c-1',
     icon: 'chat',
   })
   // comment·reply 도 payload 모양이 같다.
   expect(view('reply', { doc_id: 'd-1', from })?.to).toBe('/docs/d-1')
+  // 댓글 멘션은 그 댓글로 간다.
+  expect(view('mention', { doc_id: 'd-1', comment_id: 'dc-1', from })?.to).toBe(
+    '/docs/d-1?comment=dc-1',
+  )
 })
 
 it('채팅 멘션은 채널 이름을 요약에 넣는다. DM 은 넣지 않는다', () => {
@@ -40,7 +45,13 @@ it('채팅 멘션은 채널 이름을 요약에 넣는다. DM 은 넣지 않는�
 })
 
 it('권한 밖이라 가려진 글 알림은 누를 수 없다', () => {
-  const open = view('post', { post_id: 'p-1', board_id: 'all', board_name: '전체 공지', title: '공지', from })
+  const open = view('post', {
+    post_id: 'p-1',
+    board_id: 'all',
+    board_name: '전체 공지',
+    title: '공지',
+    from,
+  })
   expect(open).toMatchObject({ to: '/board/all/p-1', icon: 'board' })
 
   const masked = view('post', {
