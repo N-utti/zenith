@@ -119,7 +119,7 @@ export function Tabs({
         id={`${baseId}-panel-${active}`}
         aria-labelledby={`${baseId}-tab-${active}`}
         tabIndex={0}
-        className="pt-4 focus-visible:outline-none"
+        className="pt-4"
       >
         {children(active)}
       </div>

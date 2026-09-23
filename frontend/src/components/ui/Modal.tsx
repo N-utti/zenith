@@ -1,7 +1,8 @@
-import { useEffect, useEffectEvent, useId, useRef, type ReactNode } from 'react'
+import { useEffect, useId, useRef, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import { cn } from '@/lib/cn'
+import { useFocusTrap } from '@/lib/useFocusTrap'
 
 type Size = 'sm' | 'md' | 'lg'
 
@@ -10,10 +11,6 @@ const SIZES: Record<Size, string> = {
   md: 'max-w-lg',
   lg: 'max-w-2xl',
 }
-
-/** 포커스를 가둘 수 있는 요소들. `[hidden]`은 제외해야 숨은 버튼으로 포커스가 새지 않는다. */
-const FOCUSABLE =
-  'a[href],button:not([disabled]),textarea:not([disabled]),input:not([disabled]),select:not([disabled]),[tabindex]:not([tabindex="-1"])'
 
 /**
  * 공용 모달. 청사진 §4.2가 "가장 먼저 만들어야 한다"고 지목한 부품이다.
@@ -49,48 +46,15 @@ export function Modal({
   const titleId = useId()
   const descId = useId()
 
-  // 호출부의 onClose 는 대개 매 렌더 새로 만들어지는 화살표 함수다. 그걸 이펙트 의존성에 두면
-  // 입력 한 글자마다 이펙트가 다시 돌아 포커스가 첫 요소(닫기 버튼)로 튄다. 이펙트 이벤트로 최신 것만 본다.
-  const requestClose = useEffectEvent(() => onClose())
+  useFocusTrap(open, panelRef, onClose)
 
+  // 배경 스크롤 잠금. 모달 뒤 본문이 따라 굴러가지 않는다.
   useEffect(() => {
     if (!open) return
-
-    // 닫을 때 돌아갈 자리. 모달을 연 버튼으로 포커스를 되돌린다.
-    const opener = document.activeElement as HTMLElement | null
-
     const { overflow } = document.body.style
     document.body.style.overflow = 'hidden'
-
-    // 열리자마자 첫 요소로 포커스를 옮긴다. 없으면 패널 자체가 받는다.
-    const panel = panelRef.current
-    const first = panel?.querySelector<HTMLElement>(FOCUSABLE)
-    ;(first ?? panel)?.focus()
-
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault()
-        return requestClose()
-      }
-      if (e.key !== 'Tab' || !panel) return
-
-      const items = [...panel.querySelectorAll<HTMLElement>(FOCUSABLE)].filter(
-        (el) => el.offsetParent !== null,
-      )
-      if (items.length === 0) return
-
-      const edge = e.shiftKey ? items[0] : items[items.length - 1]
-      if (document.activeElement === edge) {
-        e.preventDefault()
-        ;(e.shiftKey ? items[items.length - 1] : items[0]).focus()
-      }
-    }
-
-    document.addEventListener('keydown', onKeyDown)
     return () => {
-      document.removeEventListener('keydown', onKeyDown)
       document.body.style.overflow = overflow
-      opener?.focus()
     }
   }, [open])
 
