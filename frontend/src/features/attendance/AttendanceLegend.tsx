@@ -2,6 +2,9 @@ import { cn } from '@/lib/cn'
 
 /** 범례 견본(단색). `STATUS_TONE`(attendanceDays.ts)과 같은 계열이되 진하게 해서 작은 네모로도 구분된다. */
 const LEGEND: Array<[label: string, solid: string]> = [
+  // 정상 근무는 STATUS_TONE 에 항목이 없다(캘린더·그리드가 칠하지 않는다, attendanceDays.ts
+  // 주석 참고). 칠하지 않은 칸이라 견본은 테두리만 둔다.
+  ['정상 근무', 'bg-surface border border-line'],
   ['휴가·반차', 'bg-accent'],
   ['재택·외근·출장', 'bg-info'],
   ['휴일', 'bg-line-strong'],

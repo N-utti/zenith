@@ -8,7 +8,9 @@ const VARIANTS: Record<Variant, string> = {
   primary: 'bg-accent text-on-accent hover:bg-accent-hover',
   secondary: 'bg-surface text-fg border border-line hover:bg-surface-hover',
   ghost: 'text-muted hover:bg-surface-hover hover:text-fg',
-  danger: 'bg-danger text-white hover:opacity-90',
+  // text-on-accent: 원시값 text-white 대신 시맨틱 토큰. 다크 모드의 danger 배경은 밝은
+  // 빨강이라(oklch L 0.68) on-accent 의 어두운 값이 흰 글자보다 대비가 낫다.
+  danger: 'bg-danger text-on-accent hover:opacity-90',
 }
 
 const SIZES: Record<Size, string> = {
