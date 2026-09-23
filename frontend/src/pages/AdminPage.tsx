@@ -4,11 +4,13 @@ import { PageHeader } from '@/components/ui/PageHeader'
 import { Tabs } from '@/components/ui/Tabs'
 import { AccountList } from '@/features/admin/AccountList'
 import { AuditLog } from '@/features/admin/AuditLog'
+import { TeamList } from '@/features/admin/TeamList'
 import { useCurrentUser } from '@/features/auth/AuthContext'
 import { ROLE_RANK } from '@/types'
 
 const TABS = [
   { key: 'accounts', label: '계정 관리' },
+  { key: 'teams', label: '팀' },
   { key: 'audit', label: '감사 기록' },
 ]
 
@@ -33,7 +35,7 @@ export function AdminPage() {
 
   return (
     <>
-      <PageHeader title="관리자" description="계정과 기록은 임원만 볼 수 있습니다." />
+      <PageHeader title="관리자" description="계정·팀·기록은 임원만 볼 수 있습니다." />
       <Tabs
         items={TABS}
         value={tab}
@@ -48,7 +50,9 @@ export function AdminPage() {
           )
         }
       >
-        {(key) => (key === 'audit' ? <AuditLog /> : <AccountList />)}
+        {(key) =>
+          key === 'audit' ? <AuditLog /> : key === 'teams' ? <TeamList /> : <AccountList />
+        }
       </Tabs>
     </>
   )
