@@ -18,6 +18,11 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
 tauri-plugin-notification = "2"
+# 사내 CA(Caddy `tls internal`) 인증서를 믿으려면 Windows 인증서 저장소를 봐야 한다.
+# 기본값 rustls 는 내장 루트만 믿어서 사내 서버의 매니페스트를 못 받는다.
+tauri-plugin-updater = { version = "2", default-features = false, features = ["native-tls"] }
+# tauri.conf.json 에 plugins 설정이 있으면 generate_context! 가 이 크레이트를 찾는다.
+serde_json = "1"
 
 [profile.release]
 codegen-units = 1

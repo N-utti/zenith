@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "tauri dev",
     "build": "tauri build",
+    "manifest": "node scripts/manifest.mjs",
     "icons": "tauri icon ./app-icon.png",
     "tauri": "tauri"
   },

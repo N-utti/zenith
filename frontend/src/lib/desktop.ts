@@ -6,6 +6,8 @@
  * `window.__TAURI__` 전역만 쓰고, 없으면 아무 일도 하지 않는다.
  */
 
+import { serverOrigin } from './serverOrigin'
+
 interface TauriGlobal {
   core: { invoke: (cmd: string, args?: Record<string, unknown>) => Promise<unknown> }
 }
@@ -50,6 +52,28 @@ export function installExternalLinkHandler(): () => void {
 
   document.addEventListener('click', onClick)
   return () => document.removeEventListener('click', onClick)
+}
+
+/**
+ * 새 버전이 있으면 설치할지 묻고, 고르면 셸이 받아서 설치한다. 앱이 닫혔다가 다시 뜬다.
+ *
+ * 묻는 이유: 설치에는 관리자 확인(UAC)이 필요하다. 권한이 없는 사람이 묻지도 않고 설치로
+ * 넘어가면 앱이 꺼진 채로 남고, 켤 때마다 되풀이된다. 거절하면 지금 버전으로 계속 쓴다.
+ *
+ * 서버 주소를 모르면(개발 모드) 확인할 곳이 없으니 건너뛴다. 서버가 매니페스트를 아직
+ * 안 내놓았거나 사내망 밖이면 콘솔에만 남긴다. 다음에 켤 때 다시 본다.
+ */
+export function checkForUpdate(): void {
+  const tauri = typeof window !== 'undefined' ? window.__TAURI__ : undefined
+  const origin = serverOrigin()
+  if (!tauri || !origin) return
+
+  void (async () => {
+    const version = await tauri.core.invoke('check_update', { origin })
+    if (typeof version !== 'string') return
+    if (!window.confirm(`새 버전 ${version} 이 있습니다. 지금 설치할까요?\n앱이 닫혔다가 다시 열립니다.`)) return
+    await tauri.core.invoke('install_update')
+  })().catch((error: unknown) => console.warn('업데이트 확인 실패', error))
 }
 
 export interface DesktopNotification {
