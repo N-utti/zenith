@@ -21,7 +21,10 @@ export function Textarea({
 }) {
   return (
     <textarea
-      className={cn(CONTROL_BASE, 'resize-y px-3 py-2.5', className)}
+      // block: textarea 는 기본이 inline(-block)이라 글꼴의 디센더 여백만큼 감싸는 요소가
+      // textarea 자신보다 커진다. 감싸는 칸의 높이로 다른 요소와 나란히 놓으면(MentionTextarea)
+      // 그 몇 px 차이가 세로 정렬을 어긋나 보이게 한다.
+      className={cn(CONTROL_BASE, 'block resize-y px-3 py-2.5', className)}
       onKeyDown={(e) => {
         onKeyDown?.(e)
         // 바깥 onKeyDown 이 Enter 를 먹었으면(멘션 목록에서 고르기) 보내지 않는다.
