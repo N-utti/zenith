@@ -89,12 +89,17 @@ function Attachments({ files }: { files: ChatAttachment[] | null }) {
 
 /**
  * 메시지에 실린 문서 카드(05 SCR-04). `doc_ref` 는 문서 id뿐이라 제목·수정 정보는
- * 그 문서를 조회해 채운다. 못 받아 오면(권한 없음, 지워짐) 조용히 접는다.
- * 열리지도 않는 카드에 없는 제목을 지어내 보일 이유가 없다.
+ * 그 문서를 조회해 채운다. 못 받아 오거나(권한 없음) 휴지통에 있으면 접는다. 상세 조회는
+ * 휴지통 문서도 열어 주고, 영구 삭제되면 서버가 `doc_ref` 를 비운다.
+ * 한계: 카드 하나에 문서 상세(본문 Yjs 상태 포함)를 통째로 받는다. 무거운 문서가 걸린
+ * 채널이 느려지면 백엔드에 메시지 응답에 제목을 실어 달라고 한다(계약 변경).
  */
 function DocCard({ docId }: { docId: string }) {
-  const { data: doc, isError } = useDoc(docId)
-  if (isError || !doc) return null
+  const { data: doc, isPending, isError } = useDoc(docId)
+  // 조회 중에도 카드 높이를 잡아 둔다. 늦게 뜨면 채널을 연 직후 맨 아래가 가려진다.
+  if (isPending)
+    return <div className="bg-sunken mt-1.5 h-[50px] max-w-xs animate-pulse rounded-lg" />
+  if (isError || doc.deleted_at) return null
 
   return (
     <Link

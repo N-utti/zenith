@@ -199,7 +199,9 @@ export function TrashPage() {
           </>
         }
       >
-        <p className="text-muted text-sm leading-relaxed">{confirmPurge?.title}</p>
+        <p className="text-muted text-sm leading-relaxed">
+          «{confirmPurge?.title}» 문서가 영구 삭제됩니다. 되돌릴 수 없습니다.
+        </p>
       </Modal>
     </>
   )
