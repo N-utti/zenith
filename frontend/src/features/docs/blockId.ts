@@ -1,7 +1,7 @@
 import { Extension, type Editor } from '@tiptap/core'
 import { isChangeOrigin } from '@tiptap/extension-collaboration'
 import type { Node as PmNode } from '@tiptap/pm/model'
-import { Plugin, TextSelection } from '@tiptap/pm/state'
+import { NodeSelection, Plugin, TextSelection } from '@tiptap/pm/state'
 
 /** 댓글이 달릴 수 있는 블록. 편집기가 실제로 쓰는 것만. 달 때는 최상위에만 단다. */
 const BLOCK_TYPES = [
@@ -73,8 +73,10 @@ export const BlockId = Extension.create({
               if (copy !== keep) tr.setNodeAttribute(copy.pos, 'blockId', null)
             }
           }
-          // 정리도 되돌리기에 들지 않는다. 되돌리면 복제가 되살아난다.
-          return tr.docChanged ? tr.setMeta('addToHistory', false) : null
+          // 정리는 사용자 편집(분할·복사)과 같은 되돌리기 단위로 둔다. addToHistory false 를 주면
+          // y-tiptap 이 마지막 트랜잭션 값으로 합쳐 사용자 편집까지 기록에서 빠진다. 복제는
+          // Y.Doc 에 들어간 적이 없으니 되돌리면 분할 전으로 정확히 돌아간다.
+          return tr.docChanged ? tr : null
         },
       }),
     ]
@@ -129,7 +131,13 @@ export function anchorBlock(
     blockId = crypto.randomUUID()
     tr.setNodeAttribute(block.pos, 'blockId', blockId).setMeta('addToHistory', false)
   }
-  if (pos !== undefined) tr.setSelection(TextSelection.near(tr.doc.resolve(block.pos + 1)))
+  if (pos !== undefined)
+    // 사진처럼 속이 없는 블록은 pos + 1 이 이미 그 뒤라 커서가 다음 블록으로 간다.
+    tr.setSelection(
+      block.node.isAtom
+        ? NodeSelection.create(tr.doc, block.pos)
+        : TextSelection.near(tr.doc.resolve(block.pos + 1)),
+    )
   if (tr.docChanged || tr.selectionSet) editor.view.dispatch(tr)
   return { blockId, preview: blockPreview(block.node) }
 }
@@ -137,12 +145,15 @@ export function anchorBlock(
 /**
  * 보내기 직전에 닻을 다시 읽는다. 두 사람이 같은 블록에 거의 동시에 첫 댓글을 달면 각자 준 id 중
  * 하나만 Y.Doc 에 남는다. 내 id 가 사라졌으면 커서가 든 블록(Yjs 가 원격 편집 뒤에도 커서를 그
- * 블록에 붙들어 둔다)의 지금 id 를 쓰고, 없으면 새로 준다.
+ * 블록에 붙들어 둔다)에 이미 있는 id(이긴 쪽)를 쓴다. 새로 주지는 않는다. 그 사이 블록이 지워졌거나
+ * 커서가 다른 곳으로 갔으면 엉뚱한 이웃 블록에 붙기 때문이다. 그때는 내 id 그대로 보내
+ * "지워진 블록"으로 보이게 둔다.
  * ponytail: 경합 창을 줄일 뿐 없애지는 못한다. 없애려면 서버가 id 를 발급해야 한다.
  */
 export function resolveAnchor(editor: Editor, blockId: string): string | null {
   if (findBlock(editor.state.doc, blockId)) return blockId
-  return anchorBlock(editor)?.blockId ?? null
+  const block = topBlockAt(editor.state.doc, editor.state.selection.from)
+  return (block?.node.attrs.blockId as string | null | undefined) ?? blockId
 }
 
 /**

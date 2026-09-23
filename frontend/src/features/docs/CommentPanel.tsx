@@ -78,6 +78,8 @@ export function CommentPanel({
   const focusId = params.get('comment')
   const focused = data?.items.find((comment) => comment.id === focusId)
   const focusedId = focused?.id ?? null
+  // 없거나 볼 수 없는 댓글이면 파라미터만 걷는다. 남겨 두면 새로고침마다 패널이 다시 펼쳐진다.
+  const focusMissing = data !== undefined && focusId !== null && !focused
 
   // 찾아온 댓글마다 한 번씩 블록 이동을 예약한다. `seq` 는 같은 알림을 다시 눌러 같은 댓글로
   // 또 올 때도 새 예약이 되게 한다(렌더 중 상태 조정, effect 에서 setState 하지 않는다).
@@ -91,8 +93,8 @@ export function CommentPanel({
   }
 
   useEffect(() => {
-    if (!focusedId) return
-    const row = document.getElementById(`comment-${focusedId}`)
+    if (!focusedId && !focusMissing) return
+    const row = focusedId ? document.getElementById(`comment-${focusedId}`) : null
     if (row) {
       row.scrollIntoView({ block: 'nearest' })
       flashElement(row)
@@ -104,7 +106,7 @@ export function CommentPanel({
       },
       { replace: true },
     )
-  }, [focusedId, setParams])
+  }, [focusedId, focusMissing, setParams])
 
   const jumpReady = pendingJump !== null && blocks[pendingJump.blockId] !== undefined
   const jumpedSeq = useRef(0)
