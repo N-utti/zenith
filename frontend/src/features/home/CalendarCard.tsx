@@ -263,8 +263,9 @@ function DayModal({
                 />
               )}
             </Field>
-            {/* 시각 필드의 힌트 줄만큼 띄워 입력과 버튼의 밑선을 맞춘다. */}
-            <Button type="submit" size="sm" disabled={!canSubmit} className="mb-[26px]">
+            {/* 시각 필드의 힌트 줄만큼 띄워 입력과 버튼의 밑선을 맞춘다. 힌트(text-xs, mt-1.5)는
+                줄 높이 16px + 위 여백 6px = 22px 다. */}
+            <Button type="submit" size="sm" disabled={!canSubmit} className="mb-[22px]">
               {create.isPending ? (
                 <Spinner className="border-t-on-accent" />
               ) : (

@@ -150,6 +150,8 @@ export function Composer({
             aria-label="파일 붙이기"
             disabled={uploading > 0}
             onClick={() => picker.current?.click()}
+            // 입력칸과 한 줄(items-end)일 때 밑선을 맞춘다. 입력칸은 44px(min-h-11) 행이다.
+            className="h-11"
           >
             {uploading > 0 ? <Spinner /> : <Paperclip className="size-4" />}
           </Button>
@@ -172,6 +174,7 @@ export function Composer({
             type="submit"
             disabled={(!body.trim() && files.length === 0) || busy}
             aria-label="보내기"
+            className="h-11"
           >
             <Send className="size-4" />
           </Button>
