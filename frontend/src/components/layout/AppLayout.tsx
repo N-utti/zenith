@@ -3,6 +3,7 @@ import { Outlet, useLocation } from 'react-router'
 import { CommandPalette } from '@/components/CommandPalette'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { cn } from '@/lib/cn'
+import { ConnectionBanner } from './ConnectionBanner'
 import { Header } from './Header'
 import { MobileTabBar } from './MobileTabBar'
 import { Sidebar } from './Sidebar'
@@ -66,6 +67,7 @@ export function AppLayout({ bleed = false }: { bleed?: boolean }) {
         onToggleCollapsed={toggleCollapsed}
         onOpenCommandPalette={() => setPaletteOpen(true)}
       />
+      <ConnectionBanner />
 
       <div className="flex min-h-0 flex-1">
         <Sidebar open={sidebarOpen} collapsed={collapsed} onClose={() => setSidebarOpen(false)} />
