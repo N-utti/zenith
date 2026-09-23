@@ -1,13 +1,10 @@
 import { useQuery } from '@tanstack/react-query'
 import { useCurrentUser } from '@/features/auth/AuthContext'
 import { api } from '@/lib/api'
+import type { Schema } from '@/types'
 
 /** 백엔드 `routers/people.py` 의 `Person`. 이메일·등급·팀은 주지 않는다. */
-export interface Colleague {
-  id: string
-  name: string
-  active: boolean
-}
+export type Colleague = Schema<'PersonOut'>
 
 /**
  * 고를 수 있는 사람만 남긴다. 서버는 이름순으로, **자기 자신과 비활성 계정까지** 준다.

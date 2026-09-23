@@ -12,7 +12,6 @@ import { formatRelative } from '@/lib/datetime'
 import { useBoards, useDeletePost, usePost } from '@/features/board/api'
 import { PostComposer } from '@/features/board/PostComposer'
 import { useCurrentUser } from '@/features/auth/AuthContext'
-import { ROLE_LABEL, type Role } from '@/types'
 
 /**
  * 열람 권한이 없을 때. 05 "상태·엣지 케이스"가 요구하는 **전용 403 화면**이다.
@@ -20,7 +19,7 @@ import { ROLE_LABEL, type Role } from '@/types'
  * 목록에서는 마스킹으로 막지만 주소를 직접 치고 들어올 수 있다. 그때 빈 화면이나
  * 일반 오류를 보여주면 "고장"으로 읽힌다. 막혔다는 사실과 이유를 밝힌다.
  */
-function Forbidden({ requiredRole }: { requiredRole?: Role }) {
+function Forbidden() {
   return (
     <div className="grid place-items-center py-20 text-center">
       <div className="max-w-sm">
@@ -29,14 +28,8 @@ function Forbidden({ requiredRole }: { requiredRole?: Role }) {
         </span>
         <h1 className="text-fg mt-4 text-lg font-semibold">열람 권한이 없습니다</h1>
         <p className="text-muted mt-2 text-sm leading-relaxed">
-          {requiredRole ? (
-            <>
-              이 글은 <strong className="text-fg">{ROLE_LABEL[requiredRole]}</strong> 등급 이상만
-              볼 수 있습니다.
-            </>
-          ) : (
-            '이 글을 볼 수 있는 등급이 아닙니다.'
-          )}
+          {/* 서버 403 은 code·detail 뿐이라 몇 등급부터인지는 모른다(routers/boards.py). */}
+          이 글을 볼 수 있는 등급이 아닙니다.
           <br />
           권한이 필요하면 경영지원팀에 문의해 주세요.
         </p>
@@ -54,7 +47,7 @@ export function BoardPostPage() {
   const me = useCurrentUser()
   // 무효화할 목록은 주소가 아니라 글이 실제로 속한 게시판이다. 라우트는 어긋난 게시판 id 로도
   // 열리는데(`/board/all/p-6`), 그때 주소를 믿으면 정작 그 글이 있는 목록이 stale 로 남는다.
-  const postBoardId = post?.boardId ?? ''
+  const postBoardId = post?.board_id ?? ''
   const board = useBoards().data?.items.find((b) => b.id === postBoardId)
   const navigate = useNavigate()
   const toast = useToast()
@@ -88,8 +81,7 @@ export function BoardPostPage() {
 
   if (error) {
     if (error instanceof ApiError && error.status === 403) {
-      const detail = error.body as { requiredRole?: Role } | undefined
-      return <Forbidden requiredRole={detail?.requiredRole} />
+      return <Forbidden />
     }
     return (
       <div className="py-20 text-center">
@@ -140,7 +132,7 @@ export function BoardPostPage() {
           <Avatar name={post.author?.name ?? '?'} hue={200} size="sm" />
           {post.author?.name ?? '알 수 없음'}
           <span>·</span>
-          {formatRelative(post.createdAt)}
+          {formatRelative(post.created_at)}
         </div>
 
         <div className="border-line mt-5 border-t pt-5">

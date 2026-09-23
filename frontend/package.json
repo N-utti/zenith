@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "gen:api": "openapi-typescript ../backend/openapi.json -o src/types/api.gen.ts",
     "dev": "node scripts/dev.js",
     "server": "node scripts/dev-server.js",
     "build": "tsc -b && vite build",
@@ -55,6 +56,7 @@
     "globals": "^17.11.0",
     "jsdom": "^30.0.1",
     "msw": "^2.15.0",
+    "openapi-typescript": "^7.13.0",
     "tailwindcss": "^4.3.3",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.68.0",

@@ -35,7 +35,10 @@ function snippet(text: string, needle: string): string {
 
 /** 문서 본문은 Y.Doc 에 있고 목이 읽을 수 없다. 처음 심어 둔 초안에서 글자만 뽑아 쓴다. */
 function docText(id: string): string {
-  return (DOC_SEEDS[id] ?? '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
+  return (DOC_SEEDS[id] ?? '')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
 export function search(user: User, query: string, limit = 20): SearchHit[] {
@@ -62,16 +65,16 @@ export function search(user: User, query: string, limit = 20): SearchHit[] {
 
   for (const post of POSTS) {
     // 권한 밖은 마스킹이 아니라 결과에서 뺀다. 검색은 존재 자체가 새면 안 된다.
-    if (!canRead(user, post.minRole)) continue
+    if (!canRead(user, post.min_role)) continue
     if (!post.title.toLowerCase().includes(q) && !post.body.toLowerCase().includes(q)) continue
     hits.push({
       type: 'post',
       id: post.id,
       title: post.title,
-      sub: BOARD_DEFS.find((b) => b.id === post.boardId)?.name ?? post.boardId,
+      sub: BOARD_DEFS.find((b) => b.id === post.board_id)?.name ?? post.board_id,
       snippet: snippet(post.body, q),
-      to: `/board/${post.boardId}/${post.id}`,
-      at: post.createdAt,
+      to: `/board/${post.board_id}/${post.id}`,
+      at: post.created_at,
     })
   }
 

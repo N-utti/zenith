@@ -1,16 +1,16 @@
+import type { Schema } from '@/types'
+
 /**
  * 알림 한 건. 백엔드 `routers/me.py` 의 `NotificationOut` 과 같은 모양이라 필드가 snake_case 다.
  *
  * `payload` 는 종류마다 다른 자유 형식이고, 서버가 만든 시점의 값이다. 그래서 화면은
  * `payload` 를 **믿고 그리되 권한은 묻지 않는다**. 권한 판정은 서버가 응답을 만들 때 다시 한다
  * (등급이 내려간 뒤에도 옛 제목이 읽히면 안 되므로 `kind=post` 는 그때 제목을 가린다).
+ *
+ * 서버 스키마의 `payload` 는 아무 객체나 되는 자리라, 지금 만드는 종류의 필드로 좁혀 둔다.
  */
-export interface Notification {
-  id: string
-  kind: string
+export type Notification = Omit<Schema<'NotificationOut'>, 'payload'> & {
   payload: NotificationPayload | null
-  read_at: string | null
-  created_at: string
 }
 
 /** 보낸 사람. 모든 종류의 payload 에 같은 이름으로 들어간다. */

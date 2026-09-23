@@ -390,9 +390,9 @@ export const handlers = [
     if (!post) return notFound()
 
     // 성공 기준: 목록은 마스킹, **본문은 403**. 제목조차 내려주지 않는다.
-    if (!canRead(user, post.minRole)) {
+    if (!canRead(user, post.min_role)) {
       return HttpResponse.json(
-        { detail: '열람 권한이 없습니다.', requiredRole: post.minRole, code: 'FORBIDDEN' },
+        { detail: '열람 권한이 없습니다.', code: 'FORBIDDEN' },
         { status: 403 },
       )
     }
@@ -418,7 +418,7 @@ export const handlers = [
 
     const post = findPost(String(params.postId))
     if (!post) return notFound()
-    if (!canRead(user, post.minRole) || !canEdit(user, post)) return forbidden()
+    if (!canRead(user, post.min_role) || !canEdit(user, post)) return forbidden()
 
     // 보내지 않은 값은 그대로 둔다. null 은 "지움" 이 아니라 422 다.
     for (const key of ['title', 'body'] as const) {
@@ -439,7 +439,7 @@ export const handlers = [
 
     const post = findPost(String(params.postId))
     if (!post) return notFound()
-    if (!canRead(user, post.minRole) || !canEdit(user, post)) return forbidden()
+    if (!canRead(user, post.min_role) || !canEdit(user, post)) return forbidden()
 
     deletePost(post.id)
     return new HttpResponse(null, { status: 204 })
@@ -454,7 +454,7 @@ export const handlers = [
     if (!board) return notFound()
 
     // 05 FR-BRD-02. 열람할 수 있는 게시판에만 글을 쓸 수 있다.
-    if (!canRead(user, board.minRole)) {
+    if (!canRead(user, board.min_role)) {
       return forbidden()
     }
 

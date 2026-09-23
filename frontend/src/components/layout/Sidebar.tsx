@@ -5,6 +5,7 @@ import { cn } from '@/lib/cn'
 import { SECONDARY_NAV, TOP_NAV, visibleNav, type NavItem } from '@/app/navigation'
 import { useCurrentUser } from '@/features/auth/AuthContext'
 import { useBoards } from '@/features/board/api'
+import { BOARD_BADGE } from '@/features/board/types'
 import { useChannels } from '@/features/chat/api'
 import { NewChatModal } from '@/features/chat/NewChatModal'
 import { WorkStatus } from '@/features/chat/WorkStatus'
@@ -146,7 +147,7 @@ function BoardSection({ onNavigate }: { onNavigate?: () => void }) {
           >
             <span className="truncate">{board.name}</span>
             <span className="bg-sunken text-subtle ml-auto shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold">
-              {board.badge}
+              {BOARD_BADGE[board.min_role]}
             </span>
           </MaskedRow>
         )

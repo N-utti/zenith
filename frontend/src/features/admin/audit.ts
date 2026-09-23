@@ -1,22 +1,10 @@
 import { formatBytes } from '@/lib/format'
-import { ROLE_LABEL, type Role } from '@/types'
+import { ROLE_LABEL, type Role, type Schema } from '@/types'
 
 /** `GET /admin/audit` 한 줄 (04 §9 `AuditOut`). 쓰기만 있고 고치거나 지우는 길은 없다. */
-export interface AuditEvent {
-  id: string
-  at: string
-  kind: string
-  actor_id: string | null
-  target_id: string | null
-  ip: string | null
-  user_agent: string | null
-  detail: Record<string, unknown> | null
-}
+export type AuditEvent = Schema<'AuditOut'>
 
-export interface AuditPage {
-  items: AuditEvent[]
-  next_cursor: string | null
-}
+export type AuditPage = Schema<'AuditPage'>
 
 /**
  * 종류 거르개. 서버가 **앞글자 일치**로 거르므로(`kind.startswith`) 앞머리만 보내면 된다.
