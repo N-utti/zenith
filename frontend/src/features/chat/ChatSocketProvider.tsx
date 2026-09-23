@@ -1,4 +1,5 @@
 import { Outlet } from 'react-router'
+import { ConnectionLostContext, useConnectionLost } from '@/components/layout/connectionLost'
 import { ChatSocketContext } from './ChatSocketContext'
 import { useChatSocket } from './useChatSocket'
 
@@ -11,10 +12,13 @@ import { useChatSocket } from './useChatSocket'
  */
 export function ChatSocketProvider() {
   const socket = useChatSocket()
+  const lost = useConnectionLost(socket.connected)
 
   return (
     <ChatSocketContext value={socket}>
-      <Outlet />
+      <ConnectionLostContext value={lost}>
+        <Outlet />
+      </ConnectionLostContext>
     </ChatSocketContext>
   )
 }
