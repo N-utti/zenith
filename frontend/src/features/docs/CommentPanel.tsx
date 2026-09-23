@@ -9,6 +9,7 @@ import { Spinner } from '@/components/ui/Spinner'
 import { formatRelative } from '@/lib/datetime'
 import { useCurrentUser } from '@/features/auth/AuthContext'
 import { MentionTextarea } from '@/features/people/MentionTextarea'
+import { useMentionNames } from '@/features/people/colleagues'
 import { MentionText } from '@/features/people/MentionText'
 import { useAddComment, useComments } from './api'
 import { anchoredBlocks, flashElement, resolveAnchor } from './blockId'
@@ -34,6 +35,7 @@ export function CommentPanel({
   const user = useCurrentUser()
   const { data, isPending } = useComments(docId)
   const addComment = useAddComment(docId)
+  const names = useMentionNames()
   const [body, setBody] = useState('')
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
@@ -156,7 +158,7 @@ export function CommentPanel({
                     </p>
                   ))}
                 <p className="text-muted mt-0.5 text-sm break-words whitespace-pre-wrap">
-                  <MentionText body={comment.body} />
+                  <MentionText body={comment.body} names={names} />
                 </p>
               </div>
             </div>

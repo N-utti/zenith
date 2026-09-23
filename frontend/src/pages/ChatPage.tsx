@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
 import { useParams } from 'react-router'
 import { AtSign, Hash, MessagesSquare, WifiOff } from 'lucide-react'
 import { useChannels, useMessages } from '@/features/chat/api'
@@ -7,6 +7,7 @@ import { Composer } from '@/features/chat/Composer'
 import { MessageList } from '@/features/chat/MessageList'
 import { useChatSocketContext } from '@/features/chat/ChatSocketContext'
 import { useCurrentUser } from '@/features/auth/AuthContext'
+import { useColleagues } from '@/features/people/colleagues'
 
 function TypingLine({ names }: { names: string[] }) {
   if (names.length === 0) return <span className="h-4" />
@@ -25,6 +26,18 @@ export function ChatPage() {
   const me = useCurrentUser()
 
   const channel = channels?.items.find((c) => c.id === channelId)
+
+  // @ 자동완성 후보와 배지 명단. 서버는 채널 멤버 중 활성 계정에만 멘션 알림을 만든다. 채널 멤버는
+  // 비활성으로 바뀌어도 빠지지 않으므로 활성 동료(나는 이미 빠져 있다)와 겹쳐 거른다.
+  const { people } = useColleagues()
+  const mentionCandidates = useMemo(() => {
+    const active = new Set(people.map((person) => person.id))
+    return channel?.members.filter((member) => active.has(member.id)) ?? []
+  }, [people, channel])
+  const mentionNames = useMemo(
+    () => new Set([...mentionCandidates.map((member) => member.name), me.name]),
+    [mentionCandidates, me.name],
+  )
   const { data: messages } = useMessages(channelId ?? null)
   const latestId = messages?.items.at(-1)?.id
 
@@ -77,7 +90,7 @@ export function ChatPage() {
             )}
           </header>
 
-          <MessageList channelId={channelId} />
+          <MessageList channelId={channelId} mentionNames={mentionNames} />
 
           <div className="px-4">
             <TypingLine names={typingByChannel[channelId] ?? []} />
@@ -85,14 +98,12 @@ export function ChatPage() {
 
           {/* key 로 채널마다 새로 만든다. 없으면 올려 둔 첨부가 채널을 옮겨도 남아, A 채널에
               올린 파일을 B 채널로 보내다 서버가 거절한다(그 URL 은 B 의 것이 아니다). */}
-          {/* @ 자동완성 후보: DM 은 상대 한 명, 채널은 멤버 전원(나는 뺀다). 새 조회 없이
-              헤더의 「멤버 N명」 과 같은 channel.members 를 쓴다. */}
           <Composer
             key={channelId}
             channelId={channelId}
             channelName={channel.name}
             isDm={channel.is_dm}
-            mentionCandidates={channel.members.filter((m) => m.id !== me.id)}
+            mentionCandidates={mentionCandidates}
             onTyping={() => notifyTyping(channelId)}
           />
         </div>

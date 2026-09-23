@@ -166,7 +166,7 @@ export function Composer({
             rows={1}
             aria-label={`${channelName}에 메시지 보내기`}
             placeholder={`${isDm ? '' : '#'}${channelName}에 메시지 보내기…`}
-            className="max-h-40 min-h-11 flex-1"
+            className="max-h-40 min-h-11"
           />
           <Button
             type="submit"

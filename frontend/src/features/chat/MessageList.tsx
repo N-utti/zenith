@@ -118,7 +118,13 @@ function DocCard({ docId }: { docId: string }) {
   )
 }
 
-export function MessageList({ channelId }: { channelId: string }) {
+export function MessageList({
+  channelId,
+  mentionNames,
+}: {
+  channelId: string
+  mentionNames: ReadonlySet<string>
+}) {
   const { data, isPending, isError } = useMessages(channelId)
   const bottomRef = useRef<HTMLDivElement>(null)
   const count = data?.items.length ?? 0
@@ -225,7 +231,7 @@ export function MessageList({ channelId }: { channelId: string }) {
                   )}
                   {message.body && (
                     <p className="text-muted text-sm break-words whitespace-pre-wrap">
-                      <MentionText body={message.body} />
+                      <MentionText body={message.body} names={mentionNames} />
                     </p>
                   )}
                   <Attachments files={message.attachments} />

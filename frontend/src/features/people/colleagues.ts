@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useCurrentUser } from '@/features/auth/AuthContext'
 import { api } from '@/lib/api'
@@ -32,4 +33,14 @@ export function useColleagues(): { people: Colleague[]; isPending: boolean; isEr
   })
 
   return { people: pickable(data?.items ?? [], me.id), isPending, isError }
+}
+
+/** 멘션 배지를 칠할 이름: 활성 동료 전체 + 나(명단은 나를 빼고 준다. 남이 나를 부른 글). */
+export function useMentionNames(): ReadonlySet<string> {
+  const user = useCurrentUser()
+  const { people } = useColleagues()
+  return useMemo(
+    () => new Set([...people.map((person) => person.name), user.name]),
+    [people, user.name],
+  )
 }
