@@ -47,7 +47,9 @@ function mentionView(p: NotificationPayload): NotificationView | null {
         : `${actorName}님이 문서에서 회원님을 불렀습니다`,
       detail: p.preview ?? null,
       // 댓글 id 가 있으면 문서가 댓글을 펼치고 그 댓글(과 닻 블록)로 간다(CommentPanel).
-      to: p.comment_id ? `/docs/${p.doc_id}?comment=${p.comment_id}` : `/docs/${p.doc_id}`,
+      to: p.comment_id
+        ? `/docs/${p.doc_id}?comment=${encodeURIComponent(p.comment_id)}`
+        : `/docs/${p.doc_id}`,
       icon: 'doc',
       masked: false,
     }

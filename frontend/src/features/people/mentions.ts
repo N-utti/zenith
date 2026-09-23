@@ -2,20 +2,22 @@
  * 본문의 `@이름` 멘션. 서버가 알림을 만드는 규칙(`realtime/chat.py` 의 `mention_targets`)과 같게
  * 자른다: `@` 뒤 공백 전까지, 끝에 붙은 문장부호(`.,!?:;)`)는 이름이 아니다.
  * 문서 댓글과 채팅이 같은 규칙을 쓴다.
+ *
+ * 화면은 한 발 더 좁힌다. `@` 앞이 줄 처음이거나 공백이어야 하고(메일 주소 제외, 자동완성과
+ * 같은 조건), 이름이 실제 사람 명단에 있어야 배지가 된다. 서버가 알림을 만드는 것도 그 경우뿐이다.
  */
-const MENTION = /@\S+/g
+const MENTION = /(?<=^|\s)@\S+/g
 const TRAILING_PUNCT = /[.,!?:;)]+$/
 
 export type MentionPart = { text: string; mention: boolean }
 
 /** 본문을 평문과 멘션 조각으로 나눈다. 이어 붙이면 원문 그대로다. */
-export function splitMentions(body: string): MentionPart[] {
+export function splitMentions(body: string, names: ReadonlySet<string>): MentionPart[] {
   const parts: MentionPart[] = []
   let last = 0
   for (const match of body.matchAll(MENTION)) {
     const token = match[0].replace(TRAILING_PUNCT, '')
-    // `@` 하나나 `@.` 처럼 이름이 없으면 평문이다.
-    if (token.length < 2) continue
+    if (!names.has(token.slice(1))) continue
     if (match.index > last) parts.push({ text: body.slice(last, match.index), mention: false })
     parts.push({ text: token, mention: true })
     last = match.index + token.length

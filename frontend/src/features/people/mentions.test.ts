@@ -1,15 +1,17 @@
 import { expect, it } from 'vitest'
 import { insertMention, mentionQueryAt, splitMentions } from './mentions'
 
-it('본문의 @이름 을 멘션 조각으로 나누고 끝 문장부호는 평문으로 남긴다', () => {
-  expect(splitMentions('@정성운 확인 부탁, @진수연.')).toEqual([
+it('명단에 있는 @이름 만 멘션 조각으로 나누고 끝 문장부호는 평문으로 남긴다', () => {
+  const names = new Set(['정성운', '진수연'])
+  expect(splitMentions('@정성운 확인 부탁, @진수연.', names)).toEqual([
     { text: '@정성운', mention: true },
     { text: ' 확인 부탁, ', mention: false },
     { text: '@진수연', mention: true },
     { text: '.', mention: false },
   ])
-  // 이름 없는 @ 는 평문이다.
-  expect(splitMentions('가격 @ 5천원')).toEqual([{ text: '가격 @ 5천원', mention: false }])
+  // 이름 없는 @, 명단에 없는 이름, 메일 주소는 평문이다.
+  const plain = '가격 @ 5천원 @아무개 a@정성운'
+  expect(splitMentions(plain, names)).toEqual([{ text: plain, mention: false }])
 })
 
 it('커서 앞의 @질의 를 찾는다: 처음·문장 중간·조합 중·메일 주소', () => {

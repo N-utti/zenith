@@ -1,5 +1,5 @@
 import { hueOf } from '@/lib/avatar'
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { useEditorState, type Editor } from '@tiptap/react'
 import { Quote, X } from 'lucide-react'
 import { useSearchParams } from 'react-router'
@@ -7,21 +7,21 @@ import { Avatar } from '@/components/ui/Avatar'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
-import { cn } from '@/lib/cn'
 import { formatRelative } from '@/lib/datetime'
 import { useCurrentUser } from '@/features/auth/AuthContext'
+import { useColleagues } from '@/features/people/colleagues'
 import { MentionTextarea } from '@/features/people/MentionTextarea'
 import { splitMentions } from '@/features/people/mentions'
 import { useAddComment, useComments } from './api'
-import { anchoredBlocks } from './blockId'
+import { anchoredBlocks, flashElement, resolveAnchor } from './blockId'
 import { COMMENT_BODY_MAX } from './types'
 
 /** 댓글을 달 블록. 손잡이·툴바의 「댓글」이 정한다. */
 export type CommentTarget = { blockId: string; preview: string }
 
-/** 본문의 `@이름` 을 배지로. 서버가 알림을 만드는 규칙과 같은 자리를 칠한다. */
-function CommentBody({ body }: { body: string }) {
-  return splitMentions(body).map((part, i) =>
+/** 본문의 `@이름` 을 배지로. 실제 사람 이름만 칠한다(서버도 그 이름에만 알림을 만든다). */
+function CommentBody({ body, names }: { body: string; names: ReadonlySet<string> }) {
+  return splitMentions(body, names).map((part, i) =>
     part.mention ? (
       <Badge key={i} tone="accent" className="px-1 py-0 text-[length:inherit]">
         {part.text}
@@ -51,6 +51,12 @@ export function CommentPanel({
   const addComment = useAddComment(docId)
   const [body, setBody] = useState('')
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  // 배지를 칠할 이름. 명단은 나를 빼고 주므로 내 이름을 더한다(남이 나를 부른 댓글).
+  const { people } = useColleagues()
+  const names = useMemo(
+    () => new Set([...people.map((person) => person.name), user.name]),
+    [people, user.name],
+  )
 
   // 닻이 달린 블록의 지금 앞부분. 본문이 바뀌면 인용도 따라가고, 지워진 블록은 빠진다.
   const blocks =
@@ -64,28 +70,59 @@ export function CommentPanel({
     if (target) inputRef.current?.focus()
   }, [target])
 
-  // 멘션 알림은 `/docs/{문서}?comment={댓글}` 로 온다. 그 댓글로 내리고, 블록에 달린 것이면
-  // 본문도 그 블록으로 보낸다. 블록은 Y.Doc 이 동기화된 뒤에야 생기므로 나타날 때까지 기다린다.
-  const [params] = useSearchParams()
+  // 멘션 알림은 `/docs/{문서}?comment={댓글}` 로 온다. 그 댓글로 내려 밝히고, 주소에서 파라미터를
+  // 걷는다(새로고침·탭 왕복 때 다시 튀지 않게, 같은 알림을 또 누르면 다시 동작하게).
+  // 블록에 달린 댓글이면 본문도 그 블록으로 보낸다. 블록은 Y.Doc 이 동기화된 뒤에야 생기므로
+  // 파라미터를 걷은 뒤에도 나타날 때까지 기다린다(`pendingJump`).
+  const [params, setParams] = useSearchParams()
   const focusId = params.get('comment')
   const focused = data?.items.find((comment) => comment.id === focusId)
-  const jumpTo = focused?.block_id && blocks[focused.block_id] ? focused.block_id : null
-  const found = focused !== undefined
+  const focusedId = focused?.id ?? null
+
+  // 찾아온 댓글마다 한 번씩 블록 이동을 예약한다. `seq` 는 같은 알림을 다시 눌러 같은 댓글로
+  // 또 올 때도 새 예약이 되게 한다(렌더 중 상태 조정, effect 에서 setState 하지 않는다).
+  const [seenId, setSeenId] = useState<string | null>(null)
+  const [pendingJump, setPendingJump] = useState<{ blockId: string; seq: number } | null>(null)
+  if (focusedId !== seenId) {
+    setSeenId(focusedId)
+    if (focused?.block_id) {
+      setPendingJump({ blockId: focused.block_id, seq: (pendingJump?.seq ?? 0) + 1 })
+    }
+  }
+
   useEffect(() => {
-    if (focusId && found) document.getElementById(`comment-${focusId}`)?.scrollIntoView()
-  }, [focusId, found])
-  const jumpedFor = useRef<string | null>(null)
+    if (!focusedId) return
+    const row = document.getElementById(`comment-${focusedId}`)
+    if (row) {
+      row.scrollIntoView({ block: 'nearest' })
+      flashElement(row)
+    }
+    setParams(
+      (prev) => {
+        prev.delete('comment')
+        return prev
+      },
+      { replace: true },
+    )
+  }, [focusedId, setParams])
+
+  const jumpReady = pendingJump !== null && blocks[pendingJump.blockId] !== undefined
+  const jumpedSeq = useRef(0)
   useEffect(() => {
-    if (!jumpTo || jumpedFor.current === focusId) return
-    jumpedFor.current = focusId
-    onJump(jumpTo)
-  }, [focusId, jumpTo, onJump])
+    if (!pendingJump || !jumpReady || jumpedSeq.current === pendingJump.seq) return
+    jumpedSeq.current = pendingJump.seq
+    onJump(pendingJump.blockId)
+  }, [pendingJump, jumpReady, onJump])
 
   const send = () => {
     const text = body.trim()
     if (!text || addComment.isPending) return
     addComment.mutate(
-      { body: text, block_id: target?.blockId },
+      // 닻은 보내기 직전에 다시 읽는다. 동시 첫 댓글 경합으로 내 id 가 밀렸을 수 있다.
+      {
+        body: text,
+        block_id: (target && editor && resolveAnchor(editor, target.blockId)) || undefined,
+      },
       {
         onSuccess: () => {
           setBody('')
@@ -111,10 +148,7 @@ export function CommentPanel({
             <div
               key={comment.id}
               id={`comment-${comment.id}`}
-              className={cn(
-                '-mx-2 flex gap-2.5 rounded-lg px-2 py-1',
-                comment.id === focusId && 'animate-flash',
-              )}
+              className="-mx-2 flex gap-2.5 rounded-lg px-2 py-1"
             >
               <Avatar name={comment.author.name} hue={hueOf(comment.author.id)} size="sm" />
               <div className="min-w-0 flex-1">
@@ -141,7 +175,7 @@ export function CommentPanel({
                     </p>
                   ))}
                 <p className="text-muted mt-0.5 text-sm break-words whitespace-pre-wrap">
-                  <CommentBody body={comment.body} />
+                  <CommentBody body={comment.body} names={names} />
                 </p>
               </div>
             </div>

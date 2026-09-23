@@ -278,9 +278,21 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
     })
 
   const [tab, setTab] = useState<SidebarTab>('comments')
-  // 멘션 알림(`?comment=`)으로 들어오면 좁은 폭에서도 댓글을 펼쳐 둔다.
+  const [sideOpen, setSideOpen] = useState(false)
+  // 멘션 알림(`?comment=`)으로 들어오면 댓글 탭으로 옮기고 좁은 폭에서도 펼친다. 같은 문서를 연 채로
+  // 알림을 눌러도 오도록 값이 바뀔 때마다 본다(렌더 중 상태 조정). 파라미터는 CommentPanel 이
+  // 댓글을 찾아 밝힌 뒤 걷는다.
+  // ponytail: 버전 스냅샷 요청이 도는 중이면 그 응답이 미리보기를 열 수 있다. 드물어서 막지 않는다.
   const [params] = useSearchParams()
-  const [sideOpen, setSideOpen] = useState(() => params.has('comment'))
+  const focusComment = params.get('comment')
+  const [seenFocus, setSeenFocus] = useState<string | null>(null)
+  if (focusComment !== seenFocus) {
+    setSeenFocus(focusComment)
+    if (focusComment) {
+      setTab('comments')
+      setSideOpen(true)
+    }
+  }
   const [commentTarget, setCommentTarget] = useState<CommentTarget | null>(null)
   /**
    * 스냅샷 요청의 세대. 늦게 온 응답이 지금 화면을 덮어쓰지 않게 막는다.

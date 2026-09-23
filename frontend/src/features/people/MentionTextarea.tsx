@@ -35,6 +35,17 @@ export function MentionTextarea({
   const [active, setActive] = useState(0)
   // Esc 로 닫은 `@` 의 자리. 같은 토큰을 계속 치는 동안은 다시 뜨지 않는다.
   const [dismissedAt, setDismissedAt] = useState<number | null>(null)
+  // 보내고 입력칸이 비면 잊는다. 안 그러면 다음 댓글 맨 앞의 @ 에서 목록이 영영 안 뜬다.
+  if (!value && dismissedAt !== null) setDismissedAt(null)
+
+  /** 커서가 움직였다. 닫아 둔 토큰을 벗어났으면(다른 @ 이거나 토큰 밖) 잊는다. */
+  const moveCaret = (text: string, at: number) => {
+    setCaret(at)
+    // 함수형으로 쓴다. React 의 onSelect 는 Esc 의 keydown 과 같은 이벤트에서 돌기도 해서, 닫힌
+    // 값을 들고 있으면 방금 Esc 로 닫은 것을 바로 되연다.
+    const start = mentionQueryAt(text, at)?.start
+    setDismissedAt((prev) => (start === prev ? prev : null))
+  }
 
   const token = focused ? mentionQueryAt(value, caret) : null
   const options =
@@ -66,11 +77,11 @@ export function MentionTextarea({
         aria-activedescendant={open ? `${listId}-${activeIndex}` : undefined}
         onChange={(e) => {
           onValueChange(e.target.value)
-          setCaret(e.target.selectionStart)
+          moveCaret(e.target.value, e.target.selectionStart)
           setActive(0)
         }}
         // 방향키·클릭으로 커서만 옮겨도 질의가 바뀐다.
-        onSelect={(e) => setCaret(e.currentTarget.selectionStart)}
+        onSelect={(e) => moveCaret(e.currentTarget.value, e.currentTarget.selectionStart)}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
         onKeyDown={(e) => {
