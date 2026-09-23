@@ -1,10 +1,12 @@
 import type { ReactNode } from 'react'
 import { cn } from '@/lib/cn'
 
-type Tone = 'neutral' | 'accent' | 'success' | 'warning' | 'danger'
+type Tone = 'neutral' | 'subtle' | 'accent' | 'success' | 'warning' | 'danger'
 
 const TONES: Record<Tone, string> = {
   neutral: 'bg-sunken text-muted',
+  // 채우지 않고 테두리만. text-subtle 은 sunken 위에서 11px 글자 대비가 모자라 글자는 muted 로 둔다.
+  subtle: 'border border-line text-muted',
   accent: 'bg-accent-soft text-accent',
   success: 'bg-success/12 text-success',
   warning: 'bg-warning/15 text-warning',
