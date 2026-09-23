@@ -10,6 +10,7 @@ import {
   Minus,
   Quote,
   SquareCode,
+  Table,
   Type,
 } from 'lucide-react'
 import { Sparkles } from 'lucide-react'
@@ -145,6 +146,14 @@ export const EDITOR_BLOCKS: EditorBlock[] = [
     },
   },
   {
+    key: 'table',
+    label: '표',
+    hint: '머리 행이 있는 3x3 표를 넣습니다',
+    keywords: ['표', '테이블', 'table'],
+    icon: Table,
+    run: (e) => e.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run(),
+  },
+  {
     key: 'horizontalRule',
     label: '구분선',
     hint: '내용을 가로선으로 나눕니다',
@@ -160,7 +169,9 @@ export const BLOCK_BY_KEY: Record<string, EditorBlock> = Object.fromEntries(
 
 /** 툴바 드롭다운이 지금 무엇을 보여 줄지 고른다. 좁은 것부터 검사해야 인용 속 제목이 '인용'으로 뭉개지지 않는다. */
 export function activeBlock(editor: Editor): EditorBlock {
-  const matched = EDITOR_BLOCKS.find((block) => block.key !== 'paragraph' && block.isActive?.(editor))
+  const matched = EDITOR_BLOCKS.find(
+    (block) => block.key !== 'paragraph' && block.isActive?.(editor),
+  )
   // 아무것도 안 걸리면 본문이다. 목록 순서에 기대지 않고 키로 찾는다.
   return matched ?? BLOCK_BY_KEY.paragraph
 }

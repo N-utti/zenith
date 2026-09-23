@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
-import { useLocation, useSearchParams } from 'react-router'
-import { Download, Paperclip } from 'lucide-react'
+import { Link, useLocation, useSearchParams } from 'react-router'
+import { Download, FileText, Paperclip } from 'lucide-react'
 import { Avatar } from '@/components/ui/Avatar'
 import { Spinner } from '@/components/ui/Spinner'
 import { hueOf } from '@/lib/avatar'
-import { formatDay, formatTime } from '@/lib/datetime'
+import { formatDay, formatRelative, formatTime } from '@/lib/datetime'
 import { formatBytes } from '@/lib/format'
 import { httpUrl } from '@/lib/serverOrigin'
+import { UNTITLED_DOC, useDoc } from '@/features/docs/api'
 import { isImage } from './attachments'
 import { useMessages } from './api'
 import type { ChatAttachment, ChatMessage } from './types'
@@ -83,6 +84,31 @@ function Attachments({ files }: { files: ChatAttachment[] | null }) {
         </li>
       ))}
     </ul>
+  )
+}
+
+/**
+ * 메시지에 실린 문서 카드(05 SCR-04). `doc_ref` 는 문서 id뿐이라 제목·수정 정보는
+ * 그 문서를 조회해 채운다. 못 받아 오면(권한 없음, 지워짐) 조용히 접는다.
+ * 열리지도 않는 카드에 없는 제목을 지어내 보일 이유가 없다.
+ */
+function DocCard({ docId }: { docId: string }) {
+  const { data: doc, isError } = useDoc(docId)
+  if (isError || !doc) return null
+
+  return (
+    <Link
+      to={`/docs/${docId}`}
+      className="border-line bg-sunken hover:border-line-strong mt-1.5 flex max-w-xs items-center gap-2.5 rounded-lg border px-3 py-2 transition-colors"
+    >
+      <FileText className="text-subtle size-4 shrink-0" />
+      <div className="min-w-0">
+        <p className="text-fg truncate text-sm font-medium">{doc.title || UNTITLED_DOC}</p>
+        <p className="text-subtle truncate text-xs">
+          문서{doc.updated_by && ` · ${doc.updated_by.name}`} · {formatRelative(doc.updated_at)}
+        </p>
+      </div>
+    </Link>
   )
 }
 
@@ -197,6 +223,7 @@ export function MessageList({ channelId }: { channelId: string }) {
                     </p>
                   )}
                   <Attachments files={message.attachments} />
+                  {message.doc_ref && <DocCard docId={message.doc_ref} />}
                 </div>
               </div>
             </div>

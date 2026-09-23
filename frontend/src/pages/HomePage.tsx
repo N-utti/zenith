@@ -39,6 +39,21 @@ export function HomePage() {
   const unreadMessages = home?.unread.reduce((sum, channel) => sum + channel.count, 0) ?? 0
   const unreadTotal = unreadMessages + (home?.mentions.length ?? 0)
 
+  // 새 문서 만들기. 헤더 버튼과 "이어서 작업"의 빈 목록 버튼이 같은 동작을 쓴다.
+  const createNewDoc = () => {
+    if (!folderId) return
+    createDoc.mutate(
+      { folder_id: folderId },
+      {
+        onSuccess: (doc) => {
+          if (folderName) toast.success(`${folderName} 폴더에 만들었습니다.`)
+          void navigate(`/docs/${doc.id}`)
+        },
+      },
+    )
+  }
+  const createDisabled = createDoc.isPending || treePending || !folderId
+
   return (
     <>
       <div className="flex flex-wrap items-end justify-between gap-4">
@@ -54,19 +69,8 @@ export function HomePage() {
 
         <div className="flex gap-2">
           <Button
-            onClick={() =>
-              folderId &&
-              createDoc.mutate(
-                { folder_id: folderId },
-                {
-                  onSuccess: (doc) => {
-                    if (folderName) toast.success(`${folderName} 폴더에 만들었습니다.`)
-                    void navigate(`/docs/${doc.id}`)
-                  },
-                },
-              )
-            }
-            disabled={createDoc.isPending || treePending || !folderId}
+            onClick={createNewDoc}
+            disabled={createDisabled}
             title={folderId || treePending ? undefined : '먼저 사이드바에서 폴더를 만들어 주세요.'}
           >
             <Plus className="size-4" />새 문서
@@ -80,7 +84,11 @@ export function HomePage() {
       <div className="mt-7 grid gap-6 lg:grid-cols-[1.5fr_1fr]">
         <div className="flex flex-col gap-6">
           <CalendarCard />
-          <ContinueWorkCard />
+          <ContinueWorkCard
+            onCreate={createNewDoc}
+            creating={createDoc.isPending}
+            createDisabled={createDisabled}
+          />
           <MentionsCard />
         </div>
         <div className="flex flex-col gap-6">

@@ -13,7 +13,7 @@ export type ChatAttachment = Schema<'AttachmentOut'>
 
 /**
  * 백엔드 `MessageOut`. 소켓이 밀어 주는 메시지도 같은 모양이다.
- * `doc_ref` 는 문서 카드인데 아직 화면이 읽지 않는다.
+ * `doc_ref` 는 문서 id뿐이라(`MessageList.tsx` 의 `DocCard`), 제목·수정 정보는 그 문서를 따로 조회해 채운다.
  */
 export type ChatMessage = Schema<'MessageOut'>
 
