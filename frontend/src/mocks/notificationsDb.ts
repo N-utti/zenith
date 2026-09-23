@@ -111,9 +111,9 @@ function maskForViewer(user: User, notification: Notification): Notification {
   if (notification.kind !== 'post' || !p?.post_id) return notification
 
   const post = findPost(p.post_id)
-  const board = post && BOARD_DEFS.find((b) => b.id === post.boardId)
+  const board = post && BOARD_DEFS.find((b) => b.id === post.board_id)
   // 글이나 게시판이 사라졌으면 등급을 확인할 길이 없다. 가리는 쪽이 안전하다.
-  const allowed = board ? canRead(user, board.minRole) : false
+  const allowed = board ? canRead(user, board.min_role) : false
   if (allowed) return notification
   // 제목만 가리고 작성자를 남기면 누가 임원 게시판에 글을 썼는지가 샌다. 서버도 같이 지운다.
   return { ...notification, payload: { ...p, title: MASKED_TITLE, masked: true, from: null } }

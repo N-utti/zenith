@@ -8,7 +8,7 @@ import { Textarea } from '@/components/ui/Textarea'
 import { useToast } from '@/components/ui/ToastContext'
 import { ApiError } from '@/lib/api'
 import { useCreatePost, useUpdatePost } from './api'
-import { BODY_MAX, TITLE_MAX } from './types'
+import { BOARD_BADGE, BODY_MAX, TITLE_MAX } from './types'
 import type { Board, BoardPostDetail } from './types'
 
 /**
@@ -78,7 +78,7 @@ export function PostComposer({
       description={
         post
           ? '수정한 내용은 바로 반영됩니다.'
-          : `${board.badge} 등급 게시판입니다. 열람 권한이 있는 사람에게만 보입니다.`
+          : `${BOARD_BADGE[board.min_role]} 등급 게시판입니다. 열람 권한이 있는 사람에게만 보입니다.`
       }
       footer={
         <>

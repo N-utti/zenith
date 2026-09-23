@@ -10,6 +10,7 @@ import { Table, TableEmpty, TBody, TD, TH, THead, TR } from '@/components/ui/Tab
 import { formatRelative } from '@/lib/datetime'
 import { PostComposer } from '@/features/board/PostComposer'
 import { useBoards, usePosts } from '@/features/board/api'
+import { BOARD_BADGE } from '@/features/board/types'
 
 export function BoardPage() {
   const { boardId } = useParams()
@@ -26,9 +27,7 @@ export function BoardPage() {
   const board = boards?.items.find((b) => b.id === boardId)
 
   if (!boardsPending && !board) {
-    return (
-      <PageHeader title="게시판을 찾을 수 없습니다" description="주소를 다시 확인해 주세요." />
-    )
+    return <PageHeader title="게시판을 찾을 수 없습니다" description="주소를 다시 확인해 주세요." />
   }
 
   return (
@@ -37,7 +36,7 @@ export function BoardPage() {
         title={board?.name ?? '게시판'}
         description={
           board?.allowed
-            ? `${board.badge} 등급 게시판`
+            ? `${BOARD_BADGE[board.min_role]} 등급 게시판`
             : '이 게시판의 글은 제목만 보이고 본문은 열 수 없습니다.'
         }
         actions={
@@ -51,7 +50,7 @@ export function BoardPage() {
         }
       />
 
-      <PostTable boardId={boardId} badge={board?.badge ?? ''} />
+      <PostTable boardId={boardId} badge={board ? BOARD_BADGE[board.min_role] : ''} />
 
       {board?.allowed && composing && (
         <PostComposer board={board} onClose={() => setComposing(false)} />
@@ -100,7 +99,7 @@ function PostTable({ boardId, badge }: { boardId: string; badge: string }) {
                 </MaskedRow>
                 <p className="text-subtle mt-1 text-xs md:hidden">
                   {post.masked ? <MaskedNote /> : (post.author?.name ?? '알 수 없음')} ·{' '}
-                  {formatRelative(post.createdAt)}
+                  {formatRelative(post.created_at)}
                 </p>
               </TD>
               {/* 게시판별 화면이라 모든 행이 같은 등급이다. 05 SCR-05가 목록 요소로
@@ -112,7 +111,7 @@ function PostTable({ boardId, badge }: { boardId: string; badge: string }) {
                 {post.masked ? <MaskedNote /> : (post.author?.name ?? '알 수 없음')}
               </TD>
               <TD className="text-subtle hidden whitespace-nowrap text-xs md:table-cell">
-                {formatRelative(post.createdAt)}
+                {formatRelative(post.created_at)}
               </TD>
             </TR>
           ))

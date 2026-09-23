@@ -5,7 +5,7 @@ import reactRefresh from 'eslint-plugin-react-refresh'
 import tseslint from 'typescript-eslint'
 
 export default tseslint.config(
-  { ignores: ['dist', 'public/mockServiceWorker.js'] },
+  { ignores: ['dist', 'public/mockServiceWorker.js', 'src/types/api.gen.ts'] },
   {
     // 개발 릴레이는 브라우저가 아니라 node에서 돈다.
     files: ['scripts/**/*.js'],

@@ -1,8 +1,7 @@
+import type { Schema } from '@/types'
+
 /** 04 §8 `GET /ai/models` 항목. Ollama 태그 모양을 유지한다(Claude 는 size 가 null). */
-export interface AiModel {
-  name: string
-  size: number | null
-}
+export type AiModel = Schema<'ModelOut'>
 
 /**
  * 04 §8 `event: citations` 항목. 번호(`n`)는 본문의 `[[n]]` 표식과 짝을 이룬다(§8.1).

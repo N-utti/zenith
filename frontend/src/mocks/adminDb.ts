@@ -48,8 +48,8 @@ export function createAccount(body: UserCreate): AdminUser {
     role: body.role,
     avatar: null,
     active: true,
-    team_id: body.team_id,
-    hire_date: body.hire_date,
+    team_id: body.team_id ?? null,
+    hire_date: body.hire_date ?? null,
     created_at: new Date().toISOString(),
   }
   ACCOUNTS.push(account)
