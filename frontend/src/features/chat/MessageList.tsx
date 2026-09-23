@@ -2,30 +2,16 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router'
 import { Download, FileText, Paperclip } from 'lucide-react'
 import { Avatar } from '@/components/ui/Avatar'
-import { Badge } from '@/components/ui/Badge'
 import { Spinner } from '@/components/ui/Spinner'
 import { hueOf } from '@/lib/avatar'
 import { formatDay, formatRelative, formatTime } from '@/lib/datetime'
 import { formatBytes } from '@/lib/format'
 import { httpUrl } from '@/lib/serverOrigin'
 import { UNTITLED_DOC, useDoc } from '@/features/docs/api'
-import { splitMentions } from '@/features/people/mentions'
+import { MentionText } from '@/features/people/MentionText'
 import { isImage } from './attachments'
 import { useMessages } from './api'
 import type { ChatAttachment, ChatMessage } from './types'
-
-/** 본문의 `@이름` 을 배지로. 문서 댓글(`CommentPanel`)과 같은 자리를 칠한다. */
-function MessageBody({ body }: { body: string }) {
-  return splitMentions(body).map((part, i) =>
-    part.mention ? (
-      <Badge key={i} tone="accent" className="px-1 py-0 text-[length:inherit]">
-        {part.text}
-      </Badge>
-    ) : (
-      part.text
-    ),
-  )
-}
 
 /** 같은 사람이 5분 안에 이어서 보낸 메시지는 아바타·이름을 반복하지 않는다. */
 const GROUP_WINDOW_MS = 5 * 60_000
@@ -239,7 +225,7 @@ export function MessageList({ channelId }: { channelId: string }) {
                   )}
                   {message.body && (
                     <p className="text-muted text-sm break-words whitespace-pre-wrap">
-                      <MessageBody body={message.body} />
+                      <MentionText body={message.body} />
                     </p>
                   )}
                   <Attachments files={message.attachments} />
