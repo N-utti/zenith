@@ -40,15 +40,18 @@ const DOCUMENT_STATUS_LABEL: Record<DocumentStatus, string> = {
   closed: '강제 종결',
 }
 
-/** 13 §10 상태 색상. 강제 종결(`closed`)의 색은 계약에 없어 경고색으로 뒀다(프론트 가정). */
-export type StatusTone = 'neutral' | 'accent' | 'success' | 'warning' | 'danger'
+/**
+ * 13 §10 상태 색상: 대기 muted, 승인 success, 반려 danger, 회수 subtle, 강제 종결 warning.
+ * 임시저장은 13 에 없어 대기와 같은 muted 로 둔다(임시저장 탭에만 나온다).
+ */
+export type StatusTone = 'neutral' | 'subtle' | 'success' | 'warning' | 'danger'
 
 const DOCUMENT_STATUS_TONE: Record<DocumentStatus, StatusTone> = {
   draft: 'neutral',
-  pending: 'accent',
+  pending: 'neutral',
   approved: 'success',
   rejected: 'danger',
-  canceled: 'neutral',
+  canceled: 'subtle',
   closed: 'warning',
 }
 
