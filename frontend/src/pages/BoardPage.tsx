@@ -84,7 +84,9 @@ function PostTable({ boardId, badge }: { boardId: string; badge: string }) {
           <TableEmpty colSpan={4}>아직 글이 없습니다. 첫 글을 올려 보세요.</TableEmpty>
         ) : (
           data.items.map((post) => (
-            <TR key={post.id} muted={post.masked}>
+            // TR 의 muted 는 안 준다. MaskedRow 가 이미 제목 칸을 55%로 흐리므로, 여기서까지
+            // 행 전체를 흐리면 두 번 겹쳐 약 30%가 된다(12 §7은 55% 한 번).
+            <TR key={post.id}>
               <TD>
                 {/* 마스킹된 행은 링크가 아니다. 클릭해도 갈 곳이 없어야 한다. */}
                 <MaskedRow

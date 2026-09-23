@@ -10,6 +10,7 @@ import { useChannels } from '@/features/chat/api'
 import { NewChatModal } from '@/features/chat/NewChatModal'
 import { WorkStatus } from '@/features/chat/WorkStatus'
 import type { ChatChannel } from '@/features/chat/types'
+import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { MaskedRow } from '@/components/ui/MaskedRow'
 import { DocTree } from './DocTree'
@@ -146,9 +147,8 @@ function BoardSection({ onNavigate }: { onNavigate?: () => void }) {
             className={cn(ROW, board.allowed && (active ? ROW_ACTIVE : ROW_IDLE))}
           >
             <span className="truncate">{board.name}</span>
-            <span className="bg-sunken text-subtle ml-auto shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold">
-              {BOARD_BADGE[board.min_role]}
-            </span>
+            {/* 등급 배지는 공용 Badge 하나로만 그린다(12 §4.1). 게시판 목록과 같은 톤. */}
+            <Badge className="ml-auto shrink-0">{BOARD_BADGE[board.min_role]}</Badge>
           </MaskedRow>
         )
       })}
