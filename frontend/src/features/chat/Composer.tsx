@@ -15,10 +15,13 @@ const DISCONNECTED = '연결이 끊겨 보내지 못했습니다. 연결되면 �
 export function Composer({
   channelId,
   channelName,
+  isDm,
   onTyping,
 }: {
   channelId: string
   channelName: string
+  /** DM 이 아닌 채널은 이름 앞에 `#` 을 붙인다(채널 목록·헤더와 같은 표기). */
+  isDm: boolean
   onTyping: () => void
 }) {
   const { connected, sendMessage } = useChatSocketContext()
@@ -158,7 +161,7 @@ export function Composer({
             onSubmitEnter={dispatch}
             rows={1}
             aria-label={`${channelName}에 메시지 보내기`}
-            placeholder={`${channelName}에 메시지 보내기…`}
+            placeholder={`${isDm ? '' : '#'}${channelName}에 메시지 보내기…`}
             className="max-h-40 min-h-11 flex-1"
           />
           <Button

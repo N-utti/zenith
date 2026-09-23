@@ -53,7 +53,7 @@ function PresenceBar({ session }: { session: CollabSession }) {
 
   return (
     <div className="flex items-center gap-1.5">
-      <div className="flex -space-x-1.5">
+      <div className="flex -space-x-2">
         {users.slice(0, 4).map((user) => (
           <span
             key={user.clientId}

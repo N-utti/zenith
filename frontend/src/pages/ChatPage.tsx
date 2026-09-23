@@ -87,6 +87,7 @@ export function ChatPage() {
             key={channelId}
             channelId={channelId}
             channelName={channel.name}
+            isDm={channel.is_dm}
             onTyping={() => notifyTyping(channelId)}
           />
         </div>

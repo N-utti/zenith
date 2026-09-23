@@ -43,15 +43,27 @@ export function CardHeader({
   )
 }
 
-/** `onRetry` 를 주면 오류 표시가 된다. danger 톤 문구 + 다시 시도(12 §5 오류 규약). */
+/**
+ * `onRetry` 를 주면 오류 표시가 된다. danger 톤 문구 + 다시 시도(12 §5 오류 규약).
+ * `action` 은 빈 목록에서의 주 행동 버튼(12 §5 "빈 목록: 안내 문구 + 주 행동 버튼"). 오류 표시에는 안 쓴다.
+ */
 export function CardEmpty({
   children,
   onRetry,
+  action,
 }: {
   children: ReactNode
   onRetry?: () => Promise<unknown>
+  action?: ReactNode
 }) {
-  if (!onRetry) return <p className="text-subtle px-5 py-8 text-center text-sm">{children}</p>
+  if (!onRetry) {
+    return (
+      <div className="flex flex-col items-center gap-3 px-5 py-8 text-center text-sm">
+        <p className="text-subtle">{children}</p>
+        {action}
+      </div>
+    )
+  }
   return (
     <div className="flex flex-col items-center gap-2 px-5 py-8 text-sm">
       <p className="text-danger text-center">{children}</p>

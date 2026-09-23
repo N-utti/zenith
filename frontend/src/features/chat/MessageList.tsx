@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
-import { useLocation, useSearchParams } from 'react-router'
-import { Download, Paperclip } from 'lucide-react'
+import { Link, useLocation, useSearchParams } from 'react-router'
+import { Download, FileText, Paperclip } from 'lucide-react'
 import { Avatar } from '@/components/ui/Avatar'
 import { Spinner } from '@/components/ui/Spinner'
 import { hueOf } from '@/lib/avatar'
-import { formatDay, formatTime } from '@/lib/datetime'
+import { formatDay, formatRelative, formatTime } from '@/lib/datetime'
 import { formatBytes } from '@/lib/format'
 import { httpUrl } from '@/lib/serverOrigin'
+import { UNTITLED_DOC, useDoc } from '@/features/docs/api'
 import { isImage } from './attachments'
 import { useMessages } from './api'
 import type { ChatAttachment, ChatMessage } from './types'
@@ -83,6 +84,36 @@ function Attachments({ files }: { files: ChatAttachment[] | null }) {
         </li>
       ))}
     </ul>
+  )
+}
+
+/**
+ * 메시지에 실린 문서 카드(05 SCR-04). `doc_ref` 는 문서 id뿐이라 제목·수정 정보는
+ * 그 문서를 조회해 채운다. 못 받아 오거나(권한 없음) 휴지통에 있으면 접는다. 상세 조회는
+ * 휴지통 문서도 열어 주고, 영구 삭제되면 서버가 `doc_ref` 를 비운다.
+ * 한계: 카드 하나에 문서 상세(본문 Yjs 상태 포함)를 통째로 받는다. 무거운 문서가 걸린
+ * 채널이 느려지면 백엔드에 메시지 응답에 제목을 실어 달라고 한다(계약 변경).
+ */
+function DocCard({ docId }: { docId: string }) {
+  const { data: doc, isPending, isError } = useDoc(docId)
+  // 조회 중에도 카드 높이를 잡아 둔다. 늦게 뜨면 채널을 연 직후 맨 아래가 가려진다.
+  if (isPending)
+    return <div className="bg-sunken mt-1.5 h-[50px] max-w-xs animate-pulse rounded-lg" />
+  if (isError || doc.deleted_at) return null
+
+  return (
+    <Link
+      to={`/docs/${docId}`}
+      className="border-line bg-sunken hover:border-line-strong mt-1.5 flex max-w-xs items-center gap-2.5 rounded-lg border px-3 py-2 transition-colors"
+    >
+      <FileText className="text-subtle size-4 shrink-0" />
+      <div className="min-w-0">
+        <p className="text-fg truncate text-sm font-medium">{doc.title || UNTITLED_DOC}</p>
+        <p className="text-subtle truncate text-xs">
+          문서{doc.updated_by && ` · ${doc.updated_by.name}`} · {formatRelative(doc.updated_at)}
+        </p>
+      </div>
+    </Link>
   )
 }
 
@@ -197,6 +228,7 @@ export function MessageList({ channelId }: { channelId: string }) {
                     </p>
                   )}
                   <Attachments files={message.attachments} />
+                  {message.doc_ref && <DocCard docId={message.doc_ref} />}
                 </div>
               </div>
             </div>

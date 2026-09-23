@@ -81,7 +81,24 @@ export function DocsPage() {
 
         {data &&
           (data.items.length === 0 ? (
-            <CardEmpty>
+            <CardEmpty
+              action={
+                !query && (
+                  <Button
+                    size="sm"
+                    onClick={create}
+                    disabled={createDoc.isPending || treePending || !folderId}
+                  >
+                    {createDoc.isPending ? (
+                      <Spinner className="border-t-on-accent" />
+                    ) : (
+                      <Plus className="size-4" />
+                    )}
+                    새 문서
+                  </Button>
+                )
+              }
+            >
               {query ? `"${query}"와 일치하는 문서가 없습니다.` : '아직 문서가 없습니다.'}
             </CardEmpty>
           ) : (

@@ -1,8 +1,10 @@
+import { useState } from 'react'
 import { Link } from 'react-router'
 import { RotateCcw, Trash2 } from 'lucide-react'
 import { Avatar } from '@/components/ui/Avatar'
 import { Button } from '@/components/ui/Button'
 import { Card, CardEmpty } from '@/components/ui/Card'
+import { Modal } from '@/components/ui/Modal'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { SkeletonRows } from '@/components/ui/Skeleton'
 import { Spinner } from '@/components/ui/Spinner'
@@ -34,6 +36,8 @@ export function TrashPage() {
   // 한 줄이 도는 동안 모든 줄을 잠근다. 15명이 쓰는 휴지통이라 여러 줄을 동시에 누를 일이
   // 없고, 줄마다 따로 잠그면 어느 요청이 어느 줄 것인지 세는 장치가 하나 더 필요하다.
   const busy = untrash.isPending || purge.isPending
+  // 영구 삭제 확인. 되돌릴 수 없어서 `DocWorkspace` 의 휴지통 이동 확인과 같은 Modal 을 쓴다.
+  const [confirmPurge, setConfirmPurge] = useState<{ id: string; title: string } | null>(null)
 
   const fail = (fallback: string) => (err: unknown) =>
     toast.error(err instanceof ApiError ? err.message : fallback)
@@ -62,7 +66,9 @@ export function TrashPage() {
           <THead>
             <TR>
               <TH>제목</TH>
-              <TH className="w-28">지운 사람</TH>
+              {/* 서버는 "지운 사람"을 따로 안 준다. 여기 실린 건 `updated_by`, 즉 마지막으로
+                  손댄 사람이다. 지운 사람과 같다고 보일 이름을 붙이지 않는다. */}
+              <TH className="w-28">마지막 수정</TH>
               <TH className="w-24">지운 때</TH>
               <TH className="w-28">영구 삭제까지</TH>
               {/* 이 열에는 되돌리기와 영구 삭제가 같이 있다. 한쪽 이름을 붙이면 스크린리더가
@@ -135,14 +141,7 @@ export function TrashPage() {
                         aria-label={`${title} 영구 삭제`}
                         className="hover:text-danger ml-1"
                         disabled={busy}
-                        onClick={() => {
-                          // 되돌릴 수 없다. 버전·댓글까지 같이 사라진다.
-                          if (!confirm(`«${title}» 를 영구 삭제할까요? 되돌릴 수 없습니다.`)) return
-                          purge.mutate(doc.id, {
-                            onSuccess: () => toast.success('영구 삭제했습니다.'),
-                            onError: fail('영구 삭제하지 못했습니다.'),
-                          })
-                        }}
+                        onClick={() => setConfirmPurge({ id: doc.id, title })}
                       >
                         {purge.isPending && purge.variables === doc.id ? (
                           <Spinner />
@@ -158,6 +157,52 @@ export function TrashPage() {
           </TBody>
         </Table>
       )}
+
+      <Modal
+        open={confirmPurge !== null}
+        onClose={() => {
+          if (!purge.isPending) setConfirmPurge(null)
+        }}
+        title="영구 삭제할까요?"
+        description="되돌릴 수 없습니다. 버전·댓글까지 같이 사라집니다."
+        size="sm"
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setConfirmPurge(null)}
+              disabled={purge.isPending}
+            >
+              취소
+            </Button>
+            <Button
+              variant="danger"
+              size="sm"
+              disabled={purge.isPending}
+              onClick={() => {
+                if (!confirmPurge) return
+                purge.mutate(confirmPurge.id, {
+                  onSuccess: () => {
+                    setConfirmPurge(null)
+                    toast.success('영구 삭제했습니다.')
+                  },
+                  onError: (err) => {
+                    setConfirmPurge(null)
+                    fail('영구 삭제하지 못했습니다.')(err)
+                  },
+                })
+              }}
+            >
+              {purge.isPending ? <Spinner className="border-t-white" /> : '영구 삭제'}
+            </Button>
+          </>
+        }
+      >
+        <p className="text-muted text-sm leading-relaxed">
+          «{confirmPurge?.title}» 문서가 영구 삭제됩니다. 되돌릴 수 없습니다.
+        </p>
+      </Modal>
     </>
   )
 }
