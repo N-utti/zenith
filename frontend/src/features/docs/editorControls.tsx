@@ -512,7 +512,7 @@ function LinkForm({
         }}
         placeholder="https://example.com"
         aria-label="링크 주소"
-        className="bg-sunken text-fg placeholder:text-subtle min-w-0 flex-1 rounded-lg px-2.5 py-1.5 text-sm outline-none"
+        className="bg-sunken text-fg placeholder:text-subtle min-w-0 flex-1 rounded-lg px-2.5 py-1.5 text-sm"
       />
       {onRemove && <ToolButton icon={Link2Off} label="링크 제거" onClick={onRemove} />}
       <button

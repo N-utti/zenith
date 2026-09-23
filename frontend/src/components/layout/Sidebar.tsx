@@ -1,7 +1,8 @@
-import { useState, type ReactNode } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import { NavLink, useLocation } from 'react-router'
 import { AtSign, Plus, X } from 'lucide-react'
 import { cn } from '@/lib/cn'
+import { useFocusTrap } from '@/lib/useFocusTrap'
 import { SECONDARY_NAV, TOP_NAV, visibleNav, type NavItem } from '@/app/navigation'
 import { useCurrentUser } from '@/features/auth/AuthContext'
 import { useBoards } from '@/features/board/api'
@@ -192,6 +193,11 @@ export function Sidebar({
   collapsed: boolean
   onClose: () => void
 }) {
+  const drawerRef = useRef<HTMLElement>(null)
+  // 대화상자 규약(12 UI 청사진 §8): 열리면 포커스를 가두고, Esc 로 닫고, 닫히면 연 버튼(헤더의
+  // 메뉴 버튼)으로 포커스를 되돌린다. 로직은 공용 Modal 에서 뽑아낸 훅을 그대로 쓴다.
+  useFocusTrap(open, drawerRef, onClose)
+
   return (
     <>
       {/* 데스크톱: 고정. 폭 270px은 12·UI 청사진 1b 셸 치수다. 접으면 폭을 0 으로 밀어 넣는다(아이콘 레일 없음).
@@ -216,10 +222,18 @@ export function Sidebar({
           <button
             type="button"
             aria-label="메뉴 닫기"
+            tabIndex={-1}
             onClick={onClose}
             className="absolute inset-0 bg-black/40"
           />
-          <aside className="border-line bg-sunken absolute inset-y-0 left-0 w-[270px] border-r shadow-xl">
+          <aside
+            ref={drawerRef}
+            role="dialog"
+            aria-modal="true"
+            aria-label="메뉴"
+            tabIndex={-1}
+            className="border-line bg-sunken absolute inset-y-0 left-0 w-[270px] border-r shadow-xl outline-none"
+          >
             <Button
               variant="ghost"
               size="sm"

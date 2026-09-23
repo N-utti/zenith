@@ -61,7 +61,7 @@ export function Header({
         className="border-line bg-canvas text-subtle hover:border-line-strong mx-auto flex h-[34px] min-w-0 max-w-[460px] flex-1 cursor-pointer items-center gap-2 rounded-lg border px-3 text-[13px] transition-colors"
       >
         <Search className="size-4 shrink-0" />
-        <span className="truncate">채팅·문서 전체 검색</span>
+        <span className="truncate">문서·채팅·게시글 전체 검색</span>
         <kbd className="text-subtle ml-auto hidden font-mono text-[11px] sm:inline">
           {isMac ? '⌘' : 'Ctrl'} K
         </kbd>

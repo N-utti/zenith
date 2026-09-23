@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router'
 import { CornerDownLeft, FileText, MessagesSquare, Megaphone, Search, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { formatRelative } from '@/lib/datetime'
+import { useFocusTrap } from '@/lib/useFocusTrap'
 import { ALL_NAV, visibleNav } from '@/app/navigation'
 import { useCurrentUser } from '@/features/auth/AuthContext'
 import { useSearch } from '@/features/search/api'
@@ -82,6 +83,11 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
   const [cursor, setCursor] = useState(0)
   const timer = useRef<number | undefined>(undefined)
   const activeRow = useRef<HTMLButtonElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
+
+  // 대화상자 규약(12 UI 청사진 §8): 포커스 가둠·Esc 닫기·닫힐 때 포커스 복귀. 모달과 같은 훅.
+  // 부모가 열릴 때마다 새로 마운트하므로 늘 "열린" 상태로 부른다.
+  useFocusTrap(true, panelRef, onClose)
 
   useEffect(() => () => window.clearTimeout(timer.current), [])
 
@@ -131,7 +137,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
   }
 
   const onKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Escape') return onClose()
+    // Esc 는 useFocusTrap 의 document 리스너가 닫는다.
     if (e.key === 'ArrowDown') {
       e.preventDefault()
       setCursor((active + 1) % rows.length)
@@ -155,24 +161,26 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
       <button
         type="button"
         aria-label="닫기"
+        tabIndex={-1}
         onClick={onClose}
         className="absolute inset-0 bg-black/40"
       />
 
       <div
+        ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-label="통합 검색"
+        tabIndex={-1}
         onKeyDown={onKeyDown}
-        className="border-line bg-surface relative w-full max-w-xl overflow-hidden rounded-xl border shadow-2xl"
+        className="border-line bg-surface relative w-full max-w-xl overflow-hidden rounded-xl border shadow-2xl outline-none"
       >
         <div className="border-line flex items-center gap-3 border-b px-4">
           <Search className="text-subtle size-4.5 shrink-0" />
           <input
-            autoFocus
             value={query}
             onChange={(e) => onType(e.target.value)}
-            placeholder="문서·채팅·사람 검색 또는 화면 이동…"
+            placeholder="문서·채팅·게시글 검색 또는 화면 이동…"
             className="text-fg placeholder:text-subtle h-13 flex-1 bg-transparent text-sm outline-none"
           />
         </div>

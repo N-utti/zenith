@@ -29,11 +29,11 @@ export function ContinueWorkCard({
   return (
     <HomeSection title="이어서 작업" to="/docs">
       {isPending && (
-        <div className="grid grid-cols-2 gap-3.5">
+        <div className="flex gap-3.5 overflow-x-auto lg:grid lg:grid-cols-2">
           {[0, 1, 2, 3].map((i) => (
             <div
               key={i}
-              className="border-line bg-surface h-[136px] animate-pulse rounded-xl border"
+              className="border-line bg-surface h-[136px] w-[150px] shrink-0 animate-pulse rounded-xl border lg:w-auto"
             />
           ))}
         </div>
@@ -64,12 +64,12 @@ export function ContinueWorkCard({
             </CardEmpty>
           </Card>
         ) : (
-          <div className="grid grid-cols-2 gap-3.5">
+          <div className="flex gap-3.5 overflow-x-auto lg:grid lg:grid-cols-2">
             {data.slice(0, RECENT_LIMIT).map((doc) => (
               <Link
                 key={doc.id}
                 to={`/docs/${doc.id}`}
-                className="border-line bg-surface hover:border-line-strong rounded-xl border p-3.5 transition-colors"
+                className="border-line bg-surface hover:border-line-strong w-[150px] shrink-0 rounded-xl border p-3.5 transition-colors lg:w-auto"
               >
                 <div className="h-[70px] rounded-md" style={{ background: THUMBNAIL }} />
                 <p className="text-fg mt-2.5 truncate text-[13.5px] font-semibold">{doc.title}</p>

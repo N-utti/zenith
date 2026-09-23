@@ -81,20 +81,38 @@ export function HomePage() {
         </div>
       </div>
 
-      <div className="mt-7 grid gap-6 lg:grid-cols-[1.5fr_1fr]">
-        <div className="flex flex-col gap-6">
-          <CalendarCard />
-          <ContinueWorkCard
-            onCreate={createNewDoc}
-            creating={createDoc.isPending}
-            createDisabled={createDisabled}
-          />
-          <MentionsCard />
+      {/* 1단(모바일)일 때만 05 SCR-07 순서(이어서 작업 → 멘션 → 안 읽은 메시지 → 공지)로 다시 세운다.
+          05 에 없는 캘린더·오늘 할 일은 그 뒤로 민다. lg 부터는 order 를 지우고 기존 2열 격자대로.
+          `contents` 로 열 래퍼를 없애 여섯 카드가 그리드의 한 열에서 함께 순서를 갖게 한다.
+          grid-cols-1 은 minmax(0,1fr) 라서, 가로로 구르는 이어서 작업 줄이 칸을 밀어 넓히지 못한다.
+          감수한 것: 1단에서 보이는 순서와 코드 순서(스크린리더·Tab)가 다르다. 코드 순서를 모바일에
+          맞추면 lg 2열을 두 flex 열로 나눌 수 없어 카드 높이가 행마다 맞춰지며 빈칸이 생긴다. */}
+      <div className="mt-7 grid grid-cols-1 gap-6 lg:grid-cols-[1.5fr_1fr]">
+        <div className="contents lg:flex lg:flex-col lg:gap-6">
+          <div className="order-5 lg:order-none">
+            <CalendarCard />
+          </div>
+          <div className="order-1 lg:order-none">
+            <ContinueWorkCard
+              onCreate={createNewDoc}
+              creating={createDoc.isPending}
+              createDisabled={createDisabled}
+            />
+          </div>
+          <div className="order-2 lg:order-none">
+            <MentionsCard />
+          </div>
         </div>
-        <div className="flex flex-col gap-6">
-          <UnreadChatCard />
-          <AnnouncementsCard />
-          <TodayTasksCard />
+        <div className="contents lg:flex lg:flex-col lg:gap-6">
+          <div className="order-3 lg:order-none">
+            <UnreadChatCard />
+          </div>
+          <div className="order-4 lg:order-none">
+            <AnnouncementsCard />
+          </div>
+          <div className="order-6 lg:order-none">
+            <TodayTasksCard />
+          </div>
         </div>
       </div>
     </>
