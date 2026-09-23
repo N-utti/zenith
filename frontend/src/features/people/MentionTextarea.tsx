@@ -12,20 +12,25 @@ const MAX_OPTIONS = 6
  * `@` 를 치면 사람 목록이 뜨는 입력칸. 고르면 본문에 `@이름 ` 을 넣는다.
  *
  * 서버는 본문의 `@이름` 글자로 멘션을 판정한다(id 를 싣지 않는다). 그래서 고른 결과도 글자뿐이고,
- * 손으로 친 `@이름` 과 똑같이 취급된다. 지금은 문서 댓글이 쓰고, 채팅 입력창도 같은 모양으로 갈아 끼울 수 있다.
+ * 손으로 친 `@이름` 과 똑같이 취급된다. 문서 댓글과 채팅 입력창이 같은 모양을 쓴다.
+ *
+ * `people` 을 주면 그 후보만 뜬다(채팅은 채널 멤버로 좁힌다). 안 주면 전체 동료 목록이다.
  */
 export function MentionTextarea({
   value,
   onValueChange,
   inputRef,
   onKeyDown,
+  people: peopleProp,
   ...props
 }: Omit<ComponentProps<typeof Textarea>, 'value' | 'onChange'> & {
   value: string
   onValueChange: (value: string) => void
   inputRef?: RefObject<HTMLTextAreaElement | null>
+  people?: { id: string; name: string }[]
 }) {
-  const { people } = useColleagues()
+  const { people: colleagues } = useColleagues()
+  const people = peopleProp ?? colleagues
   const ownRef = useRef<HTMLTextAreaElement>(null)
   const ref = inputRef ?? ownRef
   const listId = useId()

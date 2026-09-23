@@ -2,12 +2,12 @@ import { useRef, useState, type FormEvent } from 'react'
 import { Paperclip, Send, X } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
-import { Textarea } from '@/components/ui/Textarea'
+import { MentionTextarea } from '@/features/people/MentionTextarea'
 import { ApiError } from '@/lib/api'
 import { formatBytes } from '@/lib/format'
 import { MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, MAX_BODY_CHARS, uploadAttachment } from './api'
 import { useChatSocketContext } from './ChatSocketContext'
-import type { ChatAttachment } from './types'
+import type { ChatAttachment, Person } from './types'
 
 /** 끊겨서 못 보냈다는 문구. 다시 연결되면 이 문구만 지운다. */
 const DISCONNECTED = '연결이 끊겨 보내지 못했습니다. 연결되면 다시 시도하세요.'
@@ -16,12 +16,15 @@ export function Composer({
   channelId,
   channelName,
   isDm,
+  mentionCandidates,
   onTyping,
 }: {
   channelId: string
   channelName: string
   /** DM 이 아닌 채널은 이름 앞에 `#` 을 붙인다(채널 목록·헤더와 같은 표기). */
   isDm: boolean
+  /** @ 자동완성 후보(DM 은 상대만, 채널은 멤버 전원). */
+  mentionCandidates: Person[]
   onTyping: () => void
 }) {
   const { connected, sendMessage } = useChatSocketContext()
@@ -151,12 +154,13 @@ export function Composer({
             {uploading > 0 ? <Spinner /> : <Paperclip className="size-4" />}
           </Button>
 
-          <Textarea
+          <MentionTextarea
             value={body}
-            onChange={(e) => {
-              setBody(e.target.value)
+            onValueChange={(next) => {
+              setBody(next)
               onTyping()
             }}
+            people={mentionCandidates}
             submitOnEnter
             onSubmitEnter={dispatch}
             rows={1}

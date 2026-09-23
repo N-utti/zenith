@@ -6,6 +6,7 @@ import { ChannelList } from '@/features/chat/ChannelList'
 import { Composer } from '@/features/chat/Composer'
 import { MessageList } from '@/features/chat/MessageList'
 import { useChatSocketContext } from '@/features/chat/ChatSocketContext'
+import { useCurrentUser } from '@/features/auth/AuthContext'
 
 function TypingLine({ names }: { names: string[] }) {
   if (names.length === 0) return <span className="h-4" />
@@ -21,6 +22,7 @@ export function ChatPage() {
   const { channelId } = useParams()
   const { data: channels } = useChannels()
   const { connected, typingByChannel, notifyTyping, sendRead } = useChatSocketContext()
+  const me = useCurrentUser()
 
   const channel = channels?.items.find((c) => c.id === channelId)
   const { data: messages } = useMessages(channelId ?? null)
@@ -83,11 +85,14 @@ export function ChatPage() {
 
           {/* key 로 채널마다 새로 만든다. 없으면 올려 둔 첨부가 채널을 옮겨도 남아, A 채널에
               올린 파일을 B 채널로 보내다 서버가 거절한다(그 URL 은 B 의 것이 아니다). */}
+          {/* @ 자동완성 후보: DM 은 상대 한 명, 채널은 멤버 전원(나는 뺀다). 새 조회 없이
+              헤더의 「멤버 N명」 과 같은 channel.members 를 쓴다. */}
           <Composer
             key={channelId}
             channelId={channelId}
             channelName={channel.name}
             isDm={channel.is_dm}
+            mentionCandidates={channel.members.filter((m) => m.id !== me.id)}
             onTyping={() => notifyTyping(channelId)}
           />
         </div>
