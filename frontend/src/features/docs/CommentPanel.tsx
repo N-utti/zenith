@@ -1,36 +1,22 @@
 import { hueOf } from '@/lib/avatar'
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useEditorState, type Editor } from '@tiptap/react'
 import { Quote, X } from 'lucide-react'
 import { useSearchParams } from 'react-router'
 import { Avatar } from '@/components/ui/Avatar'
-import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
 import { formatRelative } from '@/lib/datetime'
 import { useCurrentUser } from '@/features/auth/AuthContext'
-import { useColleagues } from '@/features/people/colleagues'
 import { MentionTextarea } from '@/features/people/MentionTextarea'
-import { splitMentions } from '@/features/people/mentions'
+import { useMentionNames } from '@/features/people/colleagues'
+import { MentionText } from '@/features/people/MentionText'
 import { useAddComment, useComments } from './api'
 import { anchoredBlocks, flashElement, resolveAnchor } from './blockId'
 import { COMMENT_BODY_MAX } from './types'
 
 /** 댓글을 달 블록. 손잡이·툴바의 「댓글」이 정한다. */
 export type CommentTarget = { blockId: string; preview: string }
-
-/** 본문의 `@이름` 을 배지로. 실제 사람 이름만 칠한다(서버도 그 이름에만 알림을 만든다). */
-function CommentBody({ body, names }: { body: string; names: ReadonlySet<string> }) {
-  return splitMentions(body, names).map((part, i) =>
-    part.mention ? (
-      <Badge key={i} tone="accent" className="px-1 py-0 text-[length:inherit]">
-        {part.text}
-      </Badge>
-    ) : (
-      part.text
-    ),
-  )
-}
 
 export function CommentPanel({
   docId,
@@ -49,14 +35,9 @@ export function CommentPanel({
   const user = useCurrentUser()
   const { data, isPending } = useComments(docId)
   const addComment = useAddComment(docId)
+  const names = useMentionNames()
   const [body, setBody] = useState('')
   const inputRef = useRef<HTMLTextAreaElement>(null)
-  // 배지를 칠할 이름. 명단은 나를 빼고 주므로 내 이름을 더한다(남이 나를 부른 댓글).
-  const { people } = useColleagues()
-  const names = useMemo(
-    () => new Set([...people.map((person) => person.name), user.name]),
-    [people, user.name],
-  )
 
   // 닻이 달린 블록의 지금 앞부분. 본문이 바뀌면 인용도 따라가고, 지워진 블록은 빠진다.
   const blocks =
@@ -177,7 +158,7 @@ export function CommentPanel({
                     </p>
                   ))}
                 <p className="text-muted mt-0.5 text-sm break-words whitespace-pre-wrap">
-                  <CommentBody body={comment.body} names={names} />
+                  <MentionText body={comment.body} names={names} />
                 </p>
               </div>
             </div>

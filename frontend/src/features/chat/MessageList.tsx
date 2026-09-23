@@ -8,6 +8,7 @@ import { formatDay, formatRelative, formatTime } from '@/lib/datetime'
 import { formatBytes } from '@/lib/format'
 import { httpUrl } from '@/lib/serverOrigin'
 import { UNTITLED_DOC, useDoc } from '@/features/docs/api'
+import { MentionText } from '@/features/people/MentionText'
 import { isImage } from './attachments'
 import { useMessages } from './api'
 import type { ChatAttachment, ChatMessage } from './types'
@@ -117,7 +118,13 @@ function DocCard({ docId }: { docId: string }) {
   )
 }
 
-export function MessageList({ channelId }: { channelId: string }) {
+export function MessageList({
+  channelId,
+  mentionNames,
+}: {
+  channelId: string
+  mentionNames: ReadonlySet<string>
+}) {
   const { data, isPending, isError } = useMessages(channelId)
   const bottomRef = useRef<HTMLDivElement>(null)
   const count = data?.items.length ?? 0
@@ -224,7 +231,7 @@ export function MessageList({ channelId }: { channelId: string }) {
                   )}
                   {message.body && (
                     <p className="text-muted text-sm break-words whitespace-pre-wrap">
-                      {message.body}
+                      <MentionText body={message.body} names={mentionNames} />
                     </p>
                   )}
                   <Attachments files={message.attachments} />
