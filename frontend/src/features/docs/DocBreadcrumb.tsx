@@ -1,6 +1,6 @@
 import { Link } from 'react-router'
 import { ChevronLeft } from 'lucide-react'
-import { useTree } from './api'
+import { UNTITLED_DOC, useTree } from './api'
 import { foldersTo } from './tree'
 
 /**
@@ -33,7 +33,7 @@ export function DocBreadcrumb({ docId, title }: { docId: string; title: string }
       ))}
 
       {/* 제목의 원천은 Y.Doc이라 목록 사본보다 이쪽이 먼저 최신이 된다. */}
-      <span className="text-fg min-w-0 truncate font-medium">{title || '제목 없는 문서'}</span>
+      <span className="text-fg min-w-0 truncate font-medium">{title || UNTITLED_DOC}</span>
     </nav>
   )
 }

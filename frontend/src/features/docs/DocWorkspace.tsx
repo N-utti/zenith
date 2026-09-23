@@ -14,7 +14,14 @@ import { useCurrentUser } from '@/features/auth/AuthContext'
 import { cn } from '@/lib/cn'
 import { formatRelative } from '@/lib/datetime'
 import { useDragAutoScroll } from '@/lib/useDragAutoScroll'
-import { untrashDoc, useSaveVersion, useTouchDoc, useTrashDoc, useVersionSnapshot } from './api'
+import {
+  UNTITLED_DOC,
+  untrashDoc,
+  useSaveVersion,
+  useTouchDoc,
+  useTrashDoc,
+  useVersionSnapshot,
+} from './api'
 import { CommentPanel } from './CommentPanel'
 import { DocBreadcrumb } from './DocBreadcrumb'
 import { EditorBubbleMenu } from './EditorBubbleMenu'
@@ -224,7 +231,7 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
         void navigate('/docs', { replace: true })
         // 제목을 싣는다. 짧은 사이에 둘을 지우면 똑같은 토스트가 겹쳐 어느 것을 되돌리는지
         // 가릴 근거가 없어진다.
-        toast.success(`«${title || '제목 없는 문서'}» 를 휴지통으로 옮겼습니다.`, {
+        toast.success(`«${title || UNTITLED_DOC}» 를 휴지통으로 옮겼습니다.`, {
           durationMs: 10_000,
           action: {
             label: '되돌리기',
@@ -287,10 +294,13 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
   useDragAutoScroll(scrollRef)
   const coarsePointer = useCoarsePointer()
 
-  // 제목의 원천도 Y.Doc이다. 비어 있으면 서버 사본으로 한 번 채운다.
+  // 제목의 원천도 Y.Doc이다. 비어 있으면 서버 사본으로 한 번 채운다. 서버가 빈 제목을 받지 않아
+  // 새 문서는 UNTITLED_DOC 로 만들어지는데, 그걸 글자로 채우면 치는 제목이 그 뒤에 붙는다.
+  // 그 경우만 비워 둬서 입력칸의 안내 문구로 보이게 한다.
   useEffect(() => {
     const metaMap = doc.getMap<string>('meta')
-    if (metaMap.get('title') === undefined) metaMap.set('title', meta.title)
+    if (metaMap.get('title') === undefined)
+      metaMap.set('title', meta.title === UNTITLED_DOC ? '' : meta.title)
   }, [doc, meta.title])
 
   // 편집이 멎으면 목록·검색이 볼 사본(제목·수정시각)을 갱신하고 버전을 남긴다.
@@ -424,7 +434,7 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
           </>
         }
       >
-        <p className="text-muted text-sm leading-relaxed">{title || '제목 없는 문서'}</p>
+        <p className="text-muted text-sm leading-relaxed">{title || UNTITLED_DOC}</p>
       </Modal>
 
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
@@ -472,7 +482,7 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
                 <input
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  placeholder="제목 없는 문서"
+                  placeholder={UNTITLED_DOC}
                   aria-label="문서 제목"
                   className="text-fg placeholder:text-subtle w-full bg-transparent py-2 text-3xl font-bold tracking-tight outline-none"
                 />

@@ -7,7 +7,8 @@ import type { ApprovalStep, StepStatus } from './types'
 const REFERENCE = { label: '참조', icon: Eye, tone: 'bg-sunken text-subtle' }
 
 const STATUS: Record<StepStatus, { label: string; icon: typeof Check; tone: string }> = {
-  waiting: { label: '대기', icon: Clock, tone: 'bg-accent-soft text-accent' },
+  // 13 §10: 대기 muted. 목록 배지(statusTone)와 같은 색.
+  waiting: { label: '대기', icon: Clock, tone: 'bg-sunken text-muted' },
   approved: { label: '승인', icon: Check, tone: 'bg-success/12 text-success' },
   rejected: { label: '반려', icon: X, tone: 'bg-danger/12 text-danger' },
   delegated_done: { label: '대결', icon: Check, tone: 'bg-success/12 text-success' },

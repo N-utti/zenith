@@ -55,7 +55,11 @@ export function docContentExtensions(): Extensions {
     Highlight.configure({ multicolor: true }),
     TextAlign.configure({ types: ['heading', 'paragraph'] }),
     TaskList,
-    TaskItem.configure({ nested: true }),
+    TaskItem.configure({
+      nested: true,
+      // 기본값은 영어("Task item checkbox for …")라 스크린리더가 영어로 읽는다.
+      a11y: { checkboxLabel: (node) => `할 일: ${node.textContent || '빈 항목'}` },
+    }),
     // 표. 지금은 AI "표로 정리"가 넣는 표만 있다(슬래시 메뉴·행·열 편집 UI 는 아직 없다).
     // resizable 은 기본값이 false 지만 뜻을 남긴다: 열 너비 끌기는 셀 속성(colwidth)을 문서에 쓰는 동작이라
     // 두 사람이 동시에 끌면 경합한다. 셀 내용을 문단으로 제한해 셀 안에 표가 들어가는 것을 스키마에서 막는다.

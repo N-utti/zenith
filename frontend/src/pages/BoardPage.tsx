@@ -37,7 +37,7 @@ export function BoardPage() {
         description={
           board?.allowed
             ? `${BOARD_BADGE[board.min_role]} 등급 게시판`
-            : '이 게시판의 글은 제목만 보이고 본문은 열 수 없습니다.'
+            : '열람 권한이 없는 게시판입니다. 글이 있다는 것만 보이고 제목과 본문은 가려집니다.'
         }
         actions={
           // FR-BRD-02. 열람할 수 있는 게시판에만 글쓰기 버튼이 보인다.
