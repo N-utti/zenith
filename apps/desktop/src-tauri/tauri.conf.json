@@ -45,6 +45,16 @@
     "windows": {
       "wix": {
         "language": ["ko-KR"]
+      },
+      "allowDowngrades": false
+    },
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDc5Q0QzQzBCQzE1MzAzNjMKUldSakExUEJDenpOZVVqSkVPOTZuVS9tN09iekcrZ1M1TE1ZZHZnRm1PaG04Z3dibzk5QUJHNHQK",
+      "windows": {
+        "installMode": "passive"
       }
     }
   }

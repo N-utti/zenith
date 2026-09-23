@@ -70,18 +70,53 @@ VITE_SERVER_ORIGIN=https://zenith.example.co.kr
 
 ---
 
+## 자동 업데이트
+
+앱이 켜질 때 웹앱이 셸에 `check_update` 를 부르고, 셸은 `{서버}/desktop/latest.json` 을 본다.
+새 버전이면 웹앱이 "지금 설치할까요?" 를 묻는다. 고르면 `install_update` 가 `.msi` 를 받아 서명을 확인하고
+설치 프로그램(진행 막대만 보이는 passive 모드)을 띄운다. 앱은 닫혔다가 설치가 끝나면 다시 뜬다.
+거절하면 지금 버전으로 계속 쓰고, 다음에 켤 때 다시 묻는다. 서버 주소를 모르는 개발 모드에서는 건너뛴다.
+
+- **서명키**: 업데이트 설치본은 Tauri 서명키(minisign)로 검증한다. 공개키는 `tauri.conf.json` 의
+  `plugins.updater.pubkey`, 개인키는 빌드 PC 의 `~/.tauri/zenith-updater.key`(레포 밖, 비밀번호 없음).
+  **개인키를 잃으면 이미 설치된 앱에 업데이트를 보낼 수 없다.** 전 직원이 `.msi` 를 손으로 다시 깔아야 한다. 백업해 둘 것.
+- **TLS**: 셸은 Windows 인증서 저장소를 믿는다(`native-tls`). Caddy 루트를 PC 에 넣었으면 그대로 된다.
+- **UAC**: `.msi` 는 컴퓨터 전체 설치(`C:\Program Files`)라 업데이트 때 관리자 확인 창이 뜬다. 관리자 권한이 없는 사람은
+  설치를 고르면 앱이 꺼진 채로 남는다(다시 켜면 옛 버전으로 뜬다). 그래서 묻고 설치한다. 그런 PC 는 IT 가 `.msi` 를 깐다.
+- **되돌리기 차단**: 매니페스트의 버전 번호는 서명 대상이 아니다. 예전 `.msi` 를 새 버전인 척 내밀어도
+  `bundle.windows.allowDowngrades: false` 라 설치가 거부된다.
+
+### 릴리스 절차
+
+```powershell
+# 1) tauri.conf.json 의 version 을 올린다. 같은 버전이면 업데이트가 안 간다
+# 2) 서명해서 빌드
+$env:TAURI_SIGNING_PRIVATE_KEY_PATH = "$HOME\.tauri\zenith-updater.key"
+$env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = ""
+npm run build
+# 3) 매니페스트
+npm run manifest -- https://zenith.example.co.kr
+```
+
+`src-tauri/target/release/bundle/msi/` 의 `.msi` 와 `latest.json` 을 서버의 `/desktop/` 에 올린다(Caddy 가 내주는 경로).
+매니페스트의 `.msi` 주소는 만들 때 준 서버 주소로 박힌다. 서버를 옮기면 매니페스트를 다시 만든다.
+개인키 없이 `npm run build` 하면 서명 단계에서 실패한다. 배포본은 전부 서명돼야 하므로 의도한 것이다.
+
+---
+
 ## 구성
 
 ```
 apps/desktop/
 ├─ package.json          Tauri CLI · dev/build 스크립트
+├─ scripts/manifest.mjs  업데이트 매니페스트(latest.json) 생성
 ├─ app-icon.png          아이콘 원본 1024² (바꾸면 npm run icons)
 └─ src-tauri/
    ├─ tauri.conf.json    창 크기 · CSP · 번들(.msi) 설정
    ├─ Cargo.toml
    ├─ capabilities/      셸이 웹앱에 허용하는 권한. 파일시스템·셸 실행은 닫혀 있다.
    ├─ icons/             생성물 (Windows/macOS/Android/iOS 전 사이즈)
-   └─ src/{main,lib}.rs  창을 띄우는 것 외에 하는 일이 없다
+   └─ src/{main,lib}.rs  창을 띄우고 켤 때 업데이트를 확인하는 것 외에 하는 일이 없다
 ```
 
 ### 프론트엔드 쪽 짝
@@ -89,7 +124,7 @@ apps/desktop/
 | 파일 | 역할 |
 | --- | --- |
 | `frontend/src/lib/serverOrigin.ts` | REST·WebSocket·이미지 URL 앞에 서버 오리진을 붙인다 |
-| `frontend/src/lib/desktop.ts` | 바깥 링크를 기본 브라우저로 넘긴다 · OS 알림(`notify`) |
+| `frontend/src/lib/desktop.ts` | 바깥 링크를 기본 브라우저로 넘긴다 · OS 알림(`notify`) · 켤 때 업데이트 확인(`checkForUpdate`) |
 | `frontend/src/features/chat/ChatSocketProvider.tsx` | 채팅 소켓을 로그인 구역 전체에서 하나만 연결 |
 
 모두 브라우저에서는 아무 일도 하지 않는다. 웹앱은 Tauri npm 패키지에 의존하지 않고,
@@ -164,8 +199,10 @@ npm run icons
 
 ## 아직 안 한 것
 
-- **코드 서명**. 서명 없는 `.msi`는 SmartScreen 경고가 뜬다. 사내 배포라도 인증서가 필요하다.
-- **자동 업데이트**. `tauri-plugin-updater` 미적용. 지금은 `.msi` 재배포.
+- **코드 서명**(Authenticode). 서명 없는 `.msi`는 처음 설치할 때 "알 수 없는 게시자" 경고가 뜬다.
+  2026-09-23 보류했다: 업데이트는 위의 Tauri 서명키로 검증하고 SmartScreen 을 거치지 않아서, 막아 주는 것이
+  첫 설치 경고뿐이다. 인증서(자체 서명 + 사내 PC 신뢰 배포, 또는 상용)가 정해지면
+  `bundle.windows.certificateThumbprint` 를 채운다.
 - **딥링크·트레이 아이콘·작업표시줄 배지**. 요구사항 확정 전.
 - **알림 범위**. 채팅뿐이다. 멘션·댓글·결재 알림은 `받은 알림`(M2) 설계가 정해진 뒤에 붙인다.
   알림 클릭 시 해당 채널로 이동하는 것도 아직 없다.

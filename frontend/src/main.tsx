@@ -1,7 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { App } from './App'
-import { installExternalLinkHandler } from './lib/desktop'
+import { checkForUpdate, installExternalLinkHandler } from './lib/desktop'
 import './styles/index.css'
 
 async function bootstrap() {
@@ -14,6 +14,7 @@ async function bootstrap() {
 
   // 데스크탑 셸에서만 동작한다. 브라우저에서는 빈 함수다.
   installExternalLinkHandler()
+  checkForUpdate()
 
   const container = document.getElementById('root')
   if (!container) throw new Error('#root 엘리먼트를 찾을 수 없습니다.')

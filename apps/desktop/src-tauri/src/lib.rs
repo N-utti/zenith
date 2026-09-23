@@ -1,3 +1,50 @@
+use std::{sync::Mutex, time::Duration};
+use tauri::Manager;
+use tauri_plugin_updater::{Update, UpdaterExt};
+
+/// `check_update` 가 찾아 둔 새 버전. 사용자가 설치를 고르면 `install_update` 가 꺼내 쓴다.
+struct Pending(Mutex<Option<Update>>);
+
+/// 사내 서버의 매니페스트(`{서버}/desktop/latest.json`)를 보고 새 버전 번호를 돌려준다. 없으면 null.
+///
+/// 서버 주소는 웹앱이 넘긴다. 현장에서 바꾼 주소(`frontend/src/lib/serverOrigin.ts`)를
+/// 셸이 따로 알 방법이 없어서다. 주소가 무엇이든 설치본은 `tauri.conf.json` 의 pubkey 로
+/// 서명을 검증한 뒤에만 깔리고, 예전 버전으로 되돌리는 설치는 `.msi` 가 거부한다(allowDowngrades).
+#[tauri::command]
+async fn check_update(
+    app: tauri::AppHandle,
+    pending: tauri::State<'_, Pending>,
+    origin: String,
+) -> Result<Option<String>, String> {
+    let manifest = format!("{}/desktop/latest.json", origin.trim_end_matches('/'));
+    let url = tauri::Url::parse(&manifest).map_err(|e| e.to_string())?;
+    let update = app
+        .updater_builder()
+        .endpoints(vec![url])
+        .and_then(|b| b.timeout(Duration::from_secs(120)).build())
+        .map_err(|e| e.to_string())?
+        .check()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let version = update.as_ref().map(|u| u.version.clone());
+    *pending.0.lock().unwrap() = update;
+    Ok(version)
+}
+
+/// 찾아 둔 새 버전을 받아 설치 프로그램(passive)을 띄운다. Windows 에서는 여기서 앱이 종료되고
+/// 설치가 끝나면 다시 뜬다. 관리자 확인(UAC)을 거절하면 설치 없이 꺼진 채로 남는다.
+#[tauri::command]
+async fn install_update(pending: tauri::State<'_, Pending>) -> Result<(), String> {
+    let Some(update) = pending.0.lock().unwrap().take() else {
+        return Ok(());
+    };
+    update
+        .download_and_install(|_, _| {}, || {})
+        .await
+        .map_err(|e| e.to_string())
+}
+
 /// 데스크탑 셸의 진입점.
 ///
 /// 셸은 화면을 띄우는 일만 한다. 업무 로직은 전부 웹앱(`frontend/`)에 있고,
@@ -11,6 +58,13 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         // 창을 보고 있지 않을 때 새 채팅을 Windows 토스트로 띄운다.
         .plugin(tauri_plugin_notification::init())
+        // 자동 업데이트. 웹앱이 켜질 때 check_update 를 부르고, 사용자가 고르면 install_update.
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .setup(|app| {
+            app.manage(Pending(Mutex::new(None)));
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![check_update, install_update])
         .run(tauri::generate_context!())
         .expect("제니스 데스크탑 셸을 시작하지 못했습니다");
 }
