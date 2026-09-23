@@ -6,7 +6,15 @@ import { DEMO_PASSWORD } from './accounts'
 import { createAccount, emailTaken, findAccount, listAccounts, patchAccount } from './adminDb'
 import { badCursor, listAudit, push as recordAudit } from './auditDb'
 import { EMAIL_PATTERN, type UserCreate, type UserPatch } from '@/features/admin/types'
-import { clearMockSession, MOCK_TEAM_LIST, MOCK_USERS, setMockSession, userFromCookie } from './db'
+import {
+  clearMockSession,
+  createTeam,
+  MOCK_TEAM_LIST,
+  renameTeam,
+  MOCK_USERS,
+  setMockSession,
+  userFromCookie,
+} from './db'
 import {
   AI_MODELS,
   answer,
@@ -177,6 +185,15 @@ const validationError = (detail: string) =>
 /** 서버 `_require_team` 과 같은 판정. 없는 팀이면 422 라 목도 같이 막아야 한다. */
 const unknownTeam = (teamId: string | null | undefined) =>
   typeof teamId === 'string' && !MOCK_TEAM_LIST.some((team) => team.id === teamId)
+
+/** 서버 `TeamIn.name`: 앞뒤 공백을 다듬고 1~100자. 어긋나면 `null`. */
+const teamName = (body: { name?: unknown } | null) => {
+  const name = typeof body?.name === 'string' ? body.name.trim() : ''
+  return name && name.length <= 100 ? name : null
+}
+
+const teamConflict = () =>
+  HttpResponse.json({ detail: '같은 이름의 팀이 있습니다.', code: 'CONFLICT' }, { status: 409 })
 
 /** 본문이 JSON 이 아니면 500 대신 422 로 떨어뜨린다. 백엔드도 422 다. */
 async function readJson<T>(request: Request): Promise<T | null> {
@@ -688,6 +705,51 @@ export const handlers = [
     '/api/admin/teams',
     authed((user) => (user.role === 'exec' ? HttpResponse.json(MOCK_TEAM_LIST) : forbidden())),
   ),
+
+  http.post('/api/admin/teams', async ({ request }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    if (user.role !== 'exec') return forbidden()
+    await delay(300)
+    const name = teamName(await readJson<{ name?: unknown }>(request))
+    if (!name) return validationError('팀 이름을 입력하세요.')
+    if (MOCK_TEAM_LIST.some((team) => team.name === name)) return teamConflict()
+    const created = createTeam(name)
+    recordAudit({
+      kind: 'admin.team_created',
+      actor_id: user.id,
+      target_id: created.id,
+      ip: '127.0.0.1',
+      user_agent: navigator.userAgent,
+      detail: { name },
+    })
+    return HttpResponse.json(created, { status: 201 })
+  }),
+
+  http.patch('/api/admin/teams/:teamId', async ({ request, params }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    if (user.role !== 'exec') return forbidden()
+    const team = MOCK_TEAM_LIST.find((t) => t.id === params.teamId)
+    if (!team) return notFound('없는 팀입니다.')
+    await delay(300)
+    const name = teamName(await readJson<{ name?: unknown }>(request))
+    if (!name) return validationError('팀 이름을 입력하세요.')
+    // 서버처럼 같은 이름은 감사 줄 없이 그대로 돌려준다.
+    if (name === team.name) return HttpResponse.json(team)
+    if (MOCK_TEAM_LIST.some((t) => t.name === name)) return teamConflict()
+    const before = team.name
+    renameTeam(team, name)
+    recordAudit({
+      kind: 'admin.team_updated',
+      actor_id: user.id,
+      target_id: team.id,
+      ip: '127.0.0.1',
+      user_agent: navigator.userAgent,
+      detail: { before, after: name },
+    })
+    return HttpResponse.json(team)
+  }),
 
   // ── 관리자 · 계정 (04 §9, 임원) ──────────────────
   http.get(

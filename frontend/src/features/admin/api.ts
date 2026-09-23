@@ -41,6 +41,31 @@ export function useTeams() {
   })
 }
 
+/**
+ * 팀 만들기(`id` 없음)와 이름 바꾸기(`id` 있음). 본문이 `{name}` 하나로 같다(04 §9 `TeamIn`).
+ *
+ * 이름을 바꾸면 소속 계정은 그대로고 이름만 따라간다. 프로필·전사 근태·휴가 목록이 줄마다
+ * 옛 팀 이름을 들고 있으니 같이 다시 부른다. 그대로 두면 월 리포트 xlsx 에도 옛 이름이 찍힌다.
+ */
+export function useSaveTeam() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, name }: { id?: string; name: string }) =>
+      api<Team>(id ? `/admin/teams/${id}` : '/admin/teams', {
+        method: id ? 'PATCH' : 'POST',
+        body: JSON.stringify({ name }),
+      }),
+    onSuccess: (_data, { id }) => {
+      void qc.invalidateQueries({ queryKey: adminKeys.teams })
+      void qc.invalidateQueries({ queryKey: adminKeys.allAudit })
+      if (!id) return
+      for (const queryKey of [meQueryKey, ['attendance'], ['leaves']]) {
+        void qc.invalidateQueries({ queryKey })
+      }
+    },
+  })
+}
+
 export function useCreateUser() {
   const qc = useQueryClient()
   return useMutation({

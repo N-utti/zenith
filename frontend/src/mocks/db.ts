@@ -21,6 +21,24 @@ export const MOCK_TEAM_LIST: Team[] = Object.values(MOCK_TEAMS).sort((a, b) =>
   a.name.localeCompare(b.name, 'ko'),
 )
 
+const sortTeams = () => MOCK_TEAM_LIST.sort((a, b) => a.name.localeCompare(b.name, 'ko'))
+
+export function createTeam(name: string): Team {
+  const team = { id: crypto.randomUUID(), name }
+  MOCK_TEAM_LIST.push(team)
+  sortTeams()
+  return team
+}
+
+/**
+ * 객체를 제자리에서 고친다. `MOCK_USERS` 의 `team` 이 같은 객체를 가리키므로 `GET /me` 의 팀
+ * 이름도 같이 바뀐다(서버에서 계정은 id 로 팀을 물고 있는 것과 같다).
+ */
+export function renameTeam(team: Team, name: string) {
+  team.name = name
+  sortTeams()
+}
+
 /**
  * 서버 `GET /me` 와 같은 모양(04 §1 + team). 명단은 users.json. 개발 채팅 서버(scripts/chat.js)도 같은 파일을 읽는다.
  * 조직도에 팀장 직급이 없어 lead 는 두지 않는다(사원·임원뿐). 아바타 색은 서버가 주지 않는다. lib/avatar 가 id 로 만든다.
