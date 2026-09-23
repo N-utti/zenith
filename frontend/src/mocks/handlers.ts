@@ -7,6 +7,11 @@ import { createAccount, emailTaken, findAccount, listAccounts, patchAccount } fr
 import { badCursor, listAudit, push as recordAudit } from './auditDb'
 import { EMAIL_PATTERN, type UserCreate, type UserPatch } from '@/features/admin/types'
 import {
+  START_PAGES,
+  type Preferences,
+  type PreferencesPatch,
+} from '@/features/settings/preferences'
+import {
   clearMockSession,
   createTeam,
   MOCK_TEAM_LIST,
@@ -186,6 +191,27 @@ const validationError = (detail: string) =>
 const unknownTeam = (teamId: string | null | undefined) =>
   typeof teamId === 'string' && !MOCK_TEAM_LIST.some((team) => team.id === teamId)
 
+/** 사람마다 한 벌. 없으면 서버 기본값(전부 켜짐, 홈)으로 만든다. */
+const PREFERENCES = new Map<string, Preferences>()
+const preferencesOf = (userId: string) => {
+  let prefs = PREFERENCES.get(userId)
+  if (!prefs) {
+    prefs = {
+      notifications: {
+        mention: true,
+        comment: true,
+        reply: true,
+        post: true,
+        attendance: true,
+        approval: true,
+      },
+      start_page: '/',
+    }
+    PREFERENCES.set(userId, prefs)
+  }
+  return prefs
+}
+
 /** 서버 `TeamIn.name`: 앞뒤 공백을 다듬고 1~100자. 어긋나면 `null`. */
 const teamName = (body: { name?: unknown } | null) => {
   const name = typeof body?.name === 'string' ? body.name.trim() : ''
@@ -285,6 +311,32 @@ export const handlers = [
     '/api/me',
     authed((user) => HttpResponse.json(user)),
   ),
+
+  // 04 밖 환경설정(backend/README 17). 서버처럼 준 것만 덮어쓰고 전체를 돌려준다. 모르는 키·값은 422.
+  // ponytail: 목의 알림 생성은 이 설정을 보지 않는다. 끄기가 실제로 먹는지는 실서버에서 본다.
+  http.get(
+    '/api/me/preferences',
+    authed((user) => HttpResponse.json(preferencesOf(user.id))),
+  ),
+
+  http.patch('/api/me/preferences', async ({ request }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    const patch = await readJson<PreferencesPatch>(request)
+    if (!patch) return validationError('본문이 올바르지 않습니다.')
+    const prefs = preferencesOf(user.id)
+    const kinds = Object.keys(prefs.notifications)
+    const bad =
+      Object.keys(patch).some((key) => key !== 'notifications' && key !== 'start_page') ||
+      Object.entries(patch.notifications ?? {}).some(
+        ([kind, on]) => !kinds.includes(kind) || typeof on !== 'boolean',
+      ) ||
+      (patch.start_page != null && !START_PAGES.some((page) => page.value === patch.start_page))
+    if (bad) return validationError('알 수 없는 설정입니다.')
+    Object.assign(prefs.notifications, patch.notifications)
+    if (patch.start_page) prefs.start_page = patch.start_page
+    return HttpResponse.json(prefs)
+  }),
 
   http.post('/api/auth/logout', () => {
     clearMockSession()

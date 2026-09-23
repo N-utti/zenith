@@ -7,6 +7,7 @@ import { Spinner } from '@/components/ui/Spinner'
 import { ZenithMark } from '@/components/ui/ZenithMark'
 import { ApiError } from '@/lib/api'
 import { DEMO_ACCOUNTS, MSW_ENABLED } from '@/mocks/accounts'
+import { fetchPreferences } from '@/features/settings/preferences'
 import { useAuth } from './AuthContext'
 
 export function LoginPage() {
@@ -18,9 +19,14 @@ export function LoginPage() {
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
 
-  if (status === 'authenticated') return <Navigate to="/" replace />
+  // 이미 로그인한 채 이 주소로 온 경우만. 방금 제출한 로그인은 `login()` 이 프로필을 채우는 순간
+  // 여기가 먼저 홈으로 보내 버려서, 시작 화면을 고르는 `submit` 이 끝날 때까지 비켜 둔다.
+  if (status === 'authenticated' && !pending) return <Navigate to="/" replace />
 
-  const from = (location.state as { from?: string } | null)?.from ?? '/'
+  // 보호된 주소로 들어오다 튕긴 거면 그 자리로 돌려보낸다. 그냥 로그인했을 때만 시작 화면을 쓴다.
+  // 주소창에 도메인만 치고 들어오면 `RequireAuth` 가 `/` 를 실어 보낸다. 그건 "그냥 로그인" 이다.
+  const state = (location.state as { from?: string } | null)?.from
+  const from = state && state !== '/' ? state : undefined
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
@@ -28,10 +34,13 @@ export function LoginPage() {
     setPending(true)
     try {
       await login(email, password)
-      await navigate(from, { replace: true })
+      // 설정을 못 읽어도 로그인은 된 것이다. 홈으로 보낸다.
+      const to = from ?? (await fetchPreferences().catch(() => null))?.start_page ?? '/'
+      await navigate(to, { replace: true })
     } catch (err) {
       setError(err instanceof ApiError ? err.message : '로그인 중 오류가 발생했습니다.')
-    } finally {
+      // 성공했을 때는 풀지 않는다. 라우터는 주소 이동을 transition 으로 늦게 그리는데, 그 사이에
+      // 이게 먼저 풀리면 위의 `<Navigate to="/">` 가 이동을 덮어써서 늘 홈으로 간다.
       setPending(false)
     }
   }
