@@ -84,15 +84,15 @@ function PostTable({ boardId, badge }: { boardId: string; badge: string }) {
           <TableEmpty colSpan={4}>아직 글이 없습니다. 첫 글을 올려 보세요.</TableEmpty>
         ) : (
           data.items.map((post) => (
-            // TR 의 muted 는 안 준다. MaskedRow 가 이미 제목 칸을 55%로 흐리므로, 여기서까지
-            // 행 전체를 흐리면 두 번 겹쳐 약 30%가 된다(12 §7은 55% 한 번).
-            <TR key={post.id}>
+            // 흐림은 행(TR muted) 한 번만. MaskedRow 도 55%를 걸어 겹치면 약 30%가 되므로
+            // 제목 칸 쪽은 opacity-100 으로 되돌린다(12 §7: 권한 밖 행 55% 한 번).
+            <TR key={post.id} muted={post.masked}>
               <TD>
                 {/* 마스킹된 행은 링크가 아니다. 클릭해도 갈 곳이 없어야 한다. */}
                 <MaskedRow
                   masked={post.masked}
                   to={post.masked ? undefined : `/board/${boardId}/${post.id}`}
-                  className="flex items-center gap-1.5 rounded-md"
+                  className="flex items-center gap-1.5 rounded-md opacity-100"
                 >
                   {post.pinned && <Pin className="text-accent size-3.5 shrink-0" />}
                   <span className={post.masked ? 'text-subtle' : 'text-fg font-medium'}>
