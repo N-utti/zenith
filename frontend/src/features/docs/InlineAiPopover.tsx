@@ -215,8 +215,15 @@ export function InlineAiPopover({ editor, docId }: { editor: Editor; docId: stri
       ref={ref}
       role="dialog"
       aria-label="문서 안 AI"
-      style={{ top: pos.top, left: pos.left, width: 420 }}
-      className="border-line bg-surface fixed z-50 overflow-hidden rounded-xl border shadow-2xl"
+      // 높이는 초안 길이에 따라 320px 를 넘는다(템플릿 회의록 등). 화면 아래 끝까지만 두고 안에서
+      // 굴린다. 안 그러면 삽입 버튼이 화면 밖으로 밀려 누를 수 없다.
+      style={{
+        top: pos.top,
+        left: pos.left,
+        width: 420,
+        maxHeight: `calc(100dvh - ${pos.top + 12}px)`,
+      }}
+      className="border-line bg-surface fixed z-50 overflow-y-auto rounded-xl border shadow-2xl"
     >
       <div className="border-line flex items-center gap-2.5 border-b px-4 py-3">
         <span className="bg-accent-soft text-accent grid size-6 shrink-0 place-items-center rounded-md">

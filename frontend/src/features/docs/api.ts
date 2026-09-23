@@ -117,10 +117,11 @@ export function useCreateDoc() {
 export function useTouchDoc(docId: string) {
   const qc = useQueryClient()
   return useMutation({
+    // 제목을 비우면 서버가 422 로 막는다(minLength 1). 빈 제목은 기본 문구로 보낸다.
     mutationFn: (title?: string) =>
       api<DocSummary>(`/docs/${docId}`, {
         method: 'PATCH',
-        body: JSON.stringify({ title }),
+        body: JSON.stringify({ title: title === '' ? UNTITLED_DOC : title }),
       }),
     onSuccess: (doc) => {
       qc.setQueryData(docKeys.detail(docId), doc)
