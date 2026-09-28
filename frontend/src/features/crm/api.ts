@@ -148,12 +148,13 @@ export function useDeleteOrg() {
   })
 }
 
+/** 수정에서 `org_id` 가 바뀌면 서버가 이직으로 기록한다(15 FR-CRM-04). */
 export function useSaveContact() {
   const refetch = useRefetchCrm()
   return useMutation({
     mutationFn: ({ id, ...input }: ContactInput & { id?: string }) =>
       id
-        ? api<Contact>(`/crm/contacts/${id}`, json('PATCH', { ...input, org_id: undefined }))
+        ? api<Contact>(`/crm/contacts/${id}`, json('PATCH', input))
         : api<Contact>('/crm/contacts', json('POST', input)),
     onSuccess: refetch,
   })

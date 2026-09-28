@@ -72,6 +72,8 @@ export interface Contact {
   email: string
   memo: string
   erased: boolean
+  /** 이전 소속, 최근 것부터(FR-CRM-04). 옛 활동 기록은 기록 당시 기관에 그대로 있다. */
+  moves: { from: Person; moved_at: string }[]
 }
 
 export interface OrgDetail extends OrgListItem {

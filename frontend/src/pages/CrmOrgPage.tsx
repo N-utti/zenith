@@ -30,6 +30,7 @@ import {
   type Contact,
 } from '@/features/crm/types'
 import { ApiError } from '@/lib/api'
+import { formatDateTime, formatRelative } from '@/lib/datetime'
 
 /** 열려 있는 창. 한 번에 하나만 뜬다. */
 type Dialog =
@@ -165,6 +166,19 @@ export function CrmOrgPage() {
                       </a>
                     )}
                     {c.memo && <p className="text-subtle mt-1 whitespace-pre-wrap">{c.memo}</p>}
+                    {c.moves.map((m) => (
+                      <p key={m.moved_at} className="text-subtle mt-1 text-xs">
+                        이전 소속{' '}
+                        <Link to={`/crm/orgs/${m.from.id}`} className="hover:text-accent underline">
+                          {m.from.name}
+                        </Link>{' '}
+                        ·{' '}
+                        <time dateTime={m.moved_at} title={formatDateTime(m.moved_at)}>
+                          {formatRelative(m.moved_at)}
+                        </time>{' '}
+                        이직
+                      </p>
+                    ))}
                   </div>
                   {!c.erased && (
                     <div className="flex shrink-0 items-start">

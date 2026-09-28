@@ -230,7 +230,10 @@ export function OrgFormModal({ org, onClose }: { org?: OrgDetail; onClose: () =>
   )
 }
 
-/** 담당자 등록·수정. 소속 기관은 바꾸지 않는다(이직 처리는 따로). */
+/**
+ * 담당자 등록·수정. 수정에서 소속 기관을 바꾸면 이직이다(15 FR-CRM-04) — 서버가 이전 소속을
+ * 이력으로 남기고, 옛 활동 기록은 기록 당시 기관에 그대로 둔다.
+ */
 export function ContactFormModal({
   orgId,
   contact,
@@ -242,6 +245,11 @@ export function ContactFormModal({
 }) {
   const toast = useToast()
   const save = useSaveContact()
+  // 기관은 수십 곳이라 선택 상자로 충분하다. 등록은 지금 보고 있는 기관에 붙으니 수정 때만 쓴다.
+  const orgs = useOrgs({ q: '', type: '', owner: '', staleDays: 0 }, !!contact)
+  const orgOptions = (orgs.data?.items ?? []).map((o) => ({ value: o.id, label: o.name }))
+  const [toOrg, setToOrg] = useState(orgId)
+  const moving = toOrg !== orgId
   const [form, setForm] = useState({
     name: contact?.name ?? '',
     title: contact?.title ?? '',
@@ -255,10 +263,14 @@ export function ContactFormModal({
   const submit = () => {
     setError(null)
     save.mutate(
-      { id: contact?.id, org_id: orgId, ...form },
+      { id: contact?.id, org_id: toOrg, ...form },
       {
         onSuccess: () => {
-          toast.success('저장했습니다.')
+          toast.success(
+            moving
+              ? `${orgOptions.find((o) => o.value === toOrg)?.label ?? '다른 기관'}으로 옮겼습니다.`
+              : '저장했습니다.',
+          )
           onClose()
         },
         onError: (err) => setError(errorText(err, '저장하지 못했습니다.')),
@@ -291,6 +303,27 @@ export function ContactFormModal({
       onSubmit={submit}
     >
       {text('name', '이름')}
+      {contact && (
+        <Field
+          label="소속 기관"
+          hint={
+            moving
+              ? '이 기관 담당자 목록에서 빠지고 이전 소속은 이력으로 남습니다. 지난 활동 기록은 이 기관에 그대로 있습니다.'
+              : '이직했으면 새 기관으로 바꿔 주세요.'
+          }
+        >
+          {(slot) => (
+            <Select
+              {...slot}
+              value={toOrg}
+              options={orgOptions}
+              // 목록이 오기 전에는 지금 기관이 선택지에 없어 빈칸으로 보인다. 잠가 둔다.
+              disabled={orgs.isPending}
+              onChange={(e) => setToOrg(e.target.value)}
+            />
+          )}
+        </Field>
+      )}
       {text('title', '부서·직함')}
       <div className="grid gap-4 sm:grid-cols-2">
         {text('phone', '전화', 'tel')}
@@ -354,9 +387,15 @@ export function ActivityFormModal({
   ]
 
   // 삭제 처리된 담당자는 새로 고를 수 없다. 이미 기록에 있던 사람은 칩으로 남겨 뺄 수 있게 한다.
-  const contactOptions = org.contacts
-    .filter((c) => !c.erased || contactIds.includes(c.id))
-    .map((c) => ({ id: c.id, name: contactName(c) }))
+  // 그사이 다른 기관으로 옮긴 참석자도 이 기관 명단에는 없으니 기록에서 가져와 붙인다.
+  const contactOptions = [
+    ...org.contacts
+      .filter((c) => !c.erased || contactIds.includes(c.id))
+      .map((c) => ({ id: c.id, name: contactName(c) })),
+    ...(activity?.contacts
+      .filter((c) => !org.contacts.some((o) => o.id === c.id))
+      .map((c) => ({ id: c.id, name: contactName(c) })) ?? []),
+  ]
   // 퇴사 등으로 명단에서 빠진 기존 참석자도 칩으로 남겨야 뺄 수 있다.
   const userOptions = [
     ...staff,
