@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router'
 import { LogOut, Settings } from 'lucide-react'
 import { Avatar } from '@/components/ui/Avatar'
 import { Badge } from '@/components/ui/Badge'
+import { useToast } from '@/components/ui/ToastContext'
 import { useAuth, useCurrentUser } from '@/features/auth/AuthContext'
 import { hueOf } from '@/lib/avatar'
 import { ROLE_LABEL } from '@/types'
@@ -10,6 +11,7 @@ import { ROLE_LABEL } from '@/types'
 export function UserMenu() {
   const user = useCurrentUser()
   const { logout } = useAuth()
+  const toast = useToast()
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -79,7 +81,10 @@ export function UserMenu() {
             role="menuitem"
             onClick={() => {
               setOpen(false)
-              void logout()
+              // 네트워크 오류면 서버 세션이 살아 있다. 조용히 넘기면 로그아웃한 줄 알고 자리를 뜬다.
+              logout().catch(() =>
+                toast.error('로그아웃하지 못했습니다. 네트워크를 확인하고 다시 시도하세요.'),
+              )
             }}
             className="text-danger hover:bg-danger/10 flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm"
           >

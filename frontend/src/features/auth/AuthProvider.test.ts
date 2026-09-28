@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, expect, test, vi } from 'vitest'
 import { appendMessage, getThread } from '@/features/ai/store'
 import { getDraft, setDraft } from '@/features/chat/drafts'
+import { docCacheUsable } from '@/features/docs/localCache'
 import { AuthContext, type AuthValue } from './AuthContext'
 import { AuthProvider } from './AuthProvider'
 
@@ -166,6 +167,66 @@ test('로그인은 됐는데 `/me` 가 실패해도 다른 탭에 알린다', as
   await act(() => expect(view.auth!.login('b@zenith.local', 'pw')).rejects.toThrow('network'))
   expect(heard).toEqual([{ userId: '' }])
   otherTab.close()
+  act(() => root.unmount())
+})
+
+/** 문서 사본 하나가 있는 브라우저. `hold` 가 풀릴 때까지 목록 조회가 끝나지 않는다. */
+function stubDocCache(hold: Promise<void> = Promise.resolve()) {
+  const deleted: string[] = []
+  vi.stubGlobal('indexedDB', {
+    databases: () => hold.then(() => [{ name: 'zenith.doc.a' }]),
+    deleteDatabase: (name: string) => deleted.push(name),
+  })
+  return deleted
+}
+
+test('앞사람 사본은 화면이 뜨기 전에 지우고, 로그아웃은 지우지 않는다', async () => {
+  let release = () => {}
+  const deleted = stubDocCache(new Promise((resolve) => (release = resolve)))
+  localStorage.setItem('zenith.docCacheOwner', 'u1') // 앞사람. 쿠키는 u2(`/me` 목)
+  const { view, root, rendered } = mount()
+  await rendered
+  // 지우기가 안 끝났으면 아직 누구로도 들어가지 않는다. 문서 화면이 앞사람 사본을 열 틈이 없다.
+  await new Promise((resolve) => setTimeout(resolve, 20))
+  expect(view.auth?.status).toBe('loading')
+
+  release()
+  await vi.waitFor(() => expect(view.auth?.status).toBe('authenticated'))
+  expect(deleted).toEqual(['zenith.doc.a'])
+  expect(localStorage.getItem('zenith.docCacheOwner')).toBe('u2')
+
+  // 못 올린 오프라인 편집이 사라지므로 로그아웃에서는 지우지 않는다.
+  await act(() => view.auth!.logout())
+  expect(deleted).toEqual(['zenith.doc.a'])
+  act(() => root.unmount())
+})
+
+test('로그인은 됐는데 `/me` 가 실패하면 사본을 지우고 주인도 비운다', async () => {
+  localStorage.setItem('zenith.docCacheOwner', 'u2')
+  const deleted = stubDocCache()
+  const { view, root, rendered } = mount()
+  await rendered
+  await vi.waitFor(() => expect(view.auth?.status).toBe('authenticated'))
+  expect(deleted).toEqual([]) // 같은 사람(u2)이라 부팅 때는 남겼다
+
+  me.answer = () => Promise.reject(new Error('network'))
+  await act(() => expect(view.auth!.login('b@zenith.local', 'pw')).rejects.toThrow('network'))
+  expect(deleted).toEqual(['zenith.doc.a'])
+  expect(localStorage.getItem('zenith.docCacheOwner')).toBeNull()
+  act(() => root.unmount())
+})
+
+test('부팅 때 앞사람 사본을 못 지워도 들어가고, 이번 세션은 사본을 쓰지 않는다', async () => {
+  vi.stubGlobal('indexedDB', {
+    databases: () => Promise.reject(new Error('blocked')),
+    deleteDatabase: () => {},
+  })
+  localStorage.setItem('zenith.docCacheOwner', 'u1') // 앞사람. 쿠키는 u2
+  const { view, root, rendered } = mount()
+  await rendered
+  await vi.waitFor(() => expect(view.auth?.status).toBe('authenticated'))
+  expect(docCacheUsable()).toBe(false)
+  expect(localStorage.getItem('zenith.docCacheOwner')).toBe('u1')
   act(() => root.unmount())
 })
 

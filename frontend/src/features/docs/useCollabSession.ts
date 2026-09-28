@@ -4,12 +4,18 @@ import { IndexeddbPersistence } from 'y-indexeddb'
 import { WebsocketProvider } from 'y-websocket'
 import { api } from '@/lib/api'
 import { wsUrl } from '@/lib/serverOrigin'
+import { docCacheName, docCacheUsable } from './localCache'
 
 export interface CollabSession {
   doc: Y.Doc
   provider: WebsocketProvider
   /** 이 문서를 처음 여는지. 초안을 심을지 판단하는 데 쓴다. */
   isEmpty: boolean
+  /**
+   * 오프라인 편집이 브라우저 사본에 남는지. 앞사람 사본을 못 지운 세션은 사본 없이 열어(`localCache`)
+   * 편집이 이 화면의 메모리에만 있다. 세션을 열 때 정해지고, 나중에 바뀌지 않는다.
+   */
+  persistent: boolean
 }
 
 /**
@@ -30,7 +36,7 @@ const RELAY_WAIT_MS = 1200
  * 본문의 원천은 서버 REST가 아니라 Y.Doc이다. 세 경로로 동기화된다.
  *   - WebSocket 릴레이  : 다른 사람 / 다른 브라우저
  *   - BroadcastChannel  : 같은 브라우저의 다른 탭 (y-websocket 내장)
- *   - IndexedDB         : 오프라인 영속
+ *   - IndexedDB         : 오프라인 영속. 사람이 바뀌면 지우고, 못 지웠으면 쓰지 않는다(`localCache`)
  *
  * 세션은 docId마다 새로 만들어야 하므로 호출하는 컴포넌트를 docId로 key 한다.
  */
@@ -48,9 +54,12 @@ export function useCollabSession(docId: string): CollabSession | null {
     // 살린 뒤 한 번 다시 붙인다. 살아나지 않으면 진짜 로그아웃. 화면은 오프라인 편집으로 남는다.
     provider.on('closed', (event) => {
       if (event.code !== 4401) return
-      void api('/me').then(() => provider.connect(), () => undefined)
+      void api('/me').then(
+        () => provider.connect(),
+        () => undefined,
+      )
     })
-    const persistence = new IndexeddbPersistence(`zenith.doc.${docId}`, doc)
+    const persistence = docCacheUsable() ? new IndexeddbPersistence(docCacheName(docId), doc) : null
 
     // StrictMode의 두 번째 마운트에서 이미 정리된 세션을 넘기지 않도록 막는다.
     let cancelled = false
@@ -65,23 +74,26 @@ export function useCollabSession(docId: string): CollabSession | null {
         doc,
         provider,
         isEmpty: doc.getXmlFragment('default').length === 0,
+        persistent: persistence !== null,
       })
     }
 
-    persistence.once('synced', () => {
+    const afterLocal = () => {
       if (cancelled) return
       // 로컬만 보고 "빈 문서"라 판단하면, 릴레이에 이미 내용이 있는 문서에
       // 초안을 덧씌운다. 서버 상태까지 받아 본 뒤에 판단한다.
       if (provider.synced) return settle()
       provider.once('sync', settle)
       relayTimeout = window.setTimeout(settle, RELAY_WAIT_MS)
-    })
+    }
+    if (persistence) persistence.once('synced', afterLocal)
+    else afterLocal()
 
     return () => {
       cancelled = true
       window.clearTimeout(relayTimeout)
       provider.destroy()
-      void persistence.destroy()
+      void persistence?.destroy()
       doc.destroy()
     }
   }, [docId])

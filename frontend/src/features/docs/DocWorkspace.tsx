@@ -49,7 +49,10 @@ function PresenceBar({ session }: { session: CollabSession }) {
         className="text-warning flex items-center gap-1.5 text-xs"
       >
         <WifiOff className="size-3.5" />
-        오프라인 편집 중. 이 브라우저에만 저장됩니다
+        {/* 사본 없이 연 세션은 편집이 이 화면의 메모리에만 있다. 다른 문서로 옮겨도 사라진다. */}
+        {session.persistent
+          ? '오프라인 편집 중. 이 브라우저에만 저장됩니다'
+          : '오프라인 편집 중. 이 문서를 닫거나 새로고침하면 사라집니다'}
       </p>
     )
   }
