@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { Mail, Pencil, Phone, Plus, Trash2 } from 'lucide-react'
-import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card, CardEmpty, CardHeader } from '@/components/ui/Card'
 import { Field } from '@/components/ui/Field'
@@ -12,23 +11,25 @@ import { Spinner } from '@/components/ui/Spinner'
 import { Textarea } from '@/components/ui/Textarea'
 import { useToast } from '@/components/ui/ToastContext'
 import { useCurrentUser } from '@/features/auth/AuthContext'
+import { ActivityCard, iconButton } from '@/features/crm/ActivityCard'
+import { useDeals, useDeleteOrg, useEraseContact, useOrg } from '@/features/crm/api'
 import {
-  useActivities,
-  useDeleteActivity,
-  useDeleteOrg,
-  useEraseContact,
-  useOrg,
-} from '@/features/crm/api'
-import { ActivityFormModal, ContactFormModal, OrgFormModal } from '@/features/crm/CrmForms'
+  ActivityFormModal,
+  ContactFormModal,
+  DealFormModal,
+  OrgFormModal,
+} from '@/features/crm/CrmForms'
+import { DealStatusBadge, NextAction } from '@/features/crm/DealBits'
 import {
-  ACTIVITY_KIND_LABEL,
+  DEAL_KIND_LABEL,
   ORG_TYPE_LABEL,
   contactName,
+  formatEok,
+  stageLabel,
   type Activity,
   type Contact,
 } from '@/features/crm/types'
 import { ApiError } from '@/lib/api'
-import { formatDateTime } from '@/lib/datetime'
 
 /** 열려 있는 창. 한 번에 하나만 뜬다. */
 type Dialog =
@@ -36,9 +37,7 @@ type Dialog =
   | { kind: 'delete' }
   | { kind: 'contact'; contact?: Contact }
   | { kind: 'activity'; activity?: Activity }
-
-const iconButton =
-  'text-subtle hover:bg-surface-hover hover:text-fg grid size-8 cursor-pointer place-items-center rounded-lg transition-colors'
+  | { kind: 'deal' }
 
 /** 기관 상세(15 CRM 모듈 설계서 §10). 담당자와 활동 타임라인을 한 화면에 둔다. */
 export function CrmOrgPage() {
@@ -47,9 +46,8 @@ export function CrmOrgPage() {
   const navigate = useNavigate()
   const toast = useToast()
   const org = useOrg(orgId)
-  const activities = useActivities(orgId)
+  const deals = useDeals({ orgId })
   const erase = useEraseContact()
-  const removeActivity = useDeleteActivity()
   const [dialog, setDialog] = useState<Dialog | null>(null)
   const close = () => setDialog(null)
   // 화면 편의일 뿐이다. 삭제·개인정보 삭제의 실제 차단은 서버 403 이다(15 §3).
@@ -209,74 +207,60 @@ export function CrmOrgPage() {
           )}
         </Card>
 
-        <Card className="lg:order-1">
-          <CardHeader title="활동" />
-          {activities.isPending && <SkeletonRows rows={3} />}
-          {activities.isError && (
-            <CardEmpty onRetry={activities.refetch}>활동 기록을 불러오지 못했습니다.</CardEmpty>
-          )}
-          {activities.data?.items.length === 0 && (
-            <CardEmpty
-              action={
-                <Button size="sm" onClick={() => setDialog({ kind: 'activity' })}>
-                  첫 활동 기록
-                </Button>
-              }
-            >
-              아직 기록이 없습니다.
-            </CardEmpty>
-          )}
-          {activities.data && activities.data.items.length > 0 && (
-            <ol className="px-5 pb-4">
-              {activities.data.items.map((a) => (
-                <li key={a.id} className="border-line border-b py-3 last:border-b-0">
-                  {/* 좁은 폭에서는 줄을 바꾸되 날짜·이름 한가운데서 쪼개지지 않게 덩어리마다 nowrap. */}
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
-                    <Badge tone="accent">{ACTIVITY_KIND_LABEL[a.kind]}</Badge>
-                    <time dateTime={a.occurred_at} className="text-muted whitespace-nowrap">
-                      {formatDateTime(a.occurred_at)}
-                    </time>
-                    <span className="text-subtle whitespace-nowrap">· {a.author.name}</span>
-                    {a.can_edit && (
-                      <span className="ml-auto flex">
-                        <button
-                          type="button"
-                          aria-label={`${formatDateTime(a.occurred_at)} 활동 기록 수정`}
-                          className={iconButton}
-                          onClick={() => setDialog({ kind: 'activity', activity: a })}
-                        >
-                          <Pencil className="size-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          aria-label={`${formatDateTime(a.occurred_at)} 활동 기록 삭제`}
-                          className={iconButton}
-                          disabled={removeActivity.isPending}
-                          onClick={() => {
-                            if (!confirm('이 활동 기록을 지울까요?')) return
-                            removeActivity.mutate(a.id, {
-                              onSuccess: () => toast.success('지웠습니다.'),
-                              onError,
-                            })
-                          }}
-                        >
-                          <Trash2 className="size-3.5" />
-                        </button>
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-fg mt-1.5 text-sm whitespace-pre-wrap">{a.body}</p>
-                  {(a.contacts.length > 0 || a.users.length > 0) && (
-                    <p className="text-subtle mt-1.5 text-xs">
-                      참석:{' '}
-                      {[...a.contacts.map(contactName), ...a.users.map((u) => u.name)].join(', ')}
+        <div className="space-y-4 lg:order-1">
+          <Card>
+            <div className="flex items-center justify-between px-5 pt-4 pb-2">
+              <h2 className="text-fg text-sm font-semibold">
+                안건
+                {(deals.data?.items.length ?? 0) > 0 && (
+                  <span className="text-subtle ml-1.5 font-normal">{deals.data?.items.length}</span>
+                )}
+              </h2>
+              <button
+                type="button"
+                aria-label="안건 등록"
+                className={iconButton}
+                onClick={() => setDialog({ kind: 'deal' })}
+              >
+                <Plus className="size-4" />
+              </button>
+            </div>
+            {deals.isPending && <SkeletonRows rows={2} />}
+            {deals.isError && !deals.data && (
+              <CardEmpty onRetry={deals.refetch}>안건을 불러오지 못했습니다.</CardEmpty>
+            )}
+            {deals.data?.items.length === 0 && (
+              <CardEmpty>이 기관과 걸린 안건이 없습니다.</CardEmpty>
+            )}
+            {deals.data && deals.data.items.length > 0 && (
+              <ul className="px-5 pb-4">
+                {deals.data.items.map((d) => (
+                  <li key={d.id} className="border-line space-y-1 border-b py-3 last:border-b-0">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <Link
+                        to={`/crm/deals/${d.id}`}
+                        className="text-fg hover:text-accent text-sm font-medium hover:underline"
+                      >
+                        {d.name}
+                      </Link>
+                      <DealStatusBadge status={d.status} />
+                    </div>
+                    <p className="text-subtle text-xs">
+                      {DEAL_KIND_LABEL[d.kind]} · {stageLabel(d.kind, d.stage)}
+                      {d.amount_krw !== null && ` · ${formatEok(d.amount_krw)}`}
                     </p>
-                  )}
-                </li>
-              ))}
-            </ol>
-          )}
-        </Card>
+                    <NextAction deal={d} />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
+          <ActivityCard
+            target={{ orgId: o.id }}
+            onAdd={() => setDialog({ kind: 'activity' })}
+            onEdit={(activity) => setDialog({ kind: 'activity', activity })}
+          />
+        </div>
       </div>
 
       {dialog?.kind === 'org' && <OrgFormModal org={o} onClose={close} />}
@@ -286,6 +270,7 @@ export function CrmOrgPage() {
       {dialog?.kind === 'activity' && (
         <ActivityFormModal org={o} activity={dialog.activity} onClose={close} />
       )}
+      {dialog?.kind === 'deal' && <DealFormModal orgId={o.id} onClose={close} />}
       {dialog?.kind === 'delete' && (
         <DeleteOrgModal
           id={o.id}
