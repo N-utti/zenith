@@ -107,6 +107,8 @@ export interface Activity {
   kind: ActivityKind
   occurred_at: string
   org: Person | null
+  /** 안건에 건 기록이면 그 안건. 기관 타임라인과 안건 타임라인 양쪽에 뜬다(15 §4.2.2). */
+  deal: Person | null
   /** 외부 참석자. 삭제 처리된 담당자는 이름이 빈 문자열로 온다. */
   contacts: Person[]
   /** 사내 참석자. */
@@ -121,6 +123,8 @@ export interface ActivityInput {
   kind: ActivityKind
   occurred_at: string
   org_id: string
+  /** 안건은 그 기관의 안건만. 없으면 null. */
+  deal_id: string | null
   contact_ids: string[]
   user_ids: string[]
   body: string
@@ -128,3 +132,99 @@ export interface ActivityInput {
 
 /** 삭제된 담당자는 이름 대신 이 문구로 보인다. */
 export const contactName = (contact: { name: string }) => contact.name || '삭제된 담당자'
+
+// ── 안건 파이프라인 (15 §2.2 · §4.2.1 · §6) ───────────────────────────
+
+export type DealKind = 'fundraising' | 'investment'
+
+export const DEAL_KIND_LABEL: Record<DealKind, string> = {
+  fundraising: '출자 유치',
+  investment: '투자 안건',
+}
+
+export const DEAL_KINDS = Object.keys(DEAL_KIND_LABEL) as DealKind[]
+
+/**
+ * 종류별 단계(15 §4.2.1 기본안, B2 에서 두 팀 확인 대기). 서버도 같은 상수를 든다.
+ * 마지막 단계에 닿으면 성사(`won`)로 끝난다.
+ */
+export const DEAL_STAGES: Record<DealKind, { key: string; label: string }[]> = {
+  fundraising: [
+    { key: 'contact', label: '접촉' },
+    { key: 'proposal', label: '제안서 발송' },
+    { key: 'diligence', label: '실사' },
+    { key: 'committee', label: '내부 심의 대기' },
+    { key: 'committed', label: '출자 확약' },
+  ],
+  investment: [
+    { key: 'sourcing', label: '발굴' },
+    { key: 'screening', label: '예비 검토' },
+    { key: 'diligence', label: '실사' },
+    { key: 'committee', label: '투자심의' },
+    { key: 'closed', label: '투자 실행' },
+  ],
+}
+
+export const stageLabel = (kind: DealKind, stage: string) =>
+  DEAL_STAGES[kind].find((s) => s.key === stage)?.label ?? stage
+
+export type DealStatus = 'open' | 'won' | 'dropped'
+
+export const DEAL_STATUS_LABEL: Record<DealStatus, string> = {
+  open: '진행 중',
+  won: '성사',
+  dropped: '중단',
+}
+
+export const DEAL_NAME_MAX = 200
+
+export interface Deal {
+  id: string
+  kind: DealKind
+  name: string
+  org: Person
+  /** 사내 담당자. */
+  owner: Person | null
+  stage: string
+  /** 원 단위. 아직 모르면 null. */
+  amount_krw: number | null
+  target_date: string | null
+  next_action: string
+  next_action_due: string | null
+  status: DealStatus
+  /** 낙관적 잠금(15 NFR-CRM-02). 수정할 때 그대로 돌려보내고, 어긋나면 409. */
+  version: number
+}
+
+export interface DealEvent {
+  id: string
+  actor: Person
+  from_stage: string | null
+  to_stage: string
+  /** 단계 이동 말고 중단·재개도 이력에 남긴다. */
+  action: 'move' | 'drop' | 'reopen'
+  reason: string | null
+  created_at: string
+}
+
+export interface DealDetail extends Deal {
+  drop_reason: string | null
+  closed_at: string | null
+  created_at: string
+  events: DealEvent[]
+}
+
+export interface DealInput {
+  kind: DealKind
+  name: string
+  org_id: string
+  owner_id: string | null
+  amount_krw: number | null
+  target_date: string | null
+  next_action: string
+  next_action_due: string | null
+}
+
+/** 금액은 억 원으로 보인다. 인프라 안건은 수백~수천억이다. */
+const eok = new Intl.NumberFormat('ko-KR', { maximumFractionDigits: 1 })
+export const formatEok = (won: number) => `${eok.format(won / 1e8)}억`

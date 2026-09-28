@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react'
-import { Navigate, Route, Routes } from 'react-router'
+import { Route, Routes } from 'react-router'
 import { CRM_ENABLED } from '@/app/navigation'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { Spinner } from '@/components/ui/Spinner'
@@ -15,6 +15,8 @@ import { BoardPage } from '@/pages/BoardPage'
 import { BoardPostPage } from '@/pages/BoardPostPage'
 import { ChatSocketProvider } from '@/features/chat/ChatSocketProvider'
 import { ChatPage } from '@/pages/ChatPage'
+import { CrmBoardPage } from '@/pages/CrmBoardPage'
+import { CrmDealPage } from '@/pages/CrmDealPage'
 import { CrmOrgPage } from '@/pages/CrmOrgPage'
 import { CrmOrgsPage } from '@/pages/CrmOrgsPage'
 import { DocsPage } from '@/pages/DocsPage'
@@ -75,11 +77,11 @@ export function AppRoutes() {
             <Route path="approvals" element={<ApprovalsPage />} />
             <Route path="approvals/new" element={<ApprovalNewPage />} />
             <Route path="approvals/:approvalId" element={<ApprovalDetailPage />} />
-            {/* CRM 은 v1.1. 운영 빌드에서는 라우트째 빠진다(navigation.ts `CRM_ENABLED`).
-                `/crm` 자리는 안건 보드가 들어올 때까지 기관 목록으로 넘긴다. */}
+            {/* CRM 은 v1.1. 운영 빌드에서는 라우트째 빠진다(navigation.ts `CRM_ENABLED`). */}
             {CRM_ENABLED && (
               <>
-                <Route path="crm" element={<Navigate to="/crm/orgs" replace />} />
+                <Route path="crm" element={<CrmBoardPage />} />
+                <Route path="crm/deals/:dealId" element={<CrmDealPage />} />
                 <Route path="crm/orgs" element={<CrmOrgsPage />} />
                 <Route path="crm/orgs/:orgId" element={<CrmOrgPage />} />
               </>

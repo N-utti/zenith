@@ -109,18 +109,24 @@ import {
 import {
   createActivity,
   createContact,
+  createDeal,
   createOrg,
   deleteActivity,
   deleteOrg,
+  dropDeal,
   eraseContact,
+  getDeal,
   getOrg,
   listActivities,
+  listDeals,
   listOrgs,
+  reopenDeal,
   updateActivity,
   updateContact,
+  updateDeal,
   updateOrg,
 } from './crmDb'
-import type { ActivityInput, ContactInput, OrgInput } from '@/features/crm/types'
+import type { ActivityInput, ContactInput, DealInput, OrgInput } from '@/features/crm/types'
 import { readFile, saveFile } from './filesDb'
 import { closeMonth, getClosing, listClosings, reopenMonth } from './closingsDb'
 import { addHoliday, listHolidays, removeHoliday } from './holidaysDb'
@@ -1857,9 +1863,11 @@ data: ${JSON.stringify(data)}
   http.get(
     '/api/crm/activities',
     authed((user, request) => {
-      const orgId = new URL(request.url).searchParams.get('org_id')
-      if (!orgId) return validationError('org_id 가 필요합니다.')
-      const result = listActivities(user, orgId)
+      const params = new URL(request.url).searchParams
+      const orgId = params.get('org_id')
+      const dealId = params.get('deal_id')
+      if (!orgId && !dealId) return validationError('org_id 나 deal_id 가 필요합니다.')
+      const result = listActivities(user, orgId ? { orgId } : { dealId: dealId! })
       return 'error' in result
         ? approvalResponse(result)
         : HttpResponse.json({ items: result, next_cursor: null })
@@ -1887,5 +1895,55 @@ data: ${JSON.stringify(data)}
     await delay(300)
     const failure = deleteActivity(user, String(params.id))
     return failure ? approvalResponse(failure) : new HttpResponse(null, { status: 204 })
+  }),
+
+  // ── CRM 안건 파이프라인 (15 §9) ─────────────────────────────
+  http.get(
+    '/api/crm/deals',
+    authed((_, request) => {
+      const params = new URL(request.url).searchParams
+      return HttpResponse.json({
+        items: listDeals({
+          kind: params.get('kind') ?? '',
+          status: params.get('status') ?? '',
+          orgId: params.get('org_id') ?? '',
+        }),
+        next_cursor: null,
+      })
+    }),
+  ),
+  http.post('/api/crm/deals', async ({ request }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    const body = await readJson<DealInput>(request)
+    if (!body) return validationError('본문이 올바르지 않습니다.')
+    await delay(300)
+    return approvalResponse(createDeal(user, body), 201)
+  }),
+  http.get('/api/crm/deals/:id', ({ params }) => {
+    if (!authenticate()) return unauthorized()
+    return approvalResponse(getDeal(String(params.id)))
+  }),
+  http.patch('/api/crm/deals/:id', async ({ request, params }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    const body = await readJson<Parameters<typeof updateDeal>[2]>(request)
+    if (!body) return validationError('본문이 올바르지 않습니다.')
+    await delay(300)
+    return approvalResponse(updateDeal(user, String(params.id), body))
+  }),
+  http.post('/api/crm/deals/:id/drop', async ({ request, params }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    const body = (await readJson<{ reason?: unknown; version?: unknown }>(request)) ?? {}
+    await delay(300)
+    return approvalResponse(dropDeal(user, String(params.id), body))
+  }),
+  http.post('/api/crm/deals/:id/reopen', async ({ request, params }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    const body = (await readJson<{ version?: unknown }>(request)) ?? {}
+    await delay(300)
+    return approvalResponse(reopenDeal(user, String(params.id), body))
   }),
 ]
