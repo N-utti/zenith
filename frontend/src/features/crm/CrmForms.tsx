@@ -82,15 +82,18 @@ function FormModal({
   children: ReactNode
 }) {
   const formId = useId()
+  // 저장 중에는 닫지도 고치지도 못하게 한다. 요청이 둘로 이어지는 폼(담당자 수정의 새 기관 등록)은
+  // 도중에 닫으면 앞의 것만 서버에 남고, 도중에 고친 값은 저장되지 않은 채 «저장했습니다» 로 닫힌다.
+  const close = busy ? () => {} : onClose
   return (
     <Modal
       open
-      onClose={onClose}
+      onClose={close}
       title={title}
       description={description}
       footer={
         <>
-          <Button variant="secondary" size="sm" onClick={onClose}>
+          <Button variant="secondary" size="sm" onClick={close} disabled={busy}>
             취소
           </Button>
           <Button type="submit" form={formId} size="sm" disabled={!canSubmit || busy}>
@@ -107,7 +110,9 @@ function FormModal({
           if (canSubmit && !busy) onSubmit()
         }}
       >
-        {children}
+        <fieldset disabled={busy} className="min-w-0 space-y-4">
+          {children}
+        </fieldset>
         {error && (
           <p role="alert" className="text-danger text-sm">
             {error}
@@ -119,6 +124,9 @@ function FormModal({
 }
 
 const TYPE_OPTIONS = ORG_TYPES.map((value) => ({ value, label: ORG_TYPE_LABEL[value] }))
+
+/** 담당자 수정의 소속 기관 선택지 끝에 붙는 «새 기관 등록». 기관 id 와 겹치지 않는 값. */
+const NEW_ORG = '__new'
 
 /** 기관 등록·수정. `org` 가 없으면 등록이고, 저장하면 새 기관 상세로 간다. */
 export function OrgFormModal({ org, onClose }: { org?: OrgDetail; onClose: () => void }) {
@@ -231,7 +239,7 @@ export function OrgFormModal({ org, onClose }: { org?: OrgDetail; onClose: () =>
 }
 
 /**
- * 담당자 등록·수정. 수정에서 소속 기관을 바꾸면 이직이다(15 FR-CRM-04) — 서버가 이전 소속을
+ * 담당자 등록·수정. 수정에서 소속 기관을 바꾸면 이직이다(15 FR-CRM-04). 서버가 이전 소속을
  * 이력으로 남기고, 옛 활동 기록은 기록 당시 기관에 그대로 둔다.
  */
 export function ContactFormModal({
@@ -245,10 +253,20 @@ export function ContactFormModal({
 }) {
   const toast = useToast()
   const save = useSaveContact()
+  const createOrg = useCreateOrg()
   // 기관은 수십 곳이라 선택 상자로 충분하다. 등록은 지금 보고 있는 기관에 붙으니 수정 때만 쓴다.
   const orgs = useOrgs({ q: '', type: '', owner: '', staleDays: 0 }, !!contact)
-  const orgOptions = (orgs.data?.items ?? []).map((o) => ({ value: o.id, label: o.name }))
+  const orgOptions = [
+    ...(orgs.data?.items ?? []).map((o) => ({ value: o.id, label: o.name })),
+    { value: NEW_ORG, label: '+ 새 기관 등록' },
+  ]
   const [toOrg, setToOrg] = useState(orgId)
+  // 옮겨 갈 기관이 주소록에 없으면 이 창에서 바로 만든다. 창을 닫고 기관부터 등록하면 적던 게 날아간다.
+  const [newOrg, setNewOrg] = useState<{ name: string; org_type: OrgType | '' }>({
+    name: '',
+    org_type: '',
+  })
+  const creatingOrg = toOrg === NEW_ORG
   const moving = toOrg !== orgId
   const [form, setForm] = useState({
     name: contact?.name ?? '',
@@ -260,20 +278,45 @@ export function ContactFormModal({
   const [error, setError] = useState<string | null>(null)
   const set = (key: keyof typeof form) => (value: string) => setForm({ ...form, [key]: value })
 
-  const submit = () => {
-    setError(null)
+  /** `made` 는 이 저장 직전에 새로 등록한 기관. 저장이 실패해도 기관은 남았다는 걸 알려야 한다. */
+  const saveContact = (to: string, made?: { name: string }) =>
     save.mutate(
-      { id: contact?.id, ...form, org_id: contact && !moving ? undefined : toOrg },
+      { id: contact?.id, ...form, org_id: contact && to === orgId ? undefined : to },
       {
         onSuccess: () => {
           toast.success(
-            moving
-              ? `${orgOptions.find((o) => o.value === toOrg)?.label ?? '다른 기관'}(으)로 옮겼습니다.`
+            to !== orgId
+              ? `${made?.name ?? orgOptions.find((o) => o.value === to)?.label ?? '다른 기관'}(으)로 옮겼습니다.`
               : '저장했습니다.',
           )
           onClose()
         },
-        onError: (err) => setError(errorText(err, '저장하지 못했습니다.')),
+        onError: (err) => {
+          const why = errorText(err, '담당자를 저장하지 못했습니다.')
+          setError(made ? `기관 «${made.name}» 등록은 끝났습니다. ${why}` : why)
+        },
+      },
+    )
+
+  const submit = () => {
+    setError(null)
+    if (!creatingOrg) return saveContact(toOrg)
+    if (!newOrg.org_type) return
+    createOrg.mutate(
+      { name: newOrg.name.trim(), org_type: newOrg.org_type, memo: '', owner_ids: [] },
+      {
+        onSuccess: ({ org: made, duplicates }) => {
+          // 막지는 않는다(15 FR-CRM-01). 다만 있던 기관을 못 보고 또 만든 것일 수 있으니 알린다.
+          if (duplicates.length > 0) {
+            toast.info(
+              `이름이 같은 기관이 이미 있습니다: ${duplicates.map((d) => d.name).join(', ')}`,
+            )
+          }
+          // 기관은 생겼다. 담당자 저장이 실패해도 다시 누를 때 기관을 또 만들지 않게 선택을 옮겨 둔다.
+          setToOrg(made.id)
+          saveContact(made.id, made)
+        },
+        onError: (err) => setError(errorText(err, '기관을 등록하지 못했습니다.')),
       },
     )
   }
@@ -296,9 +339,12 @@ export function ContactFormModal({
     <FormModal
       title={contact ? '담당자 수정' : '담당자 추가'}
       description="회사 밖 사람의 개인정보입니다. 업무 연락에 필요한 만큼만 적어 주세요."
-      busy={save.isPending}
+      busy={save.isPending || createOrg.isPending}
       error={error}
-      canSubmit={form.name.trim().length > 0}
+      canSubmit={
+        form.name.trim().length > 0 &&
+        (!creatingOrg || (newOrg.name.trim().length > 0 && newOrg.org_type !== ''))
+      }
       onClose={onClose}
       onSubmit={submit}
     >
@@ -307,9 +353,11 @@ export function ContactFormModal({
         <Field
           label="소속 기관"
           hint={
-            moving
-              ? '이 기관 담당자 목록에서 빠지고 이전 소속은 이력으로 남습니다. 지난 활동 기록은 이 기관에 그대로 있습니다.'
-              : '이직했으면 새 기관으로 바꿔 주세요.'
+            creatingOrg
+              ? '저장하면 기관을 등록하고 그 기관으로 옮깁니다. 창구·메모는 기관 상세에서 채워 주세요.'
+              : moving
+                ? '이 기관 담당자 목록에서 빠지고 이전 소속은 이력으로 남습니다. 지난 활동 기록은 이 기관에 그대로 있습니다.'
+                : '이직했으면 새 기관으로 바꿔 주세요.'
           }
         >
           {(slot) => (
@@ -323,6 +371,32 @@ export function ContactFormModal({
             />
           )}
         </Field>
+      )}
+      {creatingOrg && (
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="새 기관 이름" required>
+            {(slot) => (
+              <Input
+                {...slot}
+                value={newOrg.name}
+                maxLength={ORG_NAME_MAX}
+                autoFocus
+                onChange={(e) => setNewOrg({ ...newOrg, name: e.target.value })}
+              />
+            )}
+          </Field>
+          <Field label="유형" required>
+            {(slot) => (
+              <Select
+                {...slot}
+                value={newOrg.org_type}
+                placeholder="유형 선택"
+                options={TYPE_OPTIONS}
+                onChange={(e) => setNewOrg({ ...newOrg, org_type: e.target.value as OrgType })}
+              />
+            )}
+          </Field>
+        </div>
       )}
       {text('title', '부서·직함')}
       <div className="grid gap-4 sm:grid-cols-2">
