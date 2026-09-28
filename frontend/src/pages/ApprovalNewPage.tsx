@@ -22,7 +22,7 @@ import { AttachmentList } from '@/features/approvals/AttachmentList'
 import type { ApprovalAttachment } from '@/features/approvals/types'
 import { MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES } from '@/features/chat/api'
 import { useMyArrangements } from '@/features/attendance/api'
-import { useColleagues } from '@/features/people/colleagues'
+import { byTier, useColleagues } from '@/features/people/colleagues'
 import { useCurrentUser } from '@/features/auth/AuthContext'
 import { ApiError } from '@/lib/api'
 import { hueOf } from '@/lib/avatar'
@@ -249,32 +249,49 @@ export function ApprovalNewPage() {
                 role="group"
                 aria-label="참조자"
                 aria-describedby={slot['aria-describedby']}
-                className="flex flex-wrap gap-1.5"
+                className="flex flex-col gap-2"
               >
                 {peoplePending && <Spinner />}
                 {!peoplePending && !peopleError && people.length === 0 && (
                   <p className="text-subtle text-sm">고를 수 있는 사람이 없습니다.</p>
                 )}
-                {people.map((each) => {
-                  const picked = referenceIds.includes(each.id)
-                  return (
-                    <button
-                      key={each.id}
-                      type="button"
-                      aria-pressed={picked}
-                      onClick={() => toggleReference(each.id)}
-                      className={cn(
-                        'flex cursor-pointer items-center gap-1.5 rounded-full border py-1 pr-2.5 pl-1 text-xs transition-colors',
-                        picked
-                          ? 'border-accent bg-accent-soft text-accent'
-                          : 'border-line text-muted hover:bg-surface-hover',
-                      )}
+                {people.length > 0 &&
+                  (byTier(people) ?? [{ label: null, people }]).map((group) => (
+                    <div
+                      key={group.label ?? 'all'}
+                      role={group.label ? 'group' : undefined}
+                      aria-label={group.label ?? undefined}
+                      className="flex gap-2"
                     >
-                      <Avatar name={each.name} hue={hueOf(each.id)} size="sm" />
-                      {each.name}
-                    </button>
-                  )
-                })}
+                      {group.label && (
+                        <span aria-hidden className="text-subtle w-8 shrink-0 pt-1.5 text-xs">
+                          {group.label}
+                        </span>
+                      )}
+                      <div className="flex flex-wrap gap-1.5">
+                        {group.people.map((each) => {
+                          const picked = referenceIds.includes(each.id)
+                          return (
+                            <button
+                              key={each.id}
+                              type="button"
+                              aria-pressed={picked}
+                              onClick={() => toggleReference(each.id)}
+                              className={cn(
+                                'flex cursor-pointer items-center gap-1.5 rounded-full border py-1 pr-2.5 pl-1 text-xs transition-colors',
+                                picked
+                                  ? 'border-accent bg-accent-soft text-accent'
+                                  : 'border-line text-muted hover:bg-surface-hover',
+                              )}
+                            >
+                              <Avatar name={each.name} hue={hueOf(each.id)} size="sm" />
+                              {each.name}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  ))}
               </div>
             )}
           </Field>
