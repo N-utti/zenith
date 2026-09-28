@@ -1,8 +1,21 @@
 import { useEffect, useEffectEvent, type RefObject } from 'react'
 
-/** 포커스를 가둘 수 있는 요소들. `[hidden]`은 제외해야 숨은 버튼으로 포커스가 새지 않는다. */
-const FOCUSABLE =
-  'a[href],button:not([disabled]),textarea:not([disabled]),input:not([disabled]),select:not([disabled]),[tabindex]:not([tabindex="-1"])'
+/**
+ * 포커스를 가둘 수 있는 요소들. `[hidden]`은 제외해야 숨은 버튼으로 포커스가 새지 않는다.
+ * 탭에서 뺀 요소(`tabindex="-1"`, ⌘K 의 결과 줄)도 뺀다. 세면 "마지막 요소" 를 잘못 알아 Tab 이 패널
+ * 밖으로 빠져나간다.
+ */
+const TABBABLE = ':not([tabindex="-1"])'
+const FOCUSABLE = [
+  'a[href]',
+  'button:not([disabled])',
+  'textarea:not([disabled])',
+  'input:not([disabled])',
+  'select:not([disabled])',
+  '[tabindex]',
+]
+  .map((selector) => selector + TABBABLE)
+  .join(',')
 
 /**
  * 대화상자용 포커스 가둠. `Modal`에서 뽑아냈다. 모달·⌘K 팔레트·모바일 서랍이 같이 쓴다

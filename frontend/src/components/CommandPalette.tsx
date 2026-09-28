@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
 import {
   AtSign,
@@ -95,6 +95,9 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
   const timer = useRef<number | undefined>(undefined)
   const activeRow = useRef<HTMLButtonElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
+  // 스크린리더용 이름표. 포커스는 입력칸에 둔 채 커서가 가리키는 줄을 id 로 알린다(콤보박스 패턴).
+  const listId = useId()
+  const optionId = (index: number) => `${listId}-${index}`
 
   // 대화상자 규약(12 UI 청사진 §8): 포커스 가둠·Esc 닫기·닫힐 때 포커스 복귀. 모달과 같은 훅.
   // 부모가 열릴 때마다 새로 마운트하므로 늘 "열린" 상태로 부른다.
@@ -138,6 +141,14 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
     activeRow.current?.scrollIntoView({ block: 'nearest' })
   }, [active])
 
+  const summary = !searching
+    ? `화면 ${navItems.length}개`
+    : pending
+      ? '찾는 중'
+      : isError
+        ? `화면 ${navItems.length}개, 채팅방 ${rooms.length}개. 본문 검색에 실패했습니다.`
+        : `화면 ${navItems.length}개, 채팅방 ${rooms.length}개, 검색 결과 ${hits.length}개`
+
   const go = (to: string, state?: AskState) => {
     onClose()
     void navigate(to, { state })
@@ -150,7 +161,8 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
     setQuery(value)
     setCursor(0)
     window.clearTimeout(timer.current)
-    timer.current = window.setTimeout(() => setSettled(value), TYPING_PAUSE_MS)
+    // 다듬어서 넘긴다. "찾는 중" 은 `settled !== query.trim()` 으로 가려서, 끝 공백이 남으면 영영 찾는 중이다.
+    timer.current = window.setTimeout(() => setSettled(value.trim()), TYPING_PAUSE_MS)
   }
 
   const onKeyDown = (e: React.KeyboardEvent) => {
@@ -198,82 +210,129 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
           <input
             value={query}
             onChange={(e) => onType(e.target.value)}
+            role="combobox"
+            aria-label="검색어"
+            aria-expanded="true"
+            aria-controls={listId}
+            aria-autocomplete="list"
+            aria-activedescendant={optionId(active)}
             placeholder="문서·채팅·게시글 검색, 채팅방·화면 이동…"
             className="text-fg placeholder:text-subtle h-13 flex-1 bg-transparent text-sm outline-none"
           />
         </div>
 
-        <div className="max-h-80 overflow-y-auto p-1.5">
-          <p className="text-subtle px-2.5 pt-2 pb-1 text-[11px] font-semibold tracking-wide uppercase">
-            화면 이동
-          </p>
-          {navItems.length === 0 && (
-            <p className="text-muted px-2.5 py-6 text-center text-sm">일치하는 화면이 없습니다.</p>
-          )}
-          {navItems.map((item, i) => {
-            const Icon = item.icon
-            return (
-              <button
-                key={item.to}
-                ref={i === active ? activeRow : undefined}
-                type="button"
-                onMouseEnter={() => setCursor(i)}
-                onClick={() => go(item.to)}
-                className={cn(
-                  'flex w-full cursor-pointer items-center gap-3 rounded-lg px-2.5 py-2 text-sm',
-                  i === active ? 'bg-accent-soft text-accent' : 'text-muted',
-                )}
-              >
-                <Icon className="size-4.5 shrink-0" />
-                <span>{item.label}</span>
-                {i === active && <CornerDownLeft className="ml-auto size-3.5" />}
-              </button>
-            )
-          })}
+        {/* 결과가 바뀔 때마다 개수를 읽어 준다. 목록 안의 "없습니다"·"찾는 중…" 은 같은 내용이라
+            스크린리더에게서 감춘다(aria-hidden). */}
+        <p aria-live="polite" className="sr-only">
+          {summary}
+        </p>
+
+        <div
+          id={listId}
+          role="listbox"
+          aria-label="검색 결과"
+          className="max-h-80 overflow-y-auto p-1.5"
+        >
+          <div role="group" aria-labelledby={`${listId}-nav`}>
+            <p
+              id={`${listId}-nav`}
+              role="presentation"
+              className="text-subtle px-2.5 pt-2 pb-1 text-[11px] font-semibold tracking-wide uppercase"
+            >
+              화면 이동
+            </p>
+            {navItems.length === 0 && (
+              <p aria-hidden="true" className="text-muted px-2.5 py-6 text-center text-sm">
+                일치하는 화면이 없습니다.
+              </p>
+            )}
+            {navItems.map((item, i) => {
+              const Icon = item.icon
+              return (
+                <button
+                  key={item.to}
+                  ref={i === active ? activeRow : undefined}
+                  role="option"
+                  id={optionId(i)}
+                  aria-selected={i === active}
+                  tabIndex={-1}
+                  type="button"
+                  onMouseEnter={() => setCursor(i)}
+                  onClick={() => go(item.to)}
+                  className={cn(
+                    'flex w-full cursor-pointer items-center gap-3 rounded-lg px-2.5 py-2 text-sm',
+                    i === active ? 'bg-accent-soft text-accent' : 'text-muted',
+                  )}
+                >
+                  <Icon className="size-4.5 shrink-0" />
+                  <span>{item.label}</span>
+                  {i === active && <CornerDownLeft className="ml-auto size-3.5" />}
+                </button>
+              )
+            })}
+          </div>
 
           {rooms.length > 0 && (
-            <p className="text-subtle px-2.5 pt-3 pb-1 text-[11px] font-semibold tracking-wide uppercase">
-              채팅방
-            </p>
-          )}
-          {rooms.map((room, i) => {
-            const index = navItems.length + i
-            const Icon = room.is_dm ? AtSign : Hash
-            return (
-              <button
-                key={room.id}
-                ref={index === active ? activeRow : undefined}
-                type="button"
-                onMouseEnter={() => setCursor(index)}
-                onClick={() => go(`/chat/${room.id}`)}
-                className={cn(
-                  'flex w-full cursor-pointer items-center gap-3 rounded-lg px-2.5 py-2 text-sm',
-                  index === active ? 'bg-accent-soft text-accent' : 'text-muted',
-                )}
+            <div role="group" aria-labelledby={`${listId}-rooms`}>
+              <p
+                id={`${listId}-rooms`}
+                role="presentation"
+                className="text-subtle px-2.5 pt-3 pb-1 text-[11px] font-semibold tracking-wide uppercase"
               >
-                <Icon className="size-4.5 shrink-0" />
-                <span className="truncate">{room.name}</span>
-                <span className="text-subtle shrink-0 text-[11px]">
-                  {room.is_dm ? 'DM' : '채널'}
-                </span>
-                {index === active && <CornerDownLeft className="ml-auto size-3.5 shrink-0" />}
-              </button>
-            )
-          })}
+                채팅방
+              </p>
+              {rooms.map((room, i) => {
+                const index = navItems.length + i
+                const Icon = room.is_dm ? AtSign : Hash
+                return (
+                  <button
+                    key={room.id}
+                    ref={index === active ? activeRow : undefined}
+                    role="option"
+                    id={optionId(index)}
+                    aria-selected={index === active}
+                    tabIndex={-1}
+                    type="button"
+                    onMouseEnter={() => setCursor(index)}
+                    onClick={() => go(`/chat/${room.id}`)}
+                    className={cn(
+                      'flex w-full cursor-pointer items-center gap-3 rounded-lg px-2.5 py-2 text-sm',
+                      index === active ? 'bg-accent-soft text-accent' : 'text-muted',
+                    )}
+                  >
+                    <Icon className="size-4.5 shrink-0" />
+                    <span className="truncate">{room.name}</span>
+                    <span className="text-subtle shrink-0 text-[11px]">
+                      {room.is_dm ? 'DM' : '채널'}
+                    </span>
+                    {index === active && <CornerDownLeft className="ml-auto size-3.5 shrink-0" />}
+                  </button>
+                )
+              })}
+            </div>
+          )}
 
           {searching && (
-            <>
-              <p className="text-subtle px-2.5 pt-3 pb-1 text-[11px] font-semibold tracking-wide uppercase">
+            <div role="group" aria-labelledby={`${listId}-hits`}>
+              <p
+                id={`${listId}-hits`}
+                role="presentation"
+                className="text-subtle px-2.5 pt-3 pb-1 text-[11px] font-semibold tracking-wide uppercase"
+              >
                 문서·채팅·게시글
-                {pending && <span className="ml-1.5 font-normal normal-case">찾는 중…</span>}
+                {pending && (
+                  <span aria-hidden="true" className="ml-1.5 font-normal normal-case">
+                    찾는 중…
+                  </span>
+                )}
               </p>
               {isError && !pending && (
-                <p className="text-muted px-2.5 py-4 text-center text-sm">
+                <p aria-hidden="true" className="text-muted px-2.5 py-4 text-center text-sm">
                   검색에 실패했습니다. 잠시 뒤에 다시 시도해 주세요.
                 </p>
               )}
               {!isError && hits.length === 0 && !pending && (
-                <p className="text-muted px-2.5 py-4 text-center text-sm">
+                <p aria-hidden="true" className="text-muted px-2.5 py-4 text-center text-sm">
                   “{query.trim()}” 에 맞는 내용이 없습니다.
                 </p>
               )}
@@ -283,6 +342,10 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
                   <button
                     key={`${hit.type}-${hit.id}`}
                     ref={index === active ? activeRow : undefined}
+                    role="option"
+                    id={optionId(index)}
+                    aria-selected={index === active}
+                    tabIndex={-1}
                     type="button"
                     onMouseEnter={() => setCursor(index)}
                     onClick={() => go(hit.to)}
@@ -295,13 +358,21 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
                   </button>
                 )
               })}
-            </>
+            </div>
           )}
 
           {/* 목록이 길어도 항상 보이게 스크롤 영역 바닥에 붙인다. */}
-          <div className="border-line bg-surface sticky bottom-0 mt-1.5 border-t pt-1.5">
+          <div
+            role="group"
+            aria-label="AI"
+            className="border-line bg-surface sticky bottom-0 mt-1.5 border-t pt-1.5"
+          >
             <button
               ref={active === askIndex ? activeRow : undefined}
+              role="option"
+              id={optionId(askIndex)}
+              aria-selected={active === askIndex}
+              tabIndex={-1}
               type="button"
               onMouseEnter={() => setCursor(askIndex)}
               onClick={ask}
