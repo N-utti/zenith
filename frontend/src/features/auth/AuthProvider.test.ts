@@ -167,3 +167,23 @@ test('로그인은 됐는데 `/me` 가 실패해도 다른 탭에 알린다', as
   otherTab.close()
   act(() => root.unmount())
 })
+
+test('다른 사람이 로그인하면 문서 사본을 지우고, 로그아웃하면 또 지운다', async () => {
+  const deleted: string[] = []
+  vi.stubGlobal('indexedDB', {
+    databases: () => Promise.resolve([{ name: 'zenith.doc.a' }]),
+    deleteDatabase: (name: string) => deleted.push(name),
+  })
+  localStorage.setItem('zenith.docCacheOwner', 'u1') // 앞사람
+  const { view, root, rendered } = mount()
+  await rendered
+  await vi.waitFor(() => expect(view.auth?.status).toBe('authenticated'))
+
+  await act(() => view.auth!.login('u2@zenith.local', 'pw')) // `/me` 목은 u2
+  expect(deleted).toEqual(['zenith.doc.a'])
+
+  await act(() => view.auth!.logout())
+  await vi.waitFor(() => expect(deleted).toEqual(['zenith.doc.a', 'zenith.doc.a']))
+  expect(localStorage.getItem('zenith.docCacheOwner')).toBeNull()
+  act(() => root.unmount())
+})

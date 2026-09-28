@@ -4,6 +4,7 @@ import { IndexeddbPersistence } from 'y-indexeddb'
 import { WebsocketProvider } from 'y-websocket'
 import { api } from '@/lib/api'
 import { wsUrl } from '@/lib/serverOrigin'
+import { docCacheName } from './localCache'
 
 export interface CollabSession {
   doc: Y.Doc
@@ -30,7 +31,7 @@ const RELAY_WAIT_MS = 1200
  * 본문의 원천은 서버 REST가 아니라 Y.Doc이다. 세 경로로 동기화된다.
  *   - WebSocket 릴레이  : 다른 사람 / 다른 브라우저
  *   - BroadcastChannel  : 같은 브라우저의 다른 탭 (y-websocket 내장)
- *   - IndexedDB         : 오프라인 영속
+ *   - IndexedDB         : 오프라인 영속. 사람이 바뀌면 지운다(`localCache`)
  *
  * 세션은 docId마다 새로 만들어야 하므로 호출하는 컴포넌트를 docId로 key 한다.
  */
@@ -48,9 +49,12 @@ export function useCollabSession(docId: string): CollabSession | null {
     // 살린 뒤 한 번 다시 붙인다. 살아나지 않으면 진짜 로그아웃. 화면은 오프라인 편집으로 남는다.
     provider.on('closed', (event) => {
       if (event.code !== 4401) return
-      void api('/me').then(() => provider.connect(), () => undefined)
+      void api('/me').then(
+        () => provider.connect(),
+        () => undefined,
+      )
     })
-    const persistence = new IndexeddbPersistence(`zenith.doc.${docId}`, doc)
+    const persistence = new IndexeddbPersistence(docCacheName(docId), doc)
 
     // StrictMode의 두 번째 마운트에서 이미 정리된 세션을 넘기지 않도록 막는다.
     let cancelled = false

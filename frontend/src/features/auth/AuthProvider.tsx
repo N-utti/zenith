@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, type ReactNode } from 'react'
 import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { resetThread } from '@/features/ai/store'
 import { clearDrafts } from '@/features/chat/drafts'
+import { claimDocCaches, clearDocCaches, releaseDocCaches } from '@/features/docs/localCache'
 import { api, ApiError } from '@/lib/api'
 import type { User } from '@/types'
 import { AuthContext, type AuthValue } from './AuthContext'
@@ -77,7 +78,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       let me: User | undefined
       try {
         me = await api<User>('/me')
+        // 문서 사본은 주인이 바뀌었을 때만 지운다. 프로필을 넣으면 곧바로 화면이 뜨고 문서를 열 수 있으니
+        // 그 전에 끝낸다.
+        await claimDocCaches(me.id)
         qc.setQueryData(meQueryKey, me)
+      } catch (error) {
+        // `/me` 가 실패해 누구인지 모르면 주인과 비교할 수 없다. 앞사람 사본일 수 있으니 지운다.
+        await clearDocCaches().catch(() => undefined)
+        throw error
       } finally {
         // 여기 왔으면 쿠키는 이미 바뀌었다. `/me` 가 실패해도 다른 탭은 알아야 한다.
         tabs?.postMessage({ userId: me?.id ?? '' } satisfies TabMessage)
@@ -98,6 +106,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     qc.setQueryData(meQueryKey, null)
     // AI 대화를 비우면 받고 있던 답변 스트림도 다음 조각에서 닫힌다(`useAsk`).
     forgetPreviousUser(qc)
+    releaseDocCaches()
     // 로그아웃한 사람의 다른 탭도 로그인 화면으로 보낸다. 자리를 뜬 뒤 그 탭에 앞사람 화면이 남지 않게.
     tabs?.postMessage({ userId: null } satisfies TabMessage)
   }, [qc])
