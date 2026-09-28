@@ -89,7 +89,13 @@ afterEach(() => {
 })
 
 const input = () => container.querySelector('input')!
-const highlighted = () => container.querySelector('button.bg-accent-soft')?.textContent
+/** 스크린리더가 읽는 "지금 고른 줄". 입력칸이 가리키는 옵션과 선택 표시가 같은 줄이어야 한다. */
+function highlighted() {
+  const selected = container.querySelectorAll('[role="option"][aria-selected="true"]')
+  expect(selected).toHaveLength(1)
+  expect(input().getAttribute('aria-activedescendant')).toBe(selected[0].id)
+  return selected[0].textContent
+}
 const where = () => container.querySelector('#where')!.textContent
 
 function type(text: string) {
@@ -134,4 +140,21 @@ test('화면 이동과 방이 같이 걸리면 방 줄은 화면 이동 다음 �
   expect(highlighted()).toContain('채팅 규칙')
   act(() => press('Enter'))
   expect(where()).toBe('/chat/c-3')
+})
+
+test('스크린리더에 입력칸이 결과 목록을 조종하는 콤보박스로 보이고, 개수를 알려 준다', async () => {
+  const listbox = container.querySelector('[role="listbox"]')!
+  expect(input().getAttribute('role')).toBe('combobox')
+  expect(input().getAttribute('aria-controls')).toBe(listbox.id)
+  // 모든 줄이 목록 안의 옵션이고, 탭 키로 줄마다 멈추지 않는다(포커스는 입력칸에 머문다).
+  const options = container.querySelectorAll('[role="option"]')
+  expect(options.length).toBeGreaterThan(1)
+  for (const option of options) {
+    expect(listbox.contains(option)).toBe(true)
+    expect(option.getAttribute('tabindex')).toBe('-1')
+  }
+
+  await search()
+  const live = container.querySelector('[aria-live="polite"]')!
+  await vi.waitFor(() => expect(live.textContent).toBe('화면 0개, 채팅방 1개, 검색 결과 1개'))
 })
