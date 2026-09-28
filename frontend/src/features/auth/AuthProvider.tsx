@@ -1,4 +1,4 @@
-import { useCallback, useMemo, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, type ReactNode } from 'react'
 import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { resetThread } from '@/features/ai/store'
 import { clearDrafts } from '@/features/chat/drafts'
@@ -27,6 +27,18 @@ function forgetPreviousUser(qc: QueryClient) {
   clearDrafts()
 }
 
+/**
+ * 같은 브라우저의 다른 탭에 "이 브라우저의 사용자가 바뀌었다" 고 알린다. 쿠키는 탭끼리 공유하므로 다른
+ * 탭에서 로그인하면 이 탭의 요청도 그 사람으로 나간다. 401 이 안 오니 이 탭은 사람이 바뀐 걸 모르고
+ * 앞사람 이름·AI 대화·캐시를 계속 보여 준다. 받은 탭은 첫 화면으로 다시 열어 모듈 상태까지 한 번에
+ * 버린다. 앞사람이 보던 주소(결재·방 id, 검색어)도 남기지 않으려고 새로고침이 아니라 `/` 로 간다.
+ * 보낸 탭 자신은 받지 않는다(BroadcastChannel 규약). 없는 환경(구형 브라우저)이면 알리지 않는다.
+ */
+const tabs = typeof BroadcastChannel === 'undefined' ? null : new BroadcastChannel('zenith.auth')
+
+/** 로그아웃은 `null`, 로그인은 했는데 누구인지 못 받았으면 `''`(어느 탭과도 달라 전부 다시 연다). */
+type TabMessage = { userId: string | null }
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const qc = useQueryClient()
 
@@ -39,6 +51,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     staleTime: Infinity,
   })
 
+  useEffect(() => {
+    if (!tabs) return
+    const current = data?.id ?? null
+    const onMessage = (e: MessageEvent<TabMessage>) => {
+      // 같은 사람이 다른 탭에서 다시 로그인한 것이면 이 탭의 대화·쓰던 글을 날릴 이유가 없다.
+      // 첫 `/me` 가 도는 중이면 `current` 가 아직 null 이라 누가 로그인했든 다시 연다. 그 요청은
+      // 바뀌기 전 쿠키로 나갔을 수 있다. 다시 연 탭은 알리지 않으므로 되풀이되지 않는다.
+      if (e.data?.userId !== current) location.replace('/')
+    }
+    tabs.addEventListener('message', onMessage)
+    return () => tabs.removeEventListener('message', onMessage)
+  }, [data])
+
   const login = useCallback(
     async (email: string, password: string) => {
       // 04 §1: 204 + Set-Cookie. 본문에 토큰이 없으므로 프로필은 서버에 다시 묻는다.
@@ -49,7 +74,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // 세션 만료(`queryClient`)로 온 로그인 화면은 프로필만 비웠을 뿐 앞사람 캐시를 그대로 들고 있다.
       // 그래서 로그아웃과 별개로 들어오는 쪽에서도 비운다. 로그인 화면에는 구독 중인 화면이 없어 안전하다.
       forgetPreviousUser(qc)
-      qc.setQueryData(meQueryKey, await api<User>('/me'))
+      let me: User | undefined
+      try {
+        me = await api<User>('/me')
+        qc.setQueryData(meQueryKey, me)
+      } finally {
+        // 여기 왔으면 쿠키는 이미 바뀌었다. `/me` 가 실패해도 다른 탭은 알아야 한다.
+        tabs?.postMessage({ userId: me?.id ?? '' } satisfies TabMessage)
+      }
     },
     [qc],
   )
@@ -66,6 +98,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     qc.setQueryData(meQueryKey, null)
     // AI 대화를 비우면 받고 있던 답변 스트림도 다음 조각에서 닫힌다(`useAsk`).
     forgetPreviousUser(qc)
+    // 로그아웃한 사람의 다른 탭도 로그인 화면으로 보낸다. 자리를 뜬 뒤 그 탭에 앞사람 화면이 남지 않게.
+    tabs?.postMessage({ userId: null } satisfies TabMessage)
   }, [qc])
 
   const value = useMemo<AuthValue>(() => {
