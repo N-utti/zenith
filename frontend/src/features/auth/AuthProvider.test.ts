@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, expect, test, vi } from 'vitest'
 import { appendMessage, getThread } from '@/features/ai/store'
 import { getDraft, setDraft } from '@/features/chat/drafts'
+import { docCacheUsable } from '@/features/docs/localCache'
 import { AuthContext, type AuthValue } from './AuthContext'
 import { AuthProvider } from './AuthProvider'
 
@@ -211,5 +212,19 @@ test('로그인은 됐는데 `/me` 가 실패하면 사본을 지우고 주인�
   await act(() => expect(view.auth!.login('b@zenith.local', 'pw')).rejects.toThrow('network'))
   expect(deleted).toEqual(['zenith.doc.a'])
   expect(localStorage.getItem('zenith.docCacheOwner')).toBeNull()
+  act(() => root.unmount())
+})
+
+test('부팅 때 앞사람 사본을 못 지워도 들어가고, 이번 세션은 사본을 쓰지 않는다', async () => {
+  vi.stubGlobal('indexedDB', {
+    databases: () => Promise.reject(new Error('blocked')),
+    deleteDatabase: () => {},
+  })
+  localStorage.setItem('zenith.docCacheOwner', 'u1') // 앞사람. 쿠키는 u2
+  const { view, root, rendered } = mount()
+  await rendered
+  await vi.waitFor(() => expect(view.auth?.status).toBe('authenticated'))
+  expect(docCacheUsable()).toBe(false)
+  expect(localStorage.getItem('zenith.docCacheOwner')).toBe('u1')
   act(() => root.unmount())
 })

@@ -11,6 +11,11 @@ export interface CollabSession {
   provider: WebsocketProvider
   /** 이 문서를 처음 여는지. 초안을 심을지 판단하는 데 쓴다. */
   isEmpty: boolean
+  /**
+   * 오프라인 편집이 브라우저 사본에 남는지. 앞사람 사본을 못 지운 세션은 사본 없이 열어(`localCache`)
+   * 편집이 이 화면의 메모리에만 있다. 세션을 열 때 정해지고, 나중에 바뀌지 않는다.
+   */
+  persistent: boolean
 }
 
 /**
@@ -69,6 +74,7 @@ export function useCollabSession(docId: string): CollabSession | null {
         doc,
         provider,
         isEmpty: doc.getXmlFragment('default').length === 0,
+        persistent: persistence !== null,
       })
     }
 

@@ -17,7 +17,8 @@ const OWNER_KEY = 'zenith.docCacheOwner'
 
 /**
  * 이번 세션에 사본을 써도 되는지. 지워야 하는데 못 지웠으면(목록을 못 읽는 브라우저, 오류) 앞사람
- * 사본이 남아 있을 수 있으니 편집기가 사본 없이 연다. 오프라인 편집은 안 되지만 새지는 않는다.
+ * 사본이 남아 있을 수 있으니 편집기가 사본 없이 연다. 앞사람 편집이 다음 사람 세션으로 올라가지는
+ * 않는다(개발자 도구로는 여전히 보인다). 목록 기능이 없는 브라우저는 주인이 바뀐 뒤로 계속 사본 없이 연다.
  */
 let usable = true
 
@@ -41,9 +42,9 @@ async function clearDocCaches(): Promise<boolean> {
     timer = setTimeout(() => reject(new Error('indexedDB.databases timeout')), LIST_TIMEOUT_MS)
   })
   // 목록이 제때 오면 타이머를 끈다. 안 끄면 2초 뒤 아무도 안 받는 거부가 콘솔에 남는다.
-  const databases = await Promise.race([indexedDB.databases(), timeout]).finally(() =>
-    clearTimeout(timer),
-  )
+  // 목록 조회가 동기로 던져도 race 안에서 거부로 받는다. 안 그러면 타이머만 남아 2초 뒤 떠돈다.
+  const listing = Promise.resolve().then(() => indexedDB.databases())
+  const databases = await Promise.race([listing, timeout]).finally(() => clearTimeout(timer))
   for (const { name } of databases) {
     // 열린 편집기의 연결은 lib0 가 삭제 신호를 받자마자 닫는다. 이 뒤에 여는 요청은 삭제 뒤로 줄 선다.
     if (name?.startsWith(PREFIX)) indexedDB.deleteDatabase(name)
@@ -67,13 +68,18 @@ export async function claimDocCaches(userId: string): Promise<void> {
   } catch {
     // 주인을 못 읽으면 모르는 사람의 사본으로 보고 지운다.
   }
-  if (owner === userId) return
+  // 주인과 같으면 남은 사본은 이 사람 것이다. 앞 세션에서 꺼 둔 것도 되살린다.
+  if (owner === userId) {
+    usable = true
+    return
+  }
   // 못 지웠으면 주인을 바꾸지 않는다. 다음 인증 때 다시 지운다.
   if (!(await clearOrDisable())) return
   try {
     localStorage.setItem(OWNER_KEY, userId)
   } catch {
-    // 못 적으면 다음 인증에서 한 번 더 지워질 뿐이다.
+    // 주인을 못 적으면 다음 인증마다 이 사람 사본을 또 지운다. 이번 세션은 사본을 쓰지 않아 잃을 것을 없앤다.
+    usable = false
   }
 }
 

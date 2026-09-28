@@ -35,22 +35,23 @@ vi.mock('y-websocket', () => ({
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 async function open(docId: string) {
-  let ready = false
+  let persistent: boolean | undefined
   function Editor() {
-    ready = useCollabSession(docId) !== null
+    persistent = useCollabSession(docId)?.persistent
     return null
   }
   const root = createRoot(document.createElement('div'))
   await act(async () => root.render(createElement(Editor)))
   act(() => root.unmount())
-  return ready
+  return persistent
 }
 
 test('앞사람 사본을 못 지운 세션은 브라우저 사본 없이 문서를 연다', async () => {
   expect(await open('a')).toBe(true)
   expect(cache.opened).toEqual(['zenith.doc.a'])
 
+  // 세션이 사본 없이 열렸다는 것을 화면(오프라인 안내)이 알 수 있다.
   cache.usable = false
-  expect(await open('b')).toBe(true)
+  expect(await open('b')).toBe(false)
   expect(cache.opened).toEqual(['zenith.doc.a'])
 })
