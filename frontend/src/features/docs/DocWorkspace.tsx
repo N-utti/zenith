@@ -26,6 +26,7 @@ import { anchorBlock, flashBlock } from './blockId'
 import { CommentPanel, type CommentTarget } from './CommentPanel'
 import { DocBreadcrumb } from './DocBreadcrumb'
 import { EditorBubbleMenu } from './EditorBubbleMenu'
+import { docCacheUsable } from './localCache'
 import { InlineAiPopover } from './InlineAiPopover'
 import { buildDocExtensions } from './editorExtensions'
 import { EditorToolbar } from './EditorToolbar'
@@ -49,7 +50,10 @@ function PresenceBar({ session }: { session: CollabSession }) {
         className="text-warning flex items-center gap-1.5 text-xs"
       >
         <WifiOff className="size-3.5" />
-        오프라인 편집 중. 이 브라우저에만 저장되고 로그아웃하면 사라집니다
+        {/* 앞사람 사본을 못 지운 세션은 사본을 쓰지 않는다(`localCache`). 그때는 어디에도 안 남는다. */}
+        {docCacheUsable()
+          ? '오프라인 편집 중. 이 브라우저에만 저장됩니다'
+          : '오프라인 편집 중. 새로고침하면 사라집니다'}
       </p>
     )
   }

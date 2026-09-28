@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, type ReactNode } from 'react'
 import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { resetThread } from '@/features/ai/store'
 import { clearDrafts } from '@/features/chat/drafts'
-import { claimDocCaches, clearDocCaches, releaseDocCaches } from '@/features/docs/localCache'
+import { claimDocCaches, disownDocCaches } from '@/features/docs/localCache'
 import { api, ApiError } from '@/lib/api'
 import type { User } from '@/types'
 import { AuthContext, type AuthValue } from './AuthContext'
@@ -11,7 +11,10 @@ import { meQueryKey } from './queries'
 /** 세션은 HttpOnly 쿠키라 JS 가 "로그인했는지" 미리 알 수 없다. 서버에 묻고, 401 이면 익명이다(11 §10.2). */
 async function fetchMe(): Promise<User | null> {
   try {
-    return await api<User>('/me')
+    const me = await api<User>('/me')
+    // 쿠키로 곧장 들어온 사람도 문서 사본 주인과 비교한다. 로그인 화면을 안 거친 경로다.
+    await claimDocCaches(me.id)
+    return me
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) return null
     throw error
@@ -84,7 +87,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         qc.setQueryData(meQueryKey, me)
       } catch (error) {
         // `/me` 가 실패해 누구인지 모르면 주인과 비교할 수 없다. 앞사람 사본일 수 있으니 지운다.
-        await clearDocCaches().catch(() => undefined)
+        await disownDocCaches()
         throw error
       } finally {
         // 여기 왔으면 쿠키는 이미 바뀌었다. `/me` 가 실패해도 다른 탭은 알아야 한다.
@@ -106,7 +109,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     qc.setQueryData(meQueryKey, null)
     // AI 대화를 비우면 받고 있던 답변 스트림도 다음 조각에서 닫힌다(`useAsk`).
     forgetPreviousUser(qc)
-    releaseDocCaches()
+    // 문서 사본은 여기서 지우지 않는다. 못 올린 오프라인 편집이 사라진다(`localCache`).
     // 로그아웃한 사람의 다른 탭도 로그인 화면으로 보낸다. 자리를 뜬 뒤 그 탭에 앞사람 화면이 남지 않게.
     tabs?.postMessage({ userId: null } satisfies TabMessage)
   }, [qc])

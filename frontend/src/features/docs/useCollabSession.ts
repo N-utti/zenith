@@ -4,7 +4,7 @@ import { IndexeddbPersistence } from 'y-indexeddb'
 import { WebsocketProvider } from 'y-websocket'
 import { api } from '@/lib/api'
 import { wsUrl } from '@/lib/serverOrigin'
-import { docCacheName } from './localCache'
+import { docCacheName, docCacheUsable } from './localCache'
 
 export interface CollabSession {
   doc: Y.Doc
@@ -31,7 +31,7 @@ const RELAY_WAIT_MS = 1200
  * 본문의 원천은 서버 REST가 아니라 Y.Doc이다. 세 경로로 동기화된다.
  *   - WebSocket 릴레이  : 다른 사람 / 다른 브라우저
  *   - BroadcastChannel  : 같은 브라우저의 다른 탭 (y-websocket 내장)
- *   - IndexedDB         : 오프라인 영속. 사람이 바뀌면 지운다(`localCache`)
+ *   - IndexedDB         : 오프라인 영속. 사람이 바뀌면 지우고, 못 지웠으면 쓰지 않는다(`localCache`)
  *
  * 세션은 docId마다 새로 만들어야 하므로 호출하는 컴포넌트를 docId로 key 한다.
  */
@@ -54,7 +54,7 @@ export function useCollabSession(docId: string): CollabSession | null {
         () => undefined,
       )
     })
-    const persistence = new IndexeddbPersistence(docCacheName(docId), doc)
+    const persistence = docCacheUsable() ? new IndexeddbPersistence(docCacheName(docId), doc) : null
 
     // StrictMode의 두 번째 마운트에서 이미 정리된 세션을 넘기지 않도록 막는다.
     let cancelled = false
@@ -72,20 +72,22 @@ export function useCollabSession(docId: string): CollabSession | null {
       })
     }
 
-    persistence.once('synced', () => {
+    const afterLocal = () => {
       if (cancelled) return
       // 로컬만 보고 "빈 문서"라 판단하면, 릴레이에 이미 내용이 있는 문서에
       // 초안을 덧씌운다. 서버 상태까지 받아 본 뒤에 판단한다.
       if (provider.synced) return settle()
       provider.once('sync', settle)
       relayTimeout = window.setTimeout(settle, RELAY_WAIT_MS)
-    })
+    }
+    if (persistence) persistence.once('synced', afterLocal)
+    else afterLocal()
 
     return () => {
       cancelled = true
       window.clearTimeout(relayTimeout)
       provider.destroy()
-      void persistence.destroy()
+      void persistence?.destroy()
       doc.destroy()
     }
   }, [docId])
