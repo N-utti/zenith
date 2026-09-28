@@ -1,5 +1,6 @@
 import { useCallback, useMemo, type ReactNode } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
+import { resetThread } from '@/features/ai/store'
 import { clearDrafts } from '@/features/chat/drafts'
 import { api, ApiError } from '@/lib/api'
 import type { User } from '@/types'
@@ -14,6 +15,16 @@ async function fetchMe(): Promise<User | null> {
     if (error instanceof ApiError && error.status === 401) return null
     throw error
   }
+}
+
+/**
+ * 앞사람이 이 탭에 남긴 것을 버린다: 서버에서 받아 둔 쿼리 캐시(프로필 제외), AI 대화, 쓰다 만 채팅 글.
+ * 결재 본문·가려지기 전 게시글 제목·AI 근거 인용문처럼 등급마다 다른 내용이 섞여 있다.
+ */
+function forgetPreviousUser(qc: QueryClient) {
+  qc.removeQueries({ predicate: (query) => query.queryKey[0] !== 'auth' })
+  resetThread()
+  clearDrafts()
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -35,9 +46,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         method: 'POST',
         body: JSON.stringify({ email, password }),
       })
-      // 로그아웃뿐 아니라 세션 만료(`queryClient`)로도 익명이 되므로 들어오는 쪽 한 곳에서 비운다.
-      // 같은 탭에서 다른 사람이 로그인하면 앞사람이 쓰다 만 채팅 글이 입력창에 뜬다.
-      clearDrafts()
+      // 세션 만료(`queryClient`)로 온 로그인 화면은 프로필만 비웠을 뿐 앞사람 캐시를 그대로 들고 있다.
+      // 그래서 로그아웃과 별개로 들어오는 쪽에서도 비운다. 로그인 화면에는 구독 중인 화면이 없어 안전하다.
+      forgetPreviousUser(qc)
       qc.setQueryData(meQueryKey, await api<User>('/me'))
     },
     [qc],
@@ -53,7 +64,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // 프로필을 먼저 null 로 바꿔야 구독 중인 화면이 익명으로 전이해 로그인 화면으로 간다.
     // qc.clear() 로 쿼리를 통째로 지우면 구독자는 옛 쿼리를 붙든 채 다시 그려지지 않는다.
     qc.setQueryData(meQueryKey, null)
-    qc.removeQueries({ predicate: (query) => query.queryKey[0] !== 'auth' })
+    // AI 대화를 비우면 받고 있던 답변 스트림도 다음 조각에서 닫힌다(`useAsk`).
+    forgetPreviousUser(qc)
   }, [qc])
 
   const value = useMemo<AuthValue>(() => {
