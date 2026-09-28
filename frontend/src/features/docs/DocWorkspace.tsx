@@ -2,7 +2,7 @@ import { hueOf } from '@/lib/avatar'
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { EditorContent, useEditor, type Editor } from '@tiptap/react'
 import DragHandle from '@tiptap/extension-drag-handle-react'
-import { GripVertical, MessageSquarePlus, Trash2, WifiOff, X } from 'lucide-react'
+import { ChevronDown, GripVertical, MessageSquarePlus, Trash2, WifiOff, X } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router'
 import { Avatar } from '@/components/ui/Avatar'
 import { Button } from '@/components/ui/Button'
@@ -135,12 +135,32 @@ function DocSidebar({
               if (open) onCollapse()
               onOpenChange(!open)
             }}
+            // 좁은 폭에서 접혀 있으면 고른 탭이라도 밑줄을 빼고, 고른 탭에는 늘 화살표를 단다(접힘 ▾,
+            // 펼침 ▴). 밑줄만 있으면 이미 펼친 것처럼 보여 눌러야 열린다는 걸 모른다. 데스크톱(lg)은
+            // 늘 펼쳐져 있어 밑줄을 두고 화살표는 숨긴다.
             className={cn(
-              '-mb-px cursor-pointer border-b-2 px-4 py-3 text-sm font-medium transition-colors',
-              tab === key ? 'border-accent text-fg' : 'text-muted hover:text-fg border-transparent',
+              '-mb-px flex cursor-pointer items-center gap-1 border-b-2 px-4 py-3 text-sm font-medium transition-colors',
+              tab !== key
+                ? 'text-muted hover:text-fg border-transparent'
+                : open
+                  ? 'border-accent text-fg'
+                  : 'text-fg lg:border-accent border-transparent',
             )}
           >
             {label}
+            {tab === key && (
+              <>
+                <ChevronDown
+                  className={cn('size-4 transition-transform lg:hidden', open && 'rotate-180')}
+                  aria-hidden
+                />
+                {/* 스크린리더에도 접힘을 알린다. aria-expanded 는 데스크톱에서 늘 보이는 패널을
+                    "접힘"으로 읽게 되므로 쓰지 않고, 좁은 폭에서만 읽히는 문구로 둔다. */}
+                <span className="sr-only lg:hidden">
+                  {open ? '(펼쳐짐)' : '(접힘, 눌러서 펼치기)'}
+                </span>
+              </>
+            )}
           </button>
         ))}
       </div>
