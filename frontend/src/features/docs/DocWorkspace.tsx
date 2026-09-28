@@ -115,54 +115,62 @@ function DocSidebar({
     // max-h: 펼쳐도 본문이 절반 넘게 남아야 «본문을 넓게» 라는 목적이 유지된다.
     // shrink-0 은 접힌 탭 줄이 본문에 눌려 사라지지 않게 하는 것이라 좁은 폭에만 건다.
     <aside className="border-line bg-surface flex min-h-0 w-full flex-col border-t max-lg:max-h-[45%] max-lg:shrink-0 lg:w-80 lg:border-t-0 lg:border-l">
-      <div role="tablist" className="border-line flex shrink-0 border-b">
-        {TABS.map(({ key, label }) => (
-          <button
-            key={key}
-            type="button"
-            role="tab"
-            aria-selected={tab === key}
-            aria-controls="doc-side-panel"
-            // 접힌 상태에서 어느 탭을 누르든 그 탭으로 펼친다. 펼쳐진 탭을 다시 누르면 접는다.
-            // 접기는 탭을 바꾸지 않으므로 onTabChange 를 부르지 않는다. 부르면 그 안의
-            // dropPendingPreview 가 돌고 있던 버전 스냅샷 요청을 말없이 버린다.
-            onClick={() => {
-              if (tab !== key) {
-                onTabChange(key)
-                onOpenChange(true)
-                return
-              }
-              if (open) onCollapse()
-              onOpenChange(!open)
-            }}
-            // 좁은 폭에서 접혀 있으면 고른 탭이라도 밑줄을 빼고, 고른 탭에는 늘 화살표를 단다(접힘 ▾,
-            // 펼침 ▴). 밑줄만 있으면 이미 펼친 것처럼 보여 눌러야 열린다는 걸 모른다. 데스크톱(lg)은
-            // 늘 펼쳐져 있어 밑줄을 두고 화살표는 숨긴다.
-            className={cn(
-              '-mb-px flex cursor-pointer items-center gap-1 border-b-2 px-4 py-3 text-sm font-medium transition-colors',
-              tab !== key
-                ? 'text-muted hover:text-fg border-transparent'
-                : open
-                  ? 'border-accent text-fg'
-                  : 'text-fg lg:border-accent border-transparent',
-            )}
-          >
-            {label}
-            {tab === key && (
-              <>
-                <ChevronDown
-                  className={cn('size-4 transition-transform lg:hidden', open && 'rotate-180')}
-                  aria-hidden
-                />
-                {/* 스크린리더에도 접힘을 알린다. aria-expanded 는 데스크톱에서 늘 보이는 패널을
-                    "접힘"으로 읽게 되므로 쓰지 않고, 좁은 폭에서만 읽히는 문구로 둔다. */}
-                <span className="sr-only lg:hidden">
-                  {open ? '(펼쳐짐)' : '(접힘, 눌러서 펼치기)'}
-                </span>
-              </>
-            )}
-          </button>
-        ))}
+      <div className="border-line flex shrink-0 border-b">
+        <div role="tablist" className="flex">
+          {TABS.map(({ key, label }) => (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-selected={tab === key}
+              aria-controls="doc-side-panel"
+              // 접힌 상태에서 어느 탭을 누르든 그 탭으로 펼친다. 펼쳐진 탭을 다시 누르면 접는다.
+              // 접기는 탭을 바꾸지 않으므로 onTabChange 를 부르지 않는다. 부르면 그 안의
+              // dropPendingPreview 가 돌고 있던 버전 스냅샷 요청을 말없이 버린다.
+              onClick={() => {
+                if (tab !== key) {
+                  onTabChange(key)
+                  onOpenChange(true)
+                  return
+                }
+                if (open) onCollapse()
+                onOpenChange(!open)
+              }}
+              // 좁은 폭에서 접혀 있으면 고른 탭이라도 밑줄을 뺀다. 밑줄이 있으면 이미 펼친 것처럼 보여
+              // 눌러야 열린다는 걸 모른다. 데스크톱(lg)은 늘 펼쳐져 있어 밑줄을 둔다.
+              className={cn(
+                '-mb-px cursor-pointer border-b-2 px-4 py-3 text-sm font-medium transition-colors',
+                tab !== key
+                  ? 'text-muted hover:text-fg border-transparent'
+                  : open
+                    ? 'border-accent text-fg'
+                    : 'text-fg lg:border-accent border-transparent',
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        {/* 접히는 건 탭이 아니라 패널 전체라 화살표는 탭 줄 끝에 하나만 둔다(접힘 ▾, 펼침 ▴).
+            버튼이 탭 오른쪽 빈자리를 다 차지해 어디를 눌러도 접고 편다(바텀시트 손잡이처럼).
+            데스크톱은 늘 펼쳐져 있어 숨긴다. 이 버튼은 lg 에서 사라지므로 aria-expanded 가
+            데스크톱의 늘 보이는 패널을 "접힘"으로 읽을 일이 없다. */}
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-controls="doc-side-panel"
+          aria-label="댓글·버전 기록 패널"
+          onClick={() => {
+            if (open) onCollapse()
+            onOpenChange(!open)
+          }}
+          className="text-muted hover:text-fg flex min-w-11 flex-1 cursor-pointer items-center justify-end pr-3.5 transition-colors lg:hidden"
+        >
+          <ChevronDown
+            className={cn('size-4 transition-transform', open && 'rotate-180')}
+            aria-hidden
+          />
+        </button>
       </div>
       {/* 좁은 폭에서 접히면 패널 자체가 사라진다(hidden). 데스크톱은 늘 펼쳐져 있다. */}
       <div
