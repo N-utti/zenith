@@ -10,6 +10,7 @@ import {
   deleteOrg,
   dropDeal,
   eraseContact,
+  exportRows,
   getDeal,
   listDeals,
   reopenDeal,
@@ -222,6 +223,41 @@ describe('CRM 목 저장소 (15 CRM 모듈 설계서 §4·§9)', () => {
     expect(updateActivity(infra, act.id, { contact_ids: [contact.id, 'con-5'] })).toMatchObject({
       status: 422,
     })
+  })
+
+  it('내보내기는 지운 기관·개인정보를 지운 담당자를 빼고, 금액은 숫자로 낸다 (FR-CRM-32)', () => {
+    const gone = ok(createOrg({ name: '지워질 기관', org_type: 'etc', memo: '', owner_ids: [] }))
+    const erased = ok(
+      createContact({
+        org_id: 'org-3',
+        name: '지울사람2',
+        title: '',
+        phone: '',
+        email: '',
+        memo: '',
+      }),
+    )
+    ok(eraseContact(exec, erased.id))
+    expect(deleteOrg(exec, gone.org.id, '정리')).toBeNull()
+
+    const orgRows = ok(exportRows('orgs')).rows
+    expect(orgRows[0][0]).toBe('기관')
+    expect(orgRows.some((r) => r[0] === '지워질 기관')).toBe(false)
+    expect(orgRows.find((r) => r[0] === '한결연금공단')?.[1]).toBe('연기금')
+
+    const contactRows = ok(exportRows('contacts')).rows
+    expect(contactRows.some((r) => r[1] === '')).toBe(false)
+    // 기관 시트의 담당자 수는 담당자 시트 행 수와 같다(지운 사람은 둘 다에서 빠진다).
+    const daon = orgRows.find((r) => r[0] === '다온생명보험')!
+    expect(daon[3]).toBe(contactRows.filter((r) => r[0] === '다온생명보험').length)
+
+    const deals = ok(exportRows('deals'))
+    const dealRows = deals.rows
+    const amountCol = dealRows[0].indexOf('금액(원)')
+    expect(deals.integerCols).toEqual([amountCol])
+    expect(dealRows.slice(1).some((r) => typeof r[amountCol] === 'number')).toBe(true)
+
+    expect(exportRows('users')).toMatchObject({ status: 422 })
   })
 
   it('잘못된 이메일은 422', () => {

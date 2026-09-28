@@ -3,14 +3,18 @@ import {
   ACTIVITY_KINDS,
   MEMO_MAX,
   ORG_NAME_MAX,
+  ORG_TYPE_LABEL,
   ORG_TYPES,
   type Activity,
   type ActivityInput,
   type Contact,
   type ContactInput,
+  DEAL_KIND_LABEL,
   DEAL_KINDS,
   DEAL_NAME_MAX,
   DEAL_STAGES,
+  DEAL_STATUS_LABEL,
+  stageLabel,
   type Deal,
   type DealDetail,
   type DealEvent,
@@ -25,6 +29,7 @@ import {
 } from '@/features/crm/types'
 import { EMAIL_PATTERN } from '@/features/admin/types'
 import { toISODate } from '@/lib/datetime'
+import type { XlsxCell } from '@/lib/xlsx'
 import type { User } from '@/types'
 import { findAccount } from './adminDb'
 
@@ -950,4 +955,100 @@ export function reopenDeal(
   row.version += 1
   record(row, user, { from_stage: row.stage, to_stage: row.stage, action: 'reopen', reason: null })
   return toDealDetail(row)
+}
+
+// ── 내보내기 (15 FR-CRM-32) ───────────────────────────────────────
+
+const day = (iso: string | null) => (iso ? toISODate(new Date(iso)) : '')
+const names = (ids: string[]) =>
+  people(ids)
+    .map((p) => p.name)
+    .join(', ')
+
+export interface ExportTable {
+  sheet: string
+  /** 첫 행이 머리글이다. */
+  rows: XlsxCell[][]
+  integerCols?: number[]
+}
+
+/**
+ * xlsx 로 나갈 표. 지운 기관과 그 기관의 담당자·안건, 개인정보를 지운 담당자는 뺀다.
+ * 셀은 전부 글자·숫자로만 나간다(수식 없음, `buildXlsx`). 순서는 화면과 같게 기관 이름순·최근 안건순.
+ */
+export function exportRows(entity: string): ExportTable | Failure {
+  const orgName = (id: string) => orgs.find((o) => o.id === id)?.name ?? ''
+  const shownContacts = contacts.filter((c) => !c.erased && aliveOrg(c.org_id))
+
+  if (entity === 'orgs') {
+    const rows = listOrgs({}).map((o) => {
+      const row = aliveOrg(o.id)!
+      return [
+        o.name,
+        ORG_TYPE_LABEL[o.org_type],
+        o.owners.map((p) => p.name).join(', '),
+        // 담당자 시트와 맞춘다. 개인정보를 지운 사람은 거기 없다.
+        shownContacts.filter((c) => c.org_id === o.id).length,
+        day(o.last_contacted_at),
+        row.memo,
+        day(row.created_at),
+      ]
+    })
+    return {
+      sheet: '기관',
+      rows: [['기관', '유형', '사내 창구', '담당자 수', '마지막 연락', '메모', '등록일'], ...rows],
+    }
+  }
+
+  if (entity === 'contacts') {
+    const byOrg = (id: string) => normalizeOrgName(orgName(id))
+    const rows = [...shownContacts]
+      .sort(
+        (a, b) =>
+          byOrg(a.org_id).localeCompare(byOrg(b.org_id), 'ko') ||
+          a.name.localeCompare(b.name, 'ko'),
+      )
+      .map((c) => [orgName(c.org_id), c.name, c.title, c.phone, c.email, c.memo])
+    return {
+      sheet: '담당자',
+      rows: [['기관', '이름', '부서·직함', '전화', '이메일', '메모'], ...rows],
+    }
+  }
+
+  if (entity === 'deals') {
+    const header = [
+      '종류',
+      '안건',
+      '기관',
+      '단계',
+      '상태',
+      '금액(원)',
+      '사내 담당자',
+      '목표일',
+      '다음 할 일',
+      '기한',
+      '중단 사유',
+      '등록일',
+    ]
+    const rows = deals
+      .filter((d) => aliveOrg(d.org_id))
+      .sort((a, b) => b.created_at.localeCompare(a.created_at))
+      .map((d) => [
+        DEAL_KIND_LABEL[d.kind],
+        d.name,
+        orgName(d.org_id),
+        stageLabel(d.kind, d.stage),
+        DEAL_STATUS_LABEL[d.status],
+        d.amount_krw ?? '',
+        d.owner_id ? names([d.owner_id]) : '',
+        d.target_date ?? '',
+        d.next_action,
+        d.next_action_due ?? '',
+        d.drop_reason ?? '',
+        day(d.created_at),
+      ])
+    return { sheet: '안건', rows: [header, ...rows], integerCols: [header.indexOf('금액(원)')] }
+  }
+
+  return invalid('entity 는 orgs·contacts·deals 중 하나여야 합니다.')
 }

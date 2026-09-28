@@ -4,7 +4,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { api, apiEvents, ApiError } from './api'
+import { api, apiBytes, apiEvents, ApiError } from './api'
 
 function reply(status: number, body?: unknown): Response {
   return new Response(body === undefined ? null : JSON.stringify(body), {
@@ -94,6 +94,49 @@ describe('api()', () => {
       status: 500,
       code: null,
       message: '요청에 실패했습니다 (500)',
+    })
+  })
+})
+
+describe('apiBytes()', () => {
+  it('본문을 바이트로 돌려주고, AUTH_EXPIRED 면 refresh 후 한 번 다시 받는다', async () => {
+    fetchMock
+      .mockResolvedValueOnce(reply(401, { detail: '만료', code: 'AUTH_EXPIRED' }))
+      .mockResolvedValueOnce(reply(204))
+      .mockResolvedValueOnce(new Response(new Uint8Array([80, 75, 3, 4])))
+    await expect(apiBytes('/crm/export?entity=orgs', { method: 'POST' })).resolves.toEqual(
+      new Uint8Array([80, 75, 3, 4]),
+    )
+    expect(calledUrls()).toEqual([
+      '/api/crm/export?entity=orgs',
+      '/api/auth/refresh',
+      '/api/crm/export?entity=orgs',
+    ])
+    // 감사 기록을 남기는 POST 라 두 번 다 CSRF 헤더가 실린다.
+    expect(headersOf(0).get('X-CSRF-Token')).toBe('session-hmac')
+    expect(headersOf(2).get('X-CSRF-Token')).toBe('session-hmac')
+  })
+
+  it('만료가 아닌 401 은 refresh 없이 그 본문으로 던진다', async () => {
+    fetchMock.mockResolvedValueOnce(
+      reply(401, { detail: '로그인이 필요합니다.', code: 'AUTH_REQUIRED' }),
+    )
+    await expect(apiBytes('/crm/export?entity=orgs')).rejects.toMatchObject({
+      status: 401,
+      code: 'AUTH_REQUIRED',
+      message: '로그인이 필요합니다.',
+    })
+    expect(calledUrls()).toEqual(['/api/crm/export?entity=orgs'])
+  })
+
+  it('에러 본문은 JSON 으로 읽어 ApiError 로 던진다', async () => {
+    fetchMock.mockResolvedValueOnce(
+      reply(422, { detail: 'entity 가 틀렸습니다.', code: 'VALIDATION' }),
+    )
+    await expect(apiBytes('/crm/export?entity=x')).rejects.toMatchObject({
+      status: 422,
+      code: 'VALIDATION',
+      message: 'entity 가 틀렸습니다.',
     })
   })
 })

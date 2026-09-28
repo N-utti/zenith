@@ -1,5 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api } from '@/lib/api'
+import { api, apiBytes } from '@/lib/api'
+import { toISODate } from '@/lib/datetime'
+import { downloadBytes } from '@/lib/download'
 import type {
   Activity,
   ActivityInput,
@@ -235,5 +237,27 @@ export function useReopenDeal() {
     mutationFn: ({ id, version }: { id: string; version: number }) =>
       api<DealDetail>(`/crm/deals/${id}/reopen`, json('POST', { version })),
     onSettled: settle,
+  })
+}
+
+export type ExportEntity = 'orgs' | 'contacts' | 'deals'
+
+/**
+ * xlsx 내보내기(15 FR-CRM-32). 주소록 전체가 한 번에 나가는 길이라 파일은 서버가 만들고
+ * 누가 몇 행을 뽑았는지 감사 기록에 남긴다(§8.1). 브라우저가 만들면 그 기록을 건너뛸 수 있다.
+ *
+ * 설계서 §9 는 GET 이지만 POST 로 부른다. 감사 기록을 남기는 요청이라 CSRF 검사를 받아야 한다.
+ * GET 이면 다른 사이트의 링크 하나로 직원 이름의 가짜 내보내기 기록이 생긴다.
+ */
+export function useExportCrm() {
+  return useMutation({
+    mutationFn: async (entity: ExportEntity) => {
+      const bytes = await apiBytes(`/crm/export?entity=${entity}`, { method: 'POST' })
+      downloadBytes(
+        `crm-${entity}-${toISODate(new Date())}.xlsx`,
+        bytes,
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      )
+    },
   })
 }

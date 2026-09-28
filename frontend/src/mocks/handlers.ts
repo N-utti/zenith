@@ -125,9 +125,11 @@ import {
   updateContact,
   updateDeal,
   updateOrg,
+  exportRows,
 } from './crmDb'
 import type { ActivityInput, ContactInput, DealInput, OrgInput } from '@/features/crm/types'
 import { readFile, saveFile } from './filesDb'
+import { buildXlsx } from '@/lib/xlsx'
 import { closeMonth, getClosing, listClosings, reopenMonth } from './closingsDb'
 import { addHoliday, listHolidays, removeHoliday } from './holidaysDb'
 import { createEvent, deleteEvent, listEvents } from './eventsDb'
@@ -1896,6 +1898,31 @@ data: ${JSON.stringify(data)}
     const failure = deleteActivity(user, String(params.id))
     return failure ? approvalResponse(failure) : new HttpResponse(null, { status: 204 })
   }),
+
+  // 주소록 전체가 한 번에 나가는 길이다. 누가 무엇을 몇 행 뽑았는지 남긴다(15 §8.1, TC-CRM-SEC-04).
+  // POST 다(설계서 §9 는 GET). 감사 기록을 남기는 요청이라 CSRF 검사를 받게 한다.
+  http.post(
+    '/api/crm/export',
+    authed((user, request) => {
+      const entity = new URL(request.url).searchParams.get('entity') ?? ''
+      const table = exportRows(entity)
+      if ('error' in table) return approvalResponse(table)
+      recordAudit({
+        kind: 'crm.exported',
+        actor_id: user.id,
+        target_id: null,
+        ip: '127.0.0.1',
+        user_agent: navigator.userAgent,
+        detail: { entity, rows: table.rows.length - 1 },
+      })
+      const { sheet, rows, integerCols } = table
+      return new HttpResponse(buildXlsx(rows, { sheet, integerCols, freezeCols: 1 }), {
+        headers: {
+          'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        },
+      })
+    }),
+  ),
 
   // ── CRM 안건 파이프라인 (15 §9) ─────────────────────────────
   http.get(
