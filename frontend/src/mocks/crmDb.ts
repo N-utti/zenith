@@ -47,6 +47,16 @@ interface OrgRow {
   deleted_at: string | null
 }
 
+type ContactRow = Omit<Contact, 'moves'>
+
+/** 담당자 이직 이력(설계서 §4.1 `crm_contact_moves`). */
+interface MoveRow {
+  contact_id: string
+  from_org_id: string
+  to_org_id: string
+  moved_at: string
+}
+
 interface ActivityRow {
   id: string
   kind: Activity['kind']
@@ -112,7 +122,7 @@ const orgs: OrgRow[] = [
   },
 ]
 
-const contacts: Contact[] = [
+const contacts: ContactRow[] = [
   {
     id: 'con-1',
     org_id: 'org-1',
@@ -163,6 +173,11 @@ const contacts: Contact[] = [
     memo: '',
     erased: false,
   },
+]
+
+// 한도윤은 다온생명보험에서 옮겨 왔다. 이직 이력이 어떻게 보이는지 보여 주는 자리.
+const contactMoves: MoveRow[] = [
+  { contact_id: 'con-5', from_org_id: 'org-3', to_org_id: 'org-4', moved_at: daysAgo(60) },
 ]
 
 const activities: ActivityRow[] = [
@@ -263,11 +278,25 @@ function toListItem(org: OrgRow): OrgListItem {
   }
 }
 
+/** 지워진 기관으로 옮긴 적이 있어도 이력은 남긴다. 이름은 지워지기 전 것을 그대로 쓴다. */
+function toContact(row: ContactRow): Contact {
+  return {
+    ...row,
+    moves: contactMoves
+      .filter((m) => m.contact_id === row.id)
+      .sort((a, b) => b.moved_at.localeCompare(a.moved_at))
+      .map((m) => ({
+        from: { id: m.from_org_id, name: orgs.find((o) => o.id === m.from_org_id)?.name ?? '' },
+        moved_at: m.moved_at,
+      })),
+  }
+}
+
 function toDetail(org: OrgRow): OrgDetail {
   return {
     ...toListItem(org),
     memo: org.memo,
-    contacts: contacts.filter((c) => c.org_id === org.id),
+    contacts: contacts.filter((c) => c.org_id === org.id).map(toContact),
     created_at: org.created_at,
   }
 }
@@ -390,7 +419,7 @@ export function createContact(input: ContactInput): Contact | Failure {
   const bad =
     checkContactInput(input) ?? (input.name ? null : invalid('담당자 이름을 입력해 주세요.'))
   if (bad) return bad
-  const row: Contact = {
+  const row: ContactRow = {
     id: nextId('con'),
     org_id: input.org_id,
     name: input.name.trim(),
@@ -401,24 +430,32 @@ export function createContact(input: ContactInput): Contact | Failure {
     erased: false,
   }
   contacts.push(row)
-  return row
+  return toContact(row)
 }
 
-/** 소속 기관 변경(이직)은 이 PR 범위 밖이라 `org_id` 는 받지 않는다. */
-export function updateContact(
-  id: string,
-  patch: Partial<Omit<ContactInput, 'org_id'>>,
-): Contact | Failure {
+/** `org_id` 가 바뀌면 이직이다. 이력을 남기고, 옛 활동 기록은 기록 당시 기관에 둔다(FR-CRM-04). */
+export function updateContact(id: string, patch: Partial<ContactInput>): Contact | Failure {
   const contact = contacts.find((c) => c.id === id)
   if (!contact) return notFound('담당자를')
   if (contact.erased) return fail(409, 'CONFLICT', '개인정보가 삭제된 담당자는 고칠 수 없습니다.')
   const bad = checkContactInput(patch)
   if (bad) return bad
+  const moving = patch.org_id !== undefined && patch.org_id !== contact.org_id
+  if (moving && !aliveOrg(patch.org_id!)) return invalid('옮겨 갈 기관을 찾을 수 없습니다.')
   for (const key of ['name', 'title', 'phone', 'email'] as const) {
     if (patch[key] !== undefined) contact[key] = patch[key].trim()
   }
   if (patch.memo !== undefined) contact.memo = patch.memo
-  return contact
+  if (moving) {
+    contactMoves.push({
+      contact_id: contact.id,
+      from_org_id: contact.org_id,
+      to_org_id: patch.org_id!,
+      moved_at: new Date().toISOString(),
+    })
+    contact.org_id = patch.org_id!
+  }
+  return toContact(contact)
 }
 
 /**
@@ -430,7 +467,7 @@ export function eraseContact(user: User, id: string): Contact | Failure {
   const contact = contacts.find((c) => c.id === id)
   if (!contact) return notFound('담당자를')
   Object.assign(contact, { name: '', title: '', phone: '', email: '', memo: '', erased: true })
-  return contact
+  return toContact(contact)
 }
 
 const canEditActivity = (user: User, row: ActivityRow) =>
@@ -447,7 +484,7 @@ function toActivity(user: User, row: ActivityRow): Activity {
     deal: deal ? { id: deal.id, name: deal.name } : null,
     contacts: row.contact_ids
       .map((id) => contacts.find((c) => c.id === id))
-      .filter((c): c is Contact => !!c)
+      .filter((c): c is ContactRow => !!c)
       .map((c) => ({ id: c.id, name: c.name })),
     users: people(row.user_ids),
     author: people([row.author_id])[0] ?? { id: row.author_id, name: '' },
@@ -539,7 +576,9 @@ export function updateActivity(
   if (!canEditActivity(user, row)) return forbidden()
   const bad = checkActivityInput(patch)
   if (bad) return bad
-  if (contactsOutside(row.org_id, patch.contact_ids)) {
+  // 그사이 이직한 참석자는 이미 기록에 있던 사람이라 그대로 둘 수 있다. 새로 넣는 사람만 본다.
+  const added = patch.contact_ids?.filter((cid) => !row.contact_ids.includes(cid))
+  if (contactsOutside(row.org_id, added)) {
     return invalid('외부 참석자는 이 기관의 담당자여야 합니다.')
   }
   if (dealOutside(row.org_id, patch.deal_id)) return invalid('이 기관의 안건이 아닙니다.')

@@ -19,6 +19,7 @@ import {
   listOrgs,
   normalizeOrgName,
   updateActivity,
+  updateContact,
   updateOrg,
 } from './crmDb'
 
@@ -177,6 +178,50 @@ describe('CRM 목 저장소 (15 CRM 모듈 설계서 §4·§9)', () => {
 
     const after = ok(listActivities(fund, { orgId: 'org-2' })).find((a) => a.id === act.id)
     expect(after?.contacts).toEqual([{ id: contact.id, name: '' }])
+  })
+
+  it('담당자 기관을 바꾸면 이직 이력이 남고, 옛 활동 기록은 이전 기관에 그대로 있다', () => {
+    const contact = ok(
+      createContact({
+        org_id: 'org-1',
+        name: '옮길사람',
+        title: '',
+        phone: '',
+        email: '',
+        memo: '',
+      }),
+    )
+    const act = ok(
+      createActivity(infra, {
+        kind: 'call',
+        occurred_at: new Date().toISOString(),
+        org_id: 'org-1',
+        deal_id: null,
+        contact_ids: [contact.id],
+        user_ids: [],
+        body: '통화',
+      }),
+    )
+
+    expect(updateContact(contact.id, { org_id: 'org-없음' })).toMatchObject({ status: 422 })
+    const moved = ok(updateContact(contact.id, { org_id: 'org-2' }))
+    expect(moved.org_id).toBe('org-2')
+    expect(moved.moves).toEqual([
+      { from: { id: 'org-1', name: '한결연금공단' }, moved_at: expect.any(String) },
+    ])
+    expect(ok(getOrg('org-1')).contacts.some((c) => c.id === contact.id)).toBe(false)
+    expect(ok(getOrg('org-2')).contacts.some((c) => c.id === contact.id)).toBe(true)
+
+    // 기록은 한결연금공단 타임라인에 남고, 이미 참석자였던 사람이라 그대로 두고 고칠 수 있다.
+    const timeline = ok(listActivities(infra, { orgId: 'org-1' }))
+    expect(timeline.some((a) => a.id === act.id)).toBe(true)
+    expect(
+      updateActivity(infra, act.id, { contact_ids: [contact.id], body: '통화 수정' }),
+    ).not.toHaveProperty('error')
+    // 다른 기관 사람을 새로 넣는 건 여전히 막는다.
+    expect(updateActivity(infra, act.id, { contact_ids: [contact.id, 'con-5'] })).toMatchObject({
+      status: 422,
+    })
   })
 
   it('잘못된 이메일은 422', () => {
