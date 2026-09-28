@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import { Paperclip } from 'lucide-react'
 import { Link, useNavigate, useSearchParams } from 'react-router'
 import { Avatar } from '@/components/ui/Avatar'
 import { Button } from '@/components/ui/Button'
@@ -11,11 +12,15 @@ import { Spinner } from '@/components/ui/Spinner'
 import { Textarea } from '@/components/ui/Textarea'
 import { useToast } from '@/components/ui/ToastContext'
 import {
+  uploadApprovalAttachment,
   useApproval,
   useCreateDraft,
   useSubmitApproval,
   useUpdateDraft,
 } from '@/features/approvals/api'
+import { AttachmentList } from '@/features/approvals/AttachmentList'
+import type { ApprovalAttachment } from '@/features/approvals/types'
+import { MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES } from '@/features/chat/api'
 import { useMyArrangements } from '@/features/attendance/api'
 import { useColleagues } from '@/features/people/colleagues'
 import { useCurrentUser } from '@/features/auth/AuthContext'
@@ -28,8 +33,9 @@ import { cn } from '@/lib/cn'
  *
  * `?arrangement=<id>` 로 열면 출장비 결의서다. 출장 기간·사유를 미리 채우고 문서를 그 출장에 건다.
  * `?draft=<id>` 로 열면 임시저장을 이어 쓴다.
- * ponytail: 첨부(영수증)는 파일 업로드(FR-APV-05)가 결재 열람 권한과 묶여야 해서 뒤로 미뤘다.
- * 결재선 미리보기도 서버가 만들어 주는 값이라 상신 뒤 상세에서 본다.
+ * 첨부(영수증, FR-APV-05)는 문서에 딸려 올라가서 문서 id 가 있어야 한다. 고른 파일은 들고 있다가
+ * 저장할 때 올린다. 새 기안이면 먼저 임시저장을 만들고, 올린 뒤 첨부 목록을 한 번 더 저장한다.
+ * 결재선 미리보기는 서버가 만들어 주는 값이라 상신 뒤 상세에서 본다.
  */
 export function ApprovalNewPage() {
   const [params] = useSearchParams()
@@ -62,6 +68,16 @@ export function ApprovalNewPage() {
   const { people, isPending: peoplePending, isError: peopleError } = useColleagues()
   // 상신이 실패해도 방금 만든 임시저장을 잃지 않는다. 다음 시도는 새로 만들지 않고 이것을 고친다.
   const [createdId, setCreatedId] = useState<string | null>(null)
+  /** 올려 둔 첨부. `null` 은 아직 안 건드림이라 임시저장에 있던 것이 시작점이다. */
+  const [attachments, setAttachments] = useState<ApprovalAttachment[] | null>(null)
+  /** 골랐지만 아직 안 올린 파일. 저장할 때 올린다. */
+  const [pending, setPending] = useState<File[]>([])
+  /**
+   * 저장 한 번(생성·업로드·갱신·상신)이 도는 동안. 요청 하나하나의 진행 상태를 OR 로 묶으면
+   * 요청 사이에 한 박자 풀리는 틈이 생겨 두 번 눌린다. 저장 전체를 이 값 하나로 잠근다.
+   */
+  const [saving, setSaving] = useState(false)
+  const picker = useRef<HTMLInputElement>(null)
 
   // 임시저장·출장 정보가 오기 전에 빈 폼을 보이면, 그 사이 입력이 도착한 값과 뒤섞이고
   // 저장하면 문서가 하나 더 생긴다. 다 올 때까지 기다린다.
@@ -101,51 +117,84 @@ export function ApprovalNewPage() {
       return current.includes(id) ? current.filter((each) => each !== id) : [...current, id]
     })
 
+  const attached = attachments ?? seed?.subject.attachments ?? []
+
+  const pick = (list: FileList | null) => {
+    const chosen = [...(list ?? [])]
+    if (chosen.length === 0) return
+    setError(null)
+    if (attached.length + pending.length + chosen.length > MAX_ATTACHMENTS) {
+      return setError(`파일은 ${MAX_ATTACHMENTS}개까지 붙일 수 있습니다.`)
+    }
+    // 서버도 막지만(422) 여기서 먼저 걸러야 10MB 를 다 올린 뒤에 거절당하지 않는다.
+    const bad = chosen.find((file) => file.size === 0 || file.size > MAX_ATTACHMENT_BYTES)
+    if (bad) return setError(`${bad.name}: 비어 있지 않은 10MB 이하 파일만 붙일 수 있습니다.`)
+    setPending((prev) => [...prev, ...chosen])
+  }
+
   const amountNumber = amountValue.trim() === '' ? null : Number(amountValue.replace(/,/g, ''))
   const amountError =
     amountNumber !== null && (!Number.isFinite(amountNumber) || amountNumber < 0)
       ? '금액은 0 이상의 숫자입니다.'
       : null
-  const busy = create.isPending || update.isPending || submit.isPending
+  const busy = saving
   const canSave = titleValue.trim().length > 0 && !amountError && !busy
 
   const input = {
     type_code: 'general' as const,
     title: titleValue.trim(),
-    subject: { body: bodyValue, amount: amountNumber, related },
+    subject: { body: bodyValue, amount: amountNumber, related, attachments: attached },
     references: referenceIds,
   }
-  const fail = (err: unknown) =>
-    setError(err instanceof ApiError ? err.message : '저장하지 못했습니다.')
+  const fail = (err: unknown, prefix = '') =>
+    setError(prefix + (err instanceof ApiError ? err.message : '저장하지 못했습니다.'))
 
-  /** 임시저장이 있으면 갱신, 없으면 생성. 상신은 그 뒤에 한 번 더. */
-  const save = (thenSubmit: boolean) => {
+  /**
+   * 임시저장이 있으면 갱신, 없으면 생성. 고른 파일이 있으면 올리고 첨부 목록을 저장한다. 상신은 그 뒤에.
+   *
+   * 중간에 실패해도 이미 올린 파일은 첨부 목록으로, 만든 임시저장은 `createdId` 로 남는다.
+   * 다시 누르면 남은 파일만 올리고 같은 문서를 고친다. 도는 동안 입력칸은 잠근다(`fieldset`).
+   * 요청 본문은 누른 순간의 값이라, 그 사이 고친 글은 저장되지 않고 사라진다.
+   */
+  const save = async (thenSubmit: boolean) => {
     setError(null)
-    const after = (id: string) => {
-      if (!thenSubmit) {
-        toast.success('임시저장했습니다.')
-        void navigate(`/approvals/${id}`)
-        return
+    setSaving(true)
+    /** 올리던 파일. 실패 문구에 이름을 붙여 몇 번째에서 멈췄는지 보인다. */
+    let current: File | null = null
+    try {
+      let id = seed?.id ?? createdId
+      const fresh = !id
+      if (!id) {
+        id = (await create.mutateAsync(input)).id
+        setCreatedId(id)
       }
-      submit.mutate(id, {
-        onSuccess: () => {
-          toast.success('상신했습니다. 결재가 끝나면 알려 드립니다.')
-          void navigate(`/approvals/${id}`)
-        },
-        onError: fail,
-      })
-    }
-    const existing = seed?.id ?? createdId
-    if (existing) {
-      update.mutate({ id: existing, ...input }, { onSuccess: (d) => after(d.id), onError: fail })
-    } else {
-      create.mutate(input, {
-        onSuccess: (d) => {
-          setCreatedId(d.id)
-          after(d.id)
-        },
-        onError: fail,
-      })
+      const uploaded = [...attached]
+      for (const file of pending) {
+        current = file
+        uploaded.push(await uploadApprovalAttachment(id, file))
+        setAttachments([...uploaded])
+        setPending((prev) => prev.filter((each) => each !== file))
+      }
+      current = null
+      // 방금 만들었고 올린 것도 없으면 이미 저장된 그대로다.
+      if (!fresh || uploaded.length > attached.length) {
+        await update.mutateAsync({
+          id,
+          ...input,
+          subject: { ...input.subject, attachments: uploaded },
+        })
+      }
+      if (thenSubmit) {
+        await submit.mutateAsync(id)
+        toast.success('상신했습니다. 결재가 끝나면 알려 드립니다.')
+      } else {
+        toast.success('임시저장했습니다.')
+      }
+      void navigate(`/approvals/${id}`)
+    } catch (err) {
+      fail(err, current ? `${current.name}: ` : '')
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -164,7 +213,7 @@ export function ApprovalNewPage() {
       />
       <Card>
         <CardHeader title="내용" />
-        <div className="space-y-4 px-5 pb-5">
+        <fieldset disabled={busy} className="min-w-0 space-y-4 px-5 pb-5">
           <Field label="제목" required>
             {(slot) => (
               <Input
@@ -229,6 +278,51 @@ export function ApprovalNewPage() {
               </div>
             )}
           </Field>
+          <Field
+            label="첨부"
+            hint={`영수증·견적서. 파일당 10MB, ${MAX_ATTACHMENTS}개까지. 이 문서를 열 수 있는 사람만 받습니다.`}
+          >
+            {(slot) => (
+              <div role="group" aria-label="첨부" className="space-y-2">
+                <AttachmentList
+                  files={[...attached, ...pending]}
+                  onRemove={
+                    busy
+                      ? undefined
+                      : (index) =>
+                          index < attached.length
+                            ? setAttachments(attached.filter((_, i) => i !== index))
+                            : setPending((prev) =>
+                                prev.filter((_, i) => i !== index - attached.length),
+                              )
+                  }
+                />
+                <input
+                  ref={picker}
+                  type="file"
+                  multiple
+                  hidden
+                  onChange={(e) => {
+                    pick(e.target.files)
+                    // 같은 파일을 다시 고를 수 있게 비운다.
+                    e.target.value = ''
+                  }}
+                />
+                {/* `id` 는 넘기지 않는다. 라벨이 붙으면 버튼 이름이 "첨부" 로 덮여 보이는 글자와 갈린다. */}
+                <Button
+                  aria-describedby={slot['aria-describedby']}
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  disabled={busy}
+                  onClick={() => picker.current?.click()}
+                >
+                  <Paperclip className="size-3.5" />
+                  파일 붙이기
+                </Button>
+              </div>
+            )}
+          </Field>
           <Field label="본문" required>
             {(slot) => (
               <Textarea
@@ -245,18 +339,23 @@ export function ApprovalNewPage() {
             </p>
           )}
           <div className="flex justify-end gap-2">
-            <Button variant="secondary" size="sm" disabled={!canSave} onClick={() => save(false)}>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={!canSave}
+              onClick={() => void save(false)}
+            >
               임시저장
             </Button>
             <Button
               size="sm"
               disabled={!canSave || bodyValue.trim().length === 0}
-              onClick={() => save(true)}
+              onClick={() => void save(true)}
             >
               {busy ? <Spinner className="border-t-on-accent" /> : '상신'}
             </Button>
           </div>
-        </div>
+        </fieldset>
       </Card>
     </>
   )

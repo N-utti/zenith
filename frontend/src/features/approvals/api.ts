@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import type {
+  ApprovalAttachment,
   ApprovalBox,
   Delegation,
   DelegationInput,
@@ -64,6 +65,18 @@ export function useUpdateDraft() {
       }),
     onSuccess: refetch,
   })
+}
+
+/**
+ * 첨부 한 개를 임시저장 문서에 올린다. 받은 값을 `subject.attachments` 에 넣어 저장해야 붙는다.
+ *
+ * 훅이 아니라 함수다. 여러 개를 차례로 올릴 때 `useMutation` 의 `mutate` 를 반복해 부르면
+ * 앞선 호출의 콜백이 떨어진다(채팅 `uploadAttachment` 와 같은 이유).
+ */
+export function uploadApprovalAttachment(id: string, file: File): Promise<ApprovalAttachment> {
+  const form = new FormData()
+  form.append('file', file)
+  return api<ApprovalAttachment>(`/approvals/${id}/attachments`, { method: 'POST', body: form })
 }
 
 /** 상신. 결재선이 이 시점에 고정된다(13 §4.2.2). 도메인 사전검증 실패는 422. */

@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest'
 import { toISODate } from '@/lib/datetime'
 import { MOCK_USERS } from './db'
 import {
+  attachmentPrefix,
   cancelApproval,
+  checkAttachTarget,
+  checkAttachmentDownload,
   createDelegation,
   createDraft,
   deleteDelegation,
@@ -11,6 +14,7 @@ import {
   getApproval,
   listApprovals,
   listDelegations,
+  recordAttachment,
   submitApproval,
   updateDraft,
 } from './approvalsDb'
@@ -411,6 +415,103 @@ describe('결재 위임 (13 §4.2.3)', () => {
     expect(listDelegations(other)).toHaveLength(0)
     // 남의 위임은 해제도 못 한다.
     expect(deleteDelegation(other, made.id)).toMatchObject({ code: 'NOT_FOUND' })
+    deleteDelegation(senior, made.id)
+  })
+})
+
+describe('결재 첨부 (13 FR-APV-05)', () => {
+  const subject = { body: '본문', amount: 1000, related: null }
+  let fileSeq = 0
+  /** 목 핸들러가 하는 일: 문서에 파일을 올리고 그 주인을 적는다. */
+  function upload(docId: string, name = 'receipt.png') {
+    const fileId = `a-test-${fileSeq++}`
+    recordAttachment(docId, fileId)
+    return {
+      url: `${attachmentPrefix(docId)}${fileId}/${name}`,
+      name,
+      size: 10,
+      content_type: null,
+    }
+  }
+
+  function draftWithFile(references?: string[]) {
+    const draft = createDraft(member, {
+      type_code: 'general',
+      title: '영수증',
+      subject,
+      references,
+    })
+    if ('error' in draft) throw new Error(draft.error)
+    const updated = updateDraft(member, draft.id, {
+      type_code: 'general',
+      title: '영수증',
+      subject: { ...subject, attachments: [upload(draft.id)] },
+    })
+    if ('error' in updated) throw new Error(updated.error)
+    return { doc: updated, url: updated.subject.attachments![0].url }
+  }
+
+  it('새로 만들 때는 첨부를 받지 않는다. 아직 올릴 문서가 없다', () => {
+    const made = createDraft(member, {
+      type_code: 'general',
+      title: '영수증',
+      subject: { ...subject, attachments: [upload('apv-1')] },
+    })
+    expect(made).toMatchObject({ status: 422, code: 'VALIDATION' })
+  })
+
+  it('남의 문서에 올린 파일은 url 을 통째로 옮겨도, 파일 id 만 내 경로에 끼워도 못 붙인다', () => {
+    const { doc: mine, url } = draftWithFile()
+    const other = createDraft(member, { type_code: 'general', title: '다른 문서', subject })
+    if ('error' in other) throw new Error(other.error)
+    const attach = (fileUrl: string) =>
+      updateDraft(member, other.id, {
+        type_code: 'general',
+        title: '다른 문서',
+        subject: { ...subject, attachments: [{ url: fileUrl, name: 'x', size: 1 }] },
+      })
+    expect(attach(url)).toMatchObject({ status: 422, code: 'VALIDATION' })
+    const fileId = url.slice(attachmentPrefix(mine.id).length).split('/')[0]
+    expect(attach(`${attachmentPrefix(other.id)}${fileId}/x`)).toMatchObject({ status: 422 })
+  })
+
+  it('올리기는 내 임시저장에만 된다', () => {
+    const { doc } = draftWithFile()
+    expect(checkAttachTarget(member, doc.id)).toBeNull()
+    expect(checkAttachTarget(other, doc.id)).toMatchObject({ status: 404 })
+    submitApproval(member, doc.id)
+    expect(checkAttachTarget(member, doc.id)).toMatchObject({ status: 409, code: 'NOT_DRAFT' })
+  })
+
+  it('내려받기는 문서를 열 수 있는 사람만, 붙어 있는 파일만', () => {
+    const { doc, url } = draftWithFile()
+    expect(checkAttachmentDownload(member, doc.id, url)).toBeNull()
+    expect(checkAttachmentDownload(other, doc.id, url)).toMatchObject({ status: 403 })
+    expect(checkAttachmentDownload(ceo, doc.id, url)).toBeNull() // 임원 전사 조회
+    expect(
+      checkAttachmentDownload(member, doc.id, upload(doc.id, 'removed.png').url),
+    ).toMatchObject({ status: 404 })
+  })
+
+  it('참조자는 상신한 뒤에만 받는다. 기안자가 아직 고쳐 쓰는 중이다', () => {
+    const { doc, url } = draftWithFile([other.id])
+    expect(checkAttachmentDownload(other, doc.id, url)).toMatchObject({ status: 403 })
+    submitApproval(member, doc.id)
+    expect(checkAttachmentDownload(other, doc.id, url)).toBeNull()
+  })
+
+  it('위임받은 사람은 대신 결재할 차례에 받는다', () => {
+    const { doc, url } = draftWithFile()
+    submitApproval(member, doc.id) // 첫 차례는 전무
+    expect(checkAttachmentDownload(other, doc.id, url)).toMatchObject({ status: 403 })
+    const today = toISODate(new Date())
+    const made = createDelegation(senior, {
+      delegate_id: other.id,
+      start_date: today,
+      end_date: today,
+    })
+    if ('error' in made) throw new Error(made.error)
+    expect(checkAttachmentDownload(other, doc.id, url)).toBeNull()
     deleteDelegation(senior, made.id)
   })
 })

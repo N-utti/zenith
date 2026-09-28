@@ -32,7 +32,10 @@ function openDb(): Promise<IDBDatabase> {
   return dbPromise
 }
 
-function run<T>(mode: IDBTransactionMode, work: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> {
+function run<T>(
+  mode: IDBTransactionMode,
+  work: (store: IDBObjectStore) => IDBRequest<T>,
+): Promise<T> {
   return openDb().then(
     (db) =>
       new Promise<T>((resolve, reject) => {
@@ -46,10 +49,13 @@ function run<T>(mode: IDBTransactionMode, work: (store: IDBObjectStore) => IDBRe
 /**
  * 아이디는 무작위여야 한다. 세션마다 1부터 세면, 새로고침 뒤 올린 파일이
  * 아직 문서가 참조 중인 예전 파일을 덮어쓴다.
+ *
+ * 앞머리는 누구의 파일인지 가른다. `f` 는 문서 이미지(로그인이면 누구나), `a` 는 결재 첨부
+ * (문서 열람 권한). 공용 `/api/files` 가 `a` 를 내주면 결재 판정을 건너뛰게 된다.
  */
-export async function saveFile(file: File): Promise<StoredFile> {
+export async function saveFile(file: File, prefix: 'f' | 'a' = 'f'): Promise<StoredFile> {
   const stored: StoredFile = {
-    id: `f-${crypto.randomUUID()}`,
+    id: `${prefix}-${crypto.randomUUID()}`,
     name: file.name,
     type: file.type,
     size: file.size,
