@@ -1,5 +1,6 @@
 import { lazy, Suspense } from 'react'
-import { Route, Routes } from 'react-router'
+import { Navigate, Route, Routes } from 'react-router'
+import { CRM_ENABLED } from '@/app/navigation'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { Spinner } from '@/components/ui/Spinner'
 import { LoginPage } from '@/features/auth/LoginPage'
@@ -14,6 +15,8 @@ import { BoardPage } from '@/pages/BoardPage'
 import { BoardPostPage } from '@/pages/BoardPostPage'
 import { ChatSocketProvider } from '@/features/chat/ChatSocketProvider'
 import { ChatPage } from '@/pages/ChatPage'
+import { CrmOrgPage } from '@/pages/CrmOrgPage'
+import { CrmOrgsPage } from '@/pages/CrmOrgsPage'
 import { DocsPage } from '@/pages/DocsPage'
 import { HomePage } from '@/pages/HomePage'
 import { NotFoundPage } from '@/pages/NotFoundPage'
@@ -72,6 +75,15 @@ export function AppRoutes() {
             <Route path="approvals" element={<ApprovalsPage />} />
             <Route path="approvals/new" element={<ApprovalNewPage />} />
             <Route path="approvals/:approvalId" element={<ApprovalDetailPage />} />
+            {/* CRM 은 v1.1. 운영 빌드에서는 라우트째 빠진다(navigation.ts `CRM_ENABLED`).
+                `/crm` 자리는 안건 보드가 들어올 때까지 기관 목록으로 넘긴다. */}
+            {CRM_ENABLED && (
+              <>
+                <Route path="crm" element={<Navigate to="/crm/orgs" replace />} />
+                <Route path="crm/orgs" element={<CrmOrgsPage />} />
+                <Route path="crm/orgs/:orgId" element={<CrmOrgPage />} />
+              </>
+            )}
             <Route path="notifications" element={<NotificationsPage />} />
             <Route path="settings" element={<SettingsPage />} />
             {/* 임원 전용. 화면이 등급을 보고 막고, 실제 차단은 서버 403 이다. */}

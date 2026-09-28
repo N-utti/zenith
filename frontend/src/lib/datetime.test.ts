@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { daysUntil } from './datetime'
+import { daysUntil, toDateTimeLocal } from './datetime'
 
 /**
  * `daysUntil` 은 시각이 아니라 **날짜** 차이를 센다. 자정을 넘기면 24시간이 안 돼도 하루가 준다.
@@ -34,5 +34,12 @@ describe('daysUntil', () => {
   it('30일 뒤는 30 이다', () => {
     vi.setSystemTime(local(2026, 9, 17, 10))
     expect(daysUntil(local(2026, 10, 17, 10).toISOString())).toBe(30)
+  })
+})
+
+describe('toDateTimeLocal', () => {
+  it('UTC 가 아니라 그 기기의 현지 시각으로 쓴다. 자정은 24 가 아니라 00 이다', () => {
+    expect(toDateTimeLocal(local(2026, 9, 28, 14))).toBe('2026-09-28T14:00')
+    expect(toDateTimeLocal(local(2026, 1, 5, 0))).toBe('2026-01-05T00:00')
   })
 })

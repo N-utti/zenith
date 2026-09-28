@@ -106,6 +106,21 @@ import {
   submitApproval,
   updateDraft,
 } from './approvalsDb'
+import {
+  createActivity,
+  createContact,
+  createOrg,
+  deleteActivity,
+  deleteOrg,
+  eraseContact,
+  getOrg,
+  listActivities,
+  listOrgs,
+  updateActivity,
+  updateContact,
+  updateOrg,
+} from './crmDb'
+import type { ActivityInput, ContactInput, OrgInput } from '@/features/crm/types'
 import { readFile, saveFile } from './filesDb'
 import { closeMonth, getClosing, listClosings, reopenMonth } from './closingsDb'
 import { addHoliday, listHolidays, removeHoliday } from './holidaysDb'
@@ -253,7 +268,7 @@ function checkPostFields(body: { title?: unknown; body?: unknown }) {
   return null
 }
 
-/** 결재 목의 결과 → 응답. 실패는 `{error, status, code}` 모양(13 §9 의 403·404·409·422). */
+/** 결재·CRM 목의 결과 → 응답. 실패는 `{error, status, code}` 모양(13 §9 의 403·404·409·422). */
 function approvalResponse(
   result: { error: string; status: number; code: string } | object,
   ok = 200,
@@ -1773,5 +1788,104 @@ data: ${JSON.stringify(data)}
     return HttpResponse.json(addComment(String(params.docId), user, body, blockId), {
       status: 201,
     })
+  }),
+
+  // ── CRM 주소록 (15 CRM 모듈 설계서 §9) ─────────────────────
+  // 백엔드가 아직 없다(v1.1). 모양은 설계서 §9 를 따른 가정이다.
+  http.get(
+    '/api/crm/orgs',
+    authed((_, request) => {
+      const params = new URL(request.url).searchParams
+      const stale = Number(params.get('stale_days'))
+      return HttpResponse.json({
+        items: listOrgs({
+          q: params.get('q') ?? '',
+          type: params.get('type') ?? '',
+          owner: params.get('owner') ?? '',
+          staleDays: stale > 0 ? stale : undefined,
+        }),
+        next_cursor: null,
+      })
+    }),
+  ),
+  http.post('/api/crm/orgs', async ({ request }) => {
+    if (!authenticate()) return unauthorized()
+    const body = await readJson<OrgInput>(request)
+    if (!body) return validationError('본문이 올바르지 않습니다.')
+    await delay(300)
+    return approvalResponse(createOrg(body), 201)
+  }),
+  http.get('/api/crm/orgs/:id', ({ params }) => {
+    if (!authenticate()) return unauthorized()
+    return approvalResponse(getOrg(String(params.id)))
+  }),
+  http.patch('/api/crm/orgs/:id', async ({ request, params }) => {
+    if (!authenticate()) return unauthorized()
+    const body = await readJson<Partial<OrgInput>>(request)
+    if (!body) return validationError('본문이 올바르지 않습니다.')
+    await delay(300)
+    return approvalResponse(updateOrg(String(params.id), body))
+  }),
+  http.delete('/api/crm/orgs/:id', async ({ request, params }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    const body = await readJson<{ reason?: unknown }>(request)
+    await delay(300)
+    const failure = deleteOrg(user, String(params.id), body?.reason)
+    return failure ? approvalResponse(failure) : new HttpResponse(null, { status: 204 })
+  }),
+  http.post('/api/crm/contacts', async ({ request }) => {
+    if (!authenticate()) return unauthorized()
+    const body = await readJson<ContactInput>(request)
+    if (!body) return validationError('본문이 올바르지 않습니다.')
+    await delay(300)
+    return approvalResponse(createContact(body), 201)
+  }),
+  http.patch('/api/crm/contacts/:id', async ({ request, params }) => {
+    if (!authenticate()) return unauthorized()
+    const body = await readJson<Partial<ContactInput>>(request)
+    if (!body) return validationError('본문이 올바르지 않습니다.')
+    await delay(300)
+    return approvalResponse(updateContact(String(params.id), body))
+  }),
+  http.post('/api/crm/contacts/:id/erase', async ({ params }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    await delay(300)
+    return approvalResponse(eraseContact(user, String(params.id)))
+  }),
+  http.get(
+    '/api/crm/activities',
+    authed((user, request) => {
+      const orgId = new URL(request.url).searchParams.get('org_id')
+      if (!orgId) return validationError('org_id 가 필요합니다.')
+      const result = listActivities(user, orgId)
+      return 'error' in result
+        ? approvalResponse(result)
+        : HttpResponse.json({ items: result, next_cursor: null })
+    }),
+  ),
+  http.post('/api/crm/activities', async ({ request }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    const body = await readJson<ActivityInput>(request)
+    if (!body) return validationError('본문이 올바르지 않습니다.')
+    await delay(300)
+    return approvalResponse(createActivity(user, body), 201)
+  }),
+  http.patch('/api/crm/activities/:id', async ({ request, params }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    const body = await readJson<Partial<ActivityInput>>(request)
+    if (!body) return validationError('본문이 올바르지 않습니다.')
+    await delay(300)
+    return approvalResponse(updateActivity(user, String(params.id), body))
+  }),
+  http.delete('/api/crm/activities/:id', async ({ params }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    await delay(300)
+    const failure = deleteActivity(user, String(params.id))
+    return failure ? approvalResponse(failure) : new HttpResponse(null, { status: 204 })
   }),
 ]
