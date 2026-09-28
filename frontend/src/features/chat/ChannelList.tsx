@@ -1,15 +1,17 @@
 import { NavLink } from 'react-router'
-import { AtSign, Hash } from 'lucide-react'
+import { AtSign, Hash, Pencil } from 'lucide-react'
 import { Spinner } from '@/components/ui/Spinner'
 import { cn } from '@/lib/cn'
 import { formatRelative } from '@/lib/datetime'
 import { useChannels } from './api'
+import { useHasDraft } from './drafts'
 import type { ChatChannel } from './types'
 import { WorkStatus } from './WorkStatus'
 
 function Row({ channel }: { channel: ChatChannel }) {
   const Icon = channel.is_dm ? AtSign : Hash
   const last = channel.last_message
+  const hasDraft = useHasDraft(channel.id)
 
   return (
     <NavLink
@@ -33,6 +35,9 @@ function Row({ channel }: { channel: ChatChannel }) {
             {channel.name}
           </span>
           <WorkStatus channel={channel} />
+          {hasDraft && (
+            <Pencil role="img" aria-label="작성 중" className="text-subtle size-3.5 shrink-0" />
+          )}
         </p>
         {last && <p className="text-subtle truncate text-xs">{last.body}</p>}
       </div>
