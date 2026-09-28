@@ -1,0 +1,432 @@
+import { useId, useState, type FormEvent, type ReactNode } from 'react'
+import { useNavigate } from 'react-router'
+import { Button } from '@/components/ui/Button'
+import { Field } from '@/components/ui/Field'
+import { Input } from '@/components/ui/Input'
+import { Modal } from '@/components/ui/Modal'
+import { Select } from '@/components/ui/Select'
+import { Spinner } from '@/components/ui/Spinner'
+import { Textarea } from '@/components/ui/Textarea'
+import { useToast } from '@/components/ui/ToastContext'
+import { useCurrentUser } from '@/features/auth/AuthContext'
+import { useColleagues } from '@/features/people/colleagues'
+import { ApiError } from '@/lib/api'
+import { toDateTimeLocal } from '@/lib/datetime'
+import { useCreateOrg, useSaveActivity, useSaveContact, useUpdateOrg } from './api'
+import { ChipPicker } from './ChipPicker'
+import {
+  ACTIVITY_BODY_MAX,
+  ACTIVITY_KIND_LABEL,
+  ACTIVITY_KINDS,
+  MEMO_MAX,
+  ORG_NAME_MAX,
+  ORG_TYPE_LABEL,
+  ORG_TYPES,
+  contactName,
+  type Activity,
+  type ActivityKind,
+  type Contact,
+  type OrgDetail,
+  type OrgType,
+  type Person,
+} from './types'
+
+/**
+ * 창구·사내 참석자로 고를 사람. 동료 명단은 나를 빼고 오지만(결재·DM 에서 나를 고를 일이 없다)
+ * 여기서는 내가 맡거나 내가 다녀온 미팅이 제일 흔하다. 나를 맨 앞에 붙인다.
+ */
+function useStaff(): Person[] {
+  const me = useCurrentUser()
+  const { people } = useColleagues()
+  return [{ id: me.id, name: me.name }, ...people]
+}
+
+const errorText = (err: unknown, fallback: string) =>
+  err instanceof ApiError ? err.message : fallback
+
+/** 세 폼이 같이 쓰는 껍데기. Enter 로도 저장되게 폼을 모달 본문에 두고 버튼을 `form=` 으로 잇는다. */
+function FormModal({
+  title,
+  description,
+  busy,
+  error,
+  submitLabel = '저장',
+  canSubmit,
+  onClose,
+  onSubmit,
+  children,
+}: {
+  title: string
+  description?: string
+  busy: boolean
+  error: string | null
+  submitLabel?: string
+  canSubmit: boolean
+  onClose: () => void
+  onSubmit: () => void
+  children: ReactNode
+}) {
+  const formId = useId()
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={title}
+      description={description}
+      footer={
+        <>
+          <Button variant="secondary" size="sm" onClick={onClose}>
+            취소
+          </Button>
+          <Button type="submit" form={formId} size="sm" disabled={!canSubmit || busy}>
+            {busy ? <Spinner className="border-t-on-accent" /> : submitLabel}
+          </Button>
+        </>
+      }
+    >
+      <form
+        id={formId}
+        className="space-y-4"
+        onSubmit={(event: FormEvent) => {
+          event.preventDefault()
+          if (canSubmit && !busy) onSubmit()
+        }}
+      >
+        {children}
+        {error && (
+          <p role="alert" className="text-danger text-sm">
+            {error}
+          </p>
+        )}
+      </form>
+    </Modal>
+  )
+}
+
+const TYPE_OPTIONS = ORG_TYPES.map((value) => ({ value, label: ORG_TYPE_LABEL[value] }))
+
+/** 기관 등록·수정. `org` 가 없으면 등록이고, 저장하면 새 기관 상세로 간다. */
+export function OrgFormModal({ org, onClose }: { org?: OrgDetail; onClose: () => void }) {
+  const navigate = useNavigate()
+  const toast = useToast()
+  const staff = useStaff()
+  const create = useCreateOrg()
+  const update = useUpdateOrg()
+  const [name, setName] = useState(org?.name ?? '')
+  const [orgType, setOrgType] = useState<OrgType | ''>(org?.org_type ?? '')
+  const [owners, setOwners] = useState(org?.owners.map((o) => o.id) ?? [])
+  const [memo, setMemo] = useState(org?.memo ?? '')
+  const [error, setError] = useState<string | null>(null)
+
+  // 퇴사 등으로 명단에서 빠진 기존 창구도 칩으로 남겨야 풀 수 있다.
+  const ownerOptions = [
+    ...staff,
+    ...(org?.owners.filter((o) => !staff.some((s) => s.id === o.id)) ?? []),
+  ]
+
+  const submit = () => {
+    if (!orgType) return
+    setError(null)
+    const input = { name: name.trim(), org_type: orgType, memo, owner_ids: owners }
+    if (org) {
+      update.mutate(
+        { id: org.id, ...input },
+        {
+          onSuccess: () => {
+            toast.success('저장했습니다.')
+            onClose()
+          },
+          onError: (err) => setError(errorText(err, '저장하지 못했습니다.')),
+        },
+      )
+      return
+    }
+    create.mutate(input, {
+      onSuccess: ({ org: made, duplicates }) => {
+        // 막지는 않는다. 계열사처럼 이름이 겹쳐도 다른 기관일 수 있다(15 FR-CRM-01).
+        if (duplicates.length > 0) {
+          toast.info(
+            `이름이 같은 기관이 이미 있습니다: ${duplicates.map((d) => d.name).join(', ')}`,
+          )
+        } else {
+          toast.success('등록했습니다.')
+        }
+        onClose()
+        void navigate(`/crm/orgs/${made.id}`)
+      },
+      onError: (err) => setError(errorText(err, '등록하지 못했습니다.')),
+    })
+  }
+
+  return (
+    <FormModal
+      title={org ? '기관 수정' : '기관 등록'}
+      busy={create.isPending || update.isPending}
+      error={error}
+      canSubmit={name.trim().length > 0 && orgType !== ''}
+      onClose={onClose}
+      onSubmit={submit}
+    >
+      <Field label="기관 이름" required>
+        {(slot) => (
+          <Input
+            {...slot}
+            value={name}
+            maxLength={ORG_NAME_MAX}
+            autoFocus
+            onChange={(e) => setName(e.target.value)}
+          />
+        )}
+      </Field>
+      <Field label="유형" required>
+        {(slot) => (
+          <Select
+            {...slot}
+            value={orgType}
+            placeholder="유형 선택"
+            options={TYPE_OPTIONS}
+            onChange={(e) => setOrgType(e.target.value as OrgType)}
+          />
+        )}
+      </Field>
+      <Field label="사내 창구" hint="이 기관을 맡은 우리 쪽 사람입니다.">
+        {(slot) => (
+          <ChipPicker
+            slot={slot}
+            label="사내 창구"
+            options={ownerOptions}
+            value={owners}
+            onChange={setOwners}
+          />
+        )}
+      </Field>
+      <Field label="메모">
+        {(slot) => (
+          <Textarea
+            {...slot}
+            rows={3}
+            value={memo}
+            maxLength={MEMO_MAX}
+            onChange={(e) => setMemo(e.target.value)}
+          />
+        )}
+      </Field>
+    </FormModal>
+  )
+}
+
+/** 담당자 등록·수정. 소속 기관은 바꾸지 않는다(이직 처리는 따로). */
+export function ContactFormModal({
+  orgId,
+  contact,
+  onClose,
+}: {
+  orgId: string
+  contact?: Contact
+  onClose: () => void
+}) {
+  const toast = useToast()
+  const save = useSaveContact()
+  const [form, setForm] = useState({
+    name: contact?.name ?? '',
+    title: contact?.title ?? '',
+    phone: contact?.phone ?? '',
+    email: contact?.email ?? '',
+    memo: contact?.memo ?? '',
+  })
+  const [error, setError] = useState<string | null>(null)
+  const set = (key: keyof typeof form) => (value: string) => setForm({ ...form, [key]: value })
+
+  const submit = () => {
+    setError(null)
+    save.mutate(
+      { id: contact?.id, org_id: orgId, ...form },
+      {
+        onSuccess: () => {
+          toast.success('저장했습니다.')
+          onClose()
+        },
+        onError: (err) => setError(errorText(err, '저장하지 못했습니다.')),
+      },
+    )
+  }
+
+  const text = (key: 'name' | 'title' | 'phone' | 'email', label: string, type = 'text') => (
+    <Field label={label} required={key === 'name'}>
+      {(slot) => (
+        <Input
+          {...slot}
+          type={type}
+          value={form[key]}
+          autoFocus={key === 'name'}
+          onChange={(e) => set(key)(e.target.value)}
+        />
+      )}
+    </Field>
+  )
+
+  return (
+    <FormModal
+      title={contact ? '담당자 수정' : '담당자 추가'}
+      description="회사 밖 사람의 개인정보입니다. 업무 연락에 필요한 만큼만 적어 주세요."
+      busy={save.isPending}
+      error={error}
+      canSubmit={form.name.trim().length > 0}
+      onClose={onClose}
+      onSubmit={submit}
+    >
+      {text('name', '이름')}
+      {text('title', '부서·직함')}
+      <div className="grid gap-4 sm:grid-cols-2">
+        {text('phone', '전화', 'tel')}
+        {text('email', '이메일', 'email')}
+      </div>
+      <Field label="메모">
+        {(slot) => (
+          <Textarea
+            {...slot}
+            rows={2}
+            value={form.memo}
+            maxLength={MEMO_MAX}
+            onChange={(e) => set('memo')(e.target.value)}
+          />
+        )}
+      </Field>
+    </FormModal>
+  )
+}
+
+const KIND_OPTIONS = ACTIVITY_KINDS.map((value) => ({ value, label: ACTIVITY_KIND_LABEL[value] }))
+
+/**
+ * 활동 기록 추가·수정. 미팅 직후 휴대폰으로 바로 적는 자리라(15 FR-CRM-23) 필수 칸은
+ * 내용 하나다. 유형은 미팅, 일시는 지금, 사내 참석자는 나로 미리 채운다.
+ */
+export function ActivityFormModal({
+  org,
+  activity,
+  onClose,
+}: {
+  org: OrgDetail
+  activity?: Activity
+  onClose: () => void
+}) {
+  const me = useCurrentUser()
+  const toast = useToast()
+  const staff = useStaff()
+  const save = useSaveActivity()
+  const [kind, setKind] = useState<ActivityKind>(activity?.kind ?? 'meeting')
+  const [initialAt] = useState(() =>
+    toDateTimeLocal(activity ? new Date(activity.occurred_at) : new Date()),
+  )
+  const [at, setAt] = useState(initialAt)
+  const [contactIds, setContactIds] = useState(activity?.contacts.map((c) => c.id) ?? [])
+  const [userIds, setUserIds] = useState(activity?.users.map((u) => u.id) ?? [me.id])
+  const [body, setBody] = useState(activity?.body ?? '')
+  const [error, setError] = useState<string | null>(null)
+
+  // 삭제 처리된 담당자는 새로 고를 수 없다. 이미 기록에 있던 사람은 칩으로 남겨 뺄 수 있게 한다.
+  const contactOptions = org.contacts
+    .filter((c) => !c.erased || contactIds.includes(c.id))
+    .map((c) => ({ id: c.id, name: contactName(c) }))
+  // 퇴사 등으로 명단에서 빠진 기존 참석자도 칩으로 남겨야 뺄 수 있다.
+  const userOptions = [
+    ...staff,
+    ...(activity?.users.filter((u) => !staff.some((s) => s.id === u.id)) ?? []),
+  ]
+
+  const submit = () => {
+    const when = new Date(at)
+    if (Number.isNaN(when.getTime())) return setError('일시를 확인해 주세요.')
+    setError(null)
+    save.mutate(
+      {
+        id: activity?.id,
+        org_id: org.id,
+        kind,
+        // 입력칸은 분까지만 담는다. 손대지 않았으면 원래 시각(초 포함)을 그대로 둔다.
+        occurred_at: activity && at === initialAt ? activity.occurred_at : when.toISOString(),
+        contact_ids: contactIds,
+        user_ids: userIds,
+        body: body.trim(),
+      },
+      {
+        onSuccess: () => {
+          toast.success('기록했습니다.')
+          onClose()
+        },
+        onError: (err) => setError(errorText(err, '기록하지 못했습니다.')),
+      },
+    )
+  }
+
+  return (
+    <FormModal
+      title={activity ? '활동 기록 수정' : '활동 기록'}
+      description={org.name}
+      busy={save.isPending}
+      error={error}
+      canSubmit={body.trim().length > 0 && at !== ''}
+      onClose={onClose}
+      onSubmit={submit}
+    >
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="유형" required>
+          {(slot) => (
+            <Select
+              {...slot}
+              value={kind}
+              options={KIND_OPTIONS}
+              onChange={(e) => setKind(e.target.value as ActivityKind)}
+            />
+          )}
+        </Field>
+        <Field label="일시" required>
+          {(slot) => (
+            <Input
+              {...slot}
+              type="datetime-local"
+              value={at}
+              onChange={(e) => setAt(e.target.value)}
+            />
+          )}
+        </Field>
+      </div>
+      <Field label="내용" required>
+        {(slot) => (
+          <Textarea
+            {...slot}
+            rows={4}
+            value={body}
+            maxLength={ACTIVITY_BODY_MAX}
+            autoFocus
+            onChange={(e) => setBody(e.target.value)}
+          />
+        )}
+      </Field>
+      <Field label="외부 참석자">
+        {(slot) => (
+          <ChipPicker
+            slot={slot}
+            label="외부 참석자"
+            options={contactOptions}
+            value={contactIds}
+            onChange={setContactIds}
+            empty="등록된 담당자가 없습니다."
+          />
+        )}
+      </Field>
+      <Field label="사내 참석자">
+        {(slot) => (
+          <ChipPicker
+            slot={slot}
+            label="사내 참석자"
+            options={userOptions}
+            value={userIds}
+            onChange={setUserIds}
+          />
+        )}
+      </Field>
+    </FormModal>
+  )
+}

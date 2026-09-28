@@ -59,6 +59,15 @@ export function toISODate(date: Date): string {
   return `${date.getFullYear()}-${month}-${day}`
 }
 
+/**
+ * `2026-09-28T14:05`. `<input type="datetime-local">` 의 값은 시간대 없는 **현지 시각**이다.
+ * `toISOString().slice(0, 16)` 은 UTC 라 KST 에서 9시간 어긋난다.
+ */
+export function toDateTimeLocal(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${toISODate(date)}T${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
 /** `2026-09-08` → "9월 8일 (화)". `new Date(iso)` 는 UTC 로 읽혀 KST 서쪽에서 하루 밀리므로 숫자로 만든다. */
 export function formatISODate(iso: string): string {
   const [year, month, day] = iso.split('-').map(Number)
