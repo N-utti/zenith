@@ -252,10 +252,26 @@ A 의 편집이 B 의 Y.Doc 에 도착할 때까지와, 같은 자리 동시 입
 ```sh
 node scripts/collab-latency.js                                # 개발 릴레이(:1234)
 node scripts/collab-latency.js --url ws://<서버>/api/yjs \
-  --room <문서UUID> --cookie "session=..."                    # 백엔드
+  --room <문서UUID> --cookie "access=..."                     # 백엔드
 ```
 
 릴레이 왕복만 잰다. 기준의 "반영"에는 tiptap 렌더도 들어가므로 화면 확인은 위 방법으로 따로 해야 한다.
+
+채팅 전달 시간(07 TC-CHT-01 · NFR-04 "P95 ≤ 500ms")은 `scripts/chat-latency.js` 가 잰다.
+두 사람이 각자 소켓을 열고 A 가 보낸 메시지가 B 에게 `ev:msg` 로 올 때까지를 잰다. 보낸 메시지는 채널에
+남으니 백엔드에서는 실측용 채널에 쏜다.
+
+```sh
+node scripts/chat-latency.js                                  # 개발 서버(:1234)
+node scripts/chat-latency.js --url ws://<서버>/api/ws --channel <채널UUID> \
+  --cookie-a "access=..." --cookie-b "access=..."             # 백엔드
+```
+
+백엔드 소켓은 `access` 쿠키 하나로 사람을 가리고, 그 토큰은 15분이면 만료된다. 방금 로그인해서 받은 값을 넣는다.
+
+2026-09-28 로컬 백엔드(uvicorn + Postgres, 같은 PC) 대상 실측: 공동편집 변경 반영 p95 0.9ms · 최악 4.2ms ·
+커서 최악 1.1ms · 충돌 0(`--rounds 100`), 채팅 전달 p50 9.5ms · p95 14.7ms · 최악 40.6ms(`--rounds 200`).
+네트워크 구간이 없는 값이라 사내망 서버에서 한 번 더 재면 그 값이 최종 근거다.
 
 ### 백엔드가 구현해야 할 것
 
