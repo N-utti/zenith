@@ -26,7 +26,11 @@ const DRAG_TYPE = 'application/x-zenith-deal'
 
 /**
  * 마우스가 있는 기기에서만 끌기를 켠다. 아이폰 사파리는 `draggable` 요소를 길게 누르면 끌기를
- * 시작해 링크 미리보기·세로 스크롤과 부딪힌다. 손가락은 카드의 단계 선택으로 옮긴다.
+ * 시작해 링크 미리보기·세로 스크롤과 부딪힌다.
+ *
+ * 카드의 단계 선택은 그 반대다. 끌기가 꺼진 손가락 기기에서만 보인다. 끌기가 되는 화면에
+ * 같이 두면 카드마다 같은 일을 두 번 보여 줄 뿐이다. 끌기를 못 쓰는 키보드 사용자는 카드 제목으로
+ * 안건 상세에 들어가 거기 단계 선택으로 옮긴다(WCAG 2.5.7 의 끌기 대안).
  */
 const CAN_DRAG =
   typeof window !== 'undefined' &&
@@ -34,7 +38,7 @@ const CAN_DRAG =
   window.matchMedia('(pointer: fine)').matches
 
 /**
- * 단계 선택으로 옮기고 나면 카드가 다른 열에 새로 그려져 초점이 사라진다. 옮긴 카드의 선택으로
+ * 카드의 단계 선택(손가락 기기)으로 옮기고 나면 카드가 다른 열에 새로 그려져 초점이 사라진다. 옮긴 카드의 선택으로
  * 초점을 되돌리고, 성사로 보드에서 빠졌으면 마지막 열로 보낸다. 다시 그린 뒤에 찾도록 한 박자 미룬다.
  */
 function refocus(dealId: string, fallbackStage: string) {
@@ -51,8 +55,8 @@ function refocus(dealId: string, fallbackStage: string) {
  * 안건 파이프라인 보드(15 §10). 종류(출자 유치·투자 안건)마다 단계 열이 다르다.
  *
  * 진행 중인 안건만 보인다. 성사·중단은 기관 상세의 안건 목록과 안건 상세에 남는다.
- * 데스크톱은 카드를 끌어 단계를 옮기고, 끌기가 안 되는 손가락·키보드는 카드 아래
- * 단계 선택으로 옮긴다(15 §10 "모바일은 선택 방식만").
+ * 데스크톱은 카드를 끌어 단계를 옮기고, 손가락은 카드 아래 단계 선택으로 옮긴다
+ * (15 §10 "모바일은 선택 방식만"). 키보드는 안건 상세의 단계 선택을 쓴다.
  */
 export function CrmBoardPage() {
   const navigate = useNavigate()
@@ -224,15 +228,17 @@ function DealCard({
       </p>
       {deal.owner && <p className="text-subtle text-xs">담당 {deal.owner.name}</p>}
       <NextAction deal={deal} />
-      <Select
-        aria-label={`${deal.name} 단계`}
-        data-deal-stage={deal.id}
-        className="h-8 text-xs"
-        value={deal.stage}
-        disabled={busy}
-        options={DEAL_STAGES[deal.kind].map((s) => ({ value: s.key, label: s.label }))}
-        onChange={(e) => onMove(deal, e.target.value, true)}
-      />
+      {!CAN_DRAG && (
+        <Select
+          aria-label={`${deal.name} 단계`}
+          data-deal-stage={deal.id}
+          className="h-8 text-xs"
+          value={deal.stage}
+          disabled={busy}
+          options={DEAL_STAGES[deal.kind].map((s) => ({ value: s.key, label: s.label }))}
+          onChange={(e) => onMove(deal, e.target.value, true)}
+        />
+      )}
     </li>
   )
 }

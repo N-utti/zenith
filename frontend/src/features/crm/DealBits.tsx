@@ -25,14 +25,15 @@ export function NextAction({
   if (deal.status !== 'open' || (!deal.next_action && !deal.next_action_due)) return null
   // 날짜끼리 비교한다. `YYYY-MM-DD` 는 문자열 순서가 곧 날짜 순서다. 오늘 기한은 아직 안 지났다.
   const overdue = deal.next_action_due !== null && deal.next_action_due < toISODate(new Date())
+  // 간격은 gap 으로 준다. 기한이 다음 줄로 넘어가도 앞에 여백이 남지 않는다.
   return (
-    <p className="text-muted text-xs">
+    <p className="text-muted flex flex-wrap gap-x-1.5 text-xs">
       {deal.next_action || '다음 할 일'}
       {deal.next_action_due && (
         <span
           className={cn(
             'inline-block whitespace-nowrap',
-            overdue ? 'text-danger ml-1.5 font-medium' : 'text-subtle ml-1.5',
+            overdue ? 'text-danger font-medium' : 'text-subtle',
           )}
         >
           {overdue ? '기한 지남 ' : ''}
