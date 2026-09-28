@@ -318,13 +318,51 @@ export function getApproval(user: User, id: string): ApprovalDocument | Failure 
   return expose(doc, user)
 }
 
-/** 생성·갱신이 같은 검증을 탄다. 어느 경로로 들어와도 서버는 같은 것을 막는다. */
-function validate(input: DraftInput): Failure | null {
+/** 결재 첨부 상한. 채팅 첨부와 같다(백엔드 `MAX_ATTACHMENTS`). */
+const MAX_ATTACHMENTS = 10
+
+/** 이 문서에 올린 첨부의 경로 앞부분. 첨부 url 은 늘 이 모양이라야 한다. */
+export const attachmentPrefix = (id: string) => `/api/approvals/${id}/attachments/`
+
+/**
+ * 파일 id → 올린 문서 id. 경로 모양만 보면 남의 문서 파일 id 를 내 문서 경로에 끼워 넣을 수 있다.
+ * 실서버는 저장 키에 문서 id 를 넣어(`approvals/{doc_id}/{file_id}/{name}`) 같은 것을 막는다.
+ */
+const uploadedTo = new Map<string, string>()
+
+export function recordAttachment(docId: string, fileId: string) {
+  uploadedTo.set(fileId, docId)
+}
+
+/** 이 문서에 올린 파일의 url 인가. 경로 모양과 파일의 주인 문서를 둘 다 본다. */
+function ownsAttachment(docId: string, url: string | undefined): boolean {
+  const prefix = attachmentPrefix(docId)
+  if (!url?.startsWith(prefix)) return false
+  return uploadedTo.get(url.slice(prefix.length).split('/')[0]) === docId
+}
+
+/**
+ * 생성·갱신이 같은 검증을 탄다. 어느 경로로 들어와도 서버는 같은 것을 막는다.
+ *
+ * 첨부 url 은 **그 문서의 업로드 경로 모양**이어야 한다. 남의 문서 첨부 url 을 끼워 넣으면
+ * 내 문서를 볼 수 있는 사람이 그 파일을 받게 된다(채팅 첨부의 `VALIDATION` 과 같은 규칙).
+ * 새로 만들 때는 문서 id 가 없어 올린 파일도 없다. 그래서 `docId` 가 없으면 빈 목록만 받는다.
+ */
+function validate(input: DraftInput, docId?: string): Failure | null {
   if (input.type_code !== 'general')
     return fail('v1 은 일반 기안만 기안할 수 있습니다.', 422, 'VALIDATION')
   if (!input.title?.trim()) return fail('제목을 입력해 주세요.', 422, 'VALIDATION')
   if (input.subject.amount !== null && !(input.subject.amount >= 0)) {
     return fail('금액이 올바르지 않습니다.', 422, 'VALIDATION')
+  }
+  const files = input.subject.attachments
+  if (files !== undefined) {
+    if (!Array.isArray(files) || files.length > MAX_ATTACHMENTS) {
+      return fail(`첨부는 ${MAX_ATTACHMENTS}개까지입니다.`, 422, 'VALIDATION')
+    }
+    if (files.some((f) => !docId || !ownsAttachment(docId, f.url))) {
+      return fail('이 문서에 올린 파일만 붙일 수 있습니다.', 422, 'VALIDATION')
+    }
   }
   if (input.references !== undefined) {
     if (!Array.isArray(input.references)) {
@@ -352,7 +390,7 @@ export function updateDraft(user: User, id: string, input: DraftInput): Approval
   const doc = docs.find((d) => d.id === id)
   if (!doc || doc.drafter_id !== user.id) return fail('문서를 찾을 수 없습니다.', 404, 'NOT_FOUND')
   if (doc.status !== 'draft') return fail('상신한 문서는 고칠 수 없습니다.', 409, 'NOT_DRAFT')
-  const invalid = validate(input)
+  const invalid = validate(input, doc.id)
   if (invalid) return invalid
   doc.title = input.title.trim()
   doc.subject = input.subject
@@ -361,6 +399,27 @@ export function updateDraft(user: User, id: string, input: DraftInput): Approval
   // 안 보내면 그대로 둔다. 빈 배열은 "전부 해제" 라서 둘을 갈라야 한다.
   if (input.references !== undefined) doc.steps = referenceSteps(input.references, 1)
   return expose(doc, user)
+}
+
+/** 첨부를 올릴 수 있는 문서인가. 내 임시저장만이다. 상신한 문서는 내용과 같이 첨부도 굳는다. */
+export function checkAttachTarget(user: User, id: string): Failure | null {
+  const doc = docs.find((d) => d.id === id)
+  if (!doc || doc.drafter_id !== user.id) return fail('문서를 찾을 수 없습니다.', 404, 'NOT_FOUND')
+  if (doc.status !== 'draft') return fail('상신한 문서에는 붙일 수 없습니다.', 409, 'NOT_DRAFT')
+  return null
+}
+
+/**
+ * 첨부를 내려받을 수 있는가. **문서 열람과 같은 판정**(`getApproval`)을 탄다(13 §8.1).
+ * 그 문서에 실제로 붙어 있는 url 만 내준다. 올렸다가 뗀 파일은 404 다.
+ */
+export function checkAttachmentDownload(user: User, id: string, url: string): Failure | null {
+  const viewed = getApproval(user, id)
+  if ('error' in viewed) return viewed
+  if (!viewed.subject.attachments?.some((f) => f.url === url)) {
+    return fail('파일을 찾을 수 없습니다.', 404, 'NOT_FOUND')
+  }
+  return null
 }
 
 export function submitApproval(user: User, id: string): ApprovalDocument | Failure {

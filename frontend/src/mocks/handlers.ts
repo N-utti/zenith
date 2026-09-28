@@ -92,7 +92,11 @@ import {
   APPROVAL_TYPES,
   cancelApproval,
   createDelegation,
+  attachmentPrefix,
+  checkAttachTarget,
+  checkAttachmentDownload,
   createDraft,
+  recordAttachment,
   deleteDelegation,
   forceClose,
   listDelegations,
@@ -683,6 +687,48 @@ export const handlers = [
     const { version, reason } = (await request.json()) as { version: number; reason?: string }
     await delay(400)
     return approvalResponse(decide(user, String(params.id), 'reject', version, reason))
+  }),
+
+  // 결재 첨부(13 FR-APV-05). 계약에 없어 채팅 첨부 모양을 따랐다(PR 본문). 오브젝트는 문서
+  // 이미지와 같은 목 저장소(IndexedDB)에 두고, 판정은 문서 경로로 한다.
+  http.post('/api/approvals/:id/attachments', async ({ request, params }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    const id = String(params.id)
+    const denied = checkAttachTarget(user, id)
+    if (denied) return approvalResponse(denied)
+    const file = (await request.formData()).get('file')
+    // 백엔드 채팅 첨부처럼 초과·빈 파일은 422 다. 형식은 가리지 않는다(영수증은 pdf 도 사진도 있다).
+    if (!(file instanceof File) || file.size === 0 || file.size > MAX_UPLOAD_BYTES) {
+      return validationError('비어 있지 않은 10MB 이하 파일만 올릴 수 있습니다.')
+    }
+    const stored = await saveFile(file, 'a')
+    recordAttachment(id, stored.id)
+    return HttpResponse.json(
+      {
+        url: `${attachmentPrefix(id)}${stored.id}/${encodeURIComponent(stored.name)}`,
+        name: stored.name,
+        size: stored.size,
+        content_type: stored.type || null,
+      },
+      { status: 201 },
+    )
+  }),
+  http.get('/api/approvals/:id/attachments/:fileId/:name', async ({ request, params }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    const denied = checkAttachmentDownload(user, String(params.id), new URL(request.url).pathname)
+    if (denied) return approvalResponse(denied)
+    const stored = await readFile(String(params.fileId))
+    if (!stored) return notFound('파일을 찾을 수 없습니다.')
+    // 실행될 수 있는 형식(html·svg)이 같은 오리진에서 열리지 않게 늘 내려받기로 준다.
+    return new HttpResponse(stored.blob, {
+      headers: {
+        'Content-Type': stored.type || 'application/octet-stream',
+        'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(stored.name)}`,
+        'X-Content-Type-Options': 'nosniff',
+      },
+    })
   }),
 
   // 강제 종결(13 §9.2). 임원만. `version` 을 안 받는다: 어느 단계에 걸려 있든 끝내는 동작이라
@@ -1693,6 +1739,8 @@ data: ${JSON.stringify(data)}
   // <img src> 요청에는 Authorization 헤더가 붙지 않는다. 실제 서버는 서명 URL이나
   // 세션 쿠키로 막을 자리고, 목은 인증을 보지 않는다.
   http.get('/api/files/:fileId', async ({ params }) => {
+    // 결재 첨부는 문서 경로로만 내준다. 여기서 주면 열람 판정 없이 받아진다.
+    if (String(params.fileId).startsWith('a-')) return notFound('파일을 찾을 수 없습니다.')
     const stored = await readFile(String(params.fileId))
     if (!stored) return HttpResponse.json({ detail: '파일을 찾을 수 없습니다.' }, { status: 404 })
     return new HttpResponse(stored.blob, {

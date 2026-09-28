@@ -1,3 +1,5 @@
+import type { Schema } from '@/types'
+
 /**
  * 전자결재 계약(13 §4 · §9). 엔진은 "누가 언제 어떤 순서로"만 들고, 무엇을 결재하는지는
  * `subject` 가 든다(13 §1.2). v1 최소판은 일반 기안(`general`)만 기안하고, 근태 4종은
@@ -104,7 +106,19 @@ export interface GeneralSubject {
   /** 지출 금액(원). 전결 판정용, 없으면 null */
   amount: number | null
   related: { type: 'arrangement'; id: string } | null
+  /** 영수증·견적서(13 FR-APV-05). 안 보내면 없는 것이다. 보낼 때는 늘 전체 목록을 보낸다 */
+  attachments?: ApprovalAttachment[]
 }
+
+/**
+ * 결재 첨부(13 FR-APV-05). 채팅 첨부(`AttachmentOut`)와 같은 모양이다.
+ *
+ * **계약에 없어서 정한 모양이다(PR 본문).** 업로드는 `POST /approvals/{id}/attachments`
+ * (내 임시저장만), 내려받기는 응답의 `url`(그 문서를 열 수 있는 사람만). 채팅 첨부가 채널 경로
+ * 밑에 있어 내려받을 때마다 멤버십을 다시 재듯, 문서 경로 밑에 두어야 서버가 결재 열람 권한으로
+ * 판정할 수 있다. 공용 `/files` 는 로그인이면 누구나 읽는다(`backend/README.md` 16(g)).
+ */
+export type ApprovalAttachment = Schema<'AttachmentOut'>
 
 export interface ApprovalListItem {
   id: string

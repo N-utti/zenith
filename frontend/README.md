@@ -134,6 +134,13 @@ PR 본문에 흩어져 있던 것을 한곳에 모았다. 위는 **없어서 못
   걸려 있던 단계에 기록 · 기안 요청의 `references: [사람 id]` · 참조 단계의 상태 · 응답의
   `can_decide`(서버가 판정) · 위임 자원과 규칙 전체(자기 자신 422, 거꾸로 된 기간 422, 위임 불가
   유형 422, 겹침 409, 남의 위임 해제 404, 생성 201·해제 204) · "모든 유형" 위임이 그 기간을 독점
+- **결재 첨부**(FR-APV-05): 업로드 `POST /approvals/{id}/attachments` multipart `file` → 201
+  `{url, name, size, content_type}`(채팅 첨부와 같은 모양), 내 임시저장만(남의 문서 404, 상신 뒤
+  409 `NOT_DRAFT`), 빈 파일·10MB 초과 422, 형식 제한 없음 · 내려받기는 응답 `url`
+  (`/api/approvals/{id}/attachments/{file_id}/{name}`), 문서 열람과 같은 판정, 뗀 파일 404, 늘
+  `attachment` 로 · 저장은 `subject.attachments` 에 **전체 목록**, 새로 만들 때는 빈 목록만, 그
+  문서에 올린 파일이 아니면 422(저장 키에 문서 id 를 넣어 판정) · 목 한계: MSW 는 페이지 이동
+  요청을 가로채지 않아, 목에서는 첨부 칩을 눌러 받는 것이 안 될 수 있다(판정은 `approvalsDb.test.ts`)
 - **근태**(#112·#114): `GET /attendance/me/summary` 응답 `{from, to, summary}`(일자 배열 없음) ·
   기간 상한 366일 · 달력 재생성 응답 `{year, workdays}`
 - **AI**(#113): `POST /ai/template` 의 `blocks[]` 한 칸이 **마크다운 한 덩이** · `context` 는 안 보냄

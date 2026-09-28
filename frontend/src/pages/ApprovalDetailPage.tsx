@@ -18,6 +18,7 @@ import {
   useRejectStep,
   useSubmitApproval,
 } from '@/features/approvals/api'
+import { AttachmentList } from '@/features/approvals/AttachmentList'
 import { StepTimeline } from '@/features/approvals/StepTimeline'
 import { APPROVAL_TYPE_LABEL, statusLabel, statusTone } from '@/features/approvals/types'
 import { useCurrentUser } from '@/features/auth/AuthContext'
@@ -230,6 +231,7 @@ export function ApprovalDetailPage() {
               </p>
             )}
             <p className="text-fg text-sm whitespace-pre-wrap">{d.subject.body || '(본문 없음)'}</p>
+            <AttachmentList files={d.subject.attachments ?? []} />
           </div>
         </Card>
         <Card>
