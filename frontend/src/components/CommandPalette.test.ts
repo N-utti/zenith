@@ -104,8 +104,10 @@ function type(text: string) {
   input().dispatchEvent(new Event('input', { bubbles: true }))
 }
 
-function press(key: string) {
-  input().dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }))
+function press(key: string, init: KeyboardEventInit = {}) {
+  const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...init })
+  input().dispatchEvent(event)
+  return event
 }
 
 /** "개발" 이면 화면 이동은 없고 채팅방 1개, 본문 검색 1개, AI 행 순서다. */
@@ -155,6 +157,26 @@ test('스크린리더에 입력칸이 결과 목록을 조종하는 콤보박스
   }
 
   await search()
+  const live = container.querySelector('[aria-live="polite"]')!
+  await vi.waitFor(() => expect(live.textContent).toBe('화면 0개, 채팅방 1개, 검색 결과 1개'))
+})
+
+test('Tab 과 Shift+Tab 이 팔레트 밖으로 나가지 않고 입력칸에 머문다', () => {
+  // jsdom 은 배치를 안 해서 offsetParent 가 늘 null 이다. 포커스 가둠 훅이 "보이는 요소" 를 가리는 데 쓴다.
+  vi.spyOn(HTMLElement.prototype, 'offsetParent', 'get').mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return this.parentElement
+  })
+  expect(document.activeElement).toBe(input())
+  expect(press('Tab').defaultPrevented).toBe(true)
+  expect(press('Tab', { shiftKey: true }).defaultPrevented).toBe(true)
+  expect(document.activeElement).toBe(input())
+  vi.restoreAllMocks()
+})
+
+test('검색어 끝에 공백이 있어도 찾기가 끝나면 개수를 알린다', async () => {
+  act(() => type('개발 '))
   const live = container.querySelector('[aria-live="polite"]')!
   await vi.waitFor(() => expect(live.textContent).toBe('화면 0개, 채팅방 1개, 검색 결과 1개'))
 })

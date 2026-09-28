@@ -161,7 +161,8 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
     setQuery(value)
     setCursor(0)
     window.clearTimeout(timer.current)
-    timer.current = window.setTimeout(() => setSettled(value), TYPING_PAUSE_MS)
+    // 다듬어서 넘긴다. "찾는 중" 은 `settled !== query.trim()` 으로 가려서, 끝 공백이 남으면 영영 찾는 중이다.
+    timer.current = window.setTimeout(() => setSettled(value.trim()), TYPING_PAUSE_MS)
   }
 
   const onKeyDown = (e: React.KeyboardEvent) => {
@@ -220,8 +221,8 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
           />
         </div>
 
-        {/* 결과가 바뀔 때마다 개수를 읽어 준다. 목록 안의 "없습니다" 문구는 포커스가 입력칸에 있어
-            스크린리더가 읽지 않는다. */}
+        {/* 결과가 바뀔 때마다 개수를 읽어 준다. 목록 안의 "없습니다"·"찾는 중…" 은 같은 내용이라
+            스크린리더에게서 감춘다(aria-hidden). */}
         <p aria-live="polite" className="sr-only">
           {summary}
         </p>
@@ -235,12 +236,13 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
           <div role="group" aria-labelledby={`${listId}-nav`}>
             <p
               id={`${listId}-nav`}
+              role="presentation"
               className="text-subtle px-2.5 pt-2 pb-1 text-[11px] font-semibold tracking-wide uppercase"
             >
               화면 이동
             </p>
             {navItems.length === 0 && (
-              <p className="text-muted px-2.5 py-6 text-center text-sm">
+              <p aria-hidden="true" className="text-muted px-2.5 py-6 text-center text-sm">
                 일치하는 화면이 없습니다.
               </p>
             )}
@@ -274,6 +276,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
             <div role="group" aria-labelledby={`${listId}-rooms`}>
               <p
                 id={`${listId}-rooms`}
+                role="presentation"
                 className="text-subtle px-2.5 pt-3 pb-1 text-[11px] font-semibold tracking-wide uppercase"
               >
                 채팅방
@@ -313,18 +316,23 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
             <div role="group" aria-labelledby={`${listId}-hits`}>
               <p
                 id={`${listId}-hits`}
+                role="presentation"
                 className="text-subtle px-2.5 pt-3 pb-1 text-[11px] font-semibold tracking-wide uppercase"
               >
                 문서·채팅·게시글
-                {pending && <span className="ml-1.5 font-normal normal-case">찾는 중…</span>}
+                {pending && (
+                  <span aria-hidden="true" className="ml-1.5 font-normal normal-case">
+                    찾는 중…
+                  </span>
+                )}
               </p>
               {isError && !pending && (
-                <p className="text-muted px-2.5 py-4 text-center text-sm">
+                <p aria-hidden="true" className="text-muted px-2.5 py-4 text-center text-sm">
                   검색에 실패했습니다. 잠시 뒤에 다시 시도해 주세요.
                 </p>
               )}
               {!isError && hits.length === 0 && !pending && (
-                <p className="text-muted px-2.5 py-4 text-center text-sm">
+                <p aria-hidden="true" className="text-muted px-2.5 py-4 text-center text-sm">
                   “{query.trim()}” 에 맞는 내용이 없습니다.
                 </p>
               )}
