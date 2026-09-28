@@ -1,6 +1,6 @@
 import { useRef, useState, type ReactNode } from 'react'
 import { NavLink, useLocation } from 'react-router'
-import { AtSign, Plus, X } from 'lucide-react'
+import { AtSign, Pencil, Plus, X } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { useFocusTrap } from '@/lib/useFocusTrap'
 import { SECONDARY_NAV, TOP_NAV, visibleNav, type NavItem } from '@/app/navigation'
@@ -8,6 +8,7 @@ import { useCurrentUser } from '@/features/auth/AuthContext'
 import { useBoards } from '@/features/board/api'
 import { BOARD_BADGE } from '@/features/board/types'
 import { useChannels } from '@/features/chat/api'
+import { useHasDraft } from '@/features/chat/drafts'
 import { NewChatModal } from '@/features/chat/NewChatModal'
 import { WorkStatus } from '@/features/chat/WorkStatus'
 import type { ChatChannel } from '@/features/chat/types'
@@ -60,11 +61,12 @@ function NavRow({ item, onNavigate }: { item: NavItem; onNavigate?: () => void }
 }
 
 function ChannelRow({ channel, onNavigate }: { channel: ChatChannel; onNavigate?: () => void }) {
+  const hasDraft = useHasDraft(channel.id)
   return (
     <NavLink
       to={`/chat/${channel.id}`}
       onClick={onNavigate}
-      className={({ isActive }) => cn(ROW, isActive ? ROW_ACTIVE : ROW_IDLE)}
+      className={({ isActive }) => cn(ROW, 'group', isActive ? ROW_ACTIVE : ROW_IDLE)}
     >
       {!channel.is_dm ? (
         <span className="text-subtle shrink-0">#</span>
@@ -74,6 +76,14 @@ function ChannelRow({ channel, onNavigate }: { channel: ChatChannel; onNavigate?
       <span className="flex min-w-0 items-center gap-1.5">
         <span className="truncate">{channel.name}</span>
         <WorkStatus channel={channel} />
+        {/* 쓰다 만 글이 있는 방. 지금 보고 있는 방은 입력창에 글이 보이므로 감춘다. */}
+        {hasDraft && (
+          <Pencil
+            role="img"
+            aria-label="작성 중"
+            className="text-subtle size-3.5 shrink-0 group-aria-[current=page]:hidden"
+          />
+        )}
       </span>
       {channel.unread > 0 && (
         <span className="bg-muted text-surface ml-auto shrink-0 rounded-full px-1.5 text-[11px] font-bold">

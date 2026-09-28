@@ -1,5 +1,6 @@
 import { useCallback, useMemo, type ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { clearDrafts } from '@/features/chat/drafts'
 import { api, ApiError } from '@/lib/api'
 import type { User } from '@/types'
 import { AuthContext, type AuthValue } from './AuthContext'
@@ -34,6 +35,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         method: 'POST',
         body: JSON.stringify({ email, password }),
       })
+      // 로그아웃뿐 아니라 세션 만료(`queryClient`)로도 익명이 되므로 들어오는 쪽 한 곳에서 비운다.
+      // 같은 탭에서 다른 사람이 로그인하면 앞사람이 쓰다 만 채팅 글이 입력창에 뜬다.
+      clearDrafts()
       qc.setQueryData(meQueryKey, await api<User>('/me'))
     },
     [qc],

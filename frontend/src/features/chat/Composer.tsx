@@ -7,6 +7,7 @@ import { ApiError } from '@/lib/api'
 import { formatBytes } from '@/lib/format'
 import { MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, MAX_BODY_CHARS, uploadAttachment } from './api'
 import { useChatSocketContext } from './ChatSocketContext'
+import { getDraft, setDraft } from './drafts'
 import type { ChatAttachment, Person } from './types'
 
 /** 끊겨서 못 보냈다는 문구. 다시 연결되면 이 문구만 지운다. */
@@ -28,7 +29,8 @@ export function Composer({
   onTyping: () => void
 }) {
   const { connected, sendMessage } = useChatSocketContext()
-  const [body, setBody] = useState('')
+  // 다른 방에 다녀와도 쓰던 글이 남는다(`drafts`). 첨부는 남기지 않는다.
+  const [body, setBody] = useState(() => getDraft(channelId))
   /** 올려 둔 파일. 보내기 전까지는 서버에만 있고 어느 메시지에도 안 붙어 있다. */
   const [files, setFiles] = useState<ChatAttachment[]>([])
   /** 올라가는 중인 개수. 개수 상한은 이것까지 세야 한다. */
@@ -90,6 +92,7 @@ export function Composer({
     setError(null)
     setTriedOffline(false)
     setBody('')
+    setDraft(channelId, '')
     setFiles([])
   }
 
@@ -160,6 +163,7 @@ export function Composer({
             value={body}
             onValueChange={(next) => {
               setBody(next)
+              setDraft(channelId, next)
               onTyping()
             }}
             people={mentionCandidates}
