@@ -30,3 +30,19 @@ it('머리글·왼쪽 열을 고정하고 열 너비를 가장 긴 값에 맞춘
   expect(sheet).toContain('<c r="B2"><v>12</v></c>')
   expect(strFromU8(zip['xl/workbook.xml'])).toContain('name="2026-09"')
 })
+
+it('금액 열은 천 단위 쉼표 서식이고 열 너비도 쉼표 모양으로 잰다', () => {
+  const zip = unzipSync(buildXlsx([['금액(원)'], [120_000_000_000]], { integerCols: [0] }))
+  const sheet = strFromU8(zip['xl/worksheets/sheet1.xml'])
+  expect(sheet).toContain('<c r="A2" s="2"><v>120000000000</v></c>')
+  // "120,000,000,000" = 15, 여백 2.
+  expect(sheet).toContain('<col min="1" max="1" width="17" customWidth="1"/>')
+  expect(strFromU8(zip['xl/styles.xml'])).toContain('<xf numFmtId="3"')
+})
+
+it('= 로 시작하는 글자도 수식이 아니라 글자로 들어간다 (TC-CRM-SEC-06)', () => {
+  const zip = unzipSync(buildXlsx([['메모'], ['=HYPERLINK("http://x","열기")']]))
+  const sheet = strFromU8(zip['xl/worksheets/sheet1.xml'])
+  expect(sheet).not.toContain('<f>')
+  expect(sheet).toContain('<c r="A2" t="inlineStr"><is><t xml:space="preserve">=HYPERLINK(')
+})

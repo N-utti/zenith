@@ -18,7 +18,14 @@ export const AUDIT_FILTERS = [
   { value: 'boards', label: '게시판' },
   { value: 'docs', label: '문서' },
   { value: 'files', label: '첨부 파일' },
+  { value: 'crm', label: 'CRM' },
 ]
+
+const CRM_EXPORT_LABEL: Record<string, string> = {
+  orgs: '기관',
+  contacts: '담당자',
+  deals: '안건',
+}
 
 export type AuditTone = 'neutral' | 'warning' | 'danger'
 
@@ -199,6 +206,16 @@ export function auditView(event: AuditEvent): AuditView {
           [text(detail, 'name'), text(detail, 'claimed')].filter(Boolean).join(' · ') || undefined,
         tone: 'warning',
       }
+
+    case 'crm.exported': {
+      const what = CRM_EXPORT_LABEL[text(detail, 'entity') ?? '']
+      const rows = typeof detail?.rows === 'number' ? `${detail.rows}행` : undefined
+      return {
+        summary: 'CRM 엑셀 내보내기',
+        detail: [what, rows].filter(Boolean).join(' · ') || undefined,
+        tone: 'neutral',
+      }
+    }
 
     default:
       return { summary: kind, tone: 'neutral' }

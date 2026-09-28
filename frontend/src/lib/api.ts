@@ -109,6 +109,28 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   return body as T
 }
 
+/**
+ * 파일 응답(CRM xlsx 내보내기). 만료 갱신·에러 정규화는 `api` 와 같고 본문만 바이트로 받는다.
+ * 에러 본문은 JSON 이라 그대로 읽는다.
+ */
+export async function apiBytes(path: string, init: RequestInit = {}): Promise<Uint8Array> {
+  const headers = new Headers(init.headers)
+  headers.set('Accept', '*/*')
+  const request = { ...init, headers }
+  let res = await send(path, request)
+  if (res.status === 401) {
+    const body = await read(res)
+    if (codeOf(body) === 'AUTH_EXPIRED' && (await refreshSession())) res = await send(path, request)
+    else throw new ApiError(401, detailOf(body) ?? '요청에 실패했습니다 (401)', body)
+  }
+
+  if (!res.ok) {
+    const body = await read(res)
+    throw new ApiError(res.status, detailOf(body) ?? `요청에 실패했습니다 (${res.status})`, body)
+  }
+  return new Uint8Array(await res.arrayBuffer())
+}
+
 export interface SseEvent {
   event: string
   data: unknown

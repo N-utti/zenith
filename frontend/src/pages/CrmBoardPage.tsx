@@ -10,6 +10,7 @@ import { useToast } from '@/components/ui/ToastContext'
 import { useDeals, useUpdateDeal } from '@/features/crm/api'
 import { DealFormModal } from '@/features/crm/CrmForms'
 import { NextAction } from '@/features/crm/DealBits'
+import { ExportButton } from '@/features/crm/ExportButton'
 import {
   DEAL_KIND_LABEL,
   DEAL_KINDS,
@@ -75,6 +76,7 @@ export function CrmBoardPage() {
             <Button variant="secondary" size="sm" onClick={() => void navigate('/crm/orgs')}>
               기관 목록
             </Button>
+            <ExportButton entity="deals" />
             <Button size="sm" onClick={() => setCreating(true)}>
               <Plus className="size-4" />
               안건 등록
