@@ -1,13 +1,23 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
-import { CornerDownLeft, FileText, MessagesSquare, Megaphone, Search, Sparkles } from 'lucide-react'
+import {
+  AtSign,
+  CornerDownLeft,
+  FileText,
+  Hash,
+  MessagesSquare,
+  Megaphone,
+  Search,
+  Sparkles,
+} from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { formatRelative } from '@/lib/datetime'
 import { useFocusTrap } from '@/lib/useFocusTrap'
 import { ALL_NAV, visibleNav } from '@/app/navigation'
 import { useCurrentUser } from '@/features/auth/AuthContext'
+import { useChannels } from '@/features/chat/api'
 import { useSearch } from '@/features/search/api'
-import { hitRows, paletteRows } from '@/features/search/rows'
+import { hitRows, matchRooms, paletteRows, roomRows } from '@/features/search/rows'
 import { parseSnippet } from '@/features/search/snippet'
 import { SEARCH_TYPE_LABEL, type SearchHit } from '@/features/search/types'
 import type { AskState } from '@/features/ai/types'
@@ -65,7 +75,8 @@ function HitRow({ hit, active }: { hit: SearchHit; active: boolean }) {
 }
 
 /**
- * ⌘K 통합검색. 화면 이동과 본문 검색(`GET /search`)을 한 목록에 놓는다.
+ * ⌘K 통합검색. 화면 이동·채팅방 이름·본문 검색(`GET /search`)을 한 목록에 놓는다.
+ * 채팅방은 사이드바가 받아 둔 방 목록에서 이름으로 고른다. 서버를 따로 부르지 않고 타자 즉시 걸린다.
  *
  * 열릴 때마다 부모가 새로 마운트하므로 초기화용 effect가 필요 없다.
  *
@@ -92,6 +103,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
   useEffect(() => () => window.clearTimeout(timer.current), [])
 
   const { data, isFetching, isError } = useSearch(settled)
+  const { data: channels } = useChannels()
   const searching = query.trim().length > 0
   // 타자가 멈추기 전에는 아직 보내지도 않았다. 그 사이 "없습니다" 가 번쩍이면 안 된다.
   const pending = isFetching || settled !== query.trim()
@@ -107,7 +119,12 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
    * 사라지는데 직전 결과는 캐시에 남으므로(`keepPreviousData` 는 꺼진 쿼리에도 걸린다),
    * 둘을 따로 세면 아무것도 강조되지 않는 구간이 생기고 거기서 Enter 가 안 보이는 문서로 간다.
    */
-  const rows = paletteRows(navItems, searching ? (data ?? []) : [])
+  const rows = paletteRows(
+    navItems,
+    matchRooms(channels?.items ?? [], query),
+    searching ? (data ?? []) : [],
+  )
+  const rooms = roomRows(rows)
   const hits = hitRows(rows)
   const askIndex = rows.length - 1
   // 필터로 목록이 줄어들면 커서가 범위를 벗어날 수 있다.
@@ -152,6 +169,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
       const row = rows[active]
       if (row.kind === 'ask') ask()
       else if (row.kind === 'nav') go(row.nav.to)
+      else if (row.kind === 'room') go(`/chat/${row.room.id}`)
       else go(row.hit.to)
     }
   }
@@ -180,7 +198,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
           <input
             value={query}
             onChange={(e) => onType(e.target.value)}
-            placeholder="문서·채팅·게시글 검색 또는 화면 이동…"
+            placeholder="문서·채팅·게시글 검색, 채팅방·화면 이동…"
             className="text-fg placeholder:text-subtle h-13 flex-1 bg-transparent text-sm outline-none"
           />
         </div>
@@ -213,6 +231,36 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
             )
           })}
 
+          {rooms.length > 0 && (
+            <p className="text-subtle px-2.5 pt-3 pb-1 text-[11px] font-semibold tracking-wide uppercase">
+              채팅방
+            </p>
+          )}
+          {rooms.map((room, i) => {
+            const index = navItems.length + i
+            const Icon = room.is_dm ? AtSign : Hash
+            return (
+              <button
+                key={room.id}
+                ref={index === active ? activeRow : undefined}
+                type="button"
+                onMouseEnter={() => setCursor(index)}
+                onClick={() => go(`/chat/${room.id}`)}
+                className={cn(
+                  'flex w-full cursor-pointer items-center gap-3 rounded-lg px-2.5 py-2 text-sm',
+                  index === active ? 'bg-accent-soft text-accent' : 'text-muted',
+                )}
+              >
+                <Icon className="size-4.5 shrink-0" />
+                <span className="truncate">{room.name}</span>
+                <span className="text-subtle shrink-0 text-[11px]">
+                  {room.is_dm ? 'DM' : '채널'}
+                </span>
+                {index === active && <CornerDownLeft className="ml-auto size-3.5 shrink-0" />}
+              </button>
+            )
+          })}
+
           {searching && (
             <>
               <p className="text-subtle px-2.5 pt-3 pb-1 text-[11px] font-semibold tracking-wide uppercase">
@@ -230,7 +278,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
                 </p>
               )}
               {hits.map((hit, i) => {
-                const index = navItems.length + i
+                const index = navItems.length + rooms.length + i
                 return (
                   <button
                     key={`${hit.type}-${hit.id}`}
