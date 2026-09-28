@@ -263,12 +263,12 @@ export function ContactFormModal({
   const submit = () => {
     setError(null)
     save.mutate(
-      { id: contact?.id, org_id: toOrg, ...form },
+      { id: contact?.id, ...form, org_id: contact && !moving ? undefined : toOrg },
       {
         onSuccess: () => {
           toast.success(
             moving
-              ? `${orgOptions.find((o) => o.value === toOrg)?.label ?? '다른 기관'}으로 옮겼습니다.`
+              ? `${orgOptions.find((o) => o.value === toOrg)?.label ?? '다른 기관'}(으)로 옮겼습니다.`
               : '저장했습니다.',
           )
           onClose()

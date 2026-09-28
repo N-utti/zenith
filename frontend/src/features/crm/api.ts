@@ -148,11 +148,17 @@ export function useDeleteOrg() {
   })
 }
 
-/** 수정에서 `org_id` 가 바뀌면 서버가 이직으로 기록한다(15 FR-CRM-04). */
+/**
+ * 수정에서 `org_id` 를 보내면 서버가 이직으로 기록한다(15 FR-CRM-04). 옮길 때만 보낸다 — 늘 보내면
+ * 그사이 다른 사람이 옮겨 둔 담당자를 전화번호만 고치다가 옛 기관으로 되돌린다.
+ */
 export function useSaveContact() {
   const refetch = useRefetchCrm()
   return useMutation({
-    mutationFn: ({ id, ...input }: ContactInput & { id?: string }) =>
+    mutationFn: ({
+      id,
+      ...input
+    }: Omit<ContactInput, 'org_id'> & { id?: string; org_id?: string }) =>
       id
         ? api<Contact>(`/crm/contacts/${id}`, json('PATCH', input))
         : api<Contact>('/crm/contacts', json('POST', input)),

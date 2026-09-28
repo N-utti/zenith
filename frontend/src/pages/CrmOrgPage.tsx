@@ -166,19 +166,24 @@ export function CrmOrgPage() {
                       </a>
                     )}
                     {c.memo && <p className="text-subtle mt-1 whitespace-pre-wrap">{c.memo}</p>}
-                    {c.moves.map((m) => (
-                      <p key={m.moved_at} className="text-subtle mt-1 text-xs">
-                        이전 소속{' '}
-                        <Link to={`/crm/orgs/${m.from.id}`} className="hover:text-accent underline">
-                          {m.from.name}
-                        </Link>{' '}
-                        ·{' '}
-                        <time dateTime={m.moved_at} title={formatDateTime(m.moved_at)}>
-                          {formatRelative(m.moved_at)}
-                        </time>{' '}
-                        이직
-                      </p>
-                    ))}
+                    {/* 삭제된 담당자는 어디서 옮겨 왔는지도 드러내지 않는다. 경력도 그 사람의 정보다. */}
+                    {!c.erased &&
+                      c.moves.map((m) => (
+                        <p key={`${m.from.id}-${m.moved_at}`} className="text-subtle mt-1 text-xs">
+                          이전 소속{' '}
+                          <Link
+                            to={`/crm/orgs/${m.from.id}`}
+                            className="hover:text-accent underline"
+                          >
+                            {m.from.name}
+                          </Link>{' '}
+                          ·{' '}
+                          <time dateTime={m.moved_at} title={formatDateTime(m.moved_at)}>
+                            {formatRelative(m.moved_at)}
+                          </time>{' '}
+                          이직
+                        </p>
+                      ))}
                   </div>
                   {!c.erased && (
                     <div className="flex shrink-0 items-start">
