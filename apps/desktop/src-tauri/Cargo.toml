@@ -24,6 +24,11 @@ tauri-plugin-updater = { version = "2", default-features = false, features = ["n
 # tauri.conf.json 에 plugins 설정이 있으면 generate_context! 가 이 크레이트를 찾는다.
 serde_json = "1"
 
+# 알림 센터 비우기(clear_notifications). 알림 플러그인은 데스크톱에서 표시된 알림을 못 지운다(모바일 전용).
+# 플러그인이 이미 끌어오는 버전과 같게 둔다.
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.61", features = ["UI_Notifications"] }
+
 [profile.release]
 codegen-units = 1
 lto = true

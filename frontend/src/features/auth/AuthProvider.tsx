@@ -4,6 +4,7 @@ import { resetThread } from '@/features/ai/store'
 import { clearDrafts } from '@/features/chat/drafts'
 import { claimDocCaches, disownDocCaches } from '@/features/docs/localCache'
 import { api, ApiError } from '@/lib/api'
+import { clearNotifications } from '@/lib/desktop'
 import type { User } from '@/types'
 import { AuthContext, type AuthValue } from './AuthContext'
 import { meQueryKey } from './queries'
@@ -22,13 +23,15 @@ async function fetchMe(): Promise<User | null> {
 }
 
 /**
- * 앞사람이 이 탭에 남긴 것을 버린다: 서버에서 받아 둔 쿼리 캐시(프로필 제외), AI 대화, 쓰다 만 채팅 글.
+ * 앞사람이 이 탭에 남긴 것을 버린다: 서버에서 받아 둔 쿼리 캐시(프로필 제외), AI 대화, 쓰다 만 채팅 글,
+ * 데스크톱 앱이면 Windows 알림 센터의 채팅 알림(본문이 들어 있다).
  * 결재 본문·가려지기 전 게시글 제목·AI 근거 인용문처럼 등급마다 다른 내용이 섞여 있다.
  */
 function forgetPreviousUser(qc: QueryClient) {
   qc.removeQueries({ predicate: (query) => query.queryKey[0] !== 'auth' })
   resetThread()
   clearDrafts()
+  clearNotifications()
 }
 
 /**

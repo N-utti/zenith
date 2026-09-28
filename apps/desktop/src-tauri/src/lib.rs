@@ -45,6 +45,25 @@ async fn install_update(pending: tauri::State<'_, Pending>) -> Result<(), String
         .map_err(|e| e.to_string())
 }
 
+/// Windows 알림 센터에 쌓인 이 앱의 알림을 지운다. 채팅 알림에는 메시지 본문이 들어 있어, 공용 PC 에서
+/// 로그아웃한 뒤에도 다음 사람이 알림 센터로 앞사람의 DM 을 읽을 수 있었다. 웹앱이 로그인·로그아웃 때 부른다.
+///
+/// 알림 플러그인과 같은 앱 id(`identifier`)로 지운다. 설치하지 않고 target/debug·target/release 에서 실행하면
+/// 플러그인이 PowerShell 이름으로 띄우므로 여기서 지워지지 않는다. 확인은 `.msi` 설치본으로 한다.
+#[tauri::command]
+fn clear_notifications(app: tauri::AppHandle) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        use windows::{core::HSTRING, UI::Notifications::ToastNotificationManager};
+        ToastNotificationManager::History()
+            .and_then(|history| history.ClearWithId(&HSTRING::from(app.config().identifier.as_str())))
+            .map_err(|e| e.to_string())?;
+    }
+    #[cfg(not(windows))]
+    let _ = app;
+    Ok(())
+}
+
 /// 데스크탑 셸의 진입점.
 ///
 /// 셸은 화면을 띄우는 일만 한다. 업무 로직은 전부 웹앱(`frontend/`)에 있고,
@@ -64,7 +83,7 @@ pub fn run() {
             app.manage(Pending(Mutex::new(None)));
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![check_update, install_update])
+        .invoke_handler(tauri::generate_handler![check_update, install_update, clear_notifications])
         .run(tauri::generate_context!())
         .expect("제니스 데스크탑 셸을 시작하지 못했습니다");
 }

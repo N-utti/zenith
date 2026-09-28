@@ -71,7 +71,12 @@ export function checkForUpdate(): void {
   void (async () => {
     const version = await tauri.core.invoke('check_update', { origin })
     if (typeof version !== 'string') return
-    if (!window.confirm(`새 버전 ${version} 이 있습니다. 지금 설치할까요?\n앱이 닫혔다가 다시 열립니다.`)) return
+    if (
+      !window.confirm(
+        `새 버전 ${version} 이 있습니다. 지금 설치할까요?\n앱이 닫혔다가 다시 열립니다.`,
+      )
+    )
+      return
     await tauri.core.invoke('install_update')
   })().catch((error: unknown) => console.warn('업데이트 확인 실패', error))
 }
@@ -115,4 +120,17 @@ export async function notify(options: DesktopNotification): Promise<void> {
   } catch {
     // 무시한다. 알림은 부가 기능이다.
   }
+}
+
+/**
+ * Windows 알림 센터에 쌓인 채팅 알림(본문 포함)을 지운다. 로그인·로그아웃 때 부른다. 공용 PC 에서 다음
+ * 사람이 알림 센터로 앞사람의 DM 을 읽지 않게 한다. 브라우저에서는 아무 일도 하지 않는다.
+ */
+export function clearNotifications(): void {
+  const tauri = typeof window !== 'undefined' ? window.__TAURI__ : undefined
+  if (!tauri) return
+  // 못 지워도 로그인·로그아웃은 진행한다. 콘솔에만 남긴다.
+  tauri.core
+    .invoke('clear_notifications')
+    .catch((error: unknown) => console.warn('알림 센터 비우기 실패', error))
 }
