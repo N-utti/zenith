@@ -52,13 +52,17 @@ export function useAsk() {
         })
       }
       const answerId = uuid()
+      const session = getSessionId()
       let started = false
       const events = apiEvents('/ai/chat', {
         method: 'POST',
-        body: JSON.stringify({ session_id: getSessionId(), message: prompt, scope }),
+        body: JSON.stringify({ session_id: session, message: prompt, scope }),
       })
       try {
         for await (const { event, data } of events) {
+          // 답변 도중 대화가 비워졌다(새 대화·다른 사람 로그인). 남은 토큰이 새 대화에 붙으면 안 된다.
+          // 루프를 빠져나가면 스트림도 닫힌다.
+          if (getSessionId() !== session) return
           if (!started) {
             // 첫 이벤트에서야 말풍선을 만든다. 그 전까지는 "생성 중" 표시가 자리를 지킨다.
             appendMessage({

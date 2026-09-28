@@ -1,0 +1,56 @@
+import { act, createElement } from 'react'
+import { createRoot } from 'react-dom/client'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { expect, test, vi } from 'vitest'
+import { useAsk } from './api'
+import { getThread, resetThread } from './store'
+
+/** 첫 토큰 전에 멈춰 있다가 `release()` 하면 흘린다. 답변 말풍선은 첫 이벤트에서 생긴다. */
+let release: () => void = () => {}
+/** 끝까지 읽든 도중에 빠져나가든 스트림이 닫히면 켜진다. */
+const stream = vi.hoisted(() => ({ closed: false }))
+vi.mock('@/lib/api', () => ({
+  ApiError: class extends Error {},
+  api: vi.fn(),
+  async *apiEvents() {
+    try {
+      await new Promise<void>((resolve) => (release = resolve))
+      yield { event: 'token', data: { text: '앞사람 답변' } }
+      yield { event: 'done', data: {} }
+    } finally {
+      stream.closed = true
+    }
+  },
+}))
+
+;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+
+test('답변이 오기 전에 대화가 비워지면 그 답변을 새 대화에 붙이지 않는다', async () => {
+  let ask: ReturnType<typeof useAsk> | undefined
+  function Grab() {
+    ask = useAsk()
+    return null
+  }
+  const root = createRoot(document.createElement('div'))
+  act(() =>
+    root.render(
+      createElement(QueryClientProvider, { client: new QueryClient() }, createElement(Grab)),
+    ),
+  )
+
+  let done: Promise<unknown> = Promise.resolve()
+  await act(async () => {
+    done = ask!.mutateAsync({ prompt: '질문', scope: null })
+  })
+  // 질문만 붙고 답변은 아직 첫 토큰을 기다리는 상태.
+  expect(getThread().messages.map((m) => m.body)).toEqual(['질문'])
+
+  resetThread()
+  await act(async () => {
+    release()
+    await done
+  })
+  expect(getThread().messages).toEqual([])
+  expect(stream.closed).toBe(true)
+  act(() => root.unmount())
+})
