@@ -50,6 +50,7 @@ vi.hoisted(() => {
 
 const realAnswer = me.answer
 afterEach(() => {
+  delete window.__TAURI__
   vi.unstubAllGlobals()
   me.answer = realAnswer
 })
@@ -165,5 +166,20 @@ test('로그인은 됐는데 `/me` 가 실패해도 다른 탭에 알린다', as
   await act(() => expect(view.auth!.login('b@zenith.local', 'pw')).rejects.toThrow('network'))
   expect(heard).toEqual([{ userId: '' }])
   otherTab.close()
+  act(() => root.unmount())
+})
+
+test('데스크톱 앱이면 로그인·로그아웃 때 알림 센터의 채팅 알림을 비운다', async () => {
+  const invoke = vi.fn(() => Promise.resolve())
+  window.__TAURI__ = { core: { invoke } }
+  const { view, root, rendered } = mount()
+  await rendered
+  await vi.waitFor(() => expect(view.auth?.status).toBe('authenticated'))
+
+  await act(() => view.auth!.login('u2@zenith.local', 'pw'))
+  expect(invoke).toHaveBeenCalledTimes(1)
+  await act(() => view.auth!.logout())
+  expect(invoke).toHaveBeenCalledTimes(2)
+  expect(invoke).toHaveBeenCalledWith('clear_notifications')
   act(() => root.unmount())
 })

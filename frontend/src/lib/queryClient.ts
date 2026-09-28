@@ -1,6 +1,7 @@
 import { MutationCache, QueryCache, QueryClient } from '@tanstack/react-query'
 import { meQueryKey } from '@/features/auth/queries'
 import { ApiError } from './api'
+import { clearNotifications } from './desktop'
 
 /**
  * 서버가 세션을 끊으면(다른 곳에서 로그아웃 · 관리자 비활성화 · 비밀번호 변경) 어느 요청이든 401 이 온다.
@@ -10,6 +11,8 @@ import { ApiError } from './api'
 function dropSessionOn401(error: unknown) {
   if (error instanceof ApiError && error.status === 401) {
     queryClient.setQueryData(meQueryKey, null)
+    // 로그인 화면에 앉아 있는 동안 알림 센터로 앞사람의 DM 을 읽지 않게 한다. 나머지는 다음 로그인이 비운다.
+    clearNotifications()
   }
 }
 
