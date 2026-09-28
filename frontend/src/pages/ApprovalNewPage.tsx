@@ -7,6 +7,7 @@ import { Card, CardHeader } from '@/components/ui/Card'
 import { Field } from '@/components/ui/Field'
 import { Input } from '@/components/ui/Input'
 import { PageHeader } from '@/components/ui/PageHeader'
+import { Select } from '@/components/ui/Select'
 import { SkeletonRows } from '@/components/ui/Skeleton'
 import { Spinner } from '@/components/ui/Spinner'
 import { Textarea } from '@/components/ui/Textarea'
@@ -19,6 +20,12 @@ import {
   useUpdateDraft,
 } from '@/features/approvals/api'
 import { AttachmentList } from '@/features/approvals/AttachmentList'
+import {
+  APPROVAL_TEMPLATES,
+  filledFields,
+  switchTemplate,
+  type ApprovalTemplate,
+} from '@/features/approvals/templates'
 import type { ApprovalAttachment } from '@/features/approvals/types'
 import { MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES } from '@/features/chat/api'
 import { useMyArrangements } from '@/features/attendance/api'
@@ -30,6 +37,7 @@ import { cn } from '@/lib/cn'
 
 /**
  * 기안 작성(13 SCR-APV-01). v1 최소판은 일반 기안 한 종류다. 근태 4종은 근태 화면의 신청이 곧 기안이다.
+ * 빈 폼으로 열면 서식(기안서·지출결의서 등)을 골라 제목 머리말과 본문 틀을 채울 수 있다(`templates.ts`).
  *
  * `?arrangement=<id>` 로 열면 출장비 결의서다. 출장 기간·사유를 미리 채우고 문서를 그 출장에 건다.
  * `?draft=<id>` 로 열면 임시저장을 이어 쓴다.
@@ -63,6 +71,7 @@ export function ApprovalNewPage() {
   const [amount, setAmount] = useState<string | null>(null)
   const [body, setBody] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [template, setTemplate] = useState<ApprovalTemplate>('general')
   /** 고른 참조자. 임시저장을 열면 저장돼 있던 것으로 시작한다. */
   const [references, setReferences] = useState<string[] | null>(null)
   const { people, isPending: peoplePending, isError: peopleError } = useColleagues()
@@ -119,6 +128,16 @@ export function ApprovalNewPage() {
 
   const attached = attachments ?? seed?.subject.attachments ?? []
 
+  // 임시저장·출장비 결의서는 이미 틀이 있다. 서식은 빈 폼에서만 고른다.
+  const templatable = !seed && !trip
+  const pickTemplate = (next: ApprovalTemplate) => {
+    const fields = switchTemplate(template, next, { title: titleValue, body: bodyValue })
+    if (fields.overwrites && !confirm('쓰던 본문을 새 서식의 틀로 바꿀까요?')) return
+    setTemplate(next)
+    setTitle(fields.title)
+    setBody(fields.body)
+  }
+
   const pick = (list: FileList | null) => {
     const chosen = [...(list ?? [])]
     if (chosen.length === 0) return
@@ -138,7 +157,8 @@ export function ApprovalNewPage() {
       ? '금액은 0 이상의 숫자입니다.'
       : null
   const busy = saving
-  const canSave = titleValue.trim().length > 0 && !amountError && !busy
+  const filled = filledFields(template, { title: titleValue, body: bodyValue })
+  const canSave = filled.title && !amountError && !busy
 
   const input = {
     type_code: 'general' as const,
@@ -214,6 +234,24 @@ export function ApprovalNewPage() {
       <Card>
         <CardHeader title="내용" />
         <fieldset disabled={busy} className="min-w-0 space-y-4 px-5 pb-5">
+          {templatable && (
+            <Field
+              label="서식"
+              hint="제목 머리말과 본문 틀을 채웁니다. 결재선은 서식과 상관없이 같습니다."
+            >
+              {(slot) => (
+                <Select
+                  {...slot}
+                  value={template}
+                  onChange={(e) => pickTemplate(e.target.value as ApprovalTemplate)}
+                  options={Object.entries(APPROVAL_TEMPLATES).map(([value, each]) => ({
+                    value,
+                    label: each.label,
+                  }))}
+                />
+              )}
+            </Field>
+          )}
           <Field label="제목" required>
             {(slot) => (
               <Input
@@ -364,11 +402,7 @@ export function ApprovalNewPage() {
             >
               임시저장
             </Button>
-            <Button
-              size="sm"
-              disabled={!canSave || bodyValue.trim().length === 0}
-              onClick={() => void save(true)}
-            >
+            <Button size="sm" disabled={!canSave || !filled.body} onClick={() => void save(true)}>
               {busy ? <Spinner className="border-t-on-accent" /> : '상신'}
             </Button>
           </div>
