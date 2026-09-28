@@ -182,8 +182,11 @@ export function CommentPanel({
             </button>
           </div>
         )}
-        <div className="flex gap-2.5">
-          <Avatar name={user.name} hue={hueOf(user.id)} size="sm" />
+        {/* 등록 버튼은 입력칸 옆에 둔다(채팅 입력줄과 같은 배치). 모바일에서 이 패널은 화면의 45% 안에
+            있어, 버튼만 있는 줄과 두 줄 높이 입력칸이 댓글 목록 자리를 거의 다 먹었다. 글자를 줄이는 대신
+            높이를 줄인다(16px 미만이면 iOS 가 포커스 때 확대한다). */}
+        <div className="flex items-end gap-2">
+          <Avatar name={user.name} hue={hueOf(user.id)} size="sm" className="mb-2" />
           {/* Enter 로 등록하고 줄바꿈은 Shift+Enter. 댓글은 짧게 여러 번 쓰는 쪽이 많다.
               `@` 를 치면 사람 목록이 뜬다. 거기서의 Enter 는 고르기다. */}
           <MentionTextarea
@@ -192,24 +195,26 @@ export function CommentPanel({
             onValueChange={setBody}
             submitOnEnter
             onSubmitEnter={send}
-            rows={2}
+            rows={1}
             maxLength={COMMENT_BODY_MAX}
             aria-label="댓글"
             placeholder="댓글 남기기…"
-            className="min-h-16 w-full"
+            className="min-h-11 w-full lg:min-h-16"
           />
-        </div>
-        {/* 안내를 자리글에 같이 넣으면 좁은 화면에서 두 줄이 되며 아랫줄이 잘린다.
-            컴포저들과 같이 입력창 아래로 뺐다. 좁은 폭에서는 감춘다(물리 키보드가 없고,
-            이 패널은 모바일에서 화면의 45% 안에서 접었다 편다). */}
-        <div className="mt-2 flex items-center justify-end gap-3">
-          <span className="text-subtle hidden text-[11px] sm:inline">
-            Enter 등록 · Shift+Enter 줄바꿈
-          </span>
-          <Button type="submit" size="sm" disabled={!body.trim() || addComment.isPending}>
+          <Button
+            type="submit"
+            disabled={!body.trim() || addComment.isPending}
+            className="h-11 shrink-0"
+          >
             {addComment.isPending ? <Spinner className="border-t-on-accent" /> : '등록'}
           </Button>
         </div>
+        {/* 안내를 자리글에 같이 넣으면 좁은 화면에서 두 줄이 되며 아랫줄이 잘린다.
+            컴포저들과 같이 입력창 아래로 뺐다. 좁은 폭에서는 줄째 감춘다(물리 키보드가 없고,
+            이 패널은 모바일에서 화면의 45% 안에서 접었다 편다). */}
+        <p className="text-subtle mt-2 hidden text-right text-[11px] sm:block">
+          Enter 등록 · Shift+Enter 줄바꿈
+        </p>
       </form>
     </>
   )
