@@ -1,21 +1,42 @@
 import { escapeHtml, parseMarkdownTable, tableToHtml } from './markdownTable'
 
+export type DocTemplate = 'minutes' | 'weekly' | 'notice'
+
+/** 주간 보고 표의 빈 줄. 사람·팀이 더 많으면 표에서 줄을 늘린다. */
+const WEEKLY_ROW = '|  |  |  |  |  |'
+
 /**
- * `POST /ai/template` 이 돌려주는 블록을 편집기가 읽는 HTML 로 바꾼다.
+ * 문서 템플릿. **블록 하나는 마크다운 한 덩이다.**
  *
- * **블록 하나는 마크다운 한 덩이다**(04 §8 의 `{blocks[]}` 를 그렇게 가정했다, PR 본문). 서버가
- * HTML 을 주면 그대로 심어야 해서 위험하고, 편집기 JSON 을 주면 서버가 TipTap 스키마를 알아야
- * 한다. 마크다운은 사람이 읽을 수 있고 다른 클라이언트도 쓸 수 있다.
- *
- * 아는 모양만 바꾸고 나머지는 문단으로 둔다. 모르는 문법이 와도 글자가 사라지지 않는다.
+ * 고정 문안이라 AI 서버(04 §8 `POST /ai/template`)를 거치지 않는다. 그 경로는 실서버에서 아직
+ * 501 이라 템플릿이 통째로 안 됐다(PR 본문). 서버가 `context` 로 제목·참석자를 채우게 되면 그때 붙인다.
  */
-export function blocksToHtml(blocks: string[]): string {
-  return blocks.map(blockToHtml).join('')
+export const TEMPLATE_BLOCKS: Record<DocTemplate, string[]> = {
+  minutes: [
+    '## 회의 개요',
+    '- 일시:\n- 장소:\n- 참석:',
+    '## 안건',
+    '1. \n2. ',
+    '## 결정 사항',
+    '| 안건 | 결정 | 담당 |\n| --- | --- | --- |\n|  |  |  |',
+    '## 다음 할 일',
+    '- [ ] \n- [ ] ',
+  ],
+  // 사내에서 돌리던 엑셀(부서별 주간 업무 진행보고서)과 같은 칸이다. 한 문서를 모두가 같이 채운다.
+  weekly: [
+    '## 업무 현황',
+    [
+      '| 부서명 | 전주 진행 완료 사항 | 금주 진행 예정 사항 | 예정 완료 기한 | 요청사항 |',
+      '| --- | --- | --- | --- | --- |',
+      ...Array<string>(6).fill(WEEKLY_ROW),
+    ].join('\n'),
+  ],
+  notice: ['## 공지 내용', '', '## 적용 시점', '- ', '## 문의', '- '],
 }
 
-/** 계약에 없는 응답이라 모양을 믿지 않는다. 문자열 배열이 아니면 화면이 오류 문구로 간다. */
-export function isBlockList(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((item) => typeof item === 'string')
+/** 템플릿 블록을 편집기가 읽는 HTML 로 바꾼다. */
+export function blocksToHtml(blocks: string[]): string {
+  return blocks.map(blockToHtml).join('')
 }
 
 /**

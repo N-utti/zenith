@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { blocksToHtml, isBlockList } from './templateBlocks'
+import { blocksToHtml, TEMPLATE_BLOCKS } from './templateBlocks'
 
 describe('blocksToHtml', () => {
   it('제목·문단·목록·표를 편집기 노드로 바꾼다', () => {
@@ -49,9 +49,7 @@ describe('blocksToHtml', () => {
 
   it('제목은 h3 까지만 만든다', () => {
     // h4 는 편집기 스타일이 없어 문단과 구별이 안 된다.
-    expect(blocksToHtml(['# 하나', '## 둘', '### 셋'])).toBe(
-      '<h2>하나</h2><h3>둘</h3><h3>셋</h3>',
-    )
+    expect(blocksToHtml(['# 하나', '## 둘', '### 셋'])).toBe('<h2>하나</h2><h3>둘</h3><h3>셋</h3>')
   })
 
   it('제목과 목록이 한 블록에 섞여 오면 글자로 남긴다', () => {
@@ -85,13 +83,14 @@ describe('편집기에 심기 전 이스케이프', () => {
   })
 })
 
-describe('isBlockList', () => {
-  it('문자열 배열만 통과시킨다', () => {
-    // 계약에 없는 응답이라 모양을 믿지 않는다. 객체 배열이 오면 렌더 중에 터진다.
-    expect(isBlockList(['## 안건'])).toBe(true)
-    expect(isBlockList([])).toBe(true)
-    expect(isBlockList([{ type: 'heading', text: '안건' }])).toBe(false)
-    expect(isBlockList('## 안건')).toBe(false)
-    expect(isBlockList(undefined)).toBe(false)
+describe('TEMPLATE_BLOCKS', () => {
+  it('주간 보고는 사내 엑셀과 같은 칸의 표가 된다', () => {
+    const html = blocksToHtml(TEMPLATE_BLOCKS.weekly)
+    expect(html).toContain(
+      '<tr><th>부서명</th><th>전주 진행 완료 사항</th><th>금주 진행 예정 사항</th>' +
+        '<th>예정 완료 기한</th><th>요청사항</th></tr>',
+    )
+    // 빈 줄이 표 행으로 살아야 채울 자리가 있다. 문단으로 떨어지면 "|" 글자만 남는다.
+    expect(html.match(/<tr>/g)).toHaveLength(7)
   })
 })

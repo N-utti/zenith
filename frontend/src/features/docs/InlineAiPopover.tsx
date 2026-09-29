@@ -5,13 +5,10 @@ import { Button } from '@/components/ui/Button'
 import { api } from '@/lib/api'
 import { OPEN_INLINE_AI_EVENT } from './editorBlocks'
 import { parseMarkdownTable, tableToHtml } from './markdownTable'
-import { blocksToHtml, isBlockList } from './templateBlocks'
+import { blocksToHtml, type DocTemplate, TEMPLATE_BLOCKS } from './templateBlocks'
 
 /** 04 §8 `POST /ai/doc-action` 의 `action`. 자유 프롬프트는 계약에 없다. */
 type DocAction = 'summarize' | 'continue' | 'polish' | 'translate' | 'table'
-
-/** 04 §8 `POST /ai/template` 의 `template`. 자유 프롬프트는 계약에 없다. */
-type DocTemplate = 'minutes' | 'weekly' | 'notice'
 
 const TEMPLATES: { id: DocTemplate; label: string }[] = [
   { id: 'minutes', label: '회의록' },
@@ -50,7 +47,7 @@ export function InlineAiPopover({ editor, docId }: { editor: Editor; docId: stri
   const [open, setOpen] = useState(false)
   const [pos, setPos] = useState({ top: 0, left: 0 })
   const [draft, setDraft] = useState<string | null>(null)
-  /** 템플릿 응답. 초안(`draft`)과 달리 블록 배열이라 편집기 노드로 바꿔 넣는다. */
+  /** 템플릿 블록. 초안(`draft`)과 달리 블록 배열이라 편집기 노드로 바꿔 넣는다. */
   const [blocks, setBlocks] = useState<string[] | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -136,21 +133,11 @@ export function InlineAiPopover({ editor, docId }: { editor: Editor; docId: stri
     try {
       const result = await fetcher()
       if (reqId.current !== id) return
-      // 응답 모양이 계약에 없다. 문자열 배열이 아니면 그리다가 터지는데, 그 예외는 렌더 중에
-      // 나서 이 화면의 오류 자리로 안 들어오고 편집기까지 같이 내려앉는다.
-      if (result.blocks !== undefined && !isBlockList(result.blocks)) {
-        setError('템플릿을 읽지 못했습니다. 다시 시도해 주세요.')
-        return
-      }
       setDraft(result.draft ?? null)
       setBlocks(result.blocks ?? null)
     } catch {
       if (reqId.current === id) {
-        setError(
-          'template' in what
-            ? '템플릿을 만들지 못했습니다. 다시 시도해 주세요.'
-            : '초안을 만들지 못했습니다. 다시 시도해 주세요.',
-        )
+        setError('초안을 만들지 못했습니다. 다시 시도해 주세요.')
       }
     } finally {
       if (reqId.current === id) setBusy(false)
@@ -167,18 +154,11 @@ export function InlineAiPopover({ editor, docId }: { editor: Editor; docId: stri
     )
 
   /**
-   * 문서 템플릿(04 §8 `/ai/template`). 빈 문서를 형식부터 채우는 자리다.
-   *
-   * 문서를 근거로 쓰는 위 동작들과 달리 본문을 안 본다. 그래서 `context` 도 안 보낸다.
-   * 계약에는 있지만 지금 화면이 실어 보낼 맥락이 없다(PR 본문).
+   * 문서 템플릿. 빈 문서를 형식부터 채우는 자리다. 고정 문안이라 서버를 부르지 않는다(templateBlocks.ts).
+   * 미리보기·삽입은 위 동작들과 같은 길을 탄다.
    */
   const generateTemplate = (template: DocTemplate) =>
-    run({ template }, () =>
-      api<{ blocks: string[] }>('/ai/template', {
-        method: 'POST',
-        body: JSON.stringify({ template }),
-      }),
-    )
+    run({ template }, async () => ({ blocks: TEMPLATE_BLOCKS[template] }))
 
   // 생성 중엔 칩이 전부 비활성이라 포커스가 body 로 떨어진다. 초안이 뜨면 "삽입" 으로 되돌린다.
   useEffect(() => {
@@ -336,7 +316,9 @@ export function InlineAiPopover({ editor, docId }: { editor: Editor; docId: stri
             )}
             <p className="text-subtle mt-2.5 flex items-center gap-1.5 text-[11px]">
               <span className="bg-success size-1.5 rounded-full" />
-              Claude API · 사내 서버 경유 · 근거: {html ? '없음(형식만 만듭니다)' : '이 문서 본문'}
+              {html
+                ? '고정 서식 · AI를 쓰지 않습니다'
+                : 'Claude API · 사내 서버 경유 · 근거: 이 문서 본문'}
             </p>
           </div>
 
@@ -347,17 +329,12 @@ export function InlineAiPopover({ editor, docId }: { editor: Editor; docId: stri
             <Button variant="secondary" size="sm" onClick={() => apply('below')}>
               아래에 추가
             </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => {
-                if (!last) return
-                if ('action' in last) void generate(last.action)
-                else void generateTemplate(last.template)
-              }}
-            >
-              다시 생성
-            </Button>
+            {/* 템플릿은 고정 문안이라 다시 만들어도 같다. */}
+            {last && 'action' in last && (
+              <Button variant="secondary" size="sm" onClick={() => void generate(last.action)}>
+                다시 생성
+              </Button>
+            )}
             <button
               type="button"
               onClick={close}

@@ -20,14 +20,7 @@ import {
   setMockSession,
   userFromCookie,
 } from './db'
-import {
-  AI_MODELS,
-  answer,
-  DOC_ACTIONS,
-  docActionDraft,
-  DOC_TEMPLATES,
-  templateBlocks,
-} from './aiDb'
+import { AI_MODELS, answer, DOC_ACTIONS, docActionDraft } from './aiDb'
 import {
   BOARD_DEFS,
   canEdit,
@@ -1448,23 +1441,6 @@ data: ${JSON.stringify(data)}
     await delay(700)
     return HttpResponse.json({
       draft: docActionDraft(action as (typeof DOC_ACTIONS)[number], doc.title),
-    })
-  }),
-
-  // 04 §8 문서 템플릿. 응답 모양(`blocks[]` 의 한 칸이 마크다운 한 덩이)은 프론트 제안(PR 본문).
-  http.post('/api/ai/template', async ({ request }) => {
-    if (!authenticate()) return unauthorized()
-    const body = await readJson<{ template?: unknown }>(request)
-    const template = typeof body?.template === 'string' ? body.template : ''
-    if (!DOC_TEMPLATES.includes(template as (typeof DOC_TEMPLATES)[number])) {
-      return HttpResponse.json(
-        { detail: `template 은 ${DOC_TEMPLATES.join('|')} 중 하나입니다.`, code: 'VALIDATION' },
-        { status: 422 },
-      )
-    }
-    await delay(700)
-    return HttpResponse.json({
-      blocks: templateBlocks(template as (typeof DOC_TEMPLATES)[number]),
     })
   }),
 
