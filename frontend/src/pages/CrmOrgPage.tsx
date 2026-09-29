@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
-import { Mail, Pencil, Phone, Plus, Trash2 } from 'lucide-react'
+import { Copy, Mail, Pencil, Phone, Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Card, CardEmpty, CardHeader } from '@/components/ui/Card'
 import { Field } from '@/components/ui/Field'
@@ -157,13 +157,35 @@ export function CrmOrgPage() {
                       </a>
                     )}
                     {c.email && (
-                      <a
-                        href={`mailto:${c.email}`}
-                        className="text-muted hover:text-accent mt-1 flex items-center gap-1.5 break-all"
-                      >
-                        <Mail className="size-3.5 shrink-0" />
-                        {c.email}
-                      </a>
+                      <div className="mt-1 flex items-center gap-1">
+                        <a
+                          href={`mailto:${c.email}`}
+                          className="text-muted hover:text-accent flex items-center gap-1.5 break-all"
+                        >
+                          <Mail className="size-3.5 shrink-0" />
+                          {c.email}
+                        </a>
+                        {/* 팀은 네이버 메일을 웹에서 쓴다. 메일 링크는 PC 메일 앱을 여니, 받는 사람 칸에 붙여 넣을 주소를 복사해 준다. */}
+                        <button
+                          type="button"
+                          aria-label={`${c.email} 복사`}
+                          title="주소 복사"
+                          className={`${iconButton} -my-1 shrink-0`}
+                          // http(IP) 로 열면 navigator.clipboard 가 없어 바로 던진다. 그것도 실패 토스트로 받는다.
+                          onClick={() =>
+                            Promise.resolve()
+                              .then(() => navigator.clipboard.writeText(c.email))
+                              .then(() => toast.success('메일 주소를 복사했습니다.'))
+                              .catch(() =>
+                                toast.error(
+                                  '복사하지 못했습니다. 주소를 직접 선택해 복사해 주세요.',
+                                ),
+                              )
+                          }
+                        >
+                          <Copy className="size-3.5" />
+                        </button>
+                      </div>
                     )}
                     {c.memo && <p className="text-subtle mt-1 whitespace-pre-wrap">{c.memo}</p>}
                     {/* 삭제된 담당자는 어디서 옮겨 왔는지도 드러내지 않는다. 경력도 그 사람의 정보다. */}
