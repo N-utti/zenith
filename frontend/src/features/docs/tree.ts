@@ -104,3 +104,20 @@ export function defaultFolderId({ folders }: DocTreeData): string | undefined {
     .filter((f) => f.parent_id === null)
     .sort((a, b) => a.sort - b.sort || a.title.localeCompare(b.title))[0]?.id
 }
+
+/** 최근 수정순. */
+export const byRecent = (a: DocSummary, b: DocSummary) => b.updated_at.localeCompare(a.updated_at)
+
+/**
+ * 사이드바 폴더에 펼쳐 둘 문서. `limit` 개를 넘으면 최근 수정순으로 그만큼만 보이고 나머지는
+ * 폴더 목록 화면(`/docs?folder=`)으로 넘긴다. 주간 보고처럼 매주 쌓이는 폴더가 사이드바를
+ * 끝없이 늘이지 않게 한다. 지금 열린 문서는 오래됐어도 빼지 않는다. 빠지면 어디를 보고 있는지 잃는다.
+ */
+export function previewDocs(docs: DocSummary[], limit: number, openId?: string): DocSummary[] {
+  if (docs.length <= limit) return docs
+  const recent = [...docs].sort(byRecent)
+  const shown = recent.slice(0, limit)
+  const open = recent.find((d) => d.id === openId)
+  if (open && !shown.includes(open)) shown.push(open)
+  return shown
+}

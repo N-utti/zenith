@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest'
-import { ancestorsOf, buildTree, defaultFolderId, foldersTo } from './tree'
+import { ancestorsOf, buildTree, defaultFolderId, foldersTo, previewDocs } from './tree'
 import type { DocSummary, DocTreeData, Folder } from './types'
 
 const folder = (id: string, parent_id: string | null, title: string, sort = 0): Folder => ({
@@ -91,4 +91,20 @@ it('순환 참조가 생겨도 멈추고, 그 가지가 화면에서 사라지�
 it('새 문서의 기본 자리는 최상위 폴더 중 첫 번째', () => {
   expect(defaultFolderId(data)).toBe('f-0')
   expect(defaultFolderId({ folders: [], docs: [] })).toBeUndefined()
+})
+
+it('previewDocs: 넘치면 최근 수정순으로 자르고, 열린 문서는 남긴다', () => {
+  const at = (id: string, day: number): DocSummary => ({
+    ...doc(id, 'f-1', id),
+    updated_at: `2026-09-${String(day).padStart(2, '0')}T00:00:00Z`,
+  })
+  const docs = [at('a', 1), at('b', 5), at('c', 3), at('d', 4)]
+
+  expect(previewDocs(docs, 5)).toBe(docs)
+  expect(previewDocs(docs, 2).map((d) => d.id)).toEqual(['b', 'd'])
+  expect(previewDocs(docs, 2, 'a').map((d) => d.id)).toEqual(['b', 'd', 'a'])
+  // 이미 보이는 문서, 다른 폴더의 문서는 덧붙이지 않는다.
+  expect(previewDocs(docs, 2, 'b').map((d) => d.id)).toEqual(['b', 'd'])
+  expect(previewDocs(docs, 2, 'zz').map((d) => d.id)).toEqual(['b', 'd'])
+  expect(previewDocs(docs, 4)).toBe(docs)
 })

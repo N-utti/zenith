@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { NavLink, useNavigate, useParams } from 'react-router'
+import { Link, NavLink, useLocation, useNavigate, useParams, useSearchParams } from 'react-router'
 import {
   ChevronDown,
   ChevronRight,
@@ -17,7 +17,10 @@ import { useToast } from '@/components/ui/ToastContext'
 import { ApiError } from '@/lib/api'
 import { FolderNameModal } from '@/features/docs/FolderNameModal'
 import { useCreateDoc, useCreateFolder, useRenameFolder, useTree } from '@/features/docs/api'
-import { ancestorsOf, buildTree, type TreeNode } from '@/features/docs/tree'
+import { ancestorsOf, buildTree, previewDocs, type TreeNode } from '@/features/docs/tree'
+
+/** 폴더를 펼쳤을 때 사이드바에 보일 문서 수. 넘치면 나머지는 폴더 목록 화면에서 본다. */
+const PREVIEW_DOCS = 5
 
 // 값의 의미가 문서 id 에서 폴더 id 로 바뀌었다. 옛 키를 그대로 쓰면 안 맞는 id 가 영원히 쌓인다.
 const EXPANDED_KEY = 'zenith.docTreeExpanded.v2'
@@ -121,6 +124,10 @@ function FolderRow({
   actions: RowActions
 }) {
   const { id, title } = node.folder
+  const { docId } = useParams()
+  const { pathname } = useLocation()
+  const [searchParams] = useSearchParams()
+  const current = pathname === '/docs' && searchParams.get('folder') === id
   const [opened, setOpened] = useState(() => expandedIds.has(id))
   /*
    * 열려 있는 문서까지의 경로는 기억과 무관하게 항상 펼친다. 접어 둔 폴더 안의 문서를 ⌘K 로
@@ -137,6 +144,9 @@ function FolderRow({
 
   const Icon = expanded ? FolderOpen : Folder
 
+  const docs = node.children.flatMap((child) => (child.kind === 'doc' ? [child.doc] : []))
+  const shownDocs = previewDocs(docs, PREVIEW_DOCS, docId)
+
   return (
     <>
       <div className="group/row flex items-center">
@@ -145,21 +155,34 @@ function FolderRow({
           onClick={toggle}
           aria-label={`${title} ${expanded ? '접기' : '펼치기'}`}
           aria-expanded={expanded}
-          className="text-subtle hover:text-fg grid size-5 shrink-0 cursor-pointer place-items-center rounded transition-colors"
+          // 폴더 이름이 이동 링크가 되어 펼치기는 이 화살표만 한다. 모바일에서 눌리게 보이는 크기보다
+          // 넓게 받는다(before 로 사방 4px, 28px).
+          className="text-subtle hover:text-fg relative grid size-5 shrink-0 cursor-pointer place-items-center rounded transition-colors before:absolute before:-inset-1"
           style={{ marginLeft: depth * 14 }}
         >
           {expanded ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
         </button>
 
-        <button
-          type="button"
-          onClick={toggle}
-          aria-expanded={expanded}
-          className="text-muted hover:bg-surface-hover hover:text-fg flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13.5px] font-medium transition-colors"
+        {/* 이름은 폴더 목록 화면으로 간다(노션과 같이). 펼치고 접기는 옆 화살표가 맡는다. */}
+        <Link
+          to={`/docs?folder=${id}`}
+          onClick={(e) => {
+            // 새 탭으로 여는 클릭이면 이 화면은 그대로 둔다.
+            if (e.metaKey || e.ctrlKey || e.shiftKey) return
+            if (!expanded) toggle()
+            actions.onNavigate?.()
+          }}
+          aria-current={current ? 'page' : undefined}
+          className={cn(
+            'flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-[13.5px] font-medium transition-colors',
+            current
+              ? 'bg-accent-soft text-accent font-semibold'
+              : 'text-muted hover:bg-surface-hover hover:text-fg',
+          )}
         >
           <Icon className="size-3.5 shrink-0" strokeWidth={2} />
           <span className="truncate">{title}</span>
-        </button>
+        </Link>
 
         {/*
           폴더 행에만 붙는 조작. 마우스를 올렸을 때와 키보드 초점이 왔을 때 보인다.
@@ -178,25 +201,43 @@ function FolderRow({
         </div>
       </div>
 
-      {expanded &&
-        node.children.map((child) =>
-          child.kind === 'folder' ? (
-            <FolderRow
-              key={child.folder.id}
-              node={child}
-              depth={depth + 1}
-              openPath={openPath}
-              actions={actions}
-            />
-          ) : (
+      {expanded && (
+        <>
+          {node.children.map(
+            (child) =>
+              child.kind === 'folder' && (
+                <FolderRow
+                  key={child.folder.id}
+                  node={child}
+                  depth={depth + 1}
+                  openPath={openPath}
+                  actions={actions}
+                />
+              ),
+          )}
+          {shownDocs.map((doc) => (
             <DocRow
-              key={child.doc.id}
-              node={child}
+              key={doc.id}
+              node={{ kind: 'doc', doc }}
               depth={depth + 1}
               onNavigate={actions.onNavigate}
             />
-          ),
-        )}
+          ))}
+          {shownDocs.length < docs.length && (
+            <div className="flex items-center">
+              <span className="size-5 shrink-0" style={{ marginLeft: (depth + 1) * 14 }} />
+              <Link
+                to={`/docs?folder=${id}`}
+                onClick={actions.onNavigate}
+                aria-label={`${title} 전체 ${docs.length}개 보기`}
+                className="text-subtle hover:bg-surface-hover hover:text-fg flex min-w-0 flex-1 items-center rounded-md px-2 py-1.5 text-[13px] transition-colors"
+              >
+                전체 {docs.length}개 보기
+              </Link>
+            </div>
+          )}
+        </>
+      )}
     </>
   )
 }

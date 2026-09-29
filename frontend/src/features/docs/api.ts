@@ -17,7 +17,6 @@ import type {
 
 export const docKeys = {
   tree: ['tree'] as const,
-  list: (query: string) => ['documents', 'list', query] as const,
   detail: (docId: string) => ['documents', docId] as const,
   comments: (docId: string) => ['documents', docId, 'comments'] as const,
   versions: (docId: string) => ['documents', docId, 'versions'] as const,
@@ -76,17 +75,6 @@ export function useRenameFolder() {
   })
 }
 
-/**
- * 제목으로 거르는 목록. 04 에 `GET /docs` 가 없다. 본문 검색은 `GET /search` 가 따로 있고,
- * 이 훅은 문서 화면의 제목 필터라 그대로 둔다.
- */
-export function useDocs(query: string) {
-  return useQuery({
-    queryKey: docKeys.list(query),
-    queryFn: () => api<{ items: DocSummary[] }>(`/docs?q=${encodeURIComponent(query)}`),
-  })
-}
-
 export function useDoc(docId: string) {
   return useQuery({
     queryKey: docKeys.detail(docId),
@@ -125,7 +113,6 @@ export function useTouchDoc(docId: string) {
       }),
     onSuccess: (doc) => {
       qc.setQueryData(docKeys.detail(docId), doc)
-      void qc.invalidateQueries({ queryKey: ['documents', 'list'] })
       void qc.invalidateQueries({ queryKey: docKeys.tree })
       // 홈의 "이어서 작업" 도 같은 문서를 본다.
       void qc.invalidateQueries({ queryKey: homeKeys.home })
@@ -140,7 +127,6 @@ export function useTouchDoc(docId: string) {
  * 바로 위에서 상세를 "다시 부르지 않는다" 고 해 둔 것도 그 한 줄이 도로 무효로 만든다.
  */
 function invalidateDocLists(qc: ReturnType<typeof useQueryClient>) {
-  void qc.invalidateQueries({ queryKey: ['documents', 'list'] })
   void qc.invalidateQueries({ queryKey: docKeys.tree })
   // 휴지통은 살아 있는 목록의 여집합이다. 한쪽이 바뀌면 다른 쪽도 바뀐다.
   void qc.invalidateQueries({ queryKey: docKeys.trash })

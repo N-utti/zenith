@@ -59,7 +59,6 @@ import {
   DOC_SEEDS,
   findDoc,
   listComments,
-  listDocs,
   listTrash,
   recentDocs,
   listVersions,
@@ -1550,14 +1549,6 @@ data: ${JSON.stringify(data)}
   }),
 
   // ── 문서 ──────────────────────────────────────────────────
-  http.get(
-    '/api/docs',
-    authed((_user, request) => {
-      const query = new URL(request.url).searchParams.get('q') ?? ''
-      return HttpResponse.json({ items: listDocs(query) })
-    }),
-  ),
-
   http.post('/api/docs', async ({ request }) => {
     const user = authenticate()
     if (!user) return unauthorized()
