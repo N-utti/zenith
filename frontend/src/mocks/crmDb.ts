@@ -726,6 +726,23 @@ const deals: DealRow[] = [
     closed_at: null,
     created_at: daysAgo(5),
   },
+  {
+    id: 'deal-6',
+    kind: 'disposal',
+    name: '메디컬센터 건물 매각',
+    org_id: 'org-4',
+    owner_id: 'u-6',
+    stage: 'marketing',
+    amount_krw: 65_000_000_000,
+    target_date: daysAhead(150),
+    next_action: '원매자 비밀유지계약(NDA) 회수',
+    next_action_due: daysAhead(7),
+    status: 'open',
+    drop_reason: null,
+    version: 1,
+    closed_at: null,
+    created_at: daysAgo(3),
+  },
 ]
 
 /** 시드 안건마다 등록 이력 한 줄. 중간 이동은 생략하고 지금 단계에서 등록된 것으로 둔다. */
