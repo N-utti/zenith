@@ -217,6 +217,20 @@ export function auditView(event: AuditEvent): AuditView {
       }
     }
 
+    case 'crm.org_deleted':
+      return {
+        summary: 'CRM 기관 삭제',
+        detail:
+          [text(detail, 'name'), text(detail, 'reason')].filter(Boolean).join(' · ') || undefined,
+        tone: 'warning',
+      }
+
+    case 'crm.contact_erased':
+      return { summary: 'CRM 담당자 개인정보 삭제', tone: 'warning' }
+
+    case 'crm.activity_deleted':
+      return { summary: 'CRM 활동 기록 삭제', tone: 'neutral' }
+
     default:
       return { summary: kind, tone: 'neutral' }
   }

@@ -11,6 +11,7 @@ import { SkeletonRows } from '@/components/ui/Skeleton'
 import { Spinner } from '@/components/ui/Spinner'
 import { Textarea } from '@/components/ui/Textarea'
 import { useToast } from '@/components/ui/ToastContext'
+import { useCurrentUser } from '@/features/auth/AuthContext'
 import { ActivityCard } from '@/features/crm/ActivityCard'
 import { useDeal, useDropDeal, useOrg, useReopenDeal, useUpdateDeal } from '@/features/crm/api'
 import { ActivityFormModal, DealFormModal } from '@/features/crm/CrmForms'
@@ -37,12 +38,15 @@ function eventText(deal: DealDetail, e: DealEvent) {
   if (e.action === 'drop') return `중단: ${e.reason ?? ''}`
   if (e.action === 'reopen') return '재개'
   if (e.from_stage === null) return `등록 (${stageLabel(deal.kind, e.to_stage)})`
-  return `${stageLabel(deal.kind, e.from_stage)} → ${stageLabel(deal.kind, e.to_stage)}`
+  const move = `${stageLabel(deal.kind, e.from_stage)} → ${stageLabel(deal.kind, e.to_stage)}`
+  // 마지막 단계에서 떠나는 이동은 임원이 성사를 되돌린 것이다(15 §6).
+  return e.from_stage === DEAL_STAGES[deal.kind].at(-1)?.key ? `성사 취소: ${move}` : move
 }
 
 /** 안건 상세(15 §10). 단계·다음 할 일·단계 이력·활동 타임라인. */
 export function CrmDealPage() {
   const { dealId = '' } = useParams()
+  const me = useCurrentUser()
   const toast = useToast()
   const deal = useDeal(dealId)
   // 활동 기록 창이 기관의 담당자·안건 목록을 쓴다. 기관 상세를 같이 받아 둔다.
@@ -73,15 +77,24 @@ export function CrmDealPage() {
   const stages = DEAL_STAGES[d.kind]
   const last = stages.at(-1)?.key
   const open = d.status === 'open'
+  // 성사는 임원만 단계를 옮겨 되돌린다(15 §6). 화면 편의일 뿐, 실제 차단은 서버 409 다.
+  const movable = open || (d.status === 'won' && me.role === 'exec')
 
   const moveTo = (stage: string) => {
     if (stage === d.stage) return
     if (stage === last && !confirm(`${stages.at(-1)?.label}(으)로 옮기면 성사로 끝납니다.`)) return
+    if (!open && !confirm('성사를 되돌려 진행 중으로 바꿉니다.')) return
     move.mutate(
       { id: d.id, version: d.version, stage },
       {
         onSuccess: () =>
-          toast.success(stage === last ? '성사로 끝냈습니다.' : '단계를 옮겼습니다.'),
+          toast.success(
+            stage === last
+              ? '성사로 끝냈습니다.'
+              : open
+                ? '단계를 옮겼습니다.'
+                : '성사를 되돌렸습니다.',
+          ),
         onError: (err) => toast.error(errorText(err, '단계를 옮기지 못했습니다.')),
       },
     )
@@ -143,7 +156,7 @@ export function CrmDealPage() {
               <div>
                 <dt className="text-subtle mb-1 text-xs">단계</dt>
                 <dd>
-                  {open ? (
+                  {movable ? (
                     <Select
                       aria-label="단계"
                       value={d.stage}

@@ -278,7 +278,8 @@ function toListItem(org: OrgRow): OrgListItem {
     name: org.name,
     org_type: org.org_type,
     owners: people(org.owner_ids),
-    contact_count: contacts.filter((c) => c.org_id === org.id).length,
+    // 개인정보를 지운 담당자는 행만 남은 것이라 세지 않는다(내보내기와 같은 기준).
+    contact_count: contacts.filter((c) => c.org_id === org.id && !c.erased).length,
     last_contacted_at: lastContacted(org.id),
   }
 }
@@ -397,13 +398,24 @@ export function updateOrg(id: string, patch: Partial<OrgInput>): OrgDetail | Fai
   return toDetail(org)
 }
 
-/** 기관 삭제는 임원만, 사유 필수(설계서 §3). 기록은 남기고 목록에서만 뺀다. */
+/**
+ * 기관 삭제는 임원만, 사유 필수(설계서 §3). 기록은 남기고 목록에서만 뺀다.
+ * 진행 중 안건이 있으면 409. 삭제 한 번에 안건이 보드에서 같이 사라지지 않게 한다(이슈 #200).
+ */
 export function deleteOrg(user: User, id: string, reason: unknown): Failure | null {
   if (user.role !== 'exec') return forbidden()
   const org = aliveOrg(id)
   if (!org) return notFound('기관을')
   if (typeof reason !== 'string' || !reason.trim())
     return fail(400, 'VALIDATION', '사유를 적어 주세요.')
+  const open = deals.filter((d) => d.org_id === id && d.status === 'open').length
+  if (open) {
+    return fail(
+      409,
+      'CONFLICT',
+      `진행 중 안건 ${open}건을 먼저 중단하거나 끝내야 지울 수 있습니다.`,
+    )
+  }
   org.deleted_at = new Date().toISOString()
   return null
 }
@@ -475,6 +487,9 @@ export function eraseContact(user: User, id: string): Contact | Failure {
   return toContact(contact)
 }
 
+/** 기기 시계가 서버보다 조금 빠른 것은 봐준다. */
+const FUTURE_SLACK_MS = 5 * 60_000
+
 const canEditActivity = (user: User, row: ActivityRow) =>
   row.author_id === user.id || user.role === 'exec'
 
@@ -505,8 +520,10 @@ export function listActivities(
 ): Activity[] | Failure {
   if ('orgId' in target) {
     if (!aliveOrg(target.orgId)) return notFound('기관을')
-  } else if (!findDeal(target.dealId)) {
-    return notFound('안건을')
+  } else {
+    // 지워진 기관의 안건은 상세가 404 다. 타임라인도 같이 막는다.
+    const deal = findDeal(target.dealId)
+    if (!deal || !aliveOrg(deal.org_id)) return notFound('안건을')
   }
   return aliveActivities()
     .filter((a) => ('orgId' in target ? a.org_id === target.orgId : a.deal_id === target.dealId))
@@ -518,8 +535,11 @@ function checkActivityInput(input: Partial<ActivityInput>): Failure | null {
   if (input.kind !== undefined && !ACTIVITY_KINDS.includes(input.kind)) {
     return invalid('활동 유형이 올바르지 않습니다.')
   }
-  if (input.occurred_at !== undefined && Number.isNaN(Date.parse(input.occurred_at))) {
-    return invalid('일시가 올바르지 않습니다.')
+  if (input.occurred_at !== undefined) {
+    const at = Date.parse(input.occurred_at)
+    if (Number.isNaN(at)) return invalid('일시가 올바르지 않습니다.')
+    // 미래 기록은 마지막 연락일을 앞당겨 「연락 없음」 필터를 속인다. 앞일은 다음 할 일에 적는다.
+    if (at > Date.now() + FUTURE_SLACK_MS) return invalid('앞으로의 일시는 기록할 수 없습니다.')
   }
   if (input.body !== undefined) {
     const body = typeof input.body === 'string' ? input.body.trim() : ''
@@ -848,6 +868,11 @@ function checkDealInput(input: Partial<DealInput>, currentOwner: string | null):
   return null
 }
 
+/** 할 일 없이 기한만 있으면 카드에 기한만 덩그러니 뜬다. 둘은 합친 값으로 본다. */
+function dueWithoutAction(action: string | undefined, due: string | null | undefined) {
+  return !action?.trim() && due ? invalid('다음 할 일을 적어야 기한을 둘 수 있습니다.') : null
+}
+
 function record(
   row: DealRow,
   user: User,
@@ -866,6 +891,7 @@ export function createDeal(user: User, input: DealInput): DealDetail | Failure {
   if (!DEAL_KINDS.includes(input.kind)) return invalid('안건 종류가 올바르지 않습니다.')
   const bad =
     checkDealInput(input, null) ??
+    dueWithoutAction(input.next_action, input.next_action_due) ??
     (input.name && input.org_id ? null : invalid('안건 이름과 기관은 필수입니다.'))
   if (bad) return bad
   const first = stages(input.kind)[0]!
@@ -896,7 +922,7 @@ const conflict = () =>
 
 /**
  * 안건 수정·단계 이동(15 §6). `version` 이 어긋나면 409(NFR-CRM-02).
- * 단계는 앞뒤 어디로든 간다. 마지막 단계에 닿으면 성사로 끝난다.
+ * 단계는 앞뒤 어디로든 간다. 마지막 단계에 닿으면 성사로 끝나고, 임원이 거기서 옮기면 다시 진행 중이다.
  */
 export function updateDeal(
   user: User,
@@ -906,10 +932,23 @@ export function updateDeal(
   const row = findDeal(id)
   if (!row || !aliveOrg(row.org_id)) return notFound('안건을')
   if (patch.version !== row.version) return conflict()
-  const bad = checkDealInput(patch, row.owner_id)
+  // 할 일·기한을 건드리는 요청만 본다. 단계만 옮기는 요청이 옛 데이터 때문에 막히지 않게.
+  const touchesNext = patch.next_action !== undefined || patch.next_action_due !== undefined
+  const bad =
+    checkDealInput(patch, row.owner_id) ??
+    (touchesNext
+      ? dueWithoutAction(
+          patch.next_action ?? row.next_action,
+          patch.next_action_due !== undefined ? patch.next_action_due : row.next_action_due,
+        )
+      : null)
   if (bad) return bad
   if (patch.stage !== undefined && patch.stage !== row.stage) {
-    if (row.status !== 'open') return fail(409, 'CONFLICT', '끝난 안건은 단계를 옮길 수 없습니다.')
+    // 성사는 임원만 되돌린다(15 §6 「잘못 누른 경우는 임원이 수정한다」). 중단은 재개로 연다.
+    const undoWon = row.status === 'won' && user.role === 'exec'
+    if (row.status !== 'open' && !undoWon) {
+      return fail(409, 'CONFLICT', '끝난 안건은 단계를 옮길 수 없습니다.')
+    }
     if (!stages(row.kind).includes(patch.stage)) return invalid('단계가 올바르지 않습니다.')
     record(row, user, {
       from_stage: row.stage,
@@ -918,10 +957,9 @@ export function updateDeal(
       reason: null,
     })
     row.stage = patch.stage
-    if (patch.stage === stages(row.kind).at(-1)) {
-      row.status = 'won'
-      row.closed_at = new Date().toISOString()
-    }
+    const won = patch.stage === stages(row.kind).at(-1)
+    row.status = won ? 'won' : 'open'
+    row.closed_at = won ? new Date().toISOString() : null
   }
   if (patch.name !== undefined) row.name = patch.name.trim()
   if (patch.owner_id !== undefined) row.owner_id = patch.owner_id || null
@@ -955,7 +993,7 @@ export function dropDeal(
 
 /**
  * 재개. 중단된 안건만 되살린다(15 §6). 새 안건을 만들면 쌓인 활동 기록이 끊긴다.
- * 성사는 되돌리지 않는다.
+ * 성사는 여기가 아니라 임원의 단계 이동으로 되돌린다.
  */
 export function reopenDeal(
   user: User,

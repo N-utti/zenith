@@ -73,6 +73,8 @@ export function CrmOrgPage() {
   }
 
   const o = org.data
+  // 개인정보를 지운 담당자는 줄로는 남기되 수에는 넣지 않는다(목록·내보내기와 같은 기준).
+  const contactCount = o.contacts.filter((c) => !c.erased).length
   const onError = (err: unknown) =>
     toast.error(err instanceof ApiError ? err.message : '처리하지 못했습니다.')
 
@@ -123,8 +125,8 @@ export function CrmOrgPage() {
           <div className="border-line flex items-center justify-between border-t px-5 pt-4 pb-2">
             <h2 className="text-fg text-sm font-semibold">
               담당자
-              {o.contacts.length > 0 && (
-                <span className="text-subtle ml-1.5 font-normal">{o.contacts.length}</span>
+              {contactCount > 0 && (
+                <span className="text-subtle ml-1.5 font-normal">{contactCount}</span>
               )}
             </h2>
             <button
@@ -316,6 +318,7 @@ export function CrmOrgPage() {
         <DeleteOrgModal
           id={o.id}
           name={o.name}
+          openDeals={deals.data?.items.filter((d) => d.status === 'open').length ?? 0}
           onClose={close}
           onDeleted={() => void navigate('/crm/orgs', { replace: true })}
         />
@@ -328,11 +331,14 @@ export function CrmOrgPage() {
 function DeleteOrgModal({
   id,
   name,
+  openDeals,
   onClose,
   onDeleted,
 }: {
   id: string
   name: string
+  /** 진행 중 안건이 있으면 서버가 409 로 막는다. 사유를 다 쓰기 전에 먼저 알린다. */
+  openDeals: number
   onClose: () => void
   onDeleted: () => void
 }) {
@@ -346,7 +352,11 @@ function DeleteOrgModal({
       open
       onClose={onClose}
       title="기관 삭제"
-      description={`${name}을(를) 목록에서 뺍니다. 사유는 감사 기록에 남습니다.`}
+      description={
+        openDeals
+          ? `진행 중 안건 ${openDeals}건을 먼저 중단하거나 끝내야 ${name}을(를) 지울 수 있습니다.`
+          : `${name}을(를) 목록에서 뺍니다. 사유는 감사 기록에 남습니다.`
+      }
       size="sm"
       footer={
         <>
@@ -356,7 +366,7 @@ function DeleteOrgModal({
           <Button
             variant="danger"
             size="sm"
-            disabled={!reason.trim() || remove.isPending}
+            disabled={openDeals > 0 || !reason.trim() || remove.isPending}
             onClick={() => {
               setError(null)
               remove.mutate(
@@ -377,17 +387,19 @@ function DeleteOrgModal({
         </>
       }
     >
-      <Field label="삭제 사유" required>
-        {(slot) => (
-          <Textarea
-            {...slot}
-            rows={3}
-            value={reason}
-            autoFocus
-            onChange={(e) => setReason(e.target.value)}
-          />
-        )}
-      </Field>
+      {openDeals === 0 && (
+        <Field label="삭제 사유" required>
+          {(slot) => (
+            <Textarea
+              {...slot}
+              rows={3}
+              value={reason}
+              autoFocus
+              onChange={(e) => setReason(e.target.value)}
+            />
+          )}
+        </Field>
+      )}
       {error && (
         <p role="alert" className="text-danger mt-3 text-sm">
           {error}
