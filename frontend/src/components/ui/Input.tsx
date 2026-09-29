@@ -28,12 +28,17 @@ export function Input({ icon, className, ref, ...props }: Props) {
     return <input ref={ref} className={cn(CONTROL_BASE, 'h-10 px-3', className)} {...props} />
   }
 
+  /*
+   * 아이콘이 있으면 `className` 은 바깥 틀에 붙는다. 아이콘은 틀 높이의 가운데에 서는데,
+   * `mb-4` 같은 여백이 안쪽 입력칸에 붙으면 틀이 그만큼 길어져 아이콘이 아래로 처진다.
+   * 아이콘 자리는 `flex` 다. 인라인이면 글줄 높이만큼 기준선 아래 틈이 생겨 또 처진다.
+   */
   return (
-    <div className="relative">
-      <span className="text-subtle pointer-events-none absolute top-1/2 left-3 -translate-y-1/2">
+    <div className={cn('relative', className)}>
+      <span className="text-subtle pointer-events-none absolute inset-y-0 left-3 flex items-center">
         {icon}
       </span>
-      <input ref={ref} className={cn(CONTROL_BASE, 'h-10 pr-3 pl-9', className)} {...props} />
+      <input ref={ref} className={cn(CONTROL_BASE, 'h-10 pr-3 pl-9')} {...props} />
     </div>
   )
 }
