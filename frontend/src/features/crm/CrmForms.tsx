@@ -479,6 +479,11 @@ export function ActivityFormModal({
   const submit = () => {
     const when = new Date(at)
     if (Number.isNaN(when.getTime())) return setError('일시를 확인해 주세요.')
+    // 서버가 막는 미래 일시(목 `crmDb.ts` 의 5분 여유)를 저장 전에 먼저 알린다. 입력칸에 `max` 를
+    // 두면 브라우저 검증이 먼저 막아 여유도 이 안내도 사라진다.
+    if (when.getTime() > Date.now() + 5 * 60_000) {
+      return setError('앞으로의 일은 안건의 다음 할 일에 적어 주세요.')
+    }
     setError(null)
     save.mutate(
       {
@@ -651,7 +656,8 @@ export function DealFormModal({
       amount_krw: won,
       target_date: target || null,
       next_action: nextAction.trim(),
-      next_action_due: nextDue || null,
+      // 할 일을 지우면 기한도 같이 지운다. 기한만 남으면 서버가 422 로 막는다.
+      next_action_due: nextAction.trim() ? nextDue || null : null,
     }
     const onError = (err: unknown) =>
       setError(
@@ -772,6 +778,8 @@ export function DealFormModal({
             <Input
               {...slot}
               type="date"
+              // 할 일이 있어야 기한을 둔다. 비어 있으면 저장할 때 기한도 비운다.
+              disabled={!nextAction.trim()}
               value={nextDue}
               onChange={(e) => setNextDue(e.target.value)}
             />

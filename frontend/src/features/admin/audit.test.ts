@@ -20,6 +20,21 @@ describe('auditView', () => {
     expect(view.summary).toBe('approvals.something_new')
   })
 
+  it('CRM 기관 삭제는 사유를, 개인정보 삭제는 종류만 보여 준다', () => {
+    const org = auditView(
+      event({ kind: 'crm.org_deleted', detail: { name: '한결연금공단', reason: '중복 등록' } }),
+    )
+    expect(org).toMatchObject({
+      summary: 'CRM 기관 삭제',
+      detail: '한결연금공단 · 중복 등록',
+      tone: 'warning',
+    })
+    expect(auditView(event({ kind: 'crm.activity_deleted' })).summary).toBe('CRM 활동 기록 삭제')
+    expect(auditView(event({ kind: 'crm.contact_erased' })).summary).toBe(
+      'CRM 담당자 개인정보 삭제',
+    )
+  })
+
   it('로그인 실패는 이유를 가른다', () => {
     const wrong = auditView(event({ kind: 'auth.login_fail', detail: { email: 'a@b.co' } }))
     expect(wrong.detail).toBe('a@b.co · 비밀번호 불일치')

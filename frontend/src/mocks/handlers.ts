@@ -279,6 +279,23 @@ function approvalResponse(
   return HttpResponse.json(result, { status: ok })
 }
 
+/** CRM 감사 기록. kind 는 점 표기(`crm.*`)로 관리자 감사 화면의 `crm` 필터에 걸린다. */
+function crmAudit(
+  kind: string,
+  user: User,
+  targetId: string | null,
+  detail: Record<string, unknown> | null = null,
+) {
+  recordAudit({
+    kind,
+    actor_id: user.id,
+    target_id: targetId,
+    ip: '127.0.0.1',
+    user_agent: navigator.userAgent,
+    detail,
+  })
+}
+
 /** 인증이 필요한 핸들러의 공통 껍데기. */
 function authed(resolve: (user: User, request: Request) => Response) {
   return ({ request }: { request: Request }) => {
@@ -1807,8 +1824,17 @@ data: ${JSON.stringify(data)}
     if (!user) return unauthorized()
     const body = await readJson<{ reason?: unknown }>(request)
     await delay(300)
-    const failure = deleteOrg(user, String(params.id), body?.reason)
-    return failure ? approvalResponse(failure) : new HttpResponse(null, { status: 204 })
+    const id = String(params.id)
+    // 지운 뒤에는 목록에서 빠지니, 감사 화면에서 알아보게 이름을 먼저 잡아 둔다.
+    const before = getOrg(id)
+    const failure = deleteOrg(user, id, body?.reason)
+    if (failure) return approvalResponse(failure)
+    // 삭제 창이 「사유는 감사 기록에 남습니다」라고 약속한다(15 NFR-CRM-03).
+    crmAudit('crm.org_deleted', user, id, {
+      name: 'name' in before ? before.name : '',
+      reason: String(body?.reason).trim(),
+    })
+    return new HttpResponse(null, { status: 204 })
   }),
   http.post('/api/crm/contacts', async ({ request }) => {
     if (!authenticate()) return unauthorized()
@@ -1828,7 +1854,11 @@ data: ${JSON.stringify(data)}
     const user = authenticate()
     if (!user) return unauthorized()
     await delay(300)
-    return approvalResponse(eraseContact(user, String(params.id)))
+    const id = String(params.id)
+    const result = eraseContact(user, id)
+    // 지운 사람의 이름은 남기지 않는다. 남기면 개인정보 삭제가 아니다.
+    if (!('error' in result)) crmAudit('crm.contact_erased', user, id)
+    return approvalResponse(result)
   }),
   http.get(
     '/api/crm/activities',
@@ -1863,8 +1893,11 @@ data: ${JSON.stringify(data)}
     const user = authenticate()
     if (!user) return unauthorized()
     await delay(300)
-    const failure = deleteActivity(user, String(params.id))
-    return failure ? approvalResponse(failure) : new HttpResponse(null, { status: 204 })
+    const id = String(params.id)
+    const failure = deleteActivity(user, id)
+    if (failure) return approvalResponse(failure)
+    crmAudit('crm.activity_deleted', user, id) // 15 FR-CRM-22
+    return new HttpResponse(null, { status: 204 })
   }),
 
   // 주소록 전체가 한 번에 나가는 길이다. 누가 무엇을 몇 행 뽑았는지 남긴다(15 §8.1, TC-CRM-SEC-04).
@@ -1875,14 +1908,7 @@ data: ${JSON.stringify(data)}
       const entity = new URL(request.url).searchParams.get('entity') ?? ''
       const table = exportRows(entity)
       if ('error' in table) return approvalResponse(table)
-      recordAudit({
-        kind: 'crm.exported',
-        actor_id: user.id,
-        target_id: null,
-        ip: '127.0.0.1',
-        user_agent: navigator.userAgent,
-        detail: { entity, rows: table.rows.length - 1 },
-      })
+      crmAudit('crm.exported', user, null, { entity, rows: table.rows.length - 1 })
       const { sheet, rows, integerCols } = table
       return new HttpResponse(buildXlsx(rows, { sheet, integerCols, freezeCols: 1 }), {
         headers: {
