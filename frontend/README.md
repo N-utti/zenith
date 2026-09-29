@@ -105,7 +105,7 @@ scripts/            개발 서버 (백엔드 대역)
 | 화면 | 상태 |
 | --- | --- |
 | 홈 대시보드 | 공지·최근문서·안읽은채팅 |
-| 문서 | 목록·검색·생성, TipTap 에디터, Yjs 실시간 공동편집, 댓글, 버전 기록·되돌리기, 휴지통(`/docs/trash`: 되돌리기·영구 삭제(임원)) |
+| 문서 | 목록·검색·생성(목록은 `/tree` 를 거른다. 사이드바 폴더 이름 → `/docs?folder=`, 폴더마다 최근 5개만 펼침), TipTap 에디터, Yjs 실시간 공동편집, 댓글, 버전 기록·되돌리기, 휴지통(`/docs/trash`: 되돌리기·영구 삭제(임원)) |
 | 채팅 | 채널·DM, 실시간 송수신, 안읽음, 타이핑 표시 |
 | AI | 어시스턴트(`/ai`): 04 §8 `/ai/chat` SSE 스트리밍 · 모델 표시 · 지식 소스 · 근거 패널 · 도움돼요(`/ai/feedback`) · ⌘K 팔레트의 "AI에게 물어보기". 문서 인라인 AI 팝오버(`/ai/doc-action`, 템플릿은 AI 없이 고정 문안). "표로 정리" 초안은 표 미리보기로 보이고 삽입하면 실제 표 블록이 된다(`@tiptap/extension-table`). 근거(citations)는 백엔드 RAG 전까지 목에서만 보인다. "문서로 저장"은 빈 문서를 만들고 초안을 라우터 state 로 실어 편집기가 Y.Doc 에 심는다(근거 인용문은 싣지 않는다) |
 | 게시판(`/board/:id`) | 사이드바가 게시판을 나열하고 화면 하나로 본다(05 SCR-05). 목록·상세·글쓰기·수정·삭제를 `GET /boards` · `/boards/{id}/posts` · `/posts/{id}` 로 붙였다. 권한 밖 글은 서버가 준 마스킹을 그대로 그리고(제목 가림·작성자 없음, TC-BRD-01), 본문 403 은 다시 시도하지 않는다 |
@@ -149,7 +149,7 @@ PR 본문에 흩어져 있던 것을 한곳에 모았다. 위는 **없어서 못
   기간 상한 366일 · 달력 재생성 응답 `{year, workdays}`
 - **AI**(#113): 문서 템플릿(회의록·주간 보고·공지)은 프론트 고정 문안(`features/docs/templateBlocks.ts`)이라
   `POST /ai/template` 을 부르지 않는다. 서버가 `context` 로 채우게 되면 `blocks[]` 한 칸 = **마크다운 한 덩이** 로 붙인다
-- 그 밖의 프론트 확장은 각 경로 옆에 적어 뒀다(`/api/docs?q=`, `?year=`,
+- 그 밖의 프론트 확장은 각 경로 옆에 적어 뒀다(`?year=`,
   `DELETE /admin/holidays/{date}`, `/leaves/balances`, `scope=all` 등).
 
 ### 출퇴근 시각은 기록하지 않는다
@@ -195,7 +195,6 @@ GET   /api/tree                        사이드바 트리 { folders[], docs[] }
 POST  /api/folders                     { title, parent_id?, sort? }
 PATCH /api/folders/:id                 이름·이동·정렬 (프론트는 아직 이름만 쓴다)
 
-GET   /api/docs?q=                     제목 필터 (04 에 없다. 본문 검색은 /api/search)
 GET   /api/trash?limit=                휴지통 목록. 트리의 여집합, 지운 지 최근 순
                                        지운 사람은 `updated_by` 로 온다(따로 주는 칸이 없다)
 POST  /api/docs                        { folder_id, title } 생성

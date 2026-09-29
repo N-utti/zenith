@@ -89,6 +89,47 @@ export const DOCS: DocSummary[] = [
     updated_by: { id: 'u-8', name: '성예림' },
     deleted_at: null,
   },
+  // 지난주들. 사이드바는 폴더마다 최근 5개만 펼친다(DocTree `PREVIEW_DOCS`). 넘치는 모양을 보려고 둔다.
+  {
+    id: 'd-7',
+    folder_id: 'f-4',
+    title: '주간 업무보고 (9월 4주차)',
+    updated_at: minutesAgo(7 * 1440),
+    updated_by: { id: 'u-8', name: '성예림' },
+    deleted_at: null,
+  },
+  {
+    id: 'd-8',
+    folder_id: 'f-4',
+    title: '주간 업무보고 (9월 3주차)',
+    updated_at: minutesAgo(14 * 1440),
+    updated_by: { id: 'u-8', name: '성예림' },
+    deleted_at: null,
+  },
+  {
+    id: 'd-9',
+    folder_id: 'f-4',
+    title: '주간 업무보고 (9월 2주차)',
+    updated_at: minutesAgo(21 * 1440),
+    updated_by: { id: 'u-8', name: '성예림' },
+    deleted_at: null,
+  },
+  {
+    id: 'd-10',
+    folder_id: 'f-4',
+    title: '주간 업무보고 (9월 1주차)',
+    updated_at: minutesAgo(28 * 1440),
+    updated_by: { id: 'u-8', name: '성예림' },
+    deleted_at: null,
+  },
+  {
+    id: 'd-11',
+    folder_id: 'f-4',
+    title: '주간 업무보고 (8월 5주차)',
+    updated_at: minutesAgo(35 * 1440),
+    updated_by: { id: 'u-8', name: '성예림' },
+    deleted_at: null,
+  },
 ]
 
 /** Y.Doc이 비어 있을 때만 한 번 심는 초안. */
