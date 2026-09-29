@@ -137,11 +137,12 @@ export const contactName = (contact: { name: string }) => contact.name || '삭�
 
 // ── 안건 파이프라인 (15 §2.2 · §4.2.1 · §6) ───────────────────────────
 
-export type DealKind = 'fundraising' | 'investment'
+export type DealKind = 'fundraising' | 'investment' | 'disposal'
 
 export const DEAL_KIND_LABEL: Record<DealKind, string> = {
   fundraising: '출자 유치',
   investment: '투자 안건',
+  disposal: '매각',
 }
 
 export const DEAL_KINDS = Object.keys(DEAL_KIND_LABEL) as DealKind[]
@@ -164,6 +165,14 @@ export const DEAL_STAGES: Record<DealKind, { key: string; label: string }[]> = {
     { key: 'diligence', label: '실사' },
     { key: 'committee', label: '투자심의' },
     { key: 'closed', label: '투자 실행' },
+  ],
+  // 원매자가 여럿이어도 안건은 기관 하나에 붙는다. 나머지 원매자와의 진행은 활동 기록으로 남긴다.
+  disposal: [
+    { key: 'marketing', label: '원매자 접촉' },
+    { key: 'prelim_bid', label: '예비입찰' },
+    { key: 'diligence', label: '실사·본입찰' },
+    { key: 'preferred', label: '우선협상' },
+    { key: 'closed', label: '거래 종결' },
   ],
 }
 

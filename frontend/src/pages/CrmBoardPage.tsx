@@ -53,7 +53,7 @@ function refocus(dealId: string, fallbackStage: string) {
 }
 
 /**
- * 안건 파이프라인 보드(15 §10). 종류(출자 유치·투자 안건)마다 단계 열이 다르다.
+ * 안건 파이프라인 보드(15 §10). 종류(출자 유치·투자 안건·매각)마다 단계 열이 다르다.
  *
  * 진행 중인 안건만 보인다. 성사·중단은 기관 상세의 안건 목록과 안건 상세에 남는다.
  * 데스크톱은 카드를 끌어 단계를 옮기고, 손가락은 카드 아래 단계 선택으로 옮긴다
@@ -70,7 +70,7 @@ export function CrmBoardPage() {
     <>
       <PageHeader
         title="안건"
-        description="출자 유치와 투자 안건의 진행 단계입니다. 전 직원이 함께 봅니다."
+        description="출자 유치·투자·매각 안건의 진행 단계입니다. 전 직원이 함께 봅니다."
         actions={
           <>
             <Button variant="secondary" size="sm" onClick={() => void navigate('/crm/orgs')}>
