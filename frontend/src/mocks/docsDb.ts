@@ -23,6 +23,7 @@ export const FOLDERS: Folder[] = [
   { id: 'f-1', parent_id: null, title: '회사 위키', sort: 0 },
   { id: 'f-2', parent_id: null, title: '회의록', sort: 1 },
   { id: 'f-3', parent_id: 'f-1', title: '제품', sort: 0 },
+  { id: 'f-4', parent_id: null, title: '주간 업무보고', sort: 2 },
 ]
 
 /**
@@ -80,6 +81,14 @@ export const DOCS: DocSummary[] = [
     updated_by: { id: 'u-1', name: '진수연' },
     deleted_at: null,
   },
+  {
+    id: 'd-6',
+    folder_id: 'f-4',
+    title: '주간 업무보고 (9월 5주차)',
+    updated_at: minutesAgo(60),
+    updated_by: { id: 'u-8', name: '성예림' },
+    deleted_at: null,
+  },
 ]
 
 /** Y.Doc이 비어 있을 때만 한 번 심는 초안. */
@@ -133,6 +142,18 @@ export const DOC_SEEDS: Record<string, string> = {
       <li>결근 확정 절차: 누가 언제 입력하는가 (출근율·연차에 직결)</li>
     </ul>
     <p>부여 기준이 정해져야 <code>leave_balances.grant_basis</code>의 기본값을 잡을 수 있다.</p>
+  `,
+  // 문서 안 AI 의 "주간 보고" 템플릿(templateBlocks.ts)과 같은 칸의 표를 채운 모양. 빈 줄은 사람 수만큼 줄였다.
+  'd-6': `
+    <h2>업무 현황</h2>
+    <table><tbody>
+      <tr><th>부서명</th><th>전주 진행 완료 사항</th><th>금주 진행 예정 사항</th><th>예정 완료 기한</th><th>요청사항</th></tr>
+      <tr><td>회계팀 성예림</td><td>1. 금감원 CPC 지원 보고<br>2. 직원 필수교육(자금세탁방지교육) 자료 찾기</td><td>1. 통장 정리 후 회계사무실 전달<br>2. 재무제표 완료되는 대로 월·분기 보고서 금감원 제출<br>3. 분기 보고서 홈페이지 게시<br>4. 급여대장 작성 및 회계사무실 전달</td><td>10/6<br>10/12<br>10/12<br>10/6</td><td></td></tr>
+      <tr><td>펀드팀 김다인</td><td></td><td></td><td></td><td></td></tr>
+      <tr><td>펀드팀 안재호</td><td></td><td></td><td></td><td></td></tr>
+      <tr><td>디지털 리서치팀</td><td></td><td></td><td></td><td></td></tr>
+      <tr><td>인프라 유치팀</td><td></td><td></td><td></td><td></td></tr>
+    </tbody></table>
   `,
 }
 
