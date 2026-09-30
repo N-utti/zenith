@@ -58,3 +58,25 @@ async def test_chat_reports_provider_error_as_event(
 async def test_chat_requires_login(client: AsyncClient) -> None:
     r = await client.post("/api/ai/chat", json={"message": "안녕"})
     assert r.status_code == 401
+
+
+class CrashingProvider(FakeProvider):
+    """API 키가 없을 때의 SDK 처럼, 토큰을 내다가 LLMError 가 아닌 예외로 죽는다."""
+
+    async def stream(self, *, system: str, messages: list[dict[str, str]]) -> AsyncIterator[str]:
+        yield "안"
+        raise TypeError("Could not resolve authentication method.")
+
+
+async def test_chat_reports_unexpected_error_as_event(
+    app: FastAPI, client: AsyncClient, member, caplog
+) -> None:
+    """스트림이 말없이 끊기지 않는다 — 받은 데까지 보내고 error 로 닫는다. 원인은 로그에만 남는다."""
+    app.dependency_overrides[get_provider] = CrashingProvider
+    r = await client.post("/api/ai/chat", json={"message": "안녕"})
+    assert r.status_code == 200
+    assert r.text == (
+        'event: token\ndata: {"text": "안"}\n\n'
+        'event: error\ndata: {"detail": "AI 답변을 만들지 못했습니다.", "code": "INTERNAL"}\n\n'
+    )
+    assert "Could not resolve authentication method" in caplog.text

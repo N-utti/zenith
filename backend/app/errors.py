@@ -1,5 +1,7 @@
 """04-API §0: 에러 본문은 `{"detail": str, "code": "AUTH_EXPIRED" | ...}` 한 가지 모양이다."""
 
+import logging
+
 from fastapi import FastAPI, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import HTTPException, RequestValidationError
@@ -14,8 +16,11 @@ CODE_BY_STATUS = {
     405: "METHOD_NOT_ALLOWED",
     409: "CONFLICT",
     422: "VALIDATION",
+    500: "INTERNAL",
     501: "NOT_IMPLEMENTED",
 }
+
+log = logging.getLogger("zenith.errors")
 
 
 class ApiError(HTTPException):
@@ -49,8 +54,21 @@ def install_error_handlers(app: FastAPI) -> None:
         )
 
     @app.exception_handler(IntegrityError)
-    async def _integrity(_: Request, exc: IntegrityError) -> JSONResponse:
+    async def _integrity(request: Request, exc: IntegrityError) -> JSONResponse:
         # 유일·외래키 제약 위반은 500 이 아니라 409 — 사전 검사와 commit 사이의 경합도 여기로 떨어진다.
+        # 어느 제약인지는 응답에 싣지 않고 로그에만 남긴다 — 없으면 409 의 원인을 찾을 길이 없다.
+        log.warning("제약 위반 %s %r: %s", request.method, request.url.path, exc.orig)
         return JSONResponse(
             {"detail": "데이터 제약을 위반했습니다.", "code": "CONFLICT"}, status_code=409
+        )
+
+    @app.exception_handler(Exception)
+    async def _unhandled(_: Request, exc: Exception) -> JSONResponse:
+        # 미처리 예외. Starlette 기본 500 은 text/plain 이라 프론트의 JSON.parse 가 터진다(04 §0 은 한 가지 모양).
+        # 로그는 남기지 않는다 — Starlette 가 응답 뒤에 예외를 다시 던지고 uvicorn 이 트레이스백을 적는다.
+        # 이 응답은 no_store 미들웨어 바깥에서 나가므로 헤더를 직접 붙인다.
+        return JSONResponse(
+            {"detail": "서버 오류가 발생했습니다.", "code": CODE_BY_STATUS[500]},
+            status_code=500,
+            headers={"Cache-Control": "no-store"},
         )

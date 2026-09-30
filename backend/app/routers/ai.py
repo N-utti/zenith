@@ -1,6 +1,7 @@
 """04-API §8 AI. `/ai/chat` 은 SSE — event:token → event:citations → event:done (실패 시 event:error)."""
 
 import json
+import logging
 import uuid
 from collections.abc import AsyncIterator
 
@@ -12,6 +13,7 @@ from app.ai.provider import LLMError, LLMProvider, get_provider
 from app.deps import current_user
 from app.stubs import register_stubs
 
+log = logging.getLogger("zenith.ai")
 router = APIRouter(tags=["ai"], dependencies=[Depends(current_user)])
 
 SYSTEM_PROMPT = (
@@ -62,6 +64,12 @@ async def chat(body: ChatIn, provider: LLMProvider = Depends(get_provider)) -> S
             yield sse("done", {})
         except LLMError as e:
             yield sse("error", {"detail": e.detail, "code": e.code})
+        except Exception:
+            # 200 과 헤더가 이미 나간 뒤라 예외 핸들러(errors.py)가 닿지 않는다. 여기서 안 잡으면 스트림이
+            # 말없이 끊겨 화면에 질문만 남는다(API 키가 없으면 SDK 가 AnthropicError 가 아닌 TypeError 를 던진다).
+            # 원인은 응답에 싣지 않고 로그에만.
+            log.exception("AI 답변 스트림 실패")
+            yield sse("error", {"detail": "AI 답변을 만들지 못했습니다.", "code": "INTERNAL"})
 
     return StreamingResponse(
         events(),

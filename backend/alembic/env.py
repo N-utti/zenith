@@ -14,7 +14,9 @@ from app.db import Base
 
 config = context.config
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # 기본값(True)은 이미 만들어진 로거를 전부 꺼 버린다 — 같은 프로세스에서 마이그레이션을 돌리면(테스트)
+    # 앱 로그(zenith.*)가 그 뒤로 말없이 사라진다.
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 # 테스트가 다른 DB(zenith_test)를 넘길 수 있게 ini 값이 있으면 그것을, 없으면 설정을 쓴다.
 # configparser 보간 때문에 % 는 %% 로.

@@ -8,6 +8,7 @@ MinIO 에 붙지 못하면 503 `STORAGE_UNAVAILABLE` — 스택트레이스 대�
 
 import asyncio
 import io
+import logging
 from functools import cache
 
 from minio import Minio
@@ -17,6 +18,7 @@ from urllib3.exceptions import HTTPError
 from app.config import settings
 from app.errors import ApiError
 
+log = logging.getLogger("zenith.storage")
 _ensured: set[str] = set()  # 이 프로세스가 존재를 확인한 버킷
 
 
@@ -68,6 +70,7 @@ async def _call(fn, *args):
     try:
         return await asyncio.to_thread(fn, *args)
     except (MinioException, HTTPError) as e:
+        log.warning("MinIO 호출 실패(%s): %r", fn.__name__, e)
         raise ApiError(503, "STORAGE_UNAVAILABLE", "파일 저장소에 연결할 수 없습니다.") from e
 
 
