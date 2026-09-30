@@ -59,7 +59,14 @@ async function send(path: string, init: RequestInit): Promise<Response> {
 async function read(res: Response): Promise<unknown> {
   if (res.status === 204) return undefined
   const text = await res.text()
-  return text ? JSON.parse(text) : undefined
+  if (!text) return undefined
+  try {
+    return JSON.parse(text)
+  } catch (err) {
+    // 앱을 거치지 않은 에러(프록시의 502/504 HTML)는 JSON 이 아니다. 호출부의 상태 코드 문구가 뜨게 버린다.
+    if (!res.ok) return undefined
+    throw err
+  }
 }
 
 let refreshing: Promise<boolean> | null = null
@@ -111,7 +118,7 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
 
 /**
  * 파일 응답(CRM xlsx 내보내기). 만료 갱신·에러 정규화는 `api` 와 같고 본문만 바이트로 받는다.
- * 에러 본문은 JSON 이라 그대로 읽는다.
+ * 에러 본문은 `read()` 로 읽는다(JSON 이 아니면 상태 코드 문구).
  */
 export async function apiBytes(path: string, init: RequestInit = {}): Promise<Uint8Array> {
   const headers = new Headers(init.headers)

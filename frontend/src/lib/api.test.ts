@@ -96,6 +96,21 @@ describe('api()', () => {
       message: '요청에 실패했습니다 (500)',
     })
   })
+
+  it('JSON 이 아닌 에러 본문(프록시 502 HTML)도 상태 코드 문구로 알린다', async () => {
+    fetchMock.mockResolvedValueOnce(new Response('<html>Bad Gateway</html>', { status: 502 }))
+    await expect(api('/x')).rejects.toMatchObject({
+      status: 502,
+      code: null,
+      message: '요청에 실패했습니다 (502)',
+    })
+  })
+
+  it('JSON 이 아닌 401 은 refresh 없이 ApiError 로 끝난다', async () => {
+    fetchMock.mockResolvedValueOnce(new Response('<html>Unauthorized</html>', { status: 401 }))
+    await expect(api('/x')).rejects.toMatchObject({ status: 401, code: null })
+    expect(calledUrls()).toEqual(['/api/x'])
+  })
 })
 
 describe('apiBytes()', () => {
