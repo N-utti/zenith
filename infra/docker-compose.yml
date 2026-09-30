@@ -53,9 +53,10 @@ services:
       - "127.0.0.1:${ZENITH_REDIS_PORT:-6379}:6379"
 
   minio:
-    # quay.io 의 릴리스 태그로 고정 — Docker Hub 의 minio/minio 는 2026-09 기준 pull 이 거부된다(레지스트리 이전).
-    # latest 는 pull 시점마다 다른 바이너리라 올릴 때는 태그를 의도적으로 바꾼다. CI(.github/workflows/ci.yml)도 같은 태그.
-    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+    # 조직 레지스트리의 미러 — MinIO 가 공개 이미지 배포를 멈췄다(Docker Hub 에 이어 2026-09-30 quay.io 도 401).
+    # 비공개 패키지라 서버에서 한 번 `docker login ghcr.io` 가 필요하다(infra/README "MinIO 이미지").
+    # CI(.github/workflows/ci.yml)도 같은 태그.
+    image: ghcr.io/n-utti/zenith-minio:RELEASE.2025-09-07T16-13-09Z
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:

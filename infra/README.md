@@ -11,7 +11,7 @@
 | `api` | `../backend/Dockerfile` | FastAPI. 기동 때 `alembic upgrade head` 를 먼저 돌리고 uvicorn 을 띄운다. 호스트 포트 없음 — caddy 로만 들어온다 |
 | `db` | `pgvector/pgvector:pg16` | 문서·채팅·권한 + 벡터(RAG) |
 | `redis` | `redis:7-alpine` | presence · 안 읽음 · WS 팬아웃 (아직 코드가 안 씀) |
-| `minio` | `quay.io/minio/minio:RELEASE…` | 채팅 첨부(`app/storage.py`). Docker Hub 의 `minio/minio` 는 pull 이 거부돼 quay 태그로 고정 |
+| `minio` | `ghcr.io/n-utti/zenith-minio:RELEASE…` | 채팅 첨부(`app/storage.py`). 조직 레지스트리의 미러 — 아래 "MinIO 이미지" |
 | `backup` | `pgvector/pgvector:pg16` | 24시간마다 `pg_dump -Fc` → `ZENITH_BACKUP_DIR`(기본 `./backups`), 14일 지난 덤프 삭제 |
 
 ```sh
@@ -53,6 +53,22 @@ docker compose cp caddy:/data/caddy/pki/authorities/local/root.crt ./zenith-root
 `report-uri` 는 두지 않았다 — 15명 규모에서 콘솔 확인이면 된다.
 
 - api 는 `COOKIE_SECURE=true` 가 기본이다. caddy 없이 api 에 평문 http 로 붙는 실험에서만 `ZENITH_COOKIE_SECURE=false`.
+
+### MinIO 이미지
+
+MinIO 는 공개 이미지 배포를 멈췄다 — Docker Hub 의 `minio/minio` 에 이어 2026-09-30 부터 `quay.io/minio/minio` 도
+익명 pull 이 401 이다(고정 태그·latest 모두). 마지막으로 받아 둔 `RELEASE.2025-09-07T16-13-09Z`(linux/amd64,
+`sha256:14cea493…8936e`)를 조직 레지스트리에 그대로 올려 두고 compose 와 CI 가 거기서 받는다.
+바이너리는 상류 그대로이고 레포 연결용 라벨만 더했다(AGPLv3, 소스 github.com/minio/minio).
+
+- **비공개 패키지다.** 서버에서 처음 한 번 로그인한다 — `read:packages` 만 있는 토큰으로:
+  `echo <토큰> | docker login ghcr.io -u <GitHub 계정> --password-stdin`
+- CI 는 `GITHUB_TOKEN`(`packages: read`)으로 받는다. 패키지 설정의 "Manage Actions access" 에 이 레포가 있어야 한다.
+- **이 버전에서 멈춘다.** 상류의 보안 수정을 더 받을 수 없다. MinIO 는 사내망 안에서 api 만 붙고 호스트 포트는
+  127.0.0.1 에만 묶여 있어 당장의 노출은 작지만, 파일럿 전에 대체 저장소를 정한다(이슈 #204).
+- 다시 올려야 하면(레지스트리를 옮길 때): 받아 둔 이미지가 있는 PC 에서
+  `printf 'FROM <받아 둔 이미지>
+' | docker build --pull=false --label org.opencontainers.image.source=https://github.com/N-utti/zenith -t ghcr.io/n-utti/zenith-minio:<태그> -` 후 `docker push`.
 
 ### 백업 · 복구
 

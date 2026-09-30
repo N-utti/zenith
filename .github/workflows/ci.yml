@@ -53,6 +53,11 @@ jobs:
     needs: changes
     if: ${{ needs.changes.outputs.backend == 'true' }}
     runs-on: ubuntu-latest
+    # 조직의 비공개 패키지(zenith-minio)를 받으려면 packages: read 가 있어야 한다. 잡에 permissions 를 쓰면
+    # 워크플로 기본값을 덮어쓰므로 contents 도 다시 적는다.
+    permissions:
+      contents: read
+      packages: read
     defaults:
       run:
         working-directory: backend
@@ -85,9 +90,12 @@ jobs:
       # services: 는 command 를 못 넘겨 minio/minio(server 인자 필수)를 못 띄운다 — 스텝에서 직접 띄운다.
       # tests/test_attachments.py 가 이 컨테이너를 쓴다(없으면 skip — 로컬은 compose 의 minio).
       # CI 환경변수(GitHub 가 기본 설정)가 있으면 첨부 테스트는 skip 대신 fail — 조용히 건너뛰지 않는다.
+      # MinIO 는 공개 이미지 배포를 멈췄다(2026-09-30 quay.io 401, Docker Hub 는 그전부터). 마지막으로 받아 둔
+      # 릴리스를 조직 레지스트리에 올려 두고 거기서 받는다 — infra/README "MinIO 이미지".
       - name: MinIO (첨부 테스트)
         run: |
-          docker run -d --name minio -p 9000:9000 -e MINIO_ROOT_USER=zenith -e MINIO_ROOT_PASSWORD=zenith-minio quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z server /data
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          docker run -d --name minio -p 9000:9000 -e MINIO_ROOT_USER=zenith -e MINIO_ROOT_PASSWORD=zenith-minio ghcr.io/n-utti/zenith-minio:RELEASE.2025-09-07T16-13-09Z server /data
           for i in $(seq 1 30); do curl -sf http://localhost:9000/minio/health/live && break; sleep 1; done
           curl -sf http://localhost:9000/minio/health/live
       - name: pytest (DB·MinIO 테스트 skip 없이)
