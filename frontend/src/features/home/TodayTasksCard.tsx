@@ -78,7 +78,7 @@ export function TodayTasksCard() {
                     }}
                     // 숨어 있을 때는 눌리지도 않는다. 호버가 없는 기기에서 목록을 스크롤하려다
                     // 보이지 않는 버튼을 눌러 지워지는 일을 막는다. 되돌릴 수 없는 동작이다.
-                    className="text-subtle hover:text-danger grid size-6 shrink-0 cursor-pointer place-items-center rounded opacity-0 transition-opacity group-focus-within/task:pointer-events-auto group-focus-within/task:opacity-100 group-hover/task:pointer-events-auto group-hover/task:opacity-100 max-[1024px]:pointer-events-auto max-[1024px]:opacity-100 pointer-events-none"
+                    className="text-subtle hover:text-danger grid size-6 shrink-0 cursor-pointer place-items-center rounded opacity-0 transition-opacity group-focus-within/task:pointer-events-auto group-focus-within/task:opacity-100 group-hover/task:pointer-events-auto group-hover/task:opacity-100 pointer-coarse:pointer-events-auto pointer-coarse:opacity-100 pointer-events-none"
                   >
                     <X className="size-3.5" />
                   </button>
