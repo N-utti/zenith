@@ -6,7 +6,8 @@ from pathlib import Path
 
 import pytest
 from fastapi import FastAPI
-from httpx import AsyncClient
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy.exc import IntegrityError
 
 from app.main import create_app
 
@@ -171,3 +172,28 @@ async def test_router_404_and_405_keep_error_shape(client: AsyncClient) -> None:
     r = await client.post("/api/healthz")
     assert r.status_code == 405
     assert r.json()["code"] == "METHOD_NOT_ALLOWED"
+
+
+async def test_unhandled_exception_is_json_500(app: FastAPI, caplog) -> None:
+    """04 §0 — 미처리 예외도 `{detail, code}` 다. text/plain 이면 프론트의 JSON.parse 가 터진다."""
+
+    async def boom() -> None:
+        raise RuntimeError("비밀 경로 /srv/zenith")
+
+    async def dup() -> None:
+        raise IntegrityError("INSERT ...", {}, Exception("uq_users_email"))
+
+    app.add_api_route("/api/boom", boom)
+    app.add_api_route("/api/dup", dup)
+    # 기본 클라이언트는 앱 예외를 다시 던진다(위 metrics 테스트). 브라우저가 받는 응답을 보려면 꺼야 한다.
+    transport = ASGITransport(app=app, raise_app_exceptions=False)
+    async with AsyncClient(transport=transport, base_url="https://test") as c:
+        r = await c.get("/api/boom")
+        assert r.status_code == 500
+        assert r.json() == {"detail": "서버 오류가 발생했습니다.", "code": "INTERNAL"}
+        assert r.headers["cache-control"] == "no-store"
+        assert "zenith" not in r.text  # 예외 문구는 응답에 싣지 않는다
+
+        r = await c.get("/api/dup")
+        assert r.status_code == 409 and r.json()["code"] == "CONFLICT"
+        assert "uq_users_email" not in r.text and "uq_users_email" in caplog.text
