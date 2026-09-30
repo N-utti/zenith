@@ -7,6 +7,7 @@ import { hueOf } from '@/lib/avatar'
 import { formatDay, formatRelative, formatTime } from '@/lib/datetime'
 import { formatBytes } from '@/lib/format'
 import { httpUrl } from '@/lib/serverOrigin'
+import { useCurrentUser } from '@/features/auth/AuthContext'
 import { UNTITLED_DOC, useDoc } from '@/features/docs/api'
 import { MentionText } from '@/features/people/MentionText'
 import { isImage } from './attachments'
@@ -137,19 +138,34 @@ export function MessageList({
   // 스크롤해 놓친 줄을 다시 찾아 준다. 라우터는 같은 주소로 밀어도 위치마다 새 열쇠를 준다.
   const { key: visitKey } = useLocation()
 
-  // 새 메시지가 오면 아래로 붙인다. 위를 읽고 있는 중이면 방해하지 않는다.
+  // 새 메시지가 오면 아래로 붙인다. 남의 메시지는 위를 읽고 있는 중이면 방해하지 않는다.
+  // 채널을 처음 그릴 때와 내가 보낸 메시지는 조건 없이 내린다(이슈 #207). 첫 그림은 맨 위에서
+  // 시작해 200px 조건을 넘지 못하고, 내 메시지가 화면 밖에 남으면 보냈는지 알 수 없다.
+  // 내 메시지는 마지막 id 가 새로 바뀐 때만 본다. 목록을 다시 받아 건수만 줄어든 때(창 복귀,
+  // 소켓 재연결)에 끌어내리면 위를 읽던 자리를 뺏는다.
+  const me = useCurrentUser().id
+  const last = data?.items.at(-1)
+  const lastId = last?.id
+  const lastMine = last?.author.id === me
+  const settledChannel = useRef<string | null>(null)
+  const seenLast = useRef<string | undefined>(undefined)
   useEffect(() => {
     const anchor = bottomRef.current
     const scroller = anchor?.parentElement?.parentElement
     if (!anchor || !scroller) return
 
+    const sentByMe = lastMine && lastId !== seenLast.current
+    seenLast.current = lastId
     const distanceFromBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight
-    if (distanceFromBottom < 200) anchor.scrollIntoView({ block: 'end' })
-  }, [count, channelId])
+    if (settledChannel.current !== channelId || sentByMe || distanceFromBottom < 200) {
+      settledChannel.current = channelId
+      anchor.scrollIntoView({ block: 'end' })
+    }
+  }, [count, channelId, lastId, lastMine])
 
   // 찾아온 메시지로 내려 주고 잠깐 밝힌다. 아래 붙이기보다 뒤에 둬야 한다: 같은 로딩에
   // 둘 다 돌면 나중에 부른 쪽이 자리를 정하고, 위로 올라간 뒤에는 아래 붙이기가 200px
-  // 조건에 걸려 스스로 비킨다.
+  // 조건에 걸려 스스로 비킨다(내가 새로 보낸 메시지만 예외).
   //
   // 목록에 그 메시지가 실린 뒤에 한 번만 움직인다(`found`). 응답 전에는 붙을 자리가 없고,
   // 새 메시지가 올 때마다 다시 튀면 읽던 자리를 뺏는다. 최근 몇 건만 내려오는 목록이라

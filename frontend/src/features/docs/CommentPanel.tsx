@@ -97,6 +97,16 @@ export function CommentPanel({
     onJump(pendingJump.blockId)
   }, [pendingJump, jumpReady, onJump])
 
+  // 방금 단 댓글로 내려 준다. 등록 응답 시점에는 목록이 아직 옛것이라(다시 받아 오는 중),
+  // 새 목록에 그 행이 실린 뒤에 움직인다.
+  const sentId = useRef<string | null>(null)
+  useEffect(() => {
+    const row = sentId.current && document.getElementById(`comment-${sentId.current}`)
+    if (!row) return
+    sentId.current = null
+    row.scrollIntoView({ block: 'nearest' })
+  }, [data])
+
   const send = () => {
     const text = body.trim()
     if (!text || addComment.isPending) return
@@ -107,7 +117,8 @@ export function CommentPanel({
         block_id: (target && editor && resolveAnchor(editor, target.blockId)) || undefined,
       },
       {
-        onSuccess: () => {
+        onSuccess: (comment) => {
+          sentId.current = comment.id
           setBody('')
           onClearTarget()
         },
