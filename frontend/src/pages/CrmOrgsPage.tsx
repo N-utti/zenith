@@ -12,6 +12,7 @@ import { useCurrentUser } from '@/features/auth/AuthContext'
 import { useOrgs } from '@/features/crm/api'
 import { OrgFormModal } from '@/features/crm/CrmForms'
 import { ExportButton } from '@/features/crm/ExportButton'
+import { ImportButton } from '@/features/crm/ImportButton'
 import { ORG_TYPE_LABEL, ORG_TYPES, STALE_DAYS } from '@/features/crm/types'
 import { formatDateTime, formatRelative } from '@/lib/datetime'
 
@@ -65,6 +66,7 @@ export function CrmOrgsPage() {
         description="출자자·공동투자 상대·자문사를 한 주소록에 둡니다. 전 직원이 함께 봅니다."
         actions={
           <>
+            <ImportButton />
             <ExportButton entity="orgs" />
             <ExportButton entity="contacts" />
             <Button size="sm" onClick={() => setCreating(true)}>

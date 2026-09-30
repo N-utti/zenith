@@ -239,3 +239,27 @@ export interface DealInput {
 /** 금액은 억 원으로 보인다. 인프라 안건은 수백~수천억이다. */
 const eok = new Intl.NumberFormat('ko-KR', { maximumFractionDigits: 1 })
 export const formatEok = (won: number) => `${eok.format(won / 1e8)}억`
+
+// ── CSV 가져오기 (15 FR-CRM-05) ─────────────────────────────────────
+
+/** 한 번에 올릴 수 있는 행 수. 두 팀 주소록을 옮기는 용도라 넉넉하다. */
+export const IMPORT_MAX_ROWS = 2000
+
+/**
+ * 가져오기 한 행의 판정. `ok` 만 반영된다. `skip` 은 이미 있는 담당자, `error` 는 고쳐서 다시 올릴 행.
+ * `line` 은 파일의 줄 번호(머리글이 1행). 엑셀에서 그 줄을 바로 찾게 한다.
+ */
+export interface ImportRow {
+  line: number
+  org_name: string
+  contact_name: string
+  status: 'ok' | 'skip' | 'error'
+  note: string
+}
+
+export interface ImportResult {
+  rows: ImportRow[]
+  /** 새로 만들(만든) 기관·담당자 수. 미리보기와 반영이 같은 모양으로 온다. */
+  new_orgs: number
+  new_contacts: number
+}

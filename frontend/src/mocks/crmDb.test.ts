@@ -16,6 +16,7 @@ import {
   reopenDeal,
   updateDeal,
   getOrg,
+  importContacts,
   listActivities,
   listOrgs,
   normalizeOrgName,
@@ -466,5 +467,58 @@ describe('CRM 목 저장소 (15 CRM 모듈 설계서 §4·§9)', () => {
       ok(updateDeal(fund, done.id, { stage: 'closed', version: 1 }))
       expect(deleteOrg(exec, other.org.id, '정리')).toBeNull()
     })
+  })
+  it('CSV 가져오기: 미리보기는 아무것도 만들지 않고, 반영은 오류 행만 빼고 만든다 (FR-CRM-05)', () => {
+    const existing = ok(
+      createOrg({ name: '(주)가져오기자산운용', org_type: 'am', memo: '', owner_ids: [] }),
+    )
+    ok(
+      createContact({
+        org_id: existing.org.id,
+        name: '기존인',
+        title: '',
+        phone: '',
+        email: '',
+        memo: '',
+      }),
+    )
+    const rows = [
+      ['기관', '유형', '이름', '이메일'],
+      ['가져오기자산운용', '', '기존인', ''], // 정규화 이름으로 기존 기관에 붙고, 담당자는 이미 있다
+      ['가져오기자산운용 주식회사', '', '새사람', 'new@x.kr'],
+      ['새가져오기공제회', '공제회', '', ''], // 기관만
+      ['새가져오기공제회', '', '둘째', ''], // 파일 안에서 앞 줄 기관에 붙는다
+      ['오류기관', '연금', '누구', ''],
+      ['', '', '이름만', ''],
+      ['', '', '', ''], // 엑셀이 빈 행을 ,,, 로 저장한다. 건너뛰되 줄 번호는 센다
+      ['메일오류', '', '누구', 'not-mail'],
+      ['가져오기자산운용', '', '', ''], // 기관만 있는 행인데 기관이 이미 있다
+    ]
+    const before = listOrgs({}).length
+    const preview = ok(importContacts(rows, true))
+    expect(listOrgs({}).length).toBe(before)
+    expect(preview.rows.map((r) => [r.line, r.status])).toEqual([
+      [2, 'skip'],
+      [3, 'ok'],
+      [4, 'ok'],
+      [5, 'ok'],
+      [6, 'error'],
+      [7, 'error'],
+      [9, 'error'],
+      [10, 'skip'],
+    ])
+    expect(preview.rows[1].note).toContain('(주)가져오기자산운용')
+    expect(preview).toMatchObject({ new_orgs: 1, new_contacts: 2 })
+
+    const done = ok(importContacts(rows, false))
+    expect(done).toMatchObject({ new_orgs: 1, new_contacts: 2 })
+    expect(listOrgs({}).length).toBe(before + 1)
+    expect(getOrg(existing.org.id)).toMatchObject({ contact_count: 2 })
+    const created = listOrgs({ q: '새가져오기공제회' })
+    expect(created).toMatchObject([{ org_type: 'mutual_aid', contact_count: 1 }])
+  })
+
+  it('CSV 가져오기: 기관 칸이 없는 파일은 통째로 거절한다', () => {
+    expect(importContacts([['이름'], ['누구']], true)).toMatchObject({ status: 422 })
   })
 })

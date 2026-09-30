@@ -118,7 +118,10 @@ import {
   updateDeal,
   updateOrg,
   exportRows,
+  importContacts,
 } from './crmDb'
+import { decodeText, parseCsv } from './csv'
+
 import type { ActivityInput, ContactInput, DealInput, OrgInput } from '@/features/crm/types'
 import { readFile, saveFile } from './filesDb'
 import { buildXlsx } from '@/lib/xlsx'
@@ -135,6 +138,9 @@ import {
   listLeaves,
   listLeavesInRange,
 } from './leavesDb'
+
+/** 가져오기 파일 크기 상한. 2천 행 주소록이 넉넉히 들어간다. */
+const IMPORT_MAX_BYTES = 1024 * 1024
 
 function authenticate(): User | undefined {
   // 세션은 쿠키다(04 §1). 핸들러는 페이지 안에서 돌므로 document.cookie 를 그대로 읽는다.
@@ -1807,6 +1813,28 @@ data: ${JSON.stringify(data)}
     if (!body) return validationError('본문이 올바르지 않습니다.')
     await delay(300)
     return approvalResponse(createOrg(body), 201)
+  }),
+  // 15 FR-CRM-05. `dry_run=true` 면 판정만 돌려준다. 반영할 때만 감사 기록을 남긴다(§8.1 대량 반입).
+  http.post('/api/crm/orgs/import', async ({ request }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    const file = (await request.formData().catch(() => null))?.get('file')
+    if (!(file instanceof File)) return validationError('CSV 파일을 올려 주세요.')
+    if (file.size > IMPORT_MAX_BYTES)
+      return validationError(`파일은 ${IMPORT_MAX_BYTES / 1024 / 1024}MB 까지 올릴 수 있습니다.`)
+    const dryRun = new URL(request.url).searchParams.get('dry_run') === 'true'
+    const rows = parseCsv(decodeText(new Uint8Array(await file.arrayBuffer())))
+    await delay(300)
+    if (!rows)
+      return validationError('따옴표 짝이 맞지 않습니다. 엑셀에서 CSV 로 다시 저장해 주세요.')
+    const result = importContacts(rows, dryRun)
+    if (!dryRun && !('error' in result)) {
+      crmAudit('crm.imported', user, null, {
+        orgs: result.new_orgs,
+        contacts: result.new_contacts,
+      })
+    }
+    return approvalResponse(result)
   }),
   http.get('/api/crm/orgs/:id', ({ params }) => {
     if (!authenticate()) return unauthorized()

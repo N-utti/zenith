@@ -26,6 +26,9 @@ import {
   type OrgListItem,
   type OrgType,
   type Person,
+  IMPORT_MAX_ROWS,
+  type ImportResult,
+  type ImportRow,
 } from '@/features/crm/types'
 import { EMAIL_PATTERN } from '@/features/admin/types'
 import { toISODate } from '@/lib/datetime'
@@ -1106,4 +1109,139 @@ export function exportRows(entity: string): ExportTable | Failure {
   }
 
   return invalid('entity 는 orgs·contacts·deals 중 하나여야 합니다.')
+}
+
+const IMPORT_HEADERS = {
+  org: '기관',
+  type: '유형',
+  name: '이름',
+  title: '부서·직함',
+  phone: '전화',
+  email: '이메일',
+  memo: '메모',
+} as const
+
+const TYPE_BY_LABEL = new Map(ORG_TYPES.map((t) => [ORG_TYPE_LABEL[t], t]))
+
+/**
+ * CSV 가져오기(15 FR-CRM-05). 한 행이 담당자 한 명이고, 이름 칸이 비면 기관만 만든다.
+ * 이름이 빈 행의 메모는 새 기관의 메모가 된다(기관 내보내기 파일도 올릴 수 있다).
+ * 칸 이름은 담당자 내보내기와 같다(기관·이름·부서·직함·전화·이메일·메모) + 선택 칸 유형.
+ * 내보낸 파일을 고쳐서 그대로 다시 올릴 수 있다.
+ *
+ * 기관은 정규화한 이름(FR-CRM-01)으로 기존 기관에 붙인다. 가져오기로 중복 기관을 만들지 않는다.
+ * 같은 기관에 같은 이름의 담당자가 있으면 건너뛴다. 실패 행은 사유와 함께 돌려주고 나머지는 반영한다.
+ * `dryRun` 이면 판정만 하고 아무것도 만들지 않는다.
+ */
+export function importContacts(rows: string[][], dryRun: boolean): ImportResult | Failure {
+  const [header = [], ...rest] = rows
+  // 줄 번호는 빈 행을 걸러내기 전에 매긴다. 엑셀의 행 번호와 같게(머리글이 1행).
+  const body = rest
+    .map((cells, i) => ({ cells, line: i + 2 }))
+    .filter(({ cells }) => cells.some((c) => c.trim()))
+  const col = (label: string) => header.findIndex((h) => h.trim() === label)
+  const idx = Object.fromEntries(
+    Object.entries(IMPORT_HEADERS).map(([key, label]) => [key, col(label)]),
+  ) as Record<keyof typeof IMPORT_HEADERS, number>
+  if (idx.org < 0) return invalid('첫 줄에 「기관」 칸이 있어야 합니다.')
+  if (body.length === 0) return invalid('가져올 행이 없습니다.')
+  if (body.length > IMPORT_MAX_ROWS) {
+    return invalid(`한 번에 ${IMPORT_MAX_ROWS}행까지 올릴 수 있습니다.`)
+  }
+
+  // 정규화 이름 → 기존 기관 id, 또는 이 파일에서 새로 만들 기관(아직 id 없음).
+  const known = new Map<string, { id: string | null; name: string }>()
+  for (const o of orgs) if (!o.deleted_at) known.set(normalizeOrgName(o.name), o)
+  // 이미 있는 담당자와 이 파일에서 앞서 받은 담당자(기관 정규화 이름 + 담당자 이름).
+  const seen = new Set(
+    contacts
+      .filter((c) => !c.erased && aliveOrg(c.org_id))
+      .map((c) => `${normalizeOrgName(aliveOrg(c.org_id)!.name)}\n${c.name}`),
+  )
+
+  const result: ImportResult = { rows: [], new_orgs: 0, new_contacts: 0 }
+  body.forEach(({ cells, line }) => {
+    const get = (key: keyof typeof IMPORT_HEADERS) =>
+      (idx[key] < 0 ? '' : (cells[idx[key]] ?? '')).trim()
+    const orgName = get('org')
+    const name = get('name')
+    const row: ImportRow = {
+      line,
+      org_name: orgName,
+      contact_name: name,
+      status: 'ok',
+      note: '',
+    }
+    result.rows.push(row)
+    const reject = (note: string) => Object.assign(row, { status: 'error', note })
+
+    const typeLabel = get('type')
+    const orgType = typeLabel ? TYPE_BY_LABEL.get(typeLabel) : 'etc'
+    if (!orgType) return reject(`유형 「${typeLabel}」 을 알 수 없습니다.`)
+    const orgBad = checkOrgInput({ name: orgName, org_type: orgType })
+    if (orgBad) return reject(orgBad.error)
+    const contact = {
+      name,
+      title: get('title'),
+      phone: get('phone'),
+      email: get('email'),
+      memo: get('memo'),
+    }
+    if (name) {
+      const bad = checkContactInput(contact)
+      if (bad) return reject(bad.error)
+    } else if (contact.title || contact.phone || contact.email) {
+      return reject('담당자 이름이 비었습니다.')
+    }
+
+    const norm = normalizeOrgName(orgName)
+    let org = known.get(norm)
+    const notes: string[] = []
+    // 기관만 있는 행(기관 내보내기 파일)의 메모는 새 기관의 메모로 쓴다.
+    if (!name && org) {
+      row.status = 'skip'
+      row.note = '이미 있는 기관'
+      return
+    }
+    if (!org) {
+      org = {
+        id: dryRun
+          ? null
+          : ok(
+              createOrg({
+                name: orgName,
+                org_type: orgType,
+                memo: name ? '' : contact.memo,
+                owner_ids: [],
+              }),
+            ).org.id,
+        name: orgName,
+      }
+      known.set(norm, org)
+      result.new_orgs++
+      notes.push('새 기관')
+    } else if (org.name !== orgName) {
+      notes.push(`기존 기관 「${org.name}」 에 붙임`)
+    }
+
+    if (name) {
+      const key = `${norm}\n${name}`
+      if (seen.has(key)) {
+        row.status = 'skip'
+        row.note = '이미 있는 담당자'
+        return
+      }
+      seen.add(key)
+      if (!dryRun) ok(createContact({ org_id: org.id!, ...contact }))
+      result.new_contacts++
+    }
+    row.note = notes.join(' · ')
+  })
+  return result
+}
+
+/** 앞에서 검증을 끝낸 뒤에 부른다. 여기서 실패하면 목의 버그다. */
+function ok<R extends object>(result: R | Failure): R {
+  if ('error' in result) throw new Error(result.error)
+  return result
 }
