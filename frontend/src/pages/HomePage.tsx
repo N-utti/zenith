@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useNavigate } from 'react-router'
 import { Plus } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
@@ -9,8 +10,7 @@ import { TodayTasksCard } from '@/features/home/TodayTasksCard'
 import { UnreadChatCard } from '@/features/home/UnreadChatCard'
 import { useHome } from '@/features/home/api'
 import { useCurrentUser } from '@/features/auth/AuthContext'
-import { useToast } from '@/components/ui/ToastContext'
-import { useCreateDoc, useDefaultFolder } from '@/features/docs/api'
+import { NewDocModal } from '@/features/docs/NewDocModal'
 
 function greeting(): string {
   const hour = new Date().getHours()
@@ -30,29 +30,12 @@ const TODAY = new Intl.DateTimeFormat('ko-KR', {
 export function HomePage() {
   const user = useCurrentUser()
   const navigate = useNavigate()
-  const createDoc = useCreateDoc()
-  const { folderId, folderName, isPending: treePending } = useDefaultFolder()
-  const toast = useToast()
+  const [creatingDoc, setCreatingDoc] = useState(false)
 
   // 청사진의 "안 읽은 항목 N". 채널 미읽음과 멘션을 합친 수다. 둘 다 홈 한 벌에서 온다.
   const home = useHome().data
   const unreadMessages = home?.unread.reduce((sum, channel) => sum + channel.count, 0) ?? 0
   const unreadTotal = unreadMessages + (home?.mentions.length ?? 0)
-
-  // 새 문서 만들기. 헤더 버튼과 "이어서 작업"의 빈 목록 버튼이 같은 동작을 쓴다.
-  const createNewDoc = () => {
-    if (!folderId) return
-    createDoc.mutate(
-      { folder_id: folderId },
-      {
-        onSuccess: (doc) => {
-          if (folderName) toast.success(`${folderName} 폴더에 만들었습니다.`)
-          void navigate(`/docs/${doc.id}`)
-        },
-      },
-    )
-  }
-  const createDisabled = createDoc.isPending || treePending || !folderId
 
   return (
     <>
@@ -68,11 +51,7 @@ export function HomePage() {
         </div>
 
         <div className="flex gap-2">
-          <Button
-            onClick={createNewDoc}
-            disabled={createDisabled}
-            title={folderId || treePending ? undefined : '먼저 사이드바에서 폴더를 만들어 주세요.'}
-          >
+          <Button onClick={() => setCreatingDoc(true)}>
             <Plus className="size-4" />새 문서
           </Button>
           <Button variant="secondary" onClick={() => void navigate('/chat')}>
@@ -93,11 +72,7 @@ export function HomePage() {
             <CalendarCard />
           </div>
           <div className="order-1 lg:order-none">
-            <ContinueWorkCard
-              onCreate={createNewDoc}
-              creating={createDoc.isPending}
-              createDisabled={createDisabled}
-            />
+            <ContinueWorkCard onCreate={() => setCreatingDoc(true)} />
           </div>
           <div className="order-2 lg:order-none">
             <MentionsCard />
@@ -115,6 +90,9 @@ export function HomePage() {
           </div>
         </div>
       </div>
+
+      {/* 헤더 버튼과 "이어서 작업"의 빈 목록 버튼이 같이 연다. */}
+      {creatingDoc && <NewDocModal onClose={() => setCreatingDoc(false)} />}
     </>
   )
 }

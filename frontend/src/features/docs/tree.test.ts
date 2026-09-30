@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest'
-import { ancestorsOf, buildTree, defaultFolderId, foldersTo, previewDocs } from './tree'
+import { ancestorsOf, buildTree, folderRows, foldersTo, previewDocs } from './tree'
 import type { DocSummary, DocTreeData, Folder } from './types'
 
 const folder = (id: string, parent_id: string | null, title: string, sort = 0): Folder => ({
@@ -88,9 +88,14 @@ it('순환 참조가 생겨도 멈추고, 그 가지가 화면에서 사라지�
   expect(a?.kind === 'folder' && a.children.some((c) => c.kind === 'doc')).toBe(true)
 })
 
-it('새 문서의 기본 자리는 최상위 폴더 중 첫 번째', () => {
-  expect(defaultFolderId(data)).toBe('f-0')
-  expect(defaultFolderId({ folders: [], docs: [] })).toBeUndefined()
+it('folderRows: 폴더만 트리 순서대로 펴고 깊이를 단다', () => {
+  // 자식 폴더는 부모 바로 뒤에, 한 단 깊게. 문서는 빠진다.
+  expect(folderRows(buildTree(data)).map((r) => [r.folder.id, r.depth])).toEqual([
+    ['f-0', 0],
+    ['f-1', 0],
+    ['f-2', 1],
+  ])
+  expect(folderRows(buildTree({ folders: [], docs: [] }))).toEqual([])
 })
 
 it('previewDocs: 넘치면 최근 수정순으로 자르고, 열린 문서는 남긴다', () => {

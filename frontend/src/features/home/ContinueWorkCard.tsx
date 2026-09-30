@@ -2,7 +2,6 @@ import { Link } from 'react-router'
 import { Plus } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Card, CardEmpty } from '@/components/ui/Card'
-import { Spinner } from '@/components/ui/Spinner'
 import { formatRelative } from '@/lib/datetime'
 import { HomeSection } from './HomeSection'
 import { useRecentDocs } from './api'
@@ -16,13 +15,9 @@ const RECENT_LIMIT = 4
 
 export function ContinueWorkCard({
   onCreate,
-  creating,
-  createDisabled,
 }: {
   /** 새 문서 만들기. 홈 헤더의 「새 문서」 버튼과 같은 동작을 쓴다(`HomePage`). */
   onCreate: () => void
-  creating: boolean
-  createDisabled: boolean
 }) {
   const { data, isPending, isError, refetch } = useRecentDocs()
 
@@ -50,13 +45,8 @@ export function ContinueWorkCard({
           <Card>
             <CardEmpty
               action={
-                <Button size="sm" onClick={onCreate} disabled={createDisabled}>
-                  {creating ? (
-                    <Spinner className="border-t-on-accent" />
-                  ) : (
-                    <Plus className="size-4" />
-                  )}
-                  새 문서
+                <Button size="sm" onClick={onCreate}>
+                  <Plus className="size-4" />새 문서
                 </Button>
               }
             >

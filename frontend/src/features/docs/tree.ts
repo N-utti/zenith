@@ -98,11 +98,13 @@ export function ancestorsOf(docId: string | undefined, data: DocTreeData): strin
   return foldersTo(docId, data).map((folder) => folder.id)
 }
 
-/** 새 문서·새 폴더의 기본 자리. 최상위 폴더 중 첫 번째. */
-export function defaultFolderId({ folders }: DocTreeData): string | undefined {
-  return folders
-    .filter((f) => f.parent_id === null)
-    .sort((a, b) => a.sort - b.sort || a.title.localeCompare(b.title))[0]?.id
+/** 폴더만 위에서 아래로 편 목록과 깊이. 새 문서를 넣을 폴더를 고르는 목록이 쓴다. */
+export function folderRows(tree: TreeNode[], depth = 0): { folder: Folder; depth: number }[] {
+  return tree.flatMap((node) =>
+    node.kind === 'folder'
+      ? [{ folder: node.folder, depth }, ...folderRows(node.children, depth + 1)]
+      : [],
+  )
 }
 
 /** 최근 수정순. */
