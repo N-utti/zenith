@@ -104,7 +104,9 @@ function FolderAction({
       aria-label={label}
       title={label}
       onClick={onClick}
-      className="text-subtle hover:text-fg grid size-6 cursor-pointer place-items-center rounded transition-colors"
+      // 터치에서는 셋이 붙어 있어 손가락으로 잘못 누르기 쉽다. 높이는 대략 행만큼 키우고, 폭은
+      // 깊은 폴더의 이름 칸을 덜 먹도록 조금만 늘린다.
+      className="text-subtle hover:text-fg grid size-6 cursor-pointer place-items-center rounded transition-colors pointer-coarse:h-8 pointer-coarse:w-7"
     >
       {children}
     </button>
@@ -187,8 +189,10 @@ function FolderRow({
         {/*
           폴더 행에만 붙는 조작. 마우스를 올렸을 때와 키보드 초점이 왔을 때 보인다.
           `opacity-0` 은 보이지만 않을 뿐 초점을 받으므로 Tab 으로도 닿는다.
+          터치 기기에는 hover 가 없어 늘 보인다. 안 그러면 모바일에서 폴더를 골라 문서를 만들 길이
+          없고, 투명한 버튼이 행 오른쪽 탭을 가로채 모르는 새 문서가 생긴다.
         */}
-        <div className="flex shrink-0 opacity-0 transition-opacity group-focus-within/row:opacity-100 group-hover/row:opacity-100">
+        <div className="flex shrink-0 opacity-0 transition-opacity group-focus-within/row:opacity-100 group-hover/row:opacity-100 pointer-coarse:opacity-100">
           <FolderAction label={`${title} 안에 새 문서`} onClick={() => actions.onAddDoc(id)}>
             <FilePlus2 className="size-3.5" />
           </FolderAction>

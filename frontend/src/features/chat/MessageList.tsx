@@ -67,7 +67,7 @@ function Attachments({ files }: { files: ChatAttachment[] | null }) {
                 download={file.name}
                 aria-label={`${file.name} 내려받기`}
                 title="내려받기"
-                className="border-line bg-surface text-muted hover:text-fg pointer-events-none absolute top-1.5 right-1.5 grid size-7 place-items-center rounded-md border opacity-0 transition-opacity group-focus-within/image:pointer-events-auto group-focus-within/image:opacity-100 group-hover/image:pointer-events-auto group-hover/image:opacity-100 max-[1024px]:pointer-events-auto max-[1024px]:opacity-100"
+                className="border-line bg-surface text-muted hover:text-fg pointer-events-none absolute top-1.5 right-1.5 grid size-7 place-items-center rounded-md border opacity-0 transition-opacity group-focus-within/image:pointer-events-auto group-focus-within/image:opacity-100 group-hover/image:pointer-events-auto group-hover/image:opacity-100 pointer-coarse:pointer-events-auto pointer-coarse:opacity-100"
               >
                 <Download className="size-3.5" />
               </a>
