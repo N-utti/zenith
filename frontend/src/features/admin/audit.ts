@@ -217,6 +217,17 @@ export function auditView(event: AuditEvent): AuditView {
       }
     }
 
+    case 'crm.imported': {
+      const count = (key: string, unit: string) =>
+        typeof detail?.[key] === 'number' ? `${String(detail[key])}${unit}` : undefined
+      return {
+        summary: 'CRM CSV 가져오기',
+        detail:
+          [count('orgs', '곳'), count('contacts', '명')].filter(Boolean).join(' · ') || undefined,
+        tone: 'neutral',
+      }
+    }
+
     case 'crm.org_deleted':
       return {
         summary: 'CRM 기관 삭제',

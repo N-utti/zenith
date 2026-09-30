@@ -12,6 +12,7 @@ import type {
   DealInput,
   DealKind,
   DealStatus,
+  ImportResult,
   OrgCreated,
   OrgDetail,
   OrgInput,
@@ -259,5 +260,21 @@ export function useExportCrm() {
         'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       )
     },
+  })
+}
+
+/**
+ * CSV 가져오기(15 FR-CRM-05). 같은 파일을 두 번 보낸다. 처음은 `dry_run` 으로 판정만 받아
+ * 미리보기로 보여 주고, 확인을 누르면 다시 보내 반영한다. 파일 해석·검증은 서버 몫이다.
+ */
+export function useImportContacts() {
+  const refetch = useRefetchCrm()
+  return useMutation({
+    mutationFn: ({ file, dryRun }: { file: File; dryRun: boolean }) => {
+      const body = new FormData()
+      body.append('file', file)
+      return api<ImportResult>(`/crm/orgs/import?dry_run=${dryRun}`, { method: 'POST', body })
+    },
+    onSuccess: (_, { dryRun }) => (dryRun ? undefined : refetch()),
   })
 }
