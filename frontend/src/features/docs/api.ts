@@ -3,7 +3,6 @@ import { api, ApiError } from '@/lib/api'
 import { queryClient } from '@/lib/queryClient'
 import { homeKeys } from '@/features/home/keys'
 import { meQueryKey } from '@/features/auth/queries'
-import { defaultFolderId } from './tree'
 import type {
   DocComment,
   DocDetail,
@@ -32,29 +31,6 @@ export function useTree() {
     queryKey: docKeys.tree,
     queryFn: () => api<DocTreeData>('/tree'),
   })
-}
-
-/**
- * 새 문서를 넣을 기본 폴더. 문서는 폴더 안에만 생기는데, 홈·문서 목록·AI 답변 저장처럼
- * 폴더를 고를 자리가 없는 곳에서는 최상위 첫 폴더에 넣는다.
- *
- * 아직 안 온 것과 하나도 없는 것을 갈라서 준다. 둘을 뭉치면 트리를 받는 동안 "폴더를 먼저
- * 만들어 주세요" 라는 틀린 안내가 뜬다.
- */
-export function useDefaultFolder(): {
-  folderId: string | undefined
-  folderName: string | undefined
-  isPending: boolean
-  isError: boolean
-} {
-  const { data, isPending, isError } = useTree()
-  const folderId = data && defaultFolderId(data)
-  return {
-    folderId,
-    folderName: data?.folders.find((f) => f.id === folderId)?.title,
-    isPending,
-    isError,
-  }
 }
 
 export function useCreateFolder() {

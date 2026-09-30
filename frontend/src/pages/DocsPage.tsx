@@ -9,10 +9,12 @@ import { PageHeader } from '@/components/ui/PageHeader'
 import { SkeletonRows } from '@/components/ui/Skeleton'
 import { Spinner } from '@/components/ui/Spinner'
 import { useToast } from '@/components/ui/ToastContext'
+import { ApiError } from '@/lib/api'
 import { hueOf } from '@/lib/avatar'
 import { formatRelative } from '@/lib/datetime'
 import { useCreateDoc, useTree } from '@/features/docs/api'
-import { byRecent, defaultFolderId } from '@/features/docs/tree'
+import { NewDocModal } from '@/features/docs/NewDocModal'
+import { byRecent } from '@/features/docs/tree'
 
 /**
  * 문서 목록. 사이드바 폴더 이름을 누르면 `?folder=` 가 붙어 그 폴더 문서만 보인다.
@@ -31,13 +33,11 @@ function DocsList({ folderId }: { folderId: string | null }) {
   const createDoc = useCreateDoc()
   const navigate = useNavigate()
   const toast = useToast()
+  const [picking, setPicking] = useState(false)
 
   const folder = folderId ? data?.folders.find((f) => f.id === folderId) : undefined
   /** 폴더를 열었는데 트리에 없다. 지워졌거나 낡은 링크다. */
   const missing = Boolean(folderId && data && !folder)
-  // 문서는 폴더 안에만 생긴다. 폴더를 열지 않았으면 고를 자리가 없어 최상위 첫 폴더에 넣는다.
-  const targetId = folderId ? folder?.id : data && defaultFolderId(data)
-  const targetName = data?.folders.find((f) => f.id === targetId)?.title
 
   // ponytail: 트리가 문서 메타를 전부 들고 있어 거르기만 한다. 수천 개가 되면 서버 쪽 목록 API 로.
   const docs = useMemo(
@@ -50,16 +50,15 @@ function DocsList({ folderId }: { folderId: string | null }) {
   const q = query.trim().toLowerCase()
   const items = q ? docs.filter((d) => d.title.toLowerCase().includes(q)) : docs
 
+  // 폴더를 열어 두었으면 거기에 바로 만든다. 아니면 넣을 폴더를 먼저 고른다.
   const create = () => {
-    if (!targetId) return
+    if (!folder) return setPicking(true)
     createDoc.mutate(
-      { folder_id: targetId },
+      { folder_id: folder.id },
       {
-        onSuccess: (doc) => {
-          // 폴더를 안 열었으면 어느 폴더에 들어갔는지 여기서만 알 수 있다.
-          if (!folderId && targetName) toast.success(`${targetName} 폴더에 만들었습니다.`)
-          void navigate(`/docs/${doc.id}`)
-        },
+        onSuccess: (doc) => void navigate(`/docs/${doc.id}`),
+        onError: (err) =>
+          toast.error(err instanceof ApiError ? err.message : '문서를 만들지 못했습니다.'),
       },
     )
   }
@@ -68,8 +67,7 @@ function DocsList({ folderId }: { folderId: string | null }) {
     <Button
       size="sm"
       onClick={create}
-      disabled={createDoc.isPending || isPending || !targetId}
-      title={targetId || isPending ? undefined : '먼저 사이드바에서 폴더를 만들어 주세요.'}
+      disabled={createDoc.isPending || (Boolean(folderId) && !folder)}
     >
       {createDoc.isPending ? (
         <Spinner className="border-t-on-accent" />
@@ -154,6 +152,8 @@ function DocsList({ folderId }: { folderId: string | null }) {
             </ul>
           ))}
       </Card>
+
+      {picking && <NewDocModal onClose={() => setPicking(false)} />}
     </>
   )
 }
