@@ -37,7 +37,9 @@ function notifyIncoming(qc: QueryClient, message: ChatMessage, currentUserId: st
 
   // DM은 채널명이 곧 상대 이름이라 "정성운 · 정성운"이 되므로 이름만 쓴다.
   const title =
-    channel && !channel.is_dm ? `#${channel.name} · ${message.author.name}` : message.author.name
+    channel && !channel.is_dm
+      ? `${channel.is_private ? '' : '#'}${channel.name} · ${message.author.name}`
+      : message.author.name
 
   void notify({ title, body: message.body })
 }
@@ -157,6 +159,13 @@ export function useChatSocket(): ChatSocket {
             withUnread(old, channel_id, count),
           )
           // 홈은 안 읽은 대화를 카드 목록으로 그려서 숫자만 꽂을 자리가 없다. 다시 받는다.
+          void qc.invalidateQueries({ queryKey: homeKeys.home })
+          return
+        }
+
+        if (event.ev === 'channels') {
+          // 빠진 채널을 보고 있었다면 목록에서 사라지는 순간 `ChatPage` 가 방을 닫는다.
+          void qc.invalidateQueries({ queryKey: chatKeys.channels })
           void qc.invalidateQueries({ queryKey: homeKeys.home })
           return
         }

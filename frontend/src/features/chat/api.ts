@@ -37,19 +37,73 @@ export function useMessages(channelId: string | null) {
 // 전에 여기 있던 `POST /channels/{id}/messages`·`/read` 는 실서버에 없는 경로였고 405·404 가 났다.
 
 /**
- * 공개 채널 또는 DM 을 만든다. 서버가 둘 중 하나만 받는다(`ChannelCreateIn`).
+ * 서버가 비공개 채널을 아는가. 채널 목록에 `is_private` 칸이 실려 오는지로 안다.
  *
- * 공개 채널은 만드는 순간 전원이 멤버다(15명 사내, 초대·탈퇴 없음). DM 은 같은 두 사람의
- * 것이 이미 있으면 새로 만들지 않고 그것을 돌려준다.
+ * 설정값이 아니라 응답으로 가르는 이유: 지금 실서버의 `ChannelCreateIn` 은 모르는 칸을 조용히
+ * 버린다. 지원하지 않는 서버에 비공개를 요청하면 거절이 아니라 **전원이 들어오는 공개 채널**이
+ * 만들어지고, 만든 사람은 그것을 비공개로 안다. 그래서 서버가 칸을 주기 전에는 고르는 자리
+ * 자체를 그리지 않는다.
+ *
+ * 채널이 하나도 없으면 알 수 없어 `false` 다. 공개 채널이나 DM 이 하나 생기면 풀린다.
+ */
+export function supportsPrivate(channels: ChatChannel[]): boolean {
+  return channels.some((channel) => typeof channel.is_private === 'boolean')
+}
+
+/**
+ * `is_private` 와 `member_ids` 는 같이 간다. 한쪽만 보내면 서버가 422 로 거절해야 한다(조용한
+ * 공개 금지). `never` 는 그 조합을 타입에서도 막는다. 유니온은 다른 갈래의 속성을 초과 속성으로
+ * 잡지 않아서, 적어 두지 않으면 `{ name, member_ids }` 가 첫 갈래로 통과한다.
+ */
+export type ChannelCreateInput =
+  | { name: string; is_private?: never; member_ids?: never }
+  | { name: string; is_private: true; member_ids: string[] }
+  | { dm_user_id: string; is_private?: never; member_ids?: never }
+
+/**
+ * 채널 또는 DM 을 만든다. 서버가 `name` 과 `dm_user_id` 중 하나만 받는다(`ChannelCreateIn`).
+ *
+ * 공개 채널은 만드는 순간 전원이 멤버다(15명 사내, 초대·탈퇴 없음). 비공개 채널은 만든 사람과
+ * 고른 사람만 멤버다. DM 은 같은 두 사람의 것이 이미 있으면 새로 만들지 않고 그것을 돌려준다.
+ *
+ * 비공개를 청했으면 **응답의 `is_private` 를 확인해야 한다**(`NewChatModal`). 서버가 목록에는
+ * 칸을 주면서 생성 요청의 칸은 버리면 공개 채널이 돌아온다.
  */
 export function useCreateChannel() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (input: { name: string } | { dm_user_id: string }) =>
+    mutationFn: (input: ChannelCreateInput) =>
       api<ChatChannel>('/channels', { method: 'POST', body: JSON.stringify(input) }),
     // 약속을 돌려준다. 목록이 갱신된 뒤에 호출부의 이동이 일어나야, 방금 만든 채널을
     // 목록에서 못 찾아 "채널을 선택하세요" 가 한 번 스치는 일이 없다.
     onSuccess: () => qc.invalidateQueries({ queryKey: chatKeys.channels }),
+  })
+}
+
+/**
+ * 비공개 채널에 사람을 더한다. 멤버면 누구나 한다. 계약에 아직 없는 경로다(README).
+ * 이미 멤버인 사람이 섞여 있어도 된다.
+ */
+export function useAddMembers(channelId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (userIds: string[]) =>
+      api<ChatChannel>(`/channels/${channelId}/members`, {
+        method: 'POST',
+        body: JSON.stringify({ user_ids: userIds }),
+      }),
+    // 실패해도 다시 받는다. 명단이 낡아서 난 실패(이미 빠진 사람)면 다시 받아야 줄이 사라진다.
+    onSettled: () => qc.invalidateQueries({ queryKey: chatKeys.channels }),
+  })
+}
+
+/** 비공개 채널에서 사람을 뺀다. 자기 자신이면 나가기다. 나가면 목록에서 채널이 사라진다. */
+export function useRemoveMember(channelId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (userId: string) =>
+      api<void>(`/channels/${channelId}/members/${userId}`, { method: 'DELETE' }),
+    onSettled: () => qc.invalidateQueries({ queryKey: chatKeys.channels }),
   })
 }
 

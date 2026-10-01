@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router'
-import { AtSign, Hash, Pencil } from 'lucide-react'
+import { AtSign, Hash, Lock, Pencil } from 'lucide-react'
 import { Spinner } from '@/components/ui/Spinner'
 import { cn } from '@/lib/cn'
 import { formatRelative } from '@/lib/datetime'
@@ -9,7 +9,8 @@ import type { ChatChannel } from './types'
 import { WorkStatus } from './WorkStatus'
 
 function Row({ channel }: { channel: ChatChannel }) {
-  const Icon = channel.is_dm ? AtSign : Hash
+  const isPrivate = !channel.is_dm && channel.is_private === true
+  const Icon = channel.is_dm ? AtSign : isPrivate ? Lock : Hash
   const last = channel.last_message
   const hasDraft = useHasDraft(channel.id)
 
@@ -23,7 +24,11 @@ function Row({ channel }: { channel: ChatChannel }) {
         )
       }
     >
-      <Icon className="text-subtle size-4 shrink-0" />
+      <Icon
+        role={isPrivate ? 'img' : undefined}
+        aria-label={isPrivate ? '비공개' : undefined}
+        className="text-subtle size-4 shrink-0"
+      />
       <div className="min-w-0 flex-1">
         <p className="flex items-center gap-1.5">
           <span

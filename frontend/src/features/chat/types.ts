@@ -18,8 +18,14 @@ export type ChatAttachment = Schema<'AttachmentOut'>
  */
 export type ChatMessage = Schema<'MessageOut'>
 
-/** 백엔드 `ChannelOut`. DM 은 보는 사람에 따라 이름이 다르다. `name` 에 상대의 이름이 온다. */
-export type ChatChannel = Schema<'ChannelOut'>
+/**
+ * 백엔드 `ChannelOut`. DM 은 보는 사람에 따라 이름이 다르다. `name` 에 상대의 이름이 온다.
+ *
+ * `is_private` 는 **계약에 아직 없다**(README "백엔드에 요청한 것"). 개발 릴레이만 먼저 준다.
+ * 서버가 안 주는 동안에는 비공개 채널을 만들 수 없다(`api.ts` 의 `supportsPrivate`).
+ * 비공개 채널은 만든 사람과 고른 사람만 멤버고, 멤버가 사람을 더하고 뺀다.
+ */
+export type ChatChannel = Schema<'ChannelOut'> & { is_private?: boolean }
 
 /**
  * 서버가 WebSocket 으로 밀어 주는 이벤트(04 §4.1). 봉투 키는 `ev` 이고 필드는 snake_case 다.
@@ -33,6 +39,11 @@ export type ChatEvent =
   | ({ ev: 'notice' } & Pick<Notification, 'id' | 'kind' | 'payload' | 'created_at'>)
   /** 내 안읽음 숫자. 새 메시지 때는 사람마다 자기 숫자, `read` 뒤에는 본인에게 0. */
   | { ev: 'unread'; channel_id: string; count: number }
+  /**
+   * 내 채널 목록이 바뀌었다(비공개 채널에 들어왔거나 빠졌거나, 멤버가 달라졌다). 목록을 다시 받는다.
+   * 계약에 아직 없다. 릴레이만 보낸다. 서버가 안 보내면 다음 재조회 때 반영된다.
+   */
+  | { ev: 'channels' }
   | { ev: 'typing'; channel_id: string; user_id: string; name: string }
   /**
    * 보낸 것이 거절됐다. 소켓은 닫히지 않는다.

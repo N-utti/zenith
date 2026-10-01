@@ -123,6 +123,21 @@ PR 본문에 흩어져 있던 것을 한곳에 모았다. 위는 **없어서 못
 - **사람 목록의 등급**(#193): 새 기안 참조자를 임원·사원 두 줄로 가르려면 `GET /people` 의
   `PersonOut` 에 `role` 이 있어야 한다. 목만 먼저 주고, 서버가 안 주면 가르지 않고 한 줄로 보인다.
   넣으면 로그인한 누구나 전원의 등급을 보게 되므로 공개 범위는 백엔드가 정한다.
+- **비공개 채널**(#221): 고른 사람만 보는 채널과, 만든 뒤 멤버 더하기·빼기. 화면과 개발
+  릴레이(`scripts/chat.js`)는 아래 모양으로 먼저 만들었다. 서버가 `ChannelOut.is_private` 를 주기
+  전에는 비공개 관련 자리가 화면에 나오지 않는다(`features/chat/api.ts` 의 `supportsPrivate`).
+  규칙의 이유와 백엔드가 정할 것은 이슈에 있다.
+  - `POST /channels {name, is_private: true, member_ids: [uuid]}` → 만든 사람과 `member_ids` 만 멤버.
+    **두 칸은 같이 온다. 한쪽만 오면 422.** 지금 `ChannelCreateIn` 은 모르는 칸을 버려서, 그대로
+    보내면 조용히 전원 공개 채널이 된다. 그래서 응답 칸과 요청 칸은 같은 배포에 들어가야 한다.
+  - `ChannelOut.is_private: bool`(DM 은 `false`). `GET /channels` 와 생성 응답 둘 다.
+  - `POST /channels/{id}/members {user_ids: [uuid]}` → 200 `ChannelOut`,
+    `DELETE /channels/{id}/members/{user_id}` → 204(자기 자신이면 나가기). 비공개 채널만, 멤버만.
+  - 소켓 `{ev: "channels"}`: 목록이 바뀐 사람(전·후 멤버)에게. 받으면 `GET /channels` 를 다시 부른다.
+  - 이름 중복(409)은 공개 채널끼리만. 비공개 채널 이름으로 409 를 주면 안 보이는 채널의 존재가 샌다.
+    사전 검사뿐 아니라 유일 인덱스(`uq_channels_public_name`)의 조건도 공개 채널만으로 좁혀야 한다.
+  - 새 계정·시드의 자동 가입(`join_public_channels`)은 공개 채널만. 지금 조건은 「DM 이 아닌 전부」라
+    그대로 두면 신입이 모든 비공개 채널에 들어가 지난 대화를 본다.
 
 전에 남아 있던 멘션 알림의 DM 표시는 백엔드가 답을 줬다(#116, #150). 공개 채널은
 채널 이름을 `channel_name` 에 채우고 DM 은 `null` 로 둔다 — 요청했던 모양 그대로다. 다만 #150

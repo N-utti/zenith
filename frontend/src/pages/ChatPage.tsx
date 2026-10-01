@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'react-router'
-import { AtSign, Hash, MessagesSquare, WifiOff } from 'lucide-react'
+import { AtSign, Hash, Lock, MessagesSquare, UserPlus, WifiOff } from 'lucide-react'
 import { useChannels, useMessages } from '@/features/chat/api'
 import { ChannelList } from '@/features/chat/ChannelList'
+import { ChannelMembersModal } from '@/features/chat/ChannelMembersModal'
 import { Composer } from '@/features/chat/Composer'
 import { MessageList } from '@/features/chat/MessageList'
 import { useChatSocketContext } from '@/features/chat/ChatSocketContext'
@@ -27,6 +28,11 @@ export function ChatPage() {
   const me = useCurrentUser()
 
   const channel = channels?.items.find((c) => c.id === channelId)
+  // 열어 둔 채널 id 로 든다. 참·거짓으로 들면 방을 옮겨도 열린 채로 다음 방의 멤버가 뜬다.
+  const [membersOf, setMembersOf] = useState<string | null>(null)
+  // 방을 옮겼거나 그 채널이 목록에서 사라졌으면(남이 나를 뺐다) 버린다. 남겨 두면 그 방에
+  // 돌아오거나 다시 더해졌을 때 창이 저절로 열린다.
+  if (membersOf !== null && membersOf !== channel?.id) setMembersOf(null)
 
   // @ 자동완성 후보와 배지 명단. 서버는 채널 멤버 중 활성 계정에만 멘션 알림을 만든다. 채널 멤버는
   // 비활성으로 바뀌어도 빠지지 않으므로 활성 동료(나는 이미 빠져 있다)와 겹쳐 거른다.
@@ -40,7 +46,9 @@ export function ChatPage() {
   // 멤버 배열이 새 객체가 된다(react-query 의 참조 유지는 같은 자리끼리만 견준다).
   const namesKey = JSON.stringify([...mentionCandidates.map((member) => member.name), me.name])
   const mentionNames = useMemo(() => new Set(JSON.parse(namesKey) as string[]), [namesKey])
-  const { data: messages } = useMessages(channelId ?? null)
+  // 목록을 받았는데 거기 없는 방이면 메시지를 조회하지 않는다. 빠진 채널의 주소에 머무는 동안
+  // 창에 초점이 올 때마다 403 을 받고, 실서버는 그때마다 감사 기록에 거부를 남긴다.
+  const { data: messages } = useMessages(channels && !channel ? null : (channelId ?? null))
   const latestId = messages?.items.at(-1)?.id
 
   // 채널을 열거나 보고 있는 동안 새 메시지가 오면 읽음으로 처리한다. 읽음도 소켓이라
@@ -100,15 +108,36 @@ export function ChatPage() {
       {channelId && channel ? (
         <div className="flex min-h-0 flex-1 flex-col">
           <header className="border-line bg-surface flex h-14 shrink-0 items-center gap-2 border-b px-4">
-            {!channel.is_dm ? (
-              <Hash className="text-subtle size-4" />
-            ) : (
+            {channel.is_dm ? (
               <AtSign className="text-subtle size-4" />
+            ) : channel.is_private ? (
+              <Lock className="text-subtle size-4" />
+            ) : (
+              <Hash className="text-subtle size-4" />
             )}
-            <h1 className="text-fg text-sm font-semibold">{channel.name}</h1>
-            <span className="text-subtle text-xs">
-              {!channel.is_dm ? `멤버 ${channel.members.length}명` : '다이렉트 메시지'}
-            </span>
+            <h1 className="text-fg max-w-[60%] shrink-0 truncate text-sm font-semibold">
+              {channel.name}
+            </h1>
+            {!channel.is_dm && channel.is_private ? (
+              // 비공개 채널은 누가 보는지가 곧 내용이라 이름을 글자로 적는다(올려야 보이면 폰에서는
+              // 볼 길이 없다). 누르면 멤버를 더하고 뺀다.
+              <button
+                type="button"
+                onClick={() => setMembersOf(channel.id)}
+                className="text-subtle hover:text-fg flex min-w-0 cursor-pointer items-center gap-1.5 text-xs transition-colors"
+              >
+                <span className="truncate">
+                  {/* 인원수를 앞에 둔다. 이름은 길면 잘려서 누가 더해져도 안 보인다. */}
+                  비공개 · {channel.members.length}명 ·{' '}
+                  {channel.members.map((m) => m.name).join(', ')}
+                </span>
+                <UserPlus role="img" aria-label="멤버 더하기·빼기" className="size-3.5 shrink-0" />
+              </button>
+            ) : (
+              <span className="text-subtle text-xs">
+                {channel.is_dm ? '다이렉트 메시지' : `멤버 ${channel.members.length}명`}
+              </span>
+            )}
 
             {!connected && (
               <span
@@ -133,10 +162,14 @@ export function ChatPage() {
             key={channelId}
             channelId={channelId}
             channelName={channel.name}
-            isDm={channel.is_dm}
+            hash={!channel.is_dm && !channel.is_private}
             mentionCandidates={mentionCandidates}
             onTyping={() => notifyTyping(channelId)}
           />
+
+          {membersOf === channel.id && channel.is_private && (
+            <ChannelMembersModal channel={channel} onClose={() => setMembersOf(null)} />
+          )}
         </div>
       ) : (
         <div className="hidden flex-1 place-items-center p-8 md:grid">

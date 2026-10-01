@@ -16,14 +16,14 @@ const DISCONNECTED = '연결이 끊겨 보내지 못했습니다. 연결되면 �
 export function Composer({
   channelId,
   channelName,
-  isDm,
+  hash,
   mentionCandidates,
   onTyping,
 }: {
   channelId: string
   channelName: string
-  /** DM 이 아닌 채널은 이름 앞에 `#` 을 붙인다(채널 목록·헤더와 같은 표기). */
-  isDm: boolean
+  /** 공개 채널은 이름 앞에 `#` 을 붙인다(채널 목록·헤더와 같은 표기). DM·비공개 채널은 안 붙인다. */
+  hash: boolean
   /** @ 자동완성 후보(DM 은 상대만, 채널은 멤버 전원). */
   mentionCandidates: Person[]
   onTyping: () => void
@@ -171,7 +171,7 @@ export function Composer({
             onSubmitEnter={dispatch}
             rows={1}
             aria-label={`${channelName}에 메시지 보내기`}
-            placeholder={`${isDm ? '' : '#'}${channelName}에 메시지 보내기…`}
+            placeholder={`${hash ? '#' : ''}${channelName}에 메시지 보내기…`}
             className="max-h-40 min-h-11"
           />
           <Button
