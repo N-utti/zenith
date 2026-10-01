@@ -22,6 +22,7 @@ import {
 } from '@/features/settings/preferences'
 import { api, ApiError } from '@/lib/api'
 import { hueOf } from '@/lib/avatar'
+import { setContentWide, useContentWide } from '@/lib/contentWidth'
 import { useTheme } from '@/lib/theme'
 import { DEMO_PASSWORD, MSW_ENABLED } from '@/mocks/accounts'
 import { PASSWORD_MIN, ROLE_LABEL } from '@/types'
@@ -202,6 +203,7 @@ function PreferencesSection() {
 export function SettingsPage() {
   const user = useCurrentUser()
   const { theme, setTheme } = useTheme()
+  const wide = useContentWide()
 
   return (
     <>
@@ -230,7 +232,7 @@ export function SettingsPage() {
 
       <section className="border-line bg-surface mt-4 rounded-xl border p-6">
         <h2 className="text-fg mb-1 text-sm font-semibold">화면</h2>
-        <p className="text-muted mb-4 text-sm">테마는 이 브라우저에만 저장됩니다.</p>
+        <p className="text-muted mb-4 text-sm">테마와 본문 너비는 이 브라우저에만 저장됩니다.</p>
         <div className="flex gap-2">
           <Button
             variant={theme === 'light' ? 'primary' : 'secondary'}
@@ -247,6 +249,29 @@ export function SettingsPage() {
           >
             <Moon className="size-4" />
             다크
+          </Button>
+        </div>
+        <h3 className="text-fg mt-5 mb-1 text-sm font-medium">본문 너비</h3>
+        <p className="text-muted mb-3 text-sm">
+          넓게를 고르면 근태 표나 목록이 모니터 폭을 다 씁니다. 문서 편집처럼 이미 화면을 꽉 채우는
+          화면은 그대로입니다.
+        </p>
+        <div className="flex gap-2">
+          <Button
+            variant={wide ? 'secondary' : 'primary'}
+            size="sm"
+            aria-pressed={!wide}
+            onClick={() => setContentWide(false)}
+          >
+            기본
+          </Button>
+          <Button
+            variant={wide ? 'primary' : 'secondary'}
+            size="sm"
+            aria-pressed={wide}
+            onClick={() => setContentWide(true)}
+          >
+            넓게
           </Button>
         </div>
       </section>

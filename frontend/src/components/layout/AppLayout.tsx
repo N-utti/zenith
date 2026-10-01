@@ -3,6 +3,7 @@ import { Outlet, useLocation } from 'react-router'
 import { CommandPalette } from '@/components/CommandPalette'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { cn } from '@/lib/cn'
+import { useContentWide } from '@/lib/contentWidth'
 import { ConnectionBanner } from './ConnectionBanner'
 import { Header } from './Header'
 import { MobileTabBar } from './MobileTabBar'
@@ -30,6 +31,7 @@ export function AppLayout({ bleed = false }: { bleed?: boolean }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [collapsed, setCollapsed] = useState(readCollapsed)
   const [paletteOpen, setPaletteOpen] = useState(false)
+  const wide = useContentWide()
 
   const toggleCollapsed = () => {
     const next = !collapsed
@@ -83,7 +85,9 @@ export function AppLayout({ bleed = false }: { bleed?: boolean }) {
           {bleed ? (
             body
           ) : (
-            <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">{body}</div>
+            <div className={cn('mx-auto px-4 py-6 sm:px-6 sm:py-8', !wide && 'max-w-6xl')}>
+              {body}
+            </div>
           )}
         </main>
       </div>
