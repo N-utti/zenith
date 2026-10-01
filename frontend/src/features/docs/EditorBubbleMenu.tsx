@@ -1,6 +1,14 @@
 import type { Editor } from '@tiptap/react'
 import { BubbleMenu } from '@tiptap/react/menus'
-import { Bold, Code, Italic, RemoveFormatting, Strikethrough, Underline } from 'lucide-react'
+import {
+  Bold,
+  Code,
+  Italic,
+  RemoveFormatting,
+  Strikethrough,
+  Trash2,
+  Underline,
+} from 'lucide-react'
 import {
   AlignMenu,
   BlockMenu,
@@ -9,6 +17,7 @@ import {
   ToolButton,
   ToolDivider,
 } from './editorControls'
+import { deleteSelectedBlocks } from './deleteBlocks'
 import { useFormatState } from './editorFormats'
 
 /** 글자를 선택하면 그 자리에 뜨는 서식 막대. 노션의 선택 메뉴와 같은 역할. */
@@ -77,6 +86,22 @@ export function EditorBubbleMenu({ editor }: { editor: Editor }) {
         icon={RemoveFormatting}
         label="서식 지우기"
         onClick={() => editor.chain().focus().unsetAllMarks().run()}
+      />
+
+      <ToolDivider />
+
+      {/* 고른 글자가 아니라 그 글이 든 블록을 통째로 지운다(글자만 지우는 건 Backspace 로 충분하다).
+          확인은 묻지 않는다. Ctrl+Z 한 번으로 돌아온다. */}
+      <ToolButton
+        icon={Trash2}
+        label="블록 지우기"
+        onClick={() =>
+          editor
+            .chain()
+            .focus()
+            .command(({ tr }) => deleteSelectedBlocks(tr))
+            .run()
+        }
       />
     </BubbleMenu>
   )
