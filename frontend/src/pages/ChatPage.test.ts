@@ -27,8 +27,6 @@ vi.mock('@/features/notifications/api', () => ({
 }))
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
-// jsdom 에는 없다. 목록은 그릴 때마다 맨 아래로 내린다.
-Element.prototype.scrollIntoView = () => {}
 
 afterEach(() => {
   vi.useRealTimers()

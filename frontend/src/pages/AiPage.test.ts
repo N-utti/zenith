@@ -20,8 +20,6 @@ vi.mock('@/features/ai/SourcesPanel', () => ({
 }))
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
-// jsdom 에는 없다. 대화는 그릴 때마다 맨 아래로 내린다.
-Element.prototype.scrollIntoView = () => {}
 
 let root: Root | undefined
 afterEach(() => {

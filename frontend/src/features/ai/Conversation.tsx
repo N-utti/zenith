@@ -162,16 +162,19 @@ export function Conversation({
   /** 마지막 답변이 실패했을 때 같은 질문을 다시 보낸다(05 공통 규칙 "생성 실패, 다시 시도"). */
   onRetry: () => void
 }) {
-  const endRef = useRef<HTMLDivElement>(null)
+  const scrollerRef = useRef<HTMLDivElement>(null)
 
   // 스트리밍은 메시지를 추가하지 않고 마지막 본문만 늘린다. 그 길이도 따라간다.
+  // 다 받은 뒤에는 마지막 답변 아래에 액션 줄이 생겨 한 번 더 는다(`streaming`).
   const lastLength = messages.at(-1)?.body.length ?? 0
   useEffect(() => {
-    endRef.current?.scrollIntoView({ block: 'end' })
-  }, [messages.length, lastLength, generating])
+    // 스크롤 영역을 끝까지 내린다. 마지막 줄에 맞추면 아래 여백만큼 덜 내려가 바닥이 남는다.
+    const scroller = scrollerRef.current
+    if (scroller) scroller.scrollTop = scroller.scrollHeight
+  }, [messages.length, lastLength, generating, streaming])
 
   return (
-    <div className="flex-1 overflow-y-auto px-5 py-5">
+    <div ref={scrollerRef} className="flex-1 overflow-y-auto px-5 py-5">
       <div className="mx-auto flex max-w-3xl flex-col gap-5">
         {messages.map((message, index) => {
           if (message.role === 'user') {
@@ -200,7 +203,6 @@ export function Conversation({
         })}
 
         {generating && <Generating />}
-        <div ref={endRef} />
       </div>
     </div>
   )
