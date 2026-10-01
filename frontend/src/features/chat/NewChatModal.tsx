@@ -13,7 +13,7 @@ import { ApiError } from '@/lib/api'
 import { hueOf } from '@/lib/avatar'
 import { supportsPrivate, useChannels, useCreateChannel, type ChannelCreateInput } from './api'
 import { useColleagues } from '@/features/people/colleagues'
-import { PersonChip } from '@/features/people/PersonChip'
+import { PersonChips } from '@/features/people/PersonChip'
 
 /** 백엔드 `ChannelCreateIn.name` 의 제약(`NonBlank`, 100자). */
 const NAME_MAX = 100
@@ -234,26 +234,23 @@ export function NewChatModal({
               role="group"
               aria-label="함께할 사람"
               aria-describedby={slot['aria-describedby']}
-              className="flex flex-wrap gap-1.5"
+              className="flex flex-col gap-2"
             >
               {peoplePending && <Spinner />}
               {!peoplePending && !peopleError && people.length === 0 && (
                 <p className="text-subtle text-sm">고를 수 있는 사람이 없습니다.</p>
               )}
-              {people.map((person) => (
-                <PersonChip
-                  key={person.id}
-                  person={person}
-                  picked={memberIds.includes(person.id)}
-                  onToggle={() =>
+              {people.length > 0 && (
+                <PersonChips
+                  people={people}
+                  picked={memberIds}
+                  onToggle={(id) =>
                     setMemberIds((ids) =>
-                      ids.includes(person.id)
-                        ? ids.filter((id) => id !== person.id)
-                        : [...ids, person.id],
+                      ids.includes(id) ? ids.filter((each) => each !== id) : [...ids, id],
                     )
                   }
                 />
-              ))}
+              )}
             </div>
           )}
         </Field>

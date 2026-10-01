@@ -37,11 +37,11 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
-/** 「새 채널」 모달을 연다. `channels` 가 서버가 준 채널 목록이다. */
-function open(channels: ChatChannel[]) {
+/** 「새 채널」 모달을 연다. `channels` 가 서버가 준 채널 목록, `roster` 가 사람 목록이다. */
+function open(channels: ChatChannel[], roster: object[] = people) {
   const qc = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: false } } })
   qc.setQueryData(chatKeys.channels, { items: channels })
-  qc.setQueryData(['people'], { items: people })
+  qc.setQueryData(['people'], { items: roster })
   root = createRoot(document.createElement('div'))
   act(() =>
     root!.render(
@@ -125,4 +125,21 @@ test('비공개 표시는 달려 왔어도 고르지 않은 사람이 들어 있
 
   expect(toast.success).not.toHaveBeenCalled()
   expect(toast.error).toHaveBeenCalled()
+})
+
+test('서버가 등급을 주면 함께할 사람을 임원과 사원으로 가른다', () => {
+  open(
+    [channel({ is_private: false })],
+    [
+      people[0],
+      { ...people[1], role: 'member' },
+      { id: 'u2', name: '홍성완', active: true, role: 'exec' },
+    ],
+  )
+  act(() => dialog().querySelector<HTMLInputElement>('input[type=checkbox]')!.click())
+
+  const groups = [...dialog().querySelectorAll('[role=group]')].map(
+    (group) => `${group.getAttribute('aria-label')}: ${group.querySelectorAll('button').length}`,
+  )
+  expect(groups).toEqual(['함께할 사람: 2', '임원: 1', '사원: 1'])
 })

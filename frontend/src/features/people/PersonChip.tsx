@@ -1,6 +1,7 @@
 import { Avatar } from '@/components/ui/Avatar'
 import { cn } from '@/lib/cn'
 import { hueOf } from '@/lib/avatar'
+import { byTier, type Colleague } from './colleagues'
 
 /** 사람을 여럿 고르는 자리의 알약 하나(결재 참조자·비공개 채널 멤버). 눌러서 넣고 뺀다. */
 export function PersonChip({
@@ -27,5 +28,49 @@ export function PersonChip({
       <Avatar name={person.name} hue={hueOf(person.id)} size="sm" />
       {person.name}
     </button>
+  )
+}
+
+/**
+ * 고를 사람들의 칩 묶음. 임원과 사원을 두 줄로 가른다(`byTier`).
+ *
+ * 등급은 서버가 줄 때만 안다. 안 주는 동안에는 가르지 않고 한 줄로 그린다.
+ */
+export function PersonChips({
+  people,
+  picked,
+  onToggle,
+}: {
+  people: Colleague[]
+  picked: string[]
+  onToggle: (id: string) => void
+}) {
+  return (
+    <div className="flex flex-col gap-2">
+      {(byTier(people) ?? [{ label: null, people }]).map((group) => (
+        <div
+          key={group.label ?? 'all'}
+          role={group.label ? 'group' : undefined}
+          aria-label={group.label ?? undefined}
+          className="flex gap-2"
+        >
+          {group.label && (
+            <span aria-hidden className="text-subtle w-8 shrink-0 pt-1.5 text-xs">
+              {group.label}
+            </span>
+          )}
+          <div className="flex flex-wrap gap-1.5">
+            {group.people.map((each) => (
+              <PersonChip
+                key={each.id}
+                person={each}
+                picked={picked.includes(each.id)}
+                onToggle={() => onToggle(each.id)}
+              />
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
   )
 }
