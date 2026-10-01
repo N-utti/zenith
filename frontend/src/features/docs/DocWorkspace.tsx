@@ -232,7 +232,25 @@ function BlockDragHandle({
       onNodeChange={({ pos }) => {
         posRef.current = pos
       }}
-      className="flex items-center pr-1"
+      // 글머리 점·번호는 항목 상자의 왼쪽 바깥(목록의 들여쓰기 칸)에 그려진다. 항목에 그대로 붙이면
+      // 손잡이가 그 기호를 덮으므로, 목록 항목일 때는 목록의 왼쪽 끝에 붙인다.
+      // 확장이 onNodeChange 를 부른 직후에 이 함수를 부르는 순서에 기댄다(인자가 없어 posRef 로 받는다).
+      getReferencedVirtualElement={() => {
+        const li = posRef.current >= 0 ? editor.view.nodeDOM(posRef.current) : null
+        if (!(li instanceof HTMLLIElement) || !li.parentElement) return null
+        const list = li.parentElement
+        return {
+          getBoundingClientRect: () => {
+            const item = li.getBoundingClientRect()
+            const left = list.getBoundingClientRect().left
+            return new DOMRect(left, item.top, item.right - left, item.height)
+          },
+        }
+      }}
+      // h-7: 본문 한 줄 높이(leading-7). 블록 위쪽에 붙는 손잡이가 첫 줄 한가운데에 오게 한다.
+      // ponytail: 높이 고정. 줄 높이가 다른 제목 1(32px)·제목 3(24px)은 2px 어긋난다.
+      // 거슬리면 onNodeChange 에서 그 블록의 line-height 를 읽어 맞춘다.
+      className="flex h-7 items-center pr-1"
     >
       <button
         type="button"
