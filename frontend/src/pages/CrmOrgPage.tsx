@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { Copy, Mail, Pencil, Phone, Plus, Trash2 } from 'lucide-react'
+import { BackLink } from '@/components/ui/BackLink'
 import { Button } from '@/components/ui/Button'
 import { Card, CardEmpty, CardHeader } from '@/components/ui/Card'
 import { Field } from '@/components/ui/Field'
@@ -80,9 +81,7 @@ export function CrmOrgPage() {
 
   return (
     <>
-      <Link to="/crm/orgs" className="text-subtle hover:text-fg mb-3 inline-block text-sm">
-        ← 기관 목록
-      </Link>
+      <BackLink to="/crm/orgs">기관 목록</BackLink>
       <PageHeader
         title={o.name}
         description={ORG_TYPE_LABEL[o.org_type]}

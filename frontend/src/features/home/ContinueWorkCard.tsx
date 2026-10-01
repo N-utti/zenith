@@ -6,9 +6,15 @@ import { formatRelative } from '@/lib/datetime'
 import { HomeSection } from './HomeSection'
 import { useRecentDocs } from './api'
 
-/** 본문 미리보기가 아직 없어 표지 자리를 줄무늬로 채운다. */
+/**
+ * 본문 미리보기가 아직 없어 표지 자리를 줄무늬로 채운다.
+ *
+ * 두 색은 canvas 와 sunken 이다. 이 둘의 명도 차가 라이트·다크에서 같다(0.03). 전에 쓰던
+ * sunken·surface-hover 는 라이트에서 0.01, 다크에서 0.11 이라 다크에서만 줄무늬가 화면에서
+ * 가장 세게 보였다.
+ */
 const THUMBNAIL =
-  'repeating-linear-gradient(45deg, var(--zenith-sunken), var(--zenith-sunken) 8px, var(--zenith-surface-hover) 8px, var(--zenith-surface-hover) 16px)'
+  'repeating-linear-gradient(45deg, var(--zenith-canvas), var(--zenith-canvas) 8px, var(--zenith-sunken) 8px, var(--zenith-sunken) 16px)'
 
 /** 카드는 넉 장만. 서버는 여덟 개까지 주지만 홈 한 화면의 밀도가 정해져 있다(12 UI 청사진). */
 const RECENT_LIMIT = 4

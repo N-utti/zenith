@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
+import { BackLink } from '@/components/ui/BackLink'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card, CardHeader } from '@/components/ui/Card'
@@ -132,9 +133,7 @@ export function ApprovalDetailPage() {
 
   return (
     <>
-      <Link to="/approvals" className="text-subtle hover:text-fg mb-3 inline-block text-sm">
-        ← 결재함
-      </Link>
+      <BackLink to="/approvals">결재함</BackLink>
       <PageHeader
         title={d.title}
         description={`${APPROVAL_TYPE_LABEL[d.type_code]} · ${d.drafter.name} 기안 · ${formatDateTime(d.submitted_at ?? d.created_at)}`}

@@ -149,48 +149,53 @@ function Board({ kind }: { kind: DealKind }) {
   }
 
   return (
-    // 좁은 화면은 단계마다 한 덩어리씩 세로로 쌓고, 넓으면 칸반처럼 열을 가로로 늘어놓는다.
-    <div className="grid gap-3 lg:grid-cols-5">
-      {stages.map((stage) => {
-        const inStage = items.filter((d) => d.stage === stage.key)
-        const total = inStage.reduce((sum, d) => sum + (d.amount_krw ?? 0), 0)
-        return (
-          <section
-            key={stage.key}
-            aria-label={`${stage.label} 단계`}
-            data-stage-column={stage.key}
-            tabIndex={-1}
-            onDragOver={(e) => {
-              if (!e.dataTransfer.types.includes(DRAG_TYPE)) return
-              e.preventDefault()
-              setOver(stage.key)
-            }}
-            onDragLeave={(e) => {
-              if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOver(null)
-            }}
-            onDrop={(e) => onDrop(e, stage.key)}
-            className={cn(
-              'bg-sunken min-h-24 rounded-xl p-2 transition-colors outline-none',
-              over === stage.key && 'bg-accent-soft',
-            )}
-          >
-            <header className="flex items-baseline justify-between px-1.5 pt-1 pb-2">
-              <h3 className="text-fg text-sm font-semibold">
-                {stage.label}
-                <span className="text-subtle ml-1.5 font-normal">{inStage.length}</span>
-              </h3>
-              {total > 0 && (
-                <span className="text-muted text-xs tabular-nums">{formatEok(total)}</span>
+    // 좁으면 단계마다 한 덩어리씩 세로로 쌓고, 넓으면 칸반처럼 열을 가로로 늘어놓는다.
+    // 기준은 화면 폭이 아니라 이 보드의 폭이다(@container). 사이드바가 270px 을 먹어서, 화면
+    // 폭으로 가르면 1024px 화면에서 다섯 열이 130px 씩으로 눌려 제목과 금액이 겹치고 카드
+    // 글자가 밖으로 나간다. 896px(@4xl)이면 열 하나가 170px 쯤이다.
+    <div className="@container">
+      <div className="grid gap-3 @4xl:grid-cols-5">
+        {stages.map((stage) => {
+          const inStage = items.filter((d) => d.stage === stage.key)
+          const total = inStage.reduce((sum, d) => sum + (d.amount_krw ?? 0), 0)
+          return (
+            <section
+              key={stage.key}
+              aria-label={`${stage.label} 단계`}
+              data-stage-column={stage.key}
+              tabIndex={-1}
+              onDragOver={(e) => {
+                if (!e.dataTransfer.types.includes(DRAG_TYPE)) return
+                e.preventDefault()
+                setOver(stage.key)
+              }}
+              onDragLeave={(e) => {
+                if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOver(null)
+              }}
+              onDrop={(e) => onDrop(e, stage.key)}
+              className={cn(
+                'bg-sunken min-h-24 rounded-xl p-2 transition-colors outline-none',
+                over === stage.key && 'bg-accent-soft',
               )}
-            </header>
-            <ul className="space-y-2">
-              {inStage.map((deal) => (
-                <DealCard key={deal.id} deal={deal} busy={move.isPending} onMove={moveTo} />
-              ))}
-            </ul>
-          </section>
-        )
-      })}
+            >
+              <header className="flex items-baseline justify-between px-1.5 pt-1 pb-2">
+                <h3 className="text-fg text-sm font-semibold">
+                  {stage.label}
+                  <span className="text-subtle ml-1.5 font-normal">{inStage.length}</span>
+                </h3>
+                {total > 0 && (
+                  <span className="text-muted text-xs tabular-nums">{formatEok(total)}</span>
+                )}
+              </header>
+              <ul className="space-y-2">
+                {inStage.map((deal) => (
+                  <DealCard key={deal.id} deal={deal} busy={move.isPending} onMove={moveTo} />
+                ))}
+              </ul>
+            </section>
+          )
+        })}
+      </div>
     </div>
   )
 }
