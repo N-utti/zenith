@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { useLocation } from 'react-router'
 import { RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
@@ -36,8 +36,13 @@ export function AiPage() {
   const [confirmReset, setConfirmReset] = useState(false)
   // 눌린 각주. 새 질문을 보내면 지운다. 근거 패널이 예전 답변에 머물지 않게.
   const [focus, setFocus] = useState<CitationFocus | null>(null)
-  const cite = (next: Omit<CitationFocus, 'tick'>) =>
-    setFocus((prev) => ({ ...next, tick: (prev?.tick ?? 0) + 1 }))
+  // 붙잡아 둔다. 지난 답변 말풍선은 받은 값이 그대로면 다시 그리지 않는데(`Conversation` 의
+  // `Answer`), 이 함수가 렌더마다 새로 만들어지면 답변 조각 하나에 전부 다시 그려진다.
+  const cite = useCallback(
+    (next: Omit<CitationFocus, 'tick'>) =>
+      setFocus((prev) => ({ ...next, tick: (prev?.tick ?? 0) + 1 })),
+    [],
+  )
 
   // 팔레트에서 넘어온 검색어를 한 번만 컴포저에 채운다. 이미 /ai 에 있을 때 또 넘어와도
   // location.key 가 바뀌므로 다시 채워진다(이전 렌더 기억 패턴, effect 아님).
