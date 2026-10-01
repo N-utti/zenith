@@ -6,7 +6,7 @@
 /* ── 1) 원시 토큰 ────────────────────────────────────────────────
    브랜드 팔레트와 타이포. 외부 폰트 CDN은 쓰지 않는다. 사내망 밖으로 나가도 되는 호출은
    서버의 AI 공급자 하나뿐이고 브라우저는 그 예외에 들지 않는다.
-   Pretendard를 쓰려면 self-host 후 아래 스택 맨 앞에 넣는다. */
+   Pretendard는 npm 패키지에서 가져와 빌드에 같이 싣는다(`main.tsx` 의 import). */
 @theme {
   --font-sans:
     'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo',
