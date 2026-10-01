@@ -29,7 +29,7 @@ function pickFile(accept: string): Promise<File | null> {
  * 서버가 그려 주는 네 형식(png·jpeg·gif·webp)은 사진 블록으로, 나머지는 파일 칩으로 넣는다.
  * 채팅과 같은 이유로 이름의 확장자로 가른다(`isImage`).
  */
-export function useFileUpload(editor: Editor | null) {
+export function useFileUpload(editor: Editor | null, docId: string) {
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -48,7 +48,7 @@ export function useFileUpload(editor: Editor | null) {
       try {
         // 늘 지금 커서 자리에 넣는다. 넣고 나면 커서가 그 뒤로 가므로 여러 개는 넣은 순서대로 쌓인다.
         for (const file of files) {
-          const uploaded = await uploadFile(file)
+          const uploaded = await uploadFile(file, docId)
           const chain = editor.chain().focus()
           if (isImage(file.name)) {
             chain.setImageBlock({ src: uploaded.url, alt: file.name })
@@ -63,7 +63,7 @@ export function useFileUpload(editor: Editor | null) {
         setUploading(false)
       }
     },
-    [editor],
+    [editor, docId],
   )
 
   // 드롭·붙여넣기는 editorProps 대신 DOM에 직접 건다. 확장은 에디터를 만들 때

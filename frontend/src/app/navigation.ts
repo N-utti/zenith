@@ -1,4 +1,5 @@
 import {
+  Archive,
   Bell,
   Building2,
   ClipboardCheck,
@@ -33,6 +34,16 @@ export const CRM_ENABLED = import.meta.env.DEV
 const CRM_NAV: NavItem[] = CRM_ENABLED ? [{ to: '/crm', label: 'CRM', icon: Building2 }] : []
 
 /**
+ * 자료실도 서버에 목록 경로(`GET /archive`)가 아직 없어 목으로만 돈다(README "백엔드에 요청한 것").
+ * CRM 과 같이 개발 빌드에서만 메뉴와 라우트를 연다. 서버가 붙으면 이 스위치를 걷는다.
+ */
+export const ARCHIVE_ENABLED = import.meta.env.DEV
+
+const ARCHIVE_NAV: NavItem[] = ARCHIVE_ENABLED
+  ? [{ to: '/archive', label: '자료실', icon: Archive }]
+  : []
+
+/**
  * 사이드바 최상단 그룹. 12·UI 청사진의 1b 셸에서 섹션 헤더 없이 먼저 오는 항목들이다.
  * 문서·채널·게시판은 여기 없다. 각각 트리와 목록 섹션으로 따로 렌더한다.
  */
@@ -42,6 +53,7 @@ export const TOP_NAV: NavItem[] = [
   { to: '/attendance', label: '근태', icon: Clock },
   { to: '/approvals', label: '결재', icon: ClipboardCheck },
   ...CRM_NAV,
+  ...ARCHIVE_NAV,
   { to: '/ai', label: 'AI 어시스턴트', icon: Sparkles },
 ]
 
@@ -80,6 +92,7 @@ export const ALL_NAV: NavItem[] = [
   { to: '/attendance', label: '근태', icon: Clock },
   { to: '/approvals', label: '결재', icon: ClipboardCheck },
   ...CRM_NAV,
+  ...ARCHIVE_NAV,
   { to: '/ai', label: 'AI 어시스턴트', icon: Sparkles },
   { to: '/notifications', label: '받은 알림', icon: Bell },
   ...SECONDARY_NAV,

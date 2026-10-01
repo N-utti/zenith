@@ -376,7 +376,7 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
     },
   })
 
-  const { uploading, error: uploadError, clearError } = useFileUpload(editor)
+  const { uploading, error: uploadError, clearError } = useFileUpload(editor, meta.id)
 
   // 사진을 끌어 옮길 때 화면 끝에 닿으면 본문이 그 방향으로 굴러야 한다.
   const scrollRef = useRef<HTMLDivElement>(null)
