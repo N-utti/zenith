@@ -1,7 +1,9 @@
 import { bypass, delay, http, HttpResponse, passthrough } from 'msw'
 import { PASSWORD_MIN, type User } from '@/types'
 import { BODY_MAX, TITLE_MAX } from '@/features/board/types'
-import type { Person } from '@/features/chat/types'
+import { ARCHIVE_LIMIT, type ArchiveFile } from '@/features/archive/types'
+import type { ChatChannel, ChatMessage, Person } from '@/features/chat/types'
+import { chatFiles, docFiles, newestFirst } from './archiveDb'
 import { DEMO_PASSWORD } from './accounts'
 import { createAccount, emailTaken, findAccount, listAccounts, patchAccount } from './adminDb'
 import { badCursor, listAudit, push as recordAudit } from './auditDb'
@@ -123,7 +125,7 @@ import {
 import { decodeText, parseCsv } from './csv'
 
 import type { ActivityInput, ContactInput, DealInput, OrgInput } from '@/features/crm/types'
-import { readFile, saveFile } from './filesDb'
+import { listFiles, readFile, saveFile } from './filesDb'
 import { isImage } from '@/features/chat/attachments'
 import { buildXlsx } from '@/lib/xlsx'
 import { closeMonth, getClosing, listClosings, reopenMonth } from './closingsDb'
@@ -190,6 +192,36 @@ async function unreadChannels(meId: string) {
   } catch {
     return []
   }
+}
+
+/**
+ * 채팅 첨부. 릴레이에 채널 목록을 묻고 채널마다 메시지를 받아 첨부를 꺼낸다. 실제 서버는
+ * 질의 한 번으로 준다.
+ *
+ * 릴레이가 **내가 멤버인 채널만** 주고 남의 채널 메시지는 403 이라, 열람 판정은 릴레이가 한다.
+ * 요청 하나가 실패하면 그 몫만 비운다. 릴레이가 안 떠 있으면 전부 빈 목록이다. 문서 파일이나
+ * 다른 채널의 파일까지 같이 죽으면 안 된다.
+ */
+async function chatArchive(): Promise<ArchiveFile[]> {
+  const get = async <T>(path: string): Promise<T[]> => {
+    try {
+      const res = await fetch(bypass(path), { signal: AbortSignal.timeout(2000) })
+      return res.ok ? ((await res.json()) as { items: T[] }).items : []
+    } catch {
+      return []
+    }
+  }
+  const channels = await get<ChatChannel>('/api/channels')
+  const perChannel = await Promise.all(
+    channels.map(async (channel) =>
+      chatFiles(
+        channel,
+        // ponytail: 채널마다 최근 메시지 이만큼만 훑는다. 목의 대화는 짧아서 넘칠 일이 없다.
+        await get<ChatMessage>(`/api/channels/${channel.id}/messages?limit=${ARCHIVE_LIMIT}`),
+      ),
+    ),
+  )
+  return perChannel.flat()
 }
 
 /**
@@ -1733,10 +1765,30 @@ data: ${JSON.stringify(data)}
   }),
 
   // ── 첨부 파일 ─────────────────────────────────────────────
-  http.post('/api/files', async ({ request }) => {
+  // 자료실(계약에 아직 없다, README "백엔드에 요청한 것"). 채팅과 문서에 붙은 파일을 올린 지
+  // 최근 순으로 모아 준다. 보는 사람이 받을 수 있는 것만 싣는다.
+  http.get('/api/archive', async ({ request }) => {
     if (!authenticate()) return unauthorized()
+    const raw = new URL(request.url).searchParams.get('limit')
+    const limit = raw === null ? ARCHIVE_LIMIT : Number(raw)
+    if (!Number.isInteger(limit) || limit < 1 || limit > ARCHIVE_LIMIT) {
+      return validationError(`limit 은 1 이상 ${ARCHIVE_LIMIT} 이하의 정수여야 합니다.`)
+    }
+    // 목 저장소(IndexedDB)가 안 열려도 채팅 파일은 나와야 한다.
+    const [chat, stored] = await Promise.all([chatArchive(), listFiles().catch(() => [])])
+    // 살아 있는 문서의 파일만 싣는다. 휴지통에 든 문서의 파일은 뺀다.
+    const docs = docFiles(stored, (docId) => aliveDoc(docId)?.title)
+    return HttpResponse.json({ items: newestFirst([...chat, ...docs], limit) })
+  }),
 
-    const file = (await request.formData()).get('file')
+  http.post('/api/files', async ({ request }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+
+    const form = await request.formData()
+    const file = form.get('file')
+    // 어느 문서에서 올렸는지. 계약에 아직 없고 목이 먼저 받는다. 자료실의 출처가 된다.
+    const docId = form.get('doc_id')
     if (!(file instanceof File)) {
       return HttpResponse.json({ detail: '파일이 없습니다.' }, { status: 400 })
     }
@@ -1745,7 +1797,11 @@ data: ${JSON.stringify(data)}
       return HttpResponse.json({ detail: '10MB 이하 파일만 올릴 수 있습니다.' }, { status: 413 })
     }
 
-    const stored = await saveFile(file)
+    const stored = await saveFile(file, 'f', {
+      doc_id: typeof docId === 'string' ? docId : null,
+      uploaded_by: { id: user.id, name: user.name },
+      created_at: new Date().toISOString(),
+    })
     return HttpResponse.json(
       { id: stored.id, url: `/api/files/${stored.id}`, name: stored.name, size: stored.size },
       { status: 201 },

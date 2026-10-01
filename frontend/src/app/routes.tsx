@@ -1,6 +1,6 @@
 import { lazy, Suspense } from 'react'
 import { Route, Routes } from 'react-router'
-import { CRM_ENABLED } from '@/app/navigation'
+import { ARCHIVE_ENABLED, CRM_ENABLED } from '@/app/navigation'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { Spinner } from '@/components/ui/Spinner'
 import { LoginPage } from '@/features/auth/LoginPage'
@@ -10,6 +10,7 @@ import { AiPage } from '@/pages/AiPage'
 import { ApprovalDetailPage } from '@/pages/ApprovalDetailPage'
 import { ApprovalNewPage } from '@/pages/ApprovalNewPage'
 import { ApprovalsPage } from '@/pages/ApprovalsPage'
+import { ArchivePage } from '@/pages/ArchivePage'
 import { AttendancePage } from '@/pages/AttendancePage'
 import { BoardPage } from '@/pages/BoardPage'
 import { BoardPostPage } from '@/pages/BoardPostPage'
@@ -86,6 +87,8 @@ export function AppRoutes() {
                 <Route path="crm/orgs/:orgId" element={<CrmOrgPage />} />
               </>
             )}
+            {/* 자료실도 서버 경로가 생길 때까지 개발 빌드에서만 연다(navigation.ts `ARCHIVE_ENABLED`). */}
+            {ARCHIVE_ENABLED && <Route path="archive" element={<ArchivePage />} />}
             <Route path="notifications" element={<NotificationsPage />} />
             <Route path="settings" element={<SettingsPage />} />
             {/* 임원 전용. 화면이 등급을 보고 막고, 실제 차단은 서버 403 이다. */}

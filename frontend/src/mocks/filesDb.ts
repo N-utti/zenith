@@ -16,7 +16,16 @@ export interface StoredFile {
   type: string
   size: number
   blob: Blob
+  /**
+   * 누가 언제 어느 문서에서 올렸는지. 자료실(`archiveDb.ts`)이 읽는다. 이 기록이 생기기 전에
+   * 올린 파일에는 없다. 결재 첨부는 남기지 않는다(자료실에 안 실린다).
+   */
+  doc_id?: string | null
+  uploaded_by?: { id: string; name: string }
+  created_at?: string
 }
+
+type UploadRecord = Pick<StoredFile, 'doc_id' | 'uploaded_by' | 'created_at'>
 
 let dbPromise: Promise<IDBDatabase> | null = null
 
@@ -53,16 +62,26 @@ function run<T>(
  * 앞머리는 누구의 파일인지 가른다. `f` 는 문서 이미지(로그인이면 누구나), `a` 는 결재 첨부
  * (문서 열람 권한). 공용 `/api/files` 가 `a` 를 내주면 결재 판정을 건너뛰게 된다.
  */
-export async function saveFile(file: File, prefix: 'f' | 'a' = 'f'): Promise<StoredFile> {
+export async function saveFile(
+  file: File,
+  prefix: 'f' | 'a' = 'f',
+  record: UploadRecord = {},
+): Promise<StoredFile> {
   const stored: StoredFile = {
     id: `${prefix}-${crypto.randomUUID()}`,
     name: file.name,
     type: file.type,
     size: file.size,
     blob: file,
+    ...record,
   }
   await run('readwrite', (store) => store.put(stored))
   return stored
+}
+
+/** 올라온 파일 전부. 자료실이 쓴다. */
+export function listFiles(): Promise<StoredFile[]> {
+  return run('readonly', (store) => store.getAll() as IDBRequest<StoredFile[]>)
 }
 
 export function readFile(id: string): Promise<StoredFile | undefined> {
