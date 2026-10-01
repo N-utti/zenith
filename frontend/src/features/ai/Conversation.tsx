@@ -1,6 +1,5 @@
-import { Fragment, useEffect, useRef } from 'react'
+import { Fragment, memo, useEffect, useRef, useState } from 'react'
 import { Check, Copy, FilePlus2, RefreshCw, Sparkles, ThumbsUp } from 'lucide-react'
-import { useState } from 'react'
 import { cn } from '@/lib/cn'
 import { useToast } from '@/components/ui/ToastContext'
 import { NewDocModal } from '@/features/docs/NewDocModal'
@@ -174,79 +173,31 @@ export function Conversation({
   return (
     <div className="flex-1 overflow-y-auto px-5 py-5">
       <div className="mx-auto flex max-w-3xl flex-col gap-5">
-        {messages.map((message, index) =>
-          message.role === 'user' ? (
-            <div key={message.id} className="flex justify-end">
-              <p className="bg-accent text-on-accent max-w-[78%] rounded-xl rounded-tr-sm px-3.5 py-2.5 text-sm leading-relaxed">
-                {message.body}
-              </p>
-            </div>
-          ) : (
-            <div key={message.id} className="flex gap-3">
-              <span className="bg-accent-soft text-accent grid size-8 shrink-0 place-items-center rounded-lg">
-                <Sparkles className="size-4" />
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="text-fg text-[13px] font-semibold">AI 어시스턴트</p>
-                <p className="text-fg mt-1.5 text-sm leading-[1.75]">
-                  {withCitations(message, focus?.messageId === message.id ? focus.n : null, (n) =>
-                    onCite({ messageId: message.id, n }),
-                  )}
+        {messages.map((message, index) => {
+          if (message.role === 'user') {
+            return (
+              <div key={message.id} className="flex justify-end">
+                <p className="bg-accent text-on-accent max-w-[78%] rounded-xl rounded-tr-sm px-3.5 py-2.5 text-sm leading-relaxed">
+                  {message.body}
                 </p>
-                {message.error && (
-                  <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
-                    <p className="text-danger">{message.error}</p>
-                    {index === messages.length - 1 && (
-                      <button
-                        type="button"
-                        onClick={onRetry}
-                        className="text-subtle hover:text-fg flex cursor-pointer items-center gap-1 transition-colors"
-                      >
-                        <RefreshCw className="size-3" />
-                        다시 시도
-                      </button>
-                    )}
-                  </div>
-                )}
-                {!message.error && !(streaming && index === messages.length - 1) && (
-                  <AnswerActions
-                    id={message.id}
-                    body={message.body}
-                    question={
-                      messages[index - 1]?.role === 'user' ? messages[index - 1].body : undefined
-                    }
-                  />
-                )}
-
-                {/* lg 미만에는 우측 근거 패널이 없다. 따라갈 수 없는 각주를 남기지 않는다. */}
-                {(message.citations?.length ?? 0) > 0 && (
-                  <div className="mt-3 lg:hidden">
-                    <p className="text-subtle mb-2 text-[11px] font-bold">
-                      근거 문서 {message.citations?.length}
-                    </p>
-                    <ul className="space-y-2">
-                      {message.citations?.map((source) => (
-                        <li key={source.n}>
-                          <SourceCard
-                            source={source}
-                            activeTick={
-                              focus?.messageId === message.id && focus.n === source.n
-                                ? focus.tick
-                                : undefined
-                            }
-                          />
-                        </li>
-                      ))}
-                    </ul>
-                    <div className="mt-2">
-                      <ExcludedNote />
-                    </div>
-                  </div>
-                )}
               </div>
-            </div>
-          ),
-        )}
+            )
+          }
+          const last = index === messages.length - 1
+          const focused = focus?.messageId === message.id ? focus : null
+          return (
+            <Answer
+              key={message.id}
+              message={message}
+              question={messages[index - 1]?.role === 'user' ? messages[index - 1].body : undefined}
+              focusN={focused?.n ?? null}
+              focusTick={focused?.tick}
+              growing={streaming && last}
+              onCite={onCite}
+              onRetry={last ? onRetry : undefined}
+            />
+          )
+        })}
 
         {generating && <Generating />}
         <div ref={endRef} />
@@ -254,3 +205,90 @@ export function Conversation({
     </div>
   )
 }
+
+/**
+ * 답변 말풍선 하나. `memo` 라 받은 값이 그대로면 다시 그리지 않는다.
+ *
+ * 답변은 조각이 올 때마다 스레드가 새 객체가 되어 화면 전체가 다시 돈다. 말풍선을 나눠 두지
+ * 않으면 조각 하나에 지난 답변 전부(각주·근거 카드·액션)를 다시 그려, 대화가 길수록 느려진다.
+ *
+ * 그래서 넘기는 값은 이 답변의 것이 바뀔 때만 바뀌어야 한다. `message` 는 자라는 답변만 새
+ * 객체가 되고(`patchMessage`), 눌린 각주는 이 답변의 것만 번호와 일련번호로 받는다.
+ * `onCite` 는 `AiPage` 가 붙잡아 두고, `onRetry` 는 마지막 답변에만 준다.
+ */
+const Answer = memo(function Answer({
+  message,
+  question,
+  focusN,
+  focusTick,
+  growing,
+  onCite,
+  onRetry,
+}: {
+  message: AiMessage
+  /** 이 답변을 부른 질문. 문서로 저장할 때 제목이 된다. */
+  question: string | undefined
+  /** 이 답변에서 눌린 각주 번호. 눌린 각주가 없거나 다른 답변의 것이면 `null`. */
+  focusN: number | null
+  /** 그 각주의 클릭 일련번호(`CitationFocus.tick`). */
+  focusTick: number | undefined
+  /** 아직 자라는 중. 액션은 다 받은 뒤에 보인다. */
+  growing: boolean
+  onCite: (focus: Omit<CitationFocus, 'tick'>) => void
+  /** 마지막 답변에만 온다. 실패했을 때 같은 질문을 다시 보낸다. */
+  onRetry: (() => void) | undefined
+}) {
+  return (
+    <div className="flex gap-3">
+      <span className="bg-accent-soft text-accent grid size-8 shrink-0 place-items-center rounded-lg">
+        <Sparkles className="size-4" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-fg text-[13px] font-semibold">AI 어시스턴트</p>
+        <p className="text-fg mt-1.5 text-sm leading-[1.75]">
+          {withCitations(message, focusN, (n) => onCite({ messageId: message.id, n }))}
+        </p>
+        {message.error && (
+          <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
+            <p className="text-danger">{message.error}</p>
+            {onRetry && (
+              <button
+                type="button"
+                onClick={onRetry}
+                className="text-subtle hover:text-fg flex cursor-pointer items-center gap-1 transition-colors"
+              >
+                <RefreshCw className="size-3" />
+                다시 시도
+              </button>
+            )}
+          </div>
+        )}
+        {!message.error && !growing && (
+          <AnswerActions id={message.id} body={message.body} question={question} />
+        )}
+
+        {/* lg 미만에는 우측 근거 패널이 없다. 따라갈 수 없는 각주를 남기지 않는다. */}
+        {(message.citations?.length ?? 0) > 0 && (
+          <div className="mt-3 lg:hidden">
+            <p className="text-subtle mb-2 text-[11px] font-bold">
+              근거 문서 {message.citations?.length}
+            </p>
+            <ul className="space-y-2">
+              {message.citations?.map((source) => (
+                <li key={source.n}>
+                  <SourceCard
+                    source={source}
+                    activeTick={focusN === source.n ? focusTick : undefined}
+                  />
+                </li>
+              ))}
+            </ul>
+            <div className="mt-2">
+              <ExcludedNote />
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+})
