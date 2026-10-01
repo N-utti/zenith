@@ -10,8 +10,10 @@
  *
  *   GET  /channels                    사용자별 목록 (안읽음·마지막 메시지 포함)
  *   GET  /channels/:id/messages       최근 메시지
+ *   POST /channels/:id/members        비공개 채널에 사람 더하기 (실서버에 아직 없다)
+ *   DELETE /channels/:id/members/:uid 비공개 채널에서 사람 빼기·나가기 (실서버에 아직 없다)
  *   WS   /ws                          보내는 op: sub · msg · read · typing
- *                                     받는 ev: msg · unread · typing · error
+ *                                     받는 ev: msg · unread · typing · error · channels
  *
  * 보내기·읽음은 REST 가 아니라 소켓 op 이다(04 §4.1). 실서버가 그렇게만 받으므로 릴레이도
  * 같게 맞춘다. 갈라 두면 목 모드에서 되는 것이 실서버에서 405 로 죽는다(이슈 #128).
@@ -32,14 +34,23 @@ const USERS = Object.fromEntries(users.map((u) => [u.id, { id: u.id, name: u.nam
 
 const ALL = Object.keys(USERS)
 
+/** 아는 사용자 id 인가. `USERS[id]` 만 보면 `constructor` 같은 프로토타입 키도 참이 된다. */
+const isUser = (id) => typeof id === 'string' && Object.hasOwn(USERS, id)
+
+/** 없는 채널과 멤버가 아닌 채널을 가르지 않는다(백엔드 `_require_member`). 가르면 비공개 채널의 존재가 샌다. */
+const FORBIDDEN = { detail: '권한이 부족합니다.', code: 'FORBIDDEN' }
+
 /**
  * `memberIds` 는 릴레이 안에서만 쓴다. 밖으로는 `members`(이름까지)로 펼쳐 나간다.
- * @type {{id:string, is_dm:boolean, name:string, memberIds:string[]}[]}
+ * `is_private` 는 실서버에 아직 없다(README "백엔드에 요청한 것"). 릴레이가 먼저 준다.
+ * @type {{id:string, is_dm:boolean, is_private?:boolean, name:string, memberIds:string[]}[]}
  */
 const CHANNELS = [
   { id: 'c-notice', is_dm: false, name: '공지', memberIds: ALL },
   { id: 'c-dev', is_dm: false, name: '개발', memberIds: ALL },
   { id: 'c-random', is_dm: false, name: '잡담', memberIds: ALL },
+  // 비공개 채널. u-1 진수연과 u-3 홍성완만 본다. u-2 로 들어가면 목록에 없어야 한다.
+  { id: 'c-hr', is_dm: false, is_private: true, name: '인사', memberIds: ['u-1', 'u-3'] },
   { id: 'dm-u1-u2', is_dm: true, name: '', memberIds: ['u-1', 'u-2'] },
   // u-5 안재호는 MSW 근태 시드에서 오늘 재택이다. DM 행의 근무 상태 표시를 보여 주는 용도.
   { id: 'dm-u2-u5', is_dm: true, name: '', memberIds: ['u-2', 'u-5'] },
@@ -163,6 +174,8 @@ function channelView(channel, viewerId) {
     id: channel.id,
     name: channelName(channel, viewerId),
     is_dm: channel.is_dm,
+    // 이 칸이 실려 오는지로 화면이 「비공개로 만들기」를 그릴지 정한다(`supportsPrivate`).
+    is_private: channel.is_private === true,
     // 백엔드는 이름순으로 준다. DM 상대를 고르는 화면이 이 순서를 그대로 그린다.
     members: channel.memberIds
       .map((id) => USERS[id])
@@ -449,7 +462,7 @@ export async function handleChatRequest(req, res, url) {
   const viewerId = sessionUserId(req)
 
   if (path === '/channels' && req.method === 'GET') {
-    if (!USERS[viewerId]) return json(res, 401, { detail: '알 수 없는 사용자입니다.' })
+    if (!isUser(viewerId)) return json(res, 401, { detail: '알 수 없는 사용자입니다.' })
     const items = CHANNELS.filter((c) => c.memberIds.includes(viewerId))
       .map((c) => channelView(c, viewerId))
       // 최근 대화가 위로. 대화가 없는 채널은 아래로 밀리고, 그 안에서는 이름순(백엔드와 같다).
@@ -463,14 +476,15 @@ export async function handleChatRequest(req, res, url) {
   }
 
   /**
-   * 공개 채널 또는 DM 생성. 백엔드 `create_channel` 과 같은 규칙이다.
+   * 채널 또는 DM 생성. 공개 채널과 DM 은 백엔드 `create_channel` 과 같은 규칙이다.
+   * 비공개 채널(`is_private` + `member_ids`)은 백엔드에 아직 없어 릴레이가 규칙을 먼저 정했다.
    *
    * 공개 채널은 만들 때 **전원**을 멤버로 넣는다(15명 사내, 초대·탈퇴 없음). 백엔드는 비활성
    * 계정도 넣는다. 복직하면 그 사이 생긴 채널도 보여야 하기 때문이다.
    * DM 은 두 사람짜리 채널이고 같은 두 사람의 DM 은 하나만 둔다.
    */
   if (path === '/channels' && req.method === 'POST') {
-    if (!USERS[viewerId]) {
+    if (!isUser(viewerId)) {
       return json(res, 401, { detail: '알 수 없는 사용자입니다.', code: 'AUTH_REQUIRED' })
     }
 
@@ -521,7 +535,42 @@ export async function handleChatRequest(req, res, url) {
         code: 'VALIDATION',
       })
     }
-    if (CHANNELS.some((c) => !c.is_dm && c.name === name)) {
+
+    // 비공개 채널. 만든 사람과 고른 사람만 멤버다. 혼자 만들고 나중에 사람을 더해도 된다.
+    // 두 칸은 같이 와야 한다. 한쪽만 오거나 모양이 틀린 요청을 무시하면 전원이 들어오는
+    // 공개 채널이 만들어지고, 보낸 쪽은 그것을 비공개로 안다.
+    const { is_private: isPrivate, member_ids: ids } = payload ?? {}
+    if (isPrivate !== undefined && typeof isPrivate !== 'boolean') {
+      return json(res, 422, { detail: 'is_private 는 참·거짓이어야 한다.', code: 'VALIDATION' })
+    }
+    if ((isPrivate === true) !== (ids !== undefined)) {
+      return json(res, 422, {
+        detail: 'member_ids 는 is_private: true 와 같이 보낸다.',
+        code: 'VALIDATION',
+      })
+    }
+    if (isPrivate === true) {
+      if (!Array.isArray(ids)) {
+        return json(res, 422, { detail: 'member_ids 는 배열이어야 한다.', code: 'VALIDATION' })
+      }
+      if (!ids.every(isUser)) {
+        return json(res, 422, { detail: '없는 사용자입니다.', code: 'VALIDATION' })
+      }
+      // 이름 중복을 보지 않는다. 409 를 주면 안 보이는 채널이 있다는 사실이 샌다.
+      const channel = {
+        id: `c-${nextChannelId++}`,
+        is_dm: false,
+        is_private: true,
+        name,
+        memberIds: [...new Set([viewerId, ...ids])],
+      }
+      CHANNELS.push(channel)
+      publishTo(channel.memberIds, { ev: 'channels' })
+      return json(res, 201, createdView(channel, viewerId))
+    }
+
+    // 공개 채널끼리만 견준다. 비공개 채널과 이름이 겹치는 것은 막지 않는다(위와 같은 이유).
+    if (CHANNELS.some((c) => !c.is_dm && !c.is_private && c.name === name)) {
       return json(res, 409, { detail: '같은 이름의 채널이 있습니다.', code: 'CONFLICT' })
     }
     // `ALL` 을 그대로 참조하면 나중에 멤버를 건드릴 때 시드 채널까지 같이 바뀐다.
@@ -537,7 +586,7 @@ export async function handleChatRequest(req, res, url) {
    */
   const uploadMatch = path.match(/^\/channels\/([^/]+)\/attachments$/)
   if (uploadMatch && req.method === 'POST') {
-    if (!USERS[viewerId]) {
+    if (!isUser(viewerId)) {
       return json(res, 401, { detail: '알 수 없는 사용자입니다.', code: 'AUTH_REQUIRED' })
     }
     const channelId = uploadMatch[1]
@@ -571,7 +620,7 @@ export async function handleChatRequest(req, res, url) {
   /** 첨부 내려받기. 채널 멤버만. 이미지는 inline, 나머지는 내려받기. */
   const downloadMatch = path.match(/^\/channels\/([^/]+)\/attachments\/([^/]+)\/(.+)$/)
   if (downloadMatch && req.method === 'GET') {
-    if (!USERS[viewerId]) {
+    if (!isUser(viewerId)) {
       return json(res, 401, { detail: '알 수 없는 사용자입니다.', code: 'AUTH_REQUIRED' })
     }
     const [, channelId, fileId, rawName] = downloadMatch
@@ -602,16 +651,64 @@ export async function handleChatRequest(req, res, url) {
     return res.end(found.data)
   }
 
+  /**
+   * 비공개 채널의 멤버를 더하고 뺀다. 실서버에 아직 없는 경로라 규칙을 릴레이가 먼저 정했다.
+   *
+   * 멤버면 누구나 더하고 뺄 수 있다(채널에 주인이 없다). 자기 자신을 빼는 것이 나가기다.
+   * 공개 채널은 전원이고 DM 은 두 사람으로 고정이라 둘 다 422.
+   * 바뀐 뒤에는 전·후 멤버 모두에게 `channels` 이벤트를 보낸다. 빠진 사람의 목록에서 채널이
+   * 사라지고, 들어온 사람의 목록에 채널이 생겨야 한다.
+   */
+  const membersMatch = path.match(/^\/channels\/([^/]+)\/members(?:\/([^/]+))?$/)
+  if (membersMatch) {
+    // 본문을 권한 확인보다 먼저 읽는다. 확인한 뒤에 기다리면, 그 사이 빠진 사람의 요청이
+    // 옛 명단 위에 반영돼 그 사람이 되살아난다. 실서버는 한 트랜잭션 안에서 해야 한다.
+    const body = req.method === 'POST' ? await readBody(req) : undefined
+    if (!isUser(viewerId)) {
+      return json(res, 401, { detail: '알 수 없는 사용자입니다.', code: 'AUTH_REQUIRED' })
+    }
+    const channel = CHANNELS.find((c) => c.id === membersMatch[1])
+    if (!channel || !channel.memberIds.includes(viewerId)) return json(res, 403, FORBIDDEN)
+    if (!channel.is_private) {
+      return json(res, 422, {
+        detail: '비공개 채널만 멤버를 바꿀 수 있습니다.',
+        code: 'VALIDATION',
+      })
+    }
+    const before = channel.memberIds
+
+    if (req.method === 'POST' && membersMatch[2] === undefined) {
+      const ids = body?.user_ids
+      if (!Array.isArray(ids) || ids.length === 0 || !ids.every(isUser)) {
+        return json(res, 422, { detail: '없는 사용자입니다.', code: 'VALIDATION' })
+      }
+      // 이미 멤버인 사람은 건너뛴다(같은 요청을 두 번 보내도 결과가 같다).
+      channel.memberIds = [...new Set([...before, ...ids])]
+      publishTo(channel.memberIds, { ev: 'channels' })
+      return json(res, 200, channelView(channel, viewerId))
+    }
+
+    if (req.method === 'DELETE' && membersMatch[2] !== undefined) {
+      const target = membersMatch[2]
+      if (!before.includes(target)) {
+        return json(res, 404, { detail: '이 채널의 멤버가 아닙니다.', code: 'NOT_FOUND' })
+      }
+      channel.memberIds = before.filter((id) => id !== target)
+      // 마지막 사람이 나가면 아무에게도 안 보이는 채널이 된다. 릴레이는 지운다.
+      if (channel.memberIds.length === 0) CHANNELS.splice(CHANNELS.indexOf(channel), 1)
+      publishTo(before, { ev: 'channels' })
+      res.writeHead(204)
+      return res.end()
+    }
+  }
+
   const messagesMatch = path.match(/^\/channels\/([^/]+)\/messages$/)
   if (messagesMatch) {
     const channelId = messagesMatch[1]
     const channel = CHANNELS.find((c) => c.id === channelId)
-    if (!channel) return json(res, 404, { detail: '채널을 찾을 수 없습니다.' })
+    if (!channel || !channel.memberIds.includes(viewerId)) return json(res, 403, FORBIDDEN)
 
     if (req.method === 'GET') {
-      if (!channel.memberIds.includes(viewerId)) {
-        return json(res, 403, { detail: '이 채널의 멤버가 아닙니다.' })
-      }
       const limit = Number(url.searchParams.get('limit') ?? 50)
       const list = messages.get(channelId) ?? []
       // 봉투도 백엔드와 같다(`MessagePage`). 릴레이는 전부 메모리에 있어 더 과거가 없다.

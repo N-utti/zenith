@@ -1,6 +1,6 @@
 import { useRef, useState, type ReactNode } from 'react'
 import { NavLink, useLocation } from 'react-router'
-import { AtSign, Pencil, Plus, X } from 'lucide-react'
+import { AtSign, Lock, Pencil, Plus, X } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { useFocusTrap } from '@/lib/useFocusTrap'
 import { SECONDARY_NAV, TOP_NAV, visibleNav, type NavItem } from '@/app/navigation'
@@ -90,10 +90,13 @@ function ChannelRow({ channel, onNavigate }: { channel: ChatChannel; onNavigate?
       onClick={onNavigate}
       className={({ isActive }) => cn(ROW, 'group', isActive ? ROW_ACTIVE : ROW_IDLE)}
     >
-      {!channel.is_dm ? (
-        <span className="text-subtle shrink-0">#</span>
-      ) : (
+      {channel.is_dm ? (
         <AtSign className="text-subtle size-4 shrink-0" />
+      ) : channel.is_private ? (
+        <Lock role="img" aria-label="비공개" className="text-subtle size-3.5 shrink-0" />
+      ) : (
+        // 자물쇠와 같은 폭을 준다. 글자 폭대로 두면 공개·비공개 행의 이름이 서로 어긋난다.
+        <span className="text-subtle w-3.5 shrink-0 text-center">#</span>
       )}
       <span className="flex min-w-0 items-center gap-1.5">
         <span className="truncate">{channel.name}</span>

@@ -2,15 +2,18 @@ import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { Button } from '@/components/ui/Button'
 import { Avatar } from '@/components/ui/Avatar'
+import { Checkbox } from '@/components/ui/Checkbox'
 import { Field } from '@/components/ui/Field'
 import { Input } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
 import { Spinner } from '@/components/ui/Spinner'
 import { useToast } from '@/components/ui/ToastContext'
+import { useCurrentUser } from '@/features/auth/AuthContext'
 import { ApiError } from '@/lib/api'
 import { hueOf } from '@/lib/avatar'
-import { useChannels, useCreateChannel } from './api'
+import { supportsPrivate, useChannels, useCreateChannel, type ChannelCreateInput } from './api'
 import { useColleagues } from '@/features/people/colleagues'
+import { PersonChip } from '@/features/people/PersonChip'
 
 /** 백엔드 `ChannelCreateIn.name` 의 제약(`NonBlank`, 100자). */
 const NAME_MAX = 100
@@ -37,10 +40,13 @@ export function NewChatModal({
 }) {
   const navigate = useNavigate()
   const toast = useToast()
+  const me = useCurrentUser()
   const { data } = useChannels()
   const create = useCreateChannel()
 
   const [name, setName] = useState('')
+  const [isPrivate, setIsPrivate] = useState(false)
+  const [memberIds, setMemberIds] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
 
   const { people, isPending: peoplePending, isError: peopleError } = useColleagues()
@@ -61,17 +67,33 @@ export function NewChatModal({
     onClose()
   }
 
-  const submit = (input: { name: string } | { dm_user_id: string }) => {
+  const submit = (input: ChannelCreateInput) => {
     setError(null)
     create.mutate(input, {
       onSuccess: (channel) => {
         onCreated()
-        // DM 은 이미 있으면 그것을 돌려준다. 어느 쪽이든 그 대화로 들어간다.
-        toast.success(
-          'dm_user_id' in input
-            ? `${channel.name} 님과의 대화입니다.`
-            : `#${channel.name} 채널을 만들었습니다.`,
-        )
+        // 비공개를 청했으면 돌아온 채널을 대조한다. 비공개 표시가 없거나 고르지 않은 사람이 들어
+        // 있으면 서버가 요청의 칸을 버렸거나 반만 따른 것이다. 채널은 이미 생겼고 지울 방법이
+        // 없다. 성공이라고 말하지 않고, 놓치지 않게 오래 띄운다.
+        const asked = new Set([me.id, ...(input.member_ids ?? [])])
+        const leaked =
+          input.is_private === true &&
+          (channel.is_private !== true || channel.members.some((m) => !asked.has(m.id)))
+        if (leaked) {
+          toast.error(
+            `${channel.name} 채널이 고른 대로 만들어지지 않았습니다. 고르지 않은 사람도 볼 수 있습니다.`,
+            { durationMs: 60_000 },
+          )
+        } else {
+          // DM 은 이미 있으면 그것을 돌려준다. 어느 쪽이든 그 대화로 들어간다.
+          toast.success(
+            'dm_user_id' in input
+              ? `${channel.name} 님과의 대화입니다.`
+              : channel.is_private
+                ? `${channel.name} 비공개 채널을 만들었습니다.`
+                : `#${channel.name} 채널을 만들었습니다.`,
+          )
+        }
         void navigate(`/chat/${channel.id}`)
       },
       // 실패는 토스트가 아니라 입력 옆에 낸다. 고칠 곳이 이 폼 안에 있다(같은 이름의 채널 409).
@@ -127,23 +149,41 @@ export function NewChatModal({
   }
 
   const trimmed = name.trim()
+  // 서버가 비공개를 모르면 고르는 자리를 그리지 않는다. 보내면 공개 채널이 된다(`supportsPrivate`).
+  const canPrivate = supportsPrivate(data?.items ?? [])
+  // 체크 상태만 보지 않는다. 열어 둔 사이 서버가 칸을 거두면 체크만 남아 요청이 나간다.
+  const priv = canPrivate && isPrivate
+  const ready = trimmed !== '' && !create.isPending
+  // 혼자 만들어도 된다. 사람은 나중에 채널 머리말에서 더한다.
+  // 고른 뒤 명단에서 사라진 사람(그 사이 비활성)은 칩도 없으니 보내지 않는다.
+  const createChannel = () =>
+    submit(
+      priv
+        ? {
+            name: trimmed,
+            is_private: true,
+            member_ids: memberIds.filter((id) => people.some((person) => person.id === id)),
+          }
+        : { name: trimmed },
+    )
+
   return (
     <Modal
       open
       onClose={close}
       title="새 채널"
-      description="공개 채널입니다. 만들면 모두가 들어옵니다."
+      description={
+        priv
+          ? '비공개 채널입니다. 고른 사람만 들어옵니다.'
+          : '공개 채널입니다. 만들면 모두가 들어옵니다.'
+      }
       size="sm"
       footer={
         <>
           <Button variant="secondary" size="sm" onClick={close} disabled={create.isPending}>
             취소
           </Button>
-          <Button
-            size="sm"
-            onClick={() => submit({ name: trimmed })}
-            disabled={!trimmed || create.isPending}
-          >
+          <Button size="sm" onClick={createChannel} disabled={!ready}>
             {create.isPending ? <Spinner className="border-t-on-accent" /> : '만들기'}
           </Button>
         </>
@@ -163,14 +203,61 @@ export function NewChatModal({
             placeholder="예: 디자인"
             onKeyDown={(e) => {
               // 한글 조합 확정 Enter 는 거른다(팔레트·작성창과 같은 규약).
-              if (e.key === 'Enter' && !e.nativeEvent.isComposing && trimmed && !create.isPending) {
+              if (e.key === 'Enter' && !e.nativeEvent.isComposing && ready) {
                 e.preventDefault()
-                submit({ name: trimmed })
+                createChannel()
               }
             }}
           />
         )}
       </Field>
+
+      {canPrivate && (
+        <Checkbox
+          className="mt-4"
+          label="비공개로 만들기"
+          description="사람은 만든 뒤에도 더하고 뺄 수 있습니다."
+          checked={isPrivate}
+          disabled={create.isPending}
+          onChange={(e) => setIsPrivate(e.target.checked)}
+        />
+      )}
+
+      {priv && (
+        <Field
+          className="mt-4"
+          label="함께할 사람"
+          error={peopleError ? '사람 목록을 불러오지 못했습니다.' : null}
+        >
+          {(slot) => (
+            <div
+              role="group"
+              aria-label="함께할 사람"
+              aria-describedby={slot['aria-describedby']}
+              className="flex flex-wrap gap-1.5"
+            >
+              {peoplePending && <Spinner />}
+              {!peoplePending && !peopleError && people.length === 0 && (
+                <p className="text-subtle text-sm">고를 수 있는 사람이 없습니다.</p>
+              )}
+              {people.map((person) => (
+                <PersonChip
+                  key={person.id}
+                  person={person}
+                  picked={memberIds.includes(person.id)}
+                  onToggle={() =>
+                    setMemberIds((ids) =>
+                      ids.includes(person.id)
+                        ? ids.filter((id) => id !== person.id)
+                        : [...ids, person.id],
+                    )
+                  }
+                />
+              ))}
+            </div>
+          )}
+        </Field>
+      )}
     </Modal>
   )
 }

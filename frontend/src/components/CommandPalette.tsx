@@ -5,6 +5,7 @@ import {
   CornerDownLeft,
   FileText,
   Hash,
+  Lock,
   MessagesSquare,
   Megaphone,
   Search,
@@ -283,7 +284,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
               </p>
               {rooms.map((room, i) => {
                 const index = navItems.length + i
-                const Icon = room.is_dm ? AtSign : Hash
+                const Icon = room.is_dm ? AtSign : room.is_private ? Lock : Hash
                 return (
                   <button
                     key={room.id}
@@ -303,7 +304,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
                     <Icon className="size-4.5 shrink-0" />
                     <span className="truncate">{room.name}</span>
                     <span className="text-subtle shrink-0 text-[11px]">
-                      {room.is_dm ? 'DM' : '채널'}
+                      {room.is_dm ? 'DM' : room.is_private ? '비공개 채널' : '채널'}
                     </span>
                     {index === active && <CornerDownLeft className="ml-auto size-3.5 shrink-0" />}
                   </button>

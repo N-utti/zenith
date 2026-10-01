@@ -1,7 +1,6 @@
 import { useRef, useState } from 'react'
 import { Paperclip } from 'lucide-react'
 import { Link, useNavigate, useSearchParams } from 'react-router'
-import { Avatar } from '@/components/ui/Avatar'
 import { BackLink } from '@/components/ui/BackLink'
 import { Button } from '@/components/ui/Button'
 import { Card, CardHeader } from '@/components/ui/Card'
@@ -31,10 +30,9 @@ import type { ApprovalAttachment } from '@/features/approvals/types'
 import { MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES } from '@/features/chat/api'
 import { useMyArrangements } from '@/features/attendance/api'
 import { byTier, useColleagues } from '@/features/people/colleagues'
+import { PersonChip } from '@/features/people/PersonChip'
 import { useCurrentUser } from '@/features/auth/AuthContext'
 import { ApiError } from '@/lib/api'
-import { hueOf } from '@/lib/avatar'
-import { cn } from '@/lib/cn'
 
 /**
  * 기안 작성(13 SCR-APV-01). v1 최소판은 일반 기안 한 종류다. 근태 4종은 근태 화면의 신청이 곧 기안이다.
@@ -306,26 +304,14 @@ export function ApprovalNewPage() {
                         </span>
                       )}
                       <div className="flex flex-wrap gap-1.5">
-                        {group.people.map((each) => {
-                          const picked = referenceIds.includes(each.id)
-                          return (
-                            <button
-                              key={each.id}
-                              type="button"
-                              aria-pressed={picked}
-                              onClick={() => toggleReference(each.id)}
-                              className={cn(
-                                'flex cursor-pointer items-center gap-1.5 rounded-full border py-1 pr-2.5 pl-1 text-xs transition-colors',
-                                picked
-                                  ? 'border-accent bg-accent-soft text-accent'
-                                  : 'border-line text-muted hover:bg-surface-hover',
-                              )}
-                            >
-                              <Avatar name={each.name} hue={hueOf(each.id)} size="sm" />
-                              {each.name}
-                            </button>
-                          )
-                        })}
+                        {group.people.map((each) => (
+                          <PersonChip
+                            key={each.id}
+                            person={each}
+                            picked={referenceIds.includes(each.id)}
+                            onToggle={() => toggleReference(each.id)}
+                          />
+                        ))}
                       </div>
                     </div>
                   ))}

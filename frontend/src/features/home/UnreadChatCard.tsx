@@ -1,10 +1,11 @@
 import { Link } from 'react-router'
-import { Hash } from 'lucide-react'
+import { Hash, Lock } from 'lucide-react'
 import { Avatar } from '@/components/ui/Avatar'
 import { hueOf } from '@/lib/avatar'
 import { Card, CardEmpty } from '@/components/ui/Card'
 import { SkeletonRows } from '@/components/ui/Skeleton'
 import { HomeSection } from './HomeSection'
+import { useChannels } from '@/features/chat/api'
 import { useUnreadChannels } from './api'
 
 /**
@@ -14,6 +15,9 @@ import { useUnreadChannels } from './api'
  */
 export function UnreadChatCard() {
   const { data: unread, isPending, isError, refetch } = useUnreadChannels()
+  // 홈의 `unread[]` 에는 비공개 여부가 없다. 사이드바가 이미 받아 둔 채널 목록에서 찾는다.
+  const { data: channels } = useChannels()
+  const privateIds = new Set(channels?.items.filter((c) => c.is_private).map((c) => c.id))
 
   return (
     <HomeSection title="안 읽은 메시지" to="/chat">
@@ -46,6 +50,12 @@ export function UnreadChatCard() {
                         hue={hueOf(channel.peer_id ?? channel.name)}
                         size="sm"
                         className="size-6"
+                      />
+                    ) : privateIds.has(channel.channel_id) ? (
+                      <Lock
+                        role="img"
+                        aria-label="비공개"
+                        className="text-subtle size-4 shrink-0"
                       />
                     ) : (
                       <Hash className="text-subtle size-4 shrink-0" />
