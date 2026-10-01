@@ -1,7 +1,7 @@
 import { hueOf } from '@/lib/avatar'
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { EditorContent, useEditor, type Editor } from '@tiptap/react'
-import DragHandle from '@tiptap/extension-drag-handle-react'
+import DragHandle, { type DragHandleProps } from '@tiptap/extension-drag-handle-react'
 import { ChevronDown, GripVertical, MessageSquarePlus, Trash2, WifiOff, X } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router'
 import { Avatar } from '@/components/ui/Avatar'
@@ -213,6 +213,24 @@ function useCoarsePointer(): boolean {
 }
 
 /**
+ * 손잡이가 붙는 블록을 고르는 규칙. 표의 칸 안 문단에는 붙이지 않는다.
+ *
+ * 표는 통째로 한 블록으로 다룬다. 칸마다 손잡이가 뜨면 표 안쪽에서 칸의 글을 가리고, 거기서
+ * 댓글을 달아도 닻은 어차피 표 전체에 걸린다(`blockId.ts` 가 최상위 블록에 단다).
+ * 확장의 기본 규칙은 행과 칸 자체, 머리 칸의 문단만 빼고 본문 칸의 문단은 남긴다. 머리 칸도
+ * 여기에 같이 적어 기본 규칙에 기대지 않는다. 빼고 나면 칸 위에서는 표 전체의 손잡이가 뜬다.
+ */
+const HANDLE_TARGETS: NonNullable<DragHandleProps['nested']> = {
+  rules: [
+    {
+      id: 'tableCellContent',
+      evaluate: ({ parent }) =>
+        parent && ['tableCell', 'tableHeader'].includes(parent.type.name) ? 1000 : 0,
+    },
+  ],
+}
+
+/**
  * 문단 왼쪽에 뜨는 손잡이. 끌어서 블록을 옮기고, 누르면 그 블록을 통째로 고른다.
  * 옆의 말풍선은 그 블록에 댓글을 단다(05 SCR-02).
  */
@@ -228,7 +246,7 @@ function BlockDragHandle({
   return (
     <DragHandle
       editor={editor}
-      nested
+      nested={HANDLE_TARGETS}
       onNodeChange={({ pos }) => {
         posRef.current = pos
       }}
