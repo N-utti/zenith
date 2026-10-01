@@ -6,7 +6,7 @@ import { Modal } from '@/components/ui/Modal'
 import { useToast } from '@/components/ui/ToastContext'
 import { useCurrentUser } from '@/features/auth/AuthContext'
 import { useColleagues } from '@/features/people/colleagues'
-import { PersonChip } from '@/features/people/PersonChip'
+import { PersonChips } from '@/features/people/PersonChip'
 import { ApiError } from '@/lib/api'
 import { hueOf } from '@/lib/avatar'
 import { useAddMembers, useRemoveMember } from './api'
@@ -137,21 +137,16 @@ export function ChannelMembersModal({
         </p>
       ) : (
         <>
-          <div role="group" aria-label="더할 사람" className="flex flex-wrap gap-1.5">
-            {outsiders.map((person) => (
-              <PersonChip
-                key={person.id}
-                person={person}
-                picked={picked.includes(person.id)}
-                onToggle={() =>
-                  setPicked((ids) =>
-                    ids.includes(person.id)
-                      ? ids.filter((id) => id !== person.id)
-                      : [...ids, person.id],
-                  )
-                }
-              />
-            ))}
+          <div role="group" aria-label="더할 사람">
+            <PersonChips
+              people={outsiders}
+              picked={picked}
+              onToggle={(id) =>
+                setPicked((ids) =>
+                  ids.includes(id) ? ids.filter((each) => each !== id) : [...ids, id],
+                )
+              }
+            />
           </div>
           <div className="mt-3 flex justify-end">
             <Button

@@ -29,8 +29,8 @@ import {
 import type { ApprovalAttachment } from '@/features/approvals/types'
 import { MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES } from '@/features/chat/api'
 import { useMyArrangements } from '@/features/attendance/api'
-import { byTier, useColleagues } from '@/features/people/colleagues'
-import { PersonChip } from '@/features/people/PersonChip'
+import { useColleagues } from '@/features/people/colleagues'
+import { PersonChips } from '@/features/people/PersonChip'
 import { useCurrentUser } from '@/features/auth/AuthContext'
 import { ApiError } from '@/lib/api'
 
@@ -290,31 +290,9 @@ export function ApprovalNewPage() {
                 {!peoplePending && !peopleError && people.length === 0 && (
                   <p className="text-subtle text-sm">고를 수 있는 사람이 없습니다.</p>
                 )}
-                {people.length > 0 &&
-                  (byTier(people) ?? [{ label: null, people }]).map((group) => (
-                    <div
-                      key={group.label ?? 'all'}
-                      role={group.label ? 'group' : undefined}
-                      aria-label={group.label ?? undefined}
-                      className="flex gap-2"
-                    >
-                      {group.label && (
-                        <span aria-hidden className="text-subtle w-8 shrink-0 pt-1.5 text-xs">
-                          {group.label}
-                        </span>
-                      )}
-                      <div className="flex flex-wrap gap-1.5">
-                        {group.people.map((each) => (
-                          <PersonChip
-                            key={each.id}
-                            person={each}
-                            picked={referenceIds.includes(each.id)}
-                            onToggle={() => toggleReference(each.id)}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  ))}
+                {people.length > 0 && (
+                  <PersonChips people={people} picked={referenceIds} onToggle={toggleReference} />
+                )}
               </div>
             )}
           </Field>
