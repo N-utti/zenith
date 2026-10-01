@@ -1,4 +1,5 @@
 import type { Schema } from '@/types'
+import type { Notification } from '@/features/notifications/types'
 
 /** 백엔드 `routers/channels.py` 의 `Person`. */
 export type Person = Schema<'Person'>
@@ -23,12 +24,13 @@ export type ChatChannel = Schema<'ChannelOut'>
 /**
  * 서버가 WebSocket 으로 밀어 주는 이벤트(04 §4.1). 봉투 키는 `ev` 이고 필드는 snake_case 다.
  *
- * `presence`(재실)·`notice`(알림)도 같은 소켓으로 오지만 여기에 없다. 받을 화면이 없어서다.
- * 재실은 근태 모듈이 판정하고(`components/layout/WorkStatus.tsx`), 알림함은 아직 소켓을 읽지
- * 않고 `GET /me/notifications` 만 본다. 그래서 둘은 받아서 버린다. 화면이 생기면 union 에 더한다.
+ * `presence`(재실)도 같은 소켓으로 오지만 여기에 없다. 받을 화면이 없어서 받아서 버린다.
+ * 재실은 근태 모듈이 판정한다(`WorkStatus.tsx`). 화면이 생기면 union 에 더한다.
  */
 export type ChatEvent =
   | { ev: 'msg'; channel_id: string; message: ChatMessage }
+  /** 알림 행 하나(`realtime/chat.py` 의 `push_notice`). 멘션·댓글·새 글이 생긴 순간에 온다. */
+  | ({ ev: 'notice' } & Pick<Notification, 'id' | 'kind' | 'payload' | 'created_at'>)
   /** 내 안읽음 숫자. 새 메시지 때는 사람마다 자기 숫자, `read` 뒤에는 본인에게 0. */
   | { ev: 'unread'; channel_id: string; count: number }
   | { ev: 'typing'; channel_id: string; user_id: string; name: string }

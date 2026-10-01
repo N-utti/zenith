@@ -12,6 +12,7 @@ import { useHasDraft } from '@/features/chat/drafts'
 import { NewChatModal } from '@/features/chat/NewChatModal'
 import { WorkStatus } from '@/features/chat/WorkStatus'
 import type { ChatChannel } from '@/features/chat/types'
+import { useUnreadNotificationCount } from '@/features/notifications/api'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { MaskedRow } from '@/components/ui/MaskedRow'
@@ -45,7 +46,27 @@ function AddButton({ label, onClick }: { label: string; onClick: () => void }) {
   )
 }
 
-function NavRow({ item, onNavigate }: { item: NavItem; onNavigate?: () => void }) {
+/** 안 읽은 개수 알약. 채널 행과 「받은 알림」 행이 같은 모양을 쓴다. */
+function UnreadPill({ count }: { count: number }) {
+  return (
+    <span className="bg-muted text-surface ml-auto shrink-0 rounded-full px-1.5 text-[11px] font-bold">
+      {/* 낭독기가 앞의 이름과 붙여 읽지 않게 끊는다("받은 알림3개" 가 아니라 "받은 알림, 3개"). */}
+      <span className="sr-only">, </span>
+      {count}
+      <span className="sr-only">개 안 읽음</span>
+    </span>
+  )
+}
+
+function NavRow({
+  item,
+  unread = 0,
+  onNavigate,
+}: {
+  item: NavItem
+  unread?: number
+  onNavigate?: () => void
+}) {
   const Icon = item.icon
   return (
     <NavLink
@@ -56,6 +77,7 @@ function NavRow({ item, onNavigate }: { item: NavItem; onNavigate?: () => void }
     >
       <Icon className="size-4 shrink-0" strokeWidth={2} />
       <span className="truncate">{item.label}</span>
+      {unread > 0 && <UnreadPill count={unread} />}
     </NavLink>
   )
 }
@@ -85,11 +107,7 @@ function ChannelRow({ channel, onNavigate }: { channel: ChatChannel; onNavigate?
           />
         )}
       </span>
-      {channel.unread > 0 && (
-        <span className="bg-muted text-surface ml-auto shrink-0 rounded-full px-1.5 text-[11px] font-bold">
-          {channel.unread}
-        </span>
-      )}
+      {channel.unread > 0 && <UnreadPill count={channel.unread} />}
     </NavLink>
   )
 }
@@ -169,12 +187,18 @@ function BoardSection({ onNavigate }: { onNavigate?: () => void }) {
 
 export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const { role } = useCurrentUser()
+  const unreadNotifications = useUnreadNotificationCount()
 
   return (
     <div className="flex h-full flex-col">
       <nav className="flex-1 overflow-y-auto px-2 py-3">
         {visibleNav(TOP_NAV, role).map((item) => (
-          <NavRow key={item.to} item={item} onNavigate={onNavigate} />
+          <NavRow
+            key={item.to}
+            item={item}
+            unread={item.to === '/notifications' ? unreadNotifications : 0}
+            onNavigate={onNavigate}
+          />
         ))}
 
         <SectionLabel>워크스페이스</SectionLabel>

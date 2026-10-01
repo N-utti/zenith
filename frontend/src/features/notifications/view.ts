@@ -68,7 +68,11 @@ function mentionView(p: NotificationPayload): NotificationView | null {
           ? `${actorName}님이 «${p.channel_name}»에서 회원님을 불렀습니다`
           : `${actorName}님이 채팅에서 회원님을 불렀습니다`,
       detail: p.preview ?? null,
-      to: `/chat/${p.channel_id}`,
+      // 메시지 id 가 있으면 그 줄로 내려가 밝힌다(`MessageList` 의 `?m=`). 채널만 열면 불린
+      // 말이 위쪽 어딘가에 묻힌다.
+      to: p.message_id
+        ? `/chat/${p.channel_id}?m=${encodeURIComponent(p.message_id)}`
+        : `/chat/${p.channel_id}`,
       icon: 'chat',
       masked: false,
     }
@@ -109,10 +113,39 @@ function postView(p: NotificationPayload): NotificationView | null {
 }
 
 /** 모르는 종류는 `null` 이다. 화면은 그 줄을 건너뛴다. 새 종류가 붙어도 목록이 깨지지 않는다. */
-export function notificationView(notification: Notification): NotificationView | null {
+export function notificationView(
+  notification: Pick<Notification, 'kind' | 'payload'>,
+): NotificationView | null {
   const p = notification.payload
   if (!p) return null
   if (notification.kind === 'post') return postView(p)
   if (MENTION_KINDS.includes(notification.kind)) return mentionView(p)
   return null
+}
+
+/**
+ * 배지에 올릴 안 읽은 알림 수. 알림함이 그릴 수 있는 것만 센다. 모르는 종류까지 세면 배지는
+ * 1 인데 알림함은 비어 있다.
+ */
+export function countUnread(items: Notification[]): number {
+  return items.filter((n) => n.read_at === null && notificationView(n) !== null).length
+}
+
+/**
+ * 방금 도착한 알림(소켓 `notice`)을 OS 알림 문구로 바꾼다. 띄우지 않을 알림은 `null`.
+ *
+ * 소켓 payload 는 서버의 읽기 시점 등급 판정(`_mask_post_notices`)을 거치지 않은 값이고, 여기서
+ * 그 제목을 그대로 화면 밖에 낸다. 받는 사람이 만든 시점 등급으로 이미 걸러져 있다는 전제에
+ * 기댄다(`boards.create_post` 의 수신자 필터). 서버가 그 필터를 넓히면 여기로 제목이 샌다.
+ *
+ * 채팅 멘션은 뺀다. 같은 메시지가 `msg` 로도 와서 이미 OS 알림을 띄운다(`useChatSocket` 의
+ * `notifyIncoming`). 여기서도 띄우면 한 마디에 알림이 두 번 울린다.
+ */
+export function noticeToast(
+  notification: Pick<Notification, 'kind' | 'payload'>,
+): { title: string; body?: string } | null {
+  if (notification.payload?.channel_id) return null
+  const view = notificationView(notification)
+  if (!view) return null
+  return { title: view.summary, body: view.detail ?? undefined }
 }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'react-router'
 import { AtSign, Hash, MessagesSquare, WifiOff } from 'lucide-react'
 import { useChannels, useMessages } from '@/features/chat/api'
@@ -7,6 +7,7 @@ import { Composer } from '@/features/chat/Composer'
 import { MessageList } from '@/features/chat/MessageList'
 import { useChatSocketContext } from '@/features/chat/ChatSocketContext'
 import { useCurrentUser } from '@/features/auth/AuthContext'
+import { useMarkNotificationsRead, useNotifications } from '@/features/notifications/api'
 import { useColleagues } from '@/features/people/colleagues'
 
 function TypingLine({ names }: { names: string[] }) {
@@ -58,6 +59,35 @@ export function ChatPage() {
   useEffect(() => {
     if (readableId && connected) sendRead(readableId)
   }, [readableId, latestId, connected, sendRead])
+
+  // 이 채널의 멘션 알림도 같이 읽음으로 넘긴다. 메시지는 위에서 읽음이 됐는데 알림만 남으면,
+  // 방금 눈앞에서 읽은 말 때문에 사이드바 「받은 알림」 숫자가 오른 채로 남는다.
+  // 실패하면 그대로 둔다. 안 읽음으로 남아 알림함에서 누를 수 있다.
+  //
+  // 메시지 읽음과 달리 창을 보고 있을 때만 넘긴다. 멘션은 "나를 불렀다" 는 신호라, 뒤에 깔린
+  // 창에서 저절로 읽음이 되면 불린 흔적이 어디에도 안 남는다. 창으로 돌아오면 그때 넘긴다.
+  const [focused, setFocused] = useState(() => document.hasFocus())
+  useEffect(() => {
+    const sync = () => setFocused(document.hasFocus())
+    window.addEventListener('focus', sync)
+    window.addEventListener('blur', sync)
+    return () => {
+      window.removeEventListener('focus', sync)
+      window.removeEventListener('blur', sync)
+    }
+  }, [])
+  const { data: notifications } = useNotifications()
+  const { mutate: markNotificationsRead } = useMarkNotificationsRead()
+  // 배열이 아니라 문자열로 든다. 배열은 렌더마다 새 객체라 deps 에 넣으면 읽음이 매번 나간다.
+  const mentionIds = readableId
+    ? (notifications?.items ?? [])
+        .filter((n) => n.read_at === null && n.payload?.channel_id === readableId)
+        .map((n) => n.id)
+        .join(',')
+    : ''
+  useEffect(() => {
+    if (mentionIds && connected && focused) markNotificationsRead(mentionIds.split(','))
+  }, [mentionIds, connected, focused, markNotificationsRead])
 
   return (
     <div className="flex h-full flex-col">
