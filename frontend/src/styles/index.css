@@ -192,13 +192,18 @@
     @apply mt-6 text-base font-semibold;
   }
 
+  /* 들여쓰기 24px: 할 일 목록의 글 시작점(상자 16 + 간격 8)과 같다.
+     20px 일 때 본문 왼쪽 밖으로 삐져나오던 두 자리 번호("10.")도 15px 글자에서는 안에 든다. */
   .zenith-editor ul {
-    @apply list-disc space-y-1 pl-5;
+    @apply list-disc space-y-1 pl-6;
   }
   .zenith-editor ol {
-    @apply list-decimal space-y-1 pl-5;
+    @apply list-decimal space-y-1 pl-6;
   }
-  .zenith-editor li > * + * {
+  /* 둘째 줄: 할 일 항목은 글이 li 바로 밑이 아니라 그 안의 div 에 든다. :where 로 우선순위를
+     첫 줄과 같게 맞춰, 할 일 안에서도 일반 목록과 똑같이 먹게 한다(구분선·사진은 자기 여백을 지킨다). */
+  .zenith-editor li > * + *,
+  .zenith-editor :where(ul[data-type='taskList'] > li) > div > * + * {
     @apply mt-1;
   }
 
@@ -258,19 +263,23 @@
   .zenith-editor ul[data-type='taskList'] {
     @apply list-none space-y-1 pl-0;
   }
-  .zenith-editor ul[data-type='taskList'] li {
+  /* 직계(> li)만 잡는다. 자손 전부를 잡으면 할 일 안에 넣은 글머리·번호 목록의 항목까지
+     flex 가 되어 점·번호가 사라지고 안쪽 목록이 글 옆으로 눕는다. */
+  .zenith-editor ul[data-type='taskList'] > li {
     @apply flex items-start gap-2;
   }
-  .zenith-editor ul[data-type='taskList'] li > label {
-    @apply mt-1 flex shrink-0 items-center;
+  /* 상자를 첫 줄 한가운데에 둔다. 1lh 는 그 줄의 높이(line-height)다. */
+  .zenith-editor ul[data-type='taskList'] > li > label {
+    @apply flex h-[1lh] shrink-0 items-center;
   }
-  .zenith-editor ul[data-type='taskList'] li > div {
-    @apply min-w-0 flex-1;
+  /* mt-0: 위의 li > * + * 가 이 상자에도 여백을 얹어 글만 아래로 밀린다. */
+  .zenith-editor ul[data-type='taskList'] > li > div {
+    @apply mt-0 min-w-0 flex-1;
   }
   .zenith-editor ul[data-type='taskList'] input[type='checkbox'] {
     @apply accent-accent size-4 cursor-pointer;
   }
-  .zenith-editor ul[data-type='taskList'] li[data-checked='true'] > div {
+  .zenith-editor ul[data-type='taskList'] > li[data-checked='true'] > div {
     @apply text-subtle line-through;
   }
 
