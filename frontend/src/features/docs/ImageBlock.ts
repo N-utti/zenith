@@ -14,7 +14,7 @@ declare module '@tiptap/core' {
  * 툴바·슬래시 메뉴가 "파일 선택 창을 열어 달라"고 알리는 신호.
  *
  * 업로드는 에디터를 만든 뒤에야 준비되는데 확장은 만들 때 굳는다. 확장이나
- * 에디터에 콜백을 심는 대신 에디터 DOM에 이벤트를 쏘고, useImageUpload가 받는다.
+ * 에디터에 콜백을 심는 대신 에디터 DOM에 이벤트를 쏘고, useFileUpload가 받는다.
  */
 export const PICK_IMAGE_EVENT = 'zenith:pick-image'
 
@@ -77,8 +77,9 @@ export const ImageBlock = Node.create({
         ({ chain, state }) => {
           // 커서가 문단 가운데 있어도 문단을 쪼개지 않는다. 지금 있는 최상위
           // 블록 바로 뒤에 세우고, 커서는 캡션으로 옮겨 바로 적을 수 있게 한다.
-          const { $from } = state.selection
-          const at = $from.depth > 0 ? $from.after(1) : state.doc.content.size
+          // 블록을 통째로 고른 상태(깊이 0)에서는 그 블록 뒤다.
+          const { $from, to } = state.selection
+          const at = $from.depth > 0 ? $from.after(1) : to
 
           return chain()
             .insertContentAt(at, { type: this.name, attrs })

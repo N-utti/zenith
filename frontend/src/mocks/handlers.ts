@@ -124,6 +124,7 @@ import { decodeText, parseCsv } from './csv'
 
 import type { ActivityInput, ContactInput, DealInput, OrgInput } from '@/features/crm/types'
 import { readFile, saveFile } from './filesDb'
+import { isImage } from '@/features/chat/attachments'
 import { buildXlsx } from '@/lib/xlsx'
 import { closeMonth, getClosing, listClosings, reopenMonth } from './closingsDb'
 import { addHoliday, listHolidays, removeHoliday } from './holidaysDb'
@@ -1739,9 +1740,7 @@ data: ${JSON.stringify(data)}
     if (!(file instanceof File)) {
       return HttpResponse.json({ detail: '파일이 없습니다.' }, { status: 400 })
     }
-    if (!file.type.startsWith('image/')) {
-      return HttpResponse.json({ detail: '이미지 파일만 올릴 수 있습니다.' }, { status: 415 })
-    }
+    // 형식을 가리지 않는다. 문서 파일 칩이 아무 파일이나 올린다. 실서버는 아직 이미지 넷만 받는다.
     if (file.size > MAX_UPLOAD_BYTES) {
       return HttpResponse.json({ detail: '10MB 이하 파일만 올릴 수 있습니다.' }, { status: 413 })
     }
@@ -1761,7 +1760,14 @@ data: ${JSON.stringify(data)}
     const stored = await readFile(String(params.fileId))
     if (!stored) return HttpResponse.json({ detail: '파일을 찾을 수 없습니다.' }, { status: 404 })
     return new HttpResponse(stored.blob, {
-      headers: { 'Content-Type': stored.type, 'Content-Length': String(stored.size) },
+      headers: {
+        'Content-Type': stored.type,
+        'Content-Length': String(stored.size),
+        // 채팅 첨부와 같은 규칙: 그림 넷만 화면에 그리고 나머지는 내려받기로만 준다.
+        // 목은 이름으로 가르지만 실서버는 내용(앞 바이트)으로 판정한다. 이름은 올린 쪽이 정하는 값이다.
+        'Content-Disposition': isImage(stored.name) ? 'inline' : 'attachment',
+        'X-Content-Type-Options': 'nosniff',
+      },
     })
   }),
 

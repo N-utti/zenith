@@ -8,6 +8,7 @@ import {
   ListOrdered,
   ListTodo,
   Minus,
+  Paperclip,
   Quote,
   SquareCode,
   Table,
@@ -15,6 +16,7 @@ import {
 } from 'lucide-react'
 import { Sparkles } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
+import { PICK_FILE_EVENT } from './FileChip'
 import { PICK_IMAGE_EVENT } from './ImageBlock'
 
 /** 인라인 AI 팝오버를 여는 신호. 사진 고르기와 같은 방식으로 편집기 DOM에 쏜다. */
@@ -136,13 +138,25 @@ export const EDITOR_BLOCKS: EditorBlock[] = [
   {
     key: 'image',
     label: '사진',
-    hint: '파일을 골라 문서에 넣습니다',
+    hint: '사진을 골라 문서에 넣습니다',
     keywords: ['사진', '이미지', '그림', 'image', 'photo', 'picture', 'img'],
     icon: ImagePlus,
     run: (e) => {
       if (!e.isEditable) return
       e.commands.focus()
       e.view.dom.dispatchEvent(new CustomEvent(PICK_IMAGE_EVENT))
+    },
+  },
+  {
+    key: 'file',
+    label: '파일',
+    hint: '파일을 올려 내려받을 수 있게 붙입니다',
+    keywords: ['파일', '첨부', 'file', 'attach', 'upload', 'pdf'],
+    icon: Paperclip,
+    run: (e) => {
+      if (!e.isEditable) return
+      e.commands.focus()
+      e.view.dom.dispatchEvent(new CustomEvent(PICK_FILE_EVENT))
     },
   },
   {

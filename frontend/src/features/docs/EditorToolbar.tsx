@@ -10,6 +10,7 @@ import {
   LoaderCircle,
   MessageSquarePlus,
   Minus,
+  Paperclip,
   Quote,
   Redo2,
   RemoveFormatting,
@@ -31,11 +32,12 @@ import { useFormatState } from './editorFormats'
 
 export function EditorToolbar({
   editor,
-  uploadingImage,
+  uploading,
   onComment,
 }: {
   editor: Editor
-  uploadingImage: boolean
+  /** 사진이든 파일이든 올리는 중. 끝날 때까지 둘 다 잠근다. */
+  uploading: boolean
   /** 커서가 든 블록에 댓글 달기. */
   onComment: () => void
 }) {
@@ -130,12 +132,13 @@ export function EditorToolbar({
       <ToolButton icon={Minus} label="구분선" onClick={run('horizontalRule')} />
 
       <ToolButton
-        icon={uploadingImage ? LoaderCircle : ImagePlus}
-        label={uploadingImage ? '사진 올리는 중…' : '사진'}
-        disabled={uploadingImage}
-        spinning={uploadingImage}
+        icon={uploading ? LoaderCircle : ImagePlus}
+        label={uploading ? '올리는 중…' : '사진'}
+        disabled={uploading}
+        spinning={uploading}
         onClick={run('image')}
       />
+      <ToolButton icon={Paperclip} label="파일" disabled={uploading} onClick={run('file')} />
       <LinkMenu editor={editor} href={state.link} />
 
       <ToolButton

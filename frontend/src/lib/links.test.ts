@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest'
-import { docIdOf, internalPath, splitLinks } from './links'
+import { docIdOf, internalPath, splitLinks, uploadedFilePath } from './links'
 
 it('평문 속 주소만 링크 조각이 되고, 이어 붙이면 원문 그대로다', () => {
   const text = '회의록 https://zenith.co.kr/docs/d-1 확인 부탁'
@@ -81,4 +81,21 @@ it('문서 하나를 가리키는 경로에서만 문서 id 를 꺼낸다', () =
   expect(docIdOf('/docs')).toBeNull()
   expect(docIdOf('/docs/trash')).toBeNull()
   expect(docIdOf('/chat/c-1')).toBeNull()
+})
+
+it('올린 파일 경로만 내려받기 주소가 된다', () => {
+  const real = '/api/files/3f0c2a1e-9b7d-4c55-8a10-2f6e1d0b7c44'
+  expect(uploadedFilePath(real)).toBe(real)
+  // 목 저장소의 id 는 앞머리가 붙는다.
+  expect(uploadedFilePath('/api/files/f-3f0c2a1e')).toBe('/api/files/f-3f0c2a1e')
+
+  // 붙여넣은 HTML·남의 편집으로 들어올 수 있는 값들.
+  expect(uploadedFilePath('javascript:alert(1)')).toBeNull()
+  expect(uploadedFilePath('//evil.example/api/files/x')).toBeNull()
+  expect(uploadedFilePath('https://evil.example/api/files/x')).toBeNull()
+  expect(uploadedFilePath('/api/files/../me')).toBeNull()
+  expect(uploadedFilePath('/api/files/f-1?next=//evil.example')).toBeNull()
+  expect(uploadedFilePath('/api/files/f-1\n')).toBeNull()
+  expect(uploadedFilePath(['/api/files/f-1'])).toBeNull()
+  expect(uploadedFilePath(null)).toBeNull()
 })

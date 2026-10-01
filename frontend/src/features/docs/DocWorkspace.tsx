@@ -34,7 +34,7 @@ import { VersionPreview } from './VersionPreview'
 import { hueToColor, useCollabStatus, useCollabTitle, usePresence } from './collabState'
 import { readSnapshot, takeSnapshot, type RestoredContent } from './versioning'
 import { useCollabSession, type CollabSession } from './useCollabSession'
-import { useImageUpload } from './useImageUpload'
+import { useFileUpload } from './useFileUpload'
 import type { DocDetail, DocVersion } from './types'
 
 /** 함께 보고 있는 사람들의 커서 색과 같은 색 아바타를 헤더에 세운다. */
@@ -376,7 +376,7 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
     },
   })
 
-  const { uploading, error: imageError, clearError } = useImageUpload(editor)
+  const { uploading, error: uploadError, clearError } = useFileUpload(editor)
 
   // 사진을 끌어 옮길 때 화면 끝에 닿으면 본문이 그 방향으로 굴러야 한다.
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -566,17 +566,17 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
             {editor && (
               <EditorToolbar
                 editor={editor}
-                uploadingImage={uploading}
+                uploading={uploading}
                 onComment={() => startBlockComment()}
               />
             )}
 
-            {imageError && (
+            {uploadError && (
               <p
                 role="alert"
                 className="text-danger bg-danger/10 flex items-center gap-2 px-4 py-2 text-xs"
               >
-                <span className="flex-1">{imageError}</span>
+                <span className="flex-1">{uploadError}</span>
                 <button
                   type="button"
                   aria-label="알림 닫기"

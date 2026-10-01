@@ -87,3 +87,13 @@ export function docIdOf(path: string): string | null {
   const id = /^\/docs\/([^/?#]+)\/?(?:[?#]|$)/.exec(path)?.[1]
   return id && id !== 'trash' ? id : null
 }
+
+/**
+ * 올린 파일의 경로(`/api/files/{id}`)면 그대로, 아니면 `null`.
+ *
+ * 문서 파일 칩의 `src` 는 붙여넣은 HTML 이나 다른 사람의 편집(Y.Doc)에서도 온다. 거르지 않으면
+ * `javascript:` 나 바깥 주소가 내려받기 링크로 둔갑한다.
+ */
+export function uploadedFilePath(src: unknown): string | null {
+  return typeof src === 'string' && /^\/api\/files\/[\w-]+$/.test(src) ? src : null
+}

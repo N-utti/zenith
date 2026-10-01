@@ -133,7 +133,7 @@ export const MAX_BODY_CHARS = 10_000
  * 훅이 아니라 그냥 함수다. 파일 여러 개를 한 번에 고를 수 있는데, 뮤테이션 훅 하나를
  * 반복문에서 부르면 새 호출이 앞선 것에서 관찰자를 떼어 간다. 그러면 앞선 파일은 서버에
  * 올라갔는데 성공 콜백이 안 불려 화면에도 메시지에도 없고 서버에만 남는다. 문서 이미지
- * 업로드(`features/docs/useImageUpload`)도 같은 이유로 함수를 쓴다.
+ * 업로드(`features/docs/useFileUpload`)도 같은 이유로 함수를 쓴다.
  */
 export function uploadAttachment(channelId: string, file: File): Promise<ChatAttachment> {
   const form = new FormData()
