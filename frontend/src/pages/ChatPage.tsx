@@ -35,10 +35,11 @@ export function ChatPage() {
     const active = new Set(people.map((person) => person.id))
     return channel?.members.filter((member) => active.has(member.id)) ?? []
   }, [people, channel])
-  const mentionNames = useMemo(
-    () => new Set([...mentionCandidates.map((member) => member.name), me.name]),
-    [mentionCandidates, me.name],
-  )
+  // 배지 명단은 내용으로 붙잡는다. 메시지 줄이 이 객체가 그대로면 다시 그리지 않는데(`MessageRow`),
+  // 후보 배열은 렌더마다 새로 만들어져 deps 로 쓸 수 없다. 채널 목록의 순서만 바뀌어도 그 안의
+  // 멤버 배열이 새 객체가 된다(react-query 의 참조 유지는 같은 자리끼리만 견준다).
+  const namesKey = JSON.stringify([...mentionCandidates.map((member) => member.name), me.name])
+  const mentionNames = useMemo(() => new Set(JSON.parse(namesKey) as string[]), [namesKey])
   const { data: messages } = useMessages(channelId ?? null)
   const latestId = messages?.items.at(-1)?.id
 

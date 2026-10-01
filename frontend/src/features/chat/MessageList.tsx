@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router'
 import { Download, FileText, Paperclip } from 'lucide-react'
 import { Avatar } from '@/components/ui/Avatar'
@@ -124,6 +124,7 @@ export function MessageList({
   mentionNames,
 }: {
   channelId: string
+  /** 줄마다 그대로 넘어간다. 내용이 같으면 같은 객체여야 줄을 건너뛴다(`MessageRow`). */
   mentionNames: ReadonlySet<string>
 }) {
   const { data, isPending, isError } = useMessages(channelId)
@@ -210,51 +211,20 @@ export function MessageList({
 
         {data.items.map((message, index) => {
           const previous = data.items[index - 1]
+
           const newDay = !previous || !sameDay(previous.created_at, message.created_at)
-          const compact = grouped(message, previous)
 
           return (
-            <div key={message.id}>
-              {newDay && (
-                <div className="my-5 flex items-center gap-3">
-                  <span className="bg-line h-px flex-1" />
-                  <span className="text-subtle text-xs">{formatDay(message.created_at)}</span>
-                  <span className="bg-line h-px flex-1" />
-                </div>
-              )}
-
-              <div
-                id={`m-${message.id}`}
-                tabIndex={-1}
-                className={cnRow(compact, message.id === focusId)}
-              >
-                {compact ? (
-                  <span className="text-subtle w-9 shrink-0 pt-0.5 text-right text-[11px] opacity-0 group-hover:opacity-100">
-                    {formatTime(message.created_at)}
-                  </span>
-                ) : (
-                  <Avatar name={message.author.name} hue={hueOf(message.author.id)} size="md" />
-                )}
-
-                <div className="min-w-0 flex-1">
-                  {!compact && (
-                    <p className="text-fg text-sm font-semibold">
-                      {message.author.name}
-                      <span className="text-subtle ml-1.5 text-xs font-normal">
-                        {formatTime(message.created_at)}
-                      </span>
-                    </p>
-                  )}
-                  {message.body && (
-                    <p className="text-muted text-sm break-words whitespace-pre-wrap">
-                      <MentionText body={message.body} names={mentionNames} />
-                    </p>
-                  )}
-                  <Attachments files={message.attachments} />
-                  {message.doc_ref && <DocCard docId={message.doc_ref} />}
-                </div>
-              </div>
-            </div>
+            <MessageRow
+              key={message.id}
+              message={message}
+              dayLabel={newDay ? formatDay(message.created_at) : null}
+              compact={grouped(message, previous)}
+              flash={message.id === focusId}
+              mentionNames={mentionNames}
+            >
+              {message.doc_ref && <DocCard docId={message.doc_ref} />}
+            </MessageRow>
           )
         })}
 
@@ -263,6 +233,81 @@ export function MessageList({
     </div>
   )
 }
+
+/**
+ * 메시지 한 줄. `memo` 라 받은 값이 그대로면 다시 그리지 않는다.
+ *
+ * 목록은 이 방에 글이 올 때만이 아니라 채널 목록이 바뀔 때마다(어느 방이든 새 글·안읽음 숫자)
+ * `ChatPage` 를 따라 다시 돈다. 줄을 나눠 두지 않으면 그때마다 쌓인 줄 전부를 다시 그리고,
+ * 목록은 받는 대로 늘기만 해서(다시 받기 전까지) 탭을 오래 켜 둘수록 느려진다. 개발 빌드로
+ * 300줄에서 한 번에 0.1초가 넘게 걸렸다.
+ *
+ * 그래서 넘기는 값은 내용이 바뀔 때만 바뀌어야 한다. `message` 는 캐시가 든 객체 그대로 오고
+ * (`appendMessage`), `mentionNames` 는 `ChatPage` 가 내용으로 붙잡는다.
+ *
+ * 그릴 때마다 달라지는 것은 줄 안에서 계산하지 않고 받는다. 안에서 하면 건너뛴 줄에 낡은 값이
+ * 남는다. 날짜 줄의 「오늘·어제」 는 자정을 넘기면 바뀌어야 해서 문구로 받고, 문서 카드의
+ * 「12분 전」 은 카드째 `children` 으로 받는다. 카드가 든 줄은 그래서 매번 다시 그려진다.
+ */
+const MessageRow = memo(function MessageRow({
+  message,
+  dayLabel,
+  compact,
+  flash,
+  mentionNames,
+  children,
+}: {
+  message: ChatMessage
+  /** 앞 메시지와 날짜가 다를 때 위에 긋는 날짜 줄의 문구. 같은 날이면 `null`. */
+  dayLabel: string | null
+  /** 같은 사람이 이어서 보내 아바타·이름을 생략한다. */
+  compact: boolean
+  /** ⌘K 로 찾아온 메시지라 잠깐 밝힌다. */
+  flash: boolean
+  mentionNames: ReadonlySet<string>
+  /** 문서 카드. 없는 줄은 `null`. */
+  children: ReactNode
+}) {
+  return (
+    <div>
+      {dayLabel && (
+        <div className="my-5 flex items-center gap-3">
+          <span className="bg-line h-px flex-1" />
+          <span className="text-subtle text-xs">{dayLabel}</span>
+          <span className="bg-line h-px flex-1" />
+        </div>
+      )}
+
+      <div id={`m-${message.id}`} tabIndex={-1} className={cnRow(compact, flash)}>
+        {compact ? (
+          <span className="text-subtle w-9 shrink-0 pt-0.5 text-right text-[11px] opacity-0 group-hover:opacity-100">
+            {formatTime(message.created_at)}
+          </span>
+        ) : (
+          <Avatar name={message.author.name} hue={hueOf(message.author.id)} size="md" />
+        )}
+
+        <div className="min-w-0 flex-1">
+          {!compact && (
+            <p className="text-fg text-sm font-semibold">
+              {message.author.name}
+              <span className="text-subtle ml-1.5 text-xs font-normal">
+                {formatTime(message.created_at)}
+              </span>
+            </p>
+          )}
+          {message.body && (
+            <p className="text-muted text-sm break-words whitespace-pre-wrap">
+              <MentionText body={message.body} names={mentionNames} />
+            </p>
+          )}
+          <Attachments files={message.attachments} />
+          {children}
+        </div>
+      </div>
+    </div>
+  )
+})
 
 // 가로 여백은 밝힐 때만 주면 글줄이 옆으로 밀린다. 항상 물려 두고 색만 오간다.
 function cnRow(compact: boolean, flash: boolean) {
