@@ -563,7 +563,7 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
                   type="button"
                   aria-label="알림 닫기"
                   onClick={clearError}
-                  className="cursor-pointer rounded p-0.5 hover:bg-black/5"
+                  className="hover:bg-danger/15 cursor-pointer rounded p-0.5"
                 >
                   <X className="size-3.5" />
                 </button>

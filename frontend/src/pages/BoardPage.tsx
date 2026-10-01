@@ -42,7 +42,7 @@ export function BoardPage() {
         actions={
           // FR-BRD-02. 열람할 수 있는 게시판에만 글쓰기 버튼이 보인다.
           board?.allowed && (
-            <Button onClick={() => setComposing(true)}>
+            <Button size="sm" onClick={() => setComposing(true)}>
               <Plus className="size-4" />
               글쓰기
             </Button>

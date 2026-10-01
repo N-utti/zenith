@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { Plus } from 'lucide-react'
+import { BackLink } from '@/components/ui/BackLink'
 import { Button } from '@/components/ui/Button'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { Field } from '@/components/ui/Field'
@@ -102,12 +103,7 @@ export function CrmDealPage() {
 
   return (
     <>
-      <Link
-        to={d.kind === 'fundraising' ? '/crm' : `/crm?kind=${d.kind}`}
-        className="text-subtle hover:text-fg mb-3 inline-block text-sm"
-      >
-        ← 안건 보드
-      </Link>
+      <BackLink to={d.kind === 'fundraising' ? '/crm' : `/crm?kind=${d.kind}`}>안건 보드</BackLink>
       <PageHeader
         title={d.name}
         description={`${DEAL_KIND_LABEL[d.kind]} · ${d.org.name}`}

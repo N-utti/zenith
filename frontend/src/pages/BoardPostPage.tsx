@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
-import { ChevronLeft, Lock, Pencil, Pin, Trash2 } from 'lucide-react'
+import { Lock, Pencil, Pin, Trash2 } from 'lucide-react'
 import { Avatar } from '@/components/ui/Avatar'
+import { BackLink } from '@/components/ui/BackLink'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Modal } from '@/components/ui/Modal'
@@ -95,13 +96,7 @@ export function BoardPostPage() {
 
   return (
     <>
-      <Link
-        to={`/board/${postBoardId}`}
-        className="text-muted hover:text-fg mb-4 inline-flex items-center gap-1 text-sm transition-colors"
-      >
-        <ChevronLeft className="size-4" />
-        목록
-      </Link>
+      <BackLink to={`/board/${postBoardId}`}>목록</BackLink>
 
       <Card className="p-6">
         <div className="flex items-start justify-between gap-4">

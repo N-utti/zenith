@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { Paperclip } from 'lucide-react'
 import { Link, useNavigate, useSearchParams } from 'react-router'
 import { Avatar } from '@/components/ui/Avatar'
+import { BackLink } from '@/components/ui/BackLink'
 import { Button } from '@/components/ui/Button'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { Field } from '@/components/ui/Field'
@@ -220,9 +221,7 @@ export function ApprovalNewPage() {
 
   return (
     <>
-      <Link to="/approvals" className="text-subtle hover:text-fg mb-3 inline-block text-sm">
-        ← 결재함
-      </Link>
+      <BackLink to="/approvals">결재함</BackLink>
       <PageHeader
         title={trip ? '출장비 결의서' : '새 기안'}
         description={
