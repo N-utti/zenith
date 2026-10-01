@@ -128,7 +128,7 @@ export function MessageList({
   mentionNames: ReadonlySet<string>
 }) {
   const { data, isPending, isError } = useMessages(channelId)
-  const bottomRef = useRef<HTMLDivElement>(null)
+  const scrollerRef = useRef<HTMLDivElement>(null)
   const count = data?.items.length ?? 0
 
   // ⌘K 통합검색은 채팅 결과의 갈 곳을 `/chat/{채널}?m={메시지}` 로 준다. 채널만 열고 말면
@@ -151,16 +151,16 @@ export function MessageList({
   const settledChannel = useRef<string | null>(null)
   const seenLast = useRef<string | undefined>(undefined)
   useEffect(() => {
-    const anchor = bottomRef.current
-    const scroller = anchor?.parentElement?.parentElement
-    if (!anchor || !scroller) return
+    const scroller = scrollerRef.current
+    if (!scroller) return
 
     const sentByMe = lastMine && lastId !== seenLast.current
     seenLast.current = lastId
     const distanceFromBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight
     if (settledChannel.current !== channelId || sentByMe || distanceFromBottom < 200) {
       settledChannel.current = channelId
-      anchor.scrollIntoView({ block: 'end' })
+      // 스크롤 영역을 끝까지 내린다. 마지막 줄에 맞추면 목록 아래 여백만큼 덜 내려가 바닥이 남는다.
+      scroller.scrollTop = scroller.scrollHeight
     }
   }, [count, channelId, lastId, lastMine])
 
@@ -201,7 +201,7 @@ export function MessageList({
   }
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto">
+    <div ref={scrollerRef} className="min-h-0 flex-1 overflow-y-auto">
       <div className="mx-auto max-w-3xl px-4 py-6">
         {data.items.length === 0 && (
           <p className="text-subtle py-12 text-center text-sm">
@@ -227,8 +227,6 @@ export function MessageList({
             </MessageRow>
           )
         })}
-
-        <div ref={bottomRef} />
       </div>
     </div>
   )
