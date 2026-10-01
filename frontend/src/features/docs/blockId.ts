@@ -103,9 +103,11 @@ function findBlock(doc: PmNode, blockId: string): { node: PmNode; pos: number } 
   return found
 }
 
-/** 칩·인용에 보이는 블록 앞부분. 글자가 없는 블록(사진·구분선)은 종류로 말한다. */
+/** 칩·인용에 보이는 블록 앞부분. 글자가 없는 블록(사진·구분선)은 종류로 말한다. 파일 칩은 파일 이름으로 읽는다. */
 export function blockPreview(node: PmNode): string {
-  const text = node.textContent.trim()
+  const text = node
+    .textBetween(0, node.content.size, ' ', (leaf) => (leaf.attrs.name as string) ?? '')
+    .trim()
   if (text) return text.slice(0, 80)
   if (node.type.name === 'imageBlock') return '사진'
   if (node.type.name === 'horizontalRule') return '구분선'

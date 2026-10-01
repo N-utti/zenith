@@ -21,8 +21,9 @@ export function EditorBubbleMenu({ editor }: { editor: Editor }) {
       updateDelay={100}
       shouldShow={({ editor: e, from, to }) => {
         // 커서만 놓인 상태에서는 뜨지 않는다. 코드 블록 안에서는 서식이 의미가 없다.
+        // 파일 칩만 고른 것도 같다. 칩은 누르면 골라지므로 내려받을 때마다 막대가 뜬다.
         if (from === to || !e.isEditable) return false
-        return !e.isActive('codeBlock')
+        return !e.isActive('codeBlock') && !e.isActive('fileChip')
       }}
       // 좁은 폭에서는 한 줄에 다 못 들어간다. 떠 있는 막대라 두 줄이 돼도 본문을 먹지 않으므로
       // 접히게 두고, 화면 밖으로 밀려 가로 스크롤이 생기는 것만 막는다.

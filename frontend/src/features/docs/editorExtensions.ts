@@ -9,6 +9,7 @@ import { TextStyleKit } from '@tiptap/extension-text-style'
 import { TaskItem, TaskList } from '@tiptap/extension-list'
 import { TableCell, TableHeader, TableKit } from '@tiptap/extension-table'
 import { BlockId } from './blockId'
+import { FileChip } from './FileChip'
 import { ImageBlock } from './ImageBlock'
 import { SlashCommand } from './slashCommand'
 import type { CollabSession } from './useCollabSession'
@@ -68,6 +69,7 @@ export function docContentExtensions(): Extensions {
     TableCell.extend({ content: 'paragraph+' }),
     TableHeader.extend({ content: 'paragraph+' }),
     ImageBlock,
+    FileChip,
     // 댓글 닻. 미리보기에도 있어야 버전을 되돌릴 때 닻이 살아남는다.
     BlockId,
 
