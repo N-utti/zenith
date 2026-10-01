@@ -24,7 +24,10 @@ import {
   APPROVAL_TEMPLATES,
   filledFields,
   switchTemplate,
+  templateContent,
+  templateOf,
   type ApprovalTemplate,
+  type TemplateValues,
 } from '@/features/approvals/templates'
 import type { ApprovalAttachment } from '@/features/approvals/types'
 import { MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES } from '@/features/chat/api'
@@ -36,9 +39,11 @@ import { ApiError } from '@/lib/api'
 
 /**
  * 기안 작성(13 SCR-APV-01). v1 최소판은 일반 기안 한 종류다. 근태 4종은 근태 화면의 신청이 곧 기안이다.
- * 빈 폼으로 열면 서식(기안서·지출결의서 등)을 골라 제목 머리말과 본문 틀을 채울 수 있다(`templates.ts`).
+ * 빈 폼으로 열면 서식(기안서·지출결의서 등)을 고른다. 서식마다 제목 머리말과 적는 칸이 다르다
+ * (`templates.ts`). 기안서는 본문을 쓰고, 나머지는 본문 자리에 그 서식의 칸이 나온다.
  *
- * `?arrangement=<id>` 로 열면 출장비 결의서다. 출장 기간·사유를 미리 채우고 문서를 그 출장에 건다.
+ * `?arrangement=<id>` 로 열면 출장비 결의서 서식이다. 출장 기간·사유를 칸에 미리 채우고 문서를 그 출장에 건다.
+ * 서식 목록에서 출장비 결의서를 고르면 칸을 직접 적고, 출장 신청과는 이어지지 않는다.
  * `?draft=<id>` 로 열면 임시저장을 이어 쓴다.
  * 첨부(영수증, FR-APV-05)는 문서에 딸려 올라가서 문서 id 가 있어야 한다. 고른 파일은 들고 있다가
  * 저장할 때 올린다. 새 기안이면 먼저 임시저장을 만들고, 올린 뒤 첨부 목록을 한 번 더 저장한다.
@@ -70,7 +75,10 @@ export function ApprovalNewPage() {
   const [amount, setAmount] = useState<string | null>(null)
   const [body, setBody] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [template, setTemplate] = useState<ApprovalTemplate>('general')
+  /** 고른 서식. `null` 은 아직 안 고름이라 임시저장에 남은 서식이 시작점이다. */
+  const [template, setTemplate] = useState<ApprovalTemplate | null>(null)
+  /** 서식의 칸에 적은 값. 서식을 바꾸면 비운다. */
+  const [values, setValues] = useState<TemplateValues | null>(null)
   /** 고른 참조자. 임시저장을 열면 저장돼 있던 것으로 시작한다. */
   const [references, setReferences] = useState<string[] | null>(null)
   const { people, isPending: peoplePending, isError: peopleError } = useColleagues()
@@ -107,12 +115,10 @@ export function ApprovalNewPage() {
 
   // 첫 렌더 값: 임시저장 → 출장 채움 → 빈 폼 순. 입력을 시작하면 그 값이 이긴다.
   const seed = draft.data
-  const titleValue = title ?? seed?.title ?? (trip ? `출장비 결의서 (${tripPeriod})` : '')
+  const titleValue =
+    title ?? seed?.title ?? (trip ? APPROVAL_TEMPLATES.trip.prefix + tripPeriod : '')
   const amountValue = amount ?? (seed?.amount != null ? String(seed.amount) : '')
-  const bodyValue =
-    body ??
-    seed?.subject.body ??
-    (trip ? `출장 기간: ${tripPeriod}\n출장 목적: ${trip.reason}\n\n지출 내역:\n- ` : '')
+  const bodyValue = body ?? seed?.subject.body ?? ''
   const related = seed?.related ?? (trip ? { type: 'arrangement' as const, id: trip.id } : null)
   // 임시저장에는 참조자가 결재선에 섞여 저장돼 있다. 역할로 갈라 낸다.
   const savedReferences =
@@ -127,14 +133,28 @@ export function ApprovalNewPage() {
 
   const attached = attachments ?? seed?.subject.attachments ?? []
 
-  // 임시저장·출장비 결의서는 이미 틀이 있다. 서식은 빈 폼에서만 고른다.
+  // 임시저장·출장비 결의서는 이미 서식이 정해져 있다. 서식은 빈 폼에서만 고른다.
   const templatable = !seed && !trip
+  // 임시저장은 쓰던 서식의 칸으로 이어 쓴다. 출장에서 열면 출장비 결의서다.
+  const active =
+    template ?? (seed ? templateOf(seed.subject.extra?.form) : trip ? 'trip' : 'general')
+  const form = APPROVAL_TEMPLATES[active]
+  const structured = form.fields.length > 0
+  const fieldValues =
+    values ??
+    seed?.subject.extra?.fields ??
+    (trip ? { period: tripPeriod, purpose: trip.reason } : {})
   const pickTemplate = (next: ApprovalTemplate) => {
-    const fields = switchTemplate(template, next, { title: titleValue, body: bodyValue })
-    if (fields.overwrites && !confirm('쓰던 본문을 새 서식의 틀로 바꿀까요?')) return
+    const switched = switchTemplate(next, {
+      title: titleValue,
+      body: bodyValue,
+      values: fieldValues,
+    })
+    if (switched.overwrites && !confirm('쓰던 내용을 지우고 새 서식으로 바꿀까요?')) return
     setTemplate(next)
-    setTitle(fields.title)
-    setBody(fields.body)
+    setTitle(switched.title)
+    setBody('')
+    setValues({})
   }
 
   const pick = (list: FileList | null) => {
@@ -156,13 +176,21 @@ export function ApprovalNewPage() {
       ? '금액은 0 이상의 숫자입니다.'
       : null
   const busy = saving
-  const filled = filledFields(template, { title: titleValue, body: bodyValue })
+  const filled = filledFields(active, { title: titleValue, body: bodyValue, values: fieldValues })
   const canSave = filled.title && !amountError && !busy
+  // 임시저장은 덜 채워도 된다. 상신은 그 서식의 필수 칸과 금액까지 본다.
+  // 금액 필수 서식은 0원도 안 쓴 것으로 친다.
+  const canSubmit = canSave && filled.body && !(form.amountRequired && !amountNumber)
 
   const input = {
     type_code: 'general' as const,
     title: titleValue.trim(),
-    subject: { body: bodyValue, amount: amountNumber, related, attachments: attached },
+    subject: {
+      ...templateContent(active, { body: bodyValue, values: fieldValues }),
+      amount: amountNumber,
+      related,
+      attachments: attached,
+    },
     references: referenceIds,
   }
   const fail = (err: unknown, prefix = '') =>
@@ -234,12 +262,17 @@ export function ApprovalNewPage() {
           {templatable && (
             <Field
               label="서식"
-              hint="제목 머리말과 본문 틀을 채웁니다. 결재선은 서식과 상관없이 같습니다."
+              hint={
+                // 여기서 쓰면 출장 신청에 안 걸려서, 근태의 출장 행에는 결의서를 안 쓴 것으로 남는다.
+                active === 'trip'
+                  ? '출장 신청이 있으면 근태의 예외 근무 탭에서 그 출장의 「결의서 작성」으로 여세요. 여기서 쓰면 출장 신청과 이어지지 않습니다.'
+                  : '서식마다 적는 칸이 다릅니다. 결재선은 서식과 상관없이 같습니다.'
+              }
             >
               {(slot) => (
                 <Select
                   {...slot}
-                  value={template}
+                  value={active}
                   onChange={(e) => pickTemplate(e.target.value as ApprovalTemplate)}
                   options={Object.entries(APPROVAL_TEMPLATES).map(([value, each]) => ({
                     value,
@@ -261,7 +294,12 @@ export function ApprovalNewPage() {
           </Field>
           <Field
             label="금액"
-            hint="지출이 없으면 비웁니다. 전결 판정에 쓰입니다."
+            required={form.amountRequired}
+            hint={
+              form.amountRequired
+                ? '전결 판정에 쓰입니다.'
+                : '지출이 없으면 비웁니다. 전결 판정에 쓰입니다.'
+            }
             error={amountError}
           >
             {(slot) => (
@@ -274,6 +312,56 @@ export function ApprovalNewPage() {
               />
             )}
           </Field>
+          {structured ? (
+            <div className="grid gap-4 sm:grid-cols-2">
+              {form.fields.map((field) => (
+                <Field
+                  key={field.key}
+                  label={field.label}
+                  required={field.required}
+                  className={field.kind === 'textarea' ? 'sm:col-span-2' : 'min-w-0'}
+                >
+                  {(slot) => {
+                    const control = {
+                      ...slot,
+                      value: fieldValues[field.key] ?? '',
+                      // 미리 채운 값에서 출발한다. `null` 은 "아직 안 건드림" 이다.
+                      onChange: (e: { target: { value: string } }) =>
+                        setValues((prev) => ({
+                          ...(prev ?? fieldValues),
+                          [field.key]: e.target.value,
+                        })),
+                    }
+                    if (field.kind === 'textarea') return <Textarea {...control} rows={4} />
+                    if (field.kind === 'select') {
+                      return (
+                        <Select
+                          {...control}
+                          placeholder="선택"
+                          options={(field.options ?? []).map((each) => ({
+                            value: each,
+                            label: each,
+                          }))}
+                        />
+                      )
+                    }
+                    return <Input {...control} type={field.kind} />
+                  }}
+                </Field>
+              ))}
+            </div>
+          ) : (
+            <Field label="본문" required>
+              {(slot) => (
+                <Textarea
+                  {...slot}
+                  rows={10}
+                  value={bodyValue}
+                  onChange={(e) => setBody(e.target.value)}
+                />
+              )}
+            </Field>
+          )}
           <Field
             label="참조"
             hint="결재는 하지 않지만 문서를 볼 사람입니다. 결재선에 오른 사람은 빠집니다."
@@ -341,16 +429,6 @@ export function ApprovalNewPage() {
               </div>
             )}
           </Field>
-          <Field label="본문" required>
-            {(slot) => (
-              <Textarea
-                {...slot}
-                rows={10}
-                value={bodyValue}
-                onChange={(e) => setBody(e.target.value)}
-              />
-            )}
-          </Field>
           {error && (
             <p role="alert" className="text-danger text-sm">
               {error}
@@ -365,7 +443,7 @@ export function ApprovalNewPage() {
             >
               임시저장
             </Button>
-            <Button size="sm" disabled={!canSave || !filled.body} onClick={() => void save(true)}>
+            <Button size="sm" disabled={!canSubmit} onClick={() => void save(true)}>
               {busy ? <Spinner className="border-t-on-accent" /> : '상신'}
             </Button>
           </div>

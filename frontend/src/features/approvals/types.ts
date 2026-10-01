@@ -108,6 +108,14 @@ export interface GeneralSubject {
   related: { type: 'arrangement'; id: string } | null
   /** 영수증·견적서(13 FR-APV-05). 안 보내면 없는 것이다. 보낼 때는 늘 전체 목록을 보낸다 */
   attachments?: ApprovalAttachment[]
+  /**
+   * 서식의 칸에 적은 값(13 §4.1 `approval_forms.extra`). 기안서처럼 칸이 없는 서식은 안 보낸다.
+   *
+   * **계약에 없어서 정한 모양이다(PR 본문).** 서버는 뜻을 몰라도 되고 받은 그대로 돌려주면 된다.
+   * 같은 내용이 글로 풀려 `body` 에도 들어가서(`templates.ts` 의 `composeBody`) 읽는 화면은 `body`
+   * 만 본다. 이 칸은 임시저장을 이어 쓸 때 칸을 되살리는 데만 쓴다.
+   */
+  extra?: { form: string; fields: Record<string, string> } | null
 }
 
 /**

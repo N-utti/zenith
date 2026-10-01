@@ -1,42 +1,99 @@
 import { expect, it } from 'vitest'
-import { APPROVAL_TEMPLATES, filledFields, switchTemplate } from './templates'
+import { composeBody, filledFields, switchTemplate, templateContent, templateOf } from './templates'
 
-it('빈 폼에서 고르면 머리말과 본문 틀이 채워진다', () => {
-  expect(switchTemplate('general', 'expense', { title: '', body: '' })).toEqual({
-    title: '[지출결의] ',
-    body: APPROVAL_TEMPLATES.expense.body,
-    overwrites: false,
-  })
-})
+const blank = { title: '', body: '', values: {} }
 
 it('제목은 머리말만 바뀌고 뒤에 쓴 말은 남는다', () => {
-  const next = switchTemplate('expense', 'purchase', {
-    title: '[지출결의] 모니터',
-    body: APPROVAL_TEMPLATES.expense.body,
-  })
-  expect(next.title).toBe('[구매요청] 모니터')
-  // 틀 그대로면 덮어도 잃을 게 없다.
-  expect(next.overwrites).toBe(false)
+  expect(switchTemplate('expense', blank)).toEqual({ title: '[지출결의] ', overwrites: false })
+  expect(switchTemplate('purchase', { ...blank, title: '[지출결의] 모니터' }).title).toBe(
+    '[구매요청] 모니터',
+  )
   // 머리말 뒤 공백을 지웠어도 겹쳐 붙지 않는다.
-  expect(switchTemplate('expense', 'proposal', { title: '[지출결의]모니터', body: '' }).title).toBe(
+  expect(switchTemplate('proposal', { ...blank, title: '[지출결의]모니터' }).title).toBe(
     '[품의] 모니터',
   )
-  expect(switchTemplate('proposal', 'general', { title: '[품의] 모니터', body: '' }).title).toBe(
-    '모니터',
+  expect(switchTemplate('general', { ...blank, title: '[품의] 모니터' }).title).toBe('모니터')
+})
+
+it('본문이든 칸이든 써 둔 게 있으면 지우기 전에 물어야 한다', () => {
+  expect(switchTemplate('expense', { ...blank, body: '메모' }).overwrites).toBe(true)
+  expect(switchTemplate('general', { ...blank, values: { purpose: '택시비' } }).overwrites).toBe(
+    true,
   )
+  // 골랐다가 비운 칸은 쓴 게 아니다.
+  expect(switchTemplate('general', { ...blank, values: { purpose: ' ' } }).overwrites).toBe(false)
 })
 
-it('본문을 고쳐 썼으면 덮기 전에 물어야 한다', () => {
-  const edited = APPROVAL_TEMPLATES.expense.body + '택시비 12,000원'
-  expect(switchTemplate('expense', 'general', { title: '', body: edited }).overwrites).toBe(true)
-  expect(switchTemplate('general', 'proposal', { title: '', body: '메모' }).overwrites).toBe(true)
-})
-
-it('머리말만 있는 제목, 틀 그대로인 본문은 안 쓴 칸이다', () => {
-  const blank = { title: '[지출결의] ', body: APPROVAL_TEMPLATES.expense.body }
-  expect(filledFields('expense', blank)).toEqual({ title: false, body: false })
+it('머리말만 있는 제목은 안 쓴 칸이고, 내용은 필수 칸이 다 차야 찬 것이다', () => {
+  const required = {
+    purpose: '택시비',
+    date: '2026-10-01',
+    method: '법인카드',
+    items: '- 12,000원',
+  }
+  expect(filledFields('expense', { ...blank, title: '[지출결의] ' })).toEqual({
+    title: false,
+    body: false,
+  })
+  // 필수가 아닌 지출처는 비워도 된다. 필수 칸 하나가 공백이면 안 찬 것이다.
   expect(
-    filledFields('expense', { title: '[지출결의] 택시비', body: blank.body + '12,000원' }),
+    filledFields('expense', { title: '[지출결의] 택시비', body: '', values: required }),
   ).toEqual({ title: true, body: true })
-  expect(filledFields('general', { title: ' ', body: '' })).toEqual({ title: false, body: false })
+  expect(filledFields('expense', { ...blank, values: { ...required, items: ' ' } }).body).toBe(
+    false,
+  )
+  // 기안서는 칸이 없어 본문을 본다.
+  expect(filledFields('general', { title: ' ', body: '', values: {} })).toEqual({
+    title: false,
+    body: false,
+  })
+  expect(filledFields('general', { ...blank, body: '본문' }).body).toBe(true)
+})
+
+it('칸의 값을 본문 글로 푼다. 빈 칸은 빠지고 여러 줄 칸은 라벨 아래로 내려간다', () => {
+  expect(
+    composeBody('expense', {
+      purpose: '택시비',
+      date: '2026-10-01',
+      payee: ' ',
+      method: '법인카드',
+      items: '- 야근 택시 12,000원\n- 주차 3,000원',
+    }),
+  ).toBe(
+    '지출 목적: 택시비\n지출 일자: 2026-10-01\n결제 방법: 법인카드\n\n지출 내역:\n- 야근 택시 12,000원\n- 주차 3,000원',
+  )
+  // 여러 줄 칸이 이어져도 빈 줄은 하나다.
+  expect(composeBody('proposal', { reason: '노후', content: '교체' })).toBe(
+    '품의 사유:\n노후\n\n품의 내용:\n교체',
+  )
+  // 적은 글 속의 빈 줄은 그대로 둔다.
+  expect(composeBody('proposal', { reason: '가\n\n\n나' })).toBe('품의 사유:\n가\n\n\n나')
+  expect(composeBody('general', {})).toBe('')
+})
+
+it('저장할 내용: 기안서는 본문만 보내고, 칸이 있는 서식은 지금 서식의 칸만 담는다', () => {
+  // 칸 값이 남아 있어도 기안서는 `extra` 키 자체를 안 보낸다.
+  expect(templateContent('general', { body: '본문', values: { purpose: '남은 값' } })).toEqual({
+    body: '본문',
+  })
+  expect(
+    templateContent('trip', {
+      body: '안 쓰는 본문',
+      values: { period: '2026-09-22', purpose: '거래처 방문', gone: '옛 칸' },
+    }),
+  ).toEqual({
+    body: '출장 기간: 2026-09-22\n출장 목적: 거래처 방문',
+    extra: {
+      form: 'trip',
+      fields: { period: '2026-09-22', purpose: '거래처 방문', method: '', items: '' },
+    },
+  })
+})
+
+it('모르는 서식 이름은 기안서로 연다', () => {
+  expect(templateOf('purchase')).toBe('purchase')
+  expect(templateOf(undefined)).toBe('general')
+  expect(templateOf('leave-form')).toBe('general')
+  // 객체가 물려받은 이름에 속지 않는다.
+  expect(templateOf('toString')).toBe('general')
 })
