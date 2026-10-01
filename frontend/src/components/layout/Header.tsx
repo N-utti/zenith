@@ -1,7 +1,18 @@
-import { Moon, PanelLeft, PanelLeftClose, PanelLeftOpen, Search, Sun } from 'lucide-react'
+import {
+  FoldHorizontal,
+  Moon,
+  PanelLeft,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Search,
+  Sun,
+  UnfoldHorizontal,
+} from 'lucide-react'
 import { Link } from 'react-router'
 import { Button } from '@/components/ui/Button'
 import { ZenithMark } from '@/components/ui/ZenithMark'
+import { cn } from '@/lib/cn'
+import { setContentWide, useContentWide } from '@/lib/contentWidth'
 import { useTheme } from '@/lib/theme'
 import { UserMenu } from './UserMenu'
 
@@ -10,13 +21,16 @@ export function Header({
   collapsed,
   onToggleCollapsed,
   onOpenCommandPalette,
+  showWidthToggle,
 }: {
   onOpenSidebar: () => void
   collapsed: boolean
   onToggleCollapsed: () => void
   onOpenCommandPalette: () => void
+  showWidthToggle: boolean
 }) {
   const { theme, toggle } = useTheme()
+  const wide = useContentWide()
   const isMac = /Mac|iPhone|iPad/.test(navigator.userAgent)
 
   return (
@@ -68,6 +82,25 @@ export function Header({
       </button>
 
       <div className="flex shrink-0 items-center gap-1">
+        {/* 본문이 최대폭(max-w-6xl, 1152px)에 닿아야 눌러서 달라진다. 사이드바(270px)를 편 채로는
+            1440px 쯤부터, 접으면 xl 부터 닿는다. 그보다 좁은 화면과 꽉 채우는 화면(bleed)에서는 숨긴다. */}
+        {showWidthToggle && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setContentWide(!wide)}
+            aria-label="본문 넓게 보기"
+            aria-pressed={wide}
+            title={wide ? '본문 기본 너비로' : '본문 넓게 보기'}
+            className={cn('hidden px-2', collapsed ? 'xl:inline-flex' : 'min-[1440px]:inline-flex')}
+          >
+            {wide ? (
+              <FoldHorizontal className="size-4.5" />
+            ) : (
+              <UnfoldHorizontal className="size-4.5" />
+            )}
+          </Button>
+        )}
         <Button
           variant="ghost"
           size="sm"

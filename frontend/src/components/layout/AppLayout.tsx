@@ -68,6 +68,7 @@ export function AppLayout({ bleed = false }: { bleed?: boolean }) {
         collapsed={collapsed}
         onToggleCollapsed={toggleCollapsed}
         onOpenCommandPalette={() => setPaletteOpen(true)}
+        showWidthToggle={!bleed}
       />
       <ConnectionBanner />
 
