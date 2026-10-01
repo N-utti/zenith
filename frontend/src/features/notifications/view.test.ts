@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest'
-import { notificationView } from './view'
+import { countUnread, noticeToast, notificationView } from './view'
 import type { Notification } from './types'
 
 const base = { id: 'n', read_at: null, created_at: '2026-09-17T00:00:00Z' }
@@ -23,6 +23,42 @@ it('같은 mention 이라도 payload 로 문서와 채팅이 갈린다', () => {
   expect(view('mention', { doc_id: 'd-1', comment_id: 'dc-1', from })?.to).toBe(
     '/docs/d-1?comment=dc-1',
   )
+})
+
+it('채팅 멘션은 메시지 id 가 있으면 그 메시지로 간다', () => {
+  expect(view('mention', { channel_id: 'c-1', message_id: 'm-9', from })?.to).toBe(
+    '/chat/c-1?m=m-9',
+  )
+})
+
+it('방금 온 알림의 OS 알림 문구. 채팅 멘션은 msg 가 이미 울리므로 뺀다', () => {
+  expect(noticeToast({ kind: 'mention', payload: { channel_id: 'c-1', from } })).toBeNull()
+  expect(
+    noticeToast({
+      kind: 'mention',
+      payload: { doc_id: 'd-1', doc_title: '로드맵', from, preview: '확인 부탁' },
+    }),
+  ).toEqual({ title: '정성운님이 «로드맵»에서 회원님을 불렀습니다', body: '확인 부탁' })
+  expect(
+    noticeToast({
+      kind: 'post',
+      payload: { post_id: 'p-1', board_id: 'all', board_name: '전체 공지', title: '공지', from },
+    }),
+  ).toEqual({ title: '공지', body: '전체 공지 · 정성운' })
+  // 모르는 종류는 알림함이 못 그린다. 울리기만 하고 열 곳이 없으면 안 된다.
+  expect(noticeToast({ kind: 'apv_pending', payload: { from } })).toBeNull()
+})
+
+it('배지는 알림함이 그릴 수 있는 안 읽은 알림만 센다', () => {
+  const mention = { kind: 'mention', payload: { channel_id: 'c-1', from } }
+  expect(
+    countUnread([
+      { ...base, id: 'a', ...mention },
+      { ...base, id: 'b', ...mention, read_at: '2026-09-17T01:00:00Z' },
+      // 모르는 종류는 알림함에 안 보인다. 세면 배지와 목록이 어긋난다.
+      { ...base, id: 'c', kind: 'apv_pending', payload: { from } },
+    ]),
+  ).toBe(1)
 })
 
 it('채팅 멘션은 채널 이름을 요약에 넣는다. DM 은 넣지 않는다', () => {

@@ -5,6 +5,8 @@ import { useCurrentUser } from '@/features/auth/AuthContext'
 import { notify } from '@/lib/desktop'
 import { wsUrl } from '@/lib/serverOrigin'
 import { homeKeys } from '@/features/home/keys'
+import { notificationKeys } from '@/features/notifications/api'
+import { noticeToast } from '@/features/notifications/view'
 import { chatKeys } from './api'
 import { appendMessage, errorText, withLastMessage, withUnread } from './events'
 import type { ChatAttachment, ChatChannel, ChatEvent, ChatMessage } from './types'
@@ -107,6 +109,7 @@ export function useChatSocket(): ChatSocket {
           void qc.invalidateQueries({ queryKey: chatKeys.allMessages })
           void qc.invalidateQueries({ queryKey: chatKeys.channels })
           void qc.invalidateQueries({ queryKey: homeKeys.home })
+          void qc.invalidateQueries({ queryKey: notificationKeys.list })
         }
         reconnectedRef.current = true
       }
@@ -190,7 +193,19 @@ export function useChatSocket(): ChatSocket {
           return
         }
 
-        // presence·notice 는 받을 화면이 없어 여기서 떨어진다(`types.ts` 의 ChatEvent).
+        if (event.ev === 'notice') {
+          // 목록에 직접 꽂지 않고 다시 받는다. 새 글 알림은 서버가 응답을 만들 때 등급을 다시
+          // 판정해 제목을 가리는데(`_mask_post_notices`), 소켓으로 온 payload 는 그 판정 전이다.
+          void qc.invalidateQueries({ queryKey: notificationKeys.list })
+          // 채팅 멘션이면 홈은 같은 메시지의 `unread` 가 이미 다시 받는다.
+          if (!event.payload?.channel_id) void qc.invalidateQueries({ queryKey: homeKeys.home })
+          // 창을 보고 있으면 사이드바 배지가 오른다. OS 알림은 `notifyIncoming` 과 같은 조건으로.
+          const alert = noticeToast(event)
+          if (alert && !document.hasFocus()) void notify(alert)
+          return
+        }
+
+        // presence 는 받을 화면이 없어 여기서 떨어진다(`types.ts` 의 ChatEvent).
       }
     }
 

@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { homeKeys } from '@/features/home/keys'
 import type { Notification } from './types'
+import { countUnread } from './view'
 
 export const notificationKeys = {
   list: ['notifications'] as const,
@@ -16,11 +17,25 @@ export const notificationKeys = {
  *
  * 프론트에서 걸러 숨기면 안 되는 것은 권한 밖 데이터다. 읽음 여부는 거기 해당하지 않는다.
  */
+const listQuery = {
+  queryKey: notificationKeys.list,
+  queryFn: () => api<{ items: Notification[] }>('/me/notifications'),
+}
+
 export function useNotifications() {
-  return useQuery({
-    queryKey: notificationKeys.list,
-    queryFn: () => api<{ items: Notification[] }>('/me/notifications'),
-  })
+  return useQuery(listQuery)
+}
+
+/**
+ * 안 읽은 알림 수. 사이드바와 모바일 탭의 배지가 쓴다. 알림함과 캐시를 같이 써서 같은
+ * 순간에는 요청이 하나다. 다만 배지가 늘 떠 있어 이 목록은 이제 어느 화면에서나 받아 온다.
+ *
+ * ponytail: 서버가 최근 50건만 주므로 그보다 많이 쌓이면 50 에서 멈춘다. 15명 규모에서는
+ * 닿지 않는다. 닿으면 서버에 개수 경로를 요청한다.
+ */
+export function useUnreadNotificationCount(): number {
+  const { data } = useQuery({ ...listQuery, select: (page) => countUnread(page.items) })
+  return data ?? 0
 }
 
 export function useMarkNotificationsRead() {
