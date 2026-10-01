@@ -78,3 +78,12 @@ export function internalPath(href: string, origins: readonly string[]): string |
   if (url.pathname === '/api' || url.pathname.startsWith('/api/')) return null
   return url.pathname + url.search + url.hash
 }
+
+/**
+ * 앱 안 경로가 문서 하나(`/docs/{id}`)를 가리키면 그 id. 목록(`/docs`)과 휴지통은 아니다.
+ * 뒤에 경로가 더 붙어도(`/docs/{id}/x`) 아니다. 문서 화면에 닿지 않는 주소다.
+ */
+export function docIdOf(path: string): string | null {
+  const id = /^\/docs\/([^/?#]+)\/?(?:[?#]|$)/.exec(path)?.[1]
+  return id && id !== 'trash' ? id : null
+}

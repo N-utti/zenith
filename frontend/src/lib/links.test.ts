@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest'
-import { internalPath, splitLinks } from './links'
+import { docIdOf, internalPath, splitLinks } from './links'
 
 it('평문 속 주소만 링크 조각이 되고, 이어 붙이면 원문 그대로다', () => {
   const text = '회의록 https://zenith.co.kr/docs/d-1 확인 부탁'
@@ -69,4 +69,16 @@ it('부호가 길게 이어져도 금방 끝난다', () => {
   const started = performance.now()
   splitLinks('https://a' + ')'.repeat(50_000) + 'x')
   expect(performance.now() - started).toBeLessThan(500)
+})
+
+it('문서 하나를 가리키는 경로에서만 문서 id 를 꺼낸다', () => {
+  expect(docIdOf('/docs/d-1')).toBe('d-1')
+  // 댓글로 가는 주소도 같은 문서다.
+  expect(docIdOf('/docs/d-1?comment=dc-1')).toBe('d-1')
+  expect(docIdOf('/docs/d-1#h')).toBe('d-1')
+  // 뒤에 경로가 더 붙으면 문서 화면이 아니다. 칩을 달면 죽은 링크에 제목이 붙는다.
+  expect(docIdOf('/docs/d-1/extra')).toBeNull()
+  expect(docIdOf('/docs')).toBeNull()
+  expect(docIdOf('/docs/trash')).toBeNull()
+  expect(docIdOf('/chat/c-1')).toBeNull()
 })
