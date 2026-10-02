@@ -348,15 +348,22 @@ async def delete_folder(
     user: User = Depends(current_user),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
-    folder = await db.get(Folder, id)
+    # 행 잠금 — 같은 폴더를 두 탭에서 동시에 지우면 둘 다 204 에 감사가 두 건 남던 것(늦은 쪽은 None → 404)
+    folder = await db.get(Folder, id, with_for_update=True, populate_existing=True)
     if folder is None:
         raise ApiError(404, "NOT_FOUND", "없는 폴더입니다.")
     # 문서는 폴더 안에만 있을 수 있어(DocCreateIn.folder_id 필수) 휴지통 문서가 남은 폴더를 지우면 되살릴 자리가
     # 없다 — 휴지통 문서도 막는다. 트리에 안 보여 화면이 미리 못 막는 경우라 문구를 따로 둔다.
     if (await db.execute(select(Folder.id).where(Folder.parent_id == id).limit(1))).first():
         raise ApiError(409, "FOLDER_NOT_EMPTY", "하위 폴더가 있어 지울 수 없습니다.")
+    # 살아 있는 문서가 하나라도 있으면 그 문구 — 휴지통 문구를 따라 해도 살아 있는 문서가 남아 또 409 가 되지 않게
     trashed = (
-        await db.execute(select(Document.deleted_at).where(Document.folder_id == id).limit(1))
+        await db.execute(
+            select(Document.deleted_at)
+            .where(Document.folder_id == id)
+            .order_by(Document.deleted_at.nulls_first())
+            .limit(1)
+        )
     ).first()
     if trashed is not None:
         if trashed[0] is None:
