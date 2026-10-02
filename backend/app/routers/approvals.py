@@ -63,6 +63,7 @@ TypeCode = Literal["leave", "arrangement", "overtime", "correction", "general"]
 DocStatus = Literal["draft", "pending", "approved", "rejected", "canceled", "closed"]
 ATTENDANCE_TYPES = frozenset({"leave", "arrangement", "overtime", "correction"})
 DECIDED = frozenset({"approved", "rejected", "delegated_done"})  # 누가 손댄 단계
+DELEGATION_MAX_DAYS = 366  # 끝없는 위임은 결재 권한을 영구히 넘기는 것과 같다
 LIST_MAX = (
     500  # ponytail: 결재함 상한. 15명 사내라 페이징 없이 — 넘으면 next_cursor 를 실제로 채운다
 )
@@ -282,7 +283,8 @@ async def _acting(
 ) -> ApprovalStep | None:
     """지금 이 사람이 처리할 수 있는 단계 — 내 차례이거나, 차례인 사람이 나에게 위임했을 때.
 
-    결재함(inbox)·열람·승인 처리가 이 판정 하나를 본다. 기안자는 위임으로도 자기 문서를 처리하지 못한다."""
+    결재함(inbox)·열람·승인 처리가 이 판정 하나를 본다. 기안자는 위임으로도 자기 문서를 처리하지 못하고,
+    같은 문서의 다른 승인 단계 결재자도 대결하지 못한다(한 사람이 두 단계를 채우는 직무 분리 위반)."""
     if doc.status != "pending":
         return None
     step = _current(steps)
@@ -290,9 +292,17 @@ async def _acting(
         return None
     if step.approver_id == user.id:
         return step
-    if user.id != doc.drafter_id and await _delegated(db, step.approver_id, user.id, doc.type_code):
+    if (
+        user.id != doc.drafter_id
+        and not _on_line(user.id, steps)
+        and await _delegated(db, step.approver_id, user.id, doc.type_code)
+    ):
         return step
     return None
+
+
+def _on_line(user_id: uuid.UUID, steps: list[ApprovalStep]) -> bool:
+    return any(s.approver_id == user_id and s.role == "approve" for s in steps)
 
 
 async def _can_view(
@@ -488,6 +498,15 @@ async def _submit(
     doc.submitted_at = now
     if not approvers:
         _close(doc, steps, "approved", now)  # 임원 기안: 즉시 확정, 문서와 이력은 남는다
+        # 결재선 없이 확정된 것은 결재선 이력이 비어 있다 — 감사에 남긴다
+        audit.record(
+            db,
+            "approvals.auto_approved",
+            actor_id=drafter.id,
+            target_id=doc.id,
+            detail={"type_code": doc.type_code},
+            at=now,
+        )
         return []
     doc.status = "pending"
     return await _notify(db, [approvers[0]], "apv_request", doc, drafter, now)
@@ -589,6 +608,8 @@ async def create_delegation(
         raise ApiError(422, "VALIDATION", "자기 자신에게는 위임할 수 없습니다.")
     if body.start_date > body.end_date:
         raise ApiError(422, "VALIDATION", "기간이 올바르지 않습니다.")
+    if (body.end_date - body.start_date).days + 1 > DELEGATION_MAX_DAYS:
+        raise ApiError(422, "VALIDATION", f"위임 기간은 {DELEGATION_MAX_DAYS}일까지입니다.")
     if body.type_code is not None:
         known = TYPES.get(body.type_code)
         if known is None:
@@ -882,6 +903,7 @@ async def list_approvals(
         types = owners.get(cur.approver_id, [])
         return (
             doc.drafter_id != user.id
+            and not _on_line(user.id, steps[doc.id])
             and TYPES[doc.type_code].allow_delegate_decision
             and (None in types or doc.type_code in types)
         )
@@ -965,6 +987,11 @@ async def _decide(
 ) -> ApprovalOut:
     doc = await _get_doc(db, id, lock=True)  # 두 탭이 동시에 눌러도 한 번만
     steps = (await _steps_of(db, [doc.id]))[doc.id]
+    # 다른 탭에서 이미 누른 것 — 권한 거부(403)가 아니라 상태 충돌이다
+    if doc.status != "pending":
+        raise ApiError(409, "NOT_PENDING", "이미 처리가 끝난 문서입니다.")
+    if any(user.id in (s.approver_id, s.acted_by_id) and s.status in DECIDED for s in steps):
+        raise ApiError(409, "ALREADY_DECIDED", "이미 처리한 문서입니다. 새로고침해 주세요.")
     step = await _acting(db, user, doc, steps)
     if step is None:
         await _deny(
@@ -990,6 +1017,20 @@ async def _decide(
     step.version += 1
     if delegated:
         step.acted_by_id = user.id  # 원 결재자 이름은 단계에 그대로, 실제 처리자만 붙는다
+    audit.record(
+        db,
+        "approvals.decided",
+        request=request,
+        actor_id=user.id,
+        target_id=doc.id,
+        detail={
+            "doc_id": str(doc.id),
+            "step": step.step_no,
+            "action": "approve" if approve else "reject",
+            "acting_for": str(step.approver_id) if delegated else None,
+        },
+        at=now,
+    )
     drafter = [doc.drafter_id]
     if not approve:
         step.status = "rejected"

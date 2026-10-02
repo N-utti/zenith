@@ -1,13 +1,14 @@
 """04 §10 근태 — 신청 4종 → 결재 연동, 일자 상태·집계, 월 마감, 휴일, 팀 그리드·리포트. 규칙은 프론트 목과 같다."""
 
 from contextlib import asynccontextmanager
+from datetime import date
 from types import SimpleNamespace
 
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
 
-from app.models import AuditEvent, Team, User
+from app.models import AuditEvent, Holiday, Team, User
 from app.routers.attendance import overtime_minutes
 
 from .conftest import PW_HASH, Users, csrf, login
@@ -55,6 +56,9 @@ def test_overtime_minutes() -> None:
     assert overtime_minutes("17:00", "18:00") == (0, 0)
     assert overtime_minutes("18:00", "18:00") == (0, 0)  # 24시간으로 읽지 않는다
     assert overtime_minutes("22:00", "07:00") == (540, 480)
+    # 쉬는 날은 18:00 바닥 없이 전 구간(근기법 휴일근로), 새벽도 야간
+    assert overtime_minutes("09:00", "18:00", day_off=True) == (540, 0)
+    assert overtime_minutes("04:00", "08:00", day_off=True) == (240, 120)
 
 
 async def test_leave_flow(c, users: Users, app_db) -> None:
@@ -359,7 +363,9 @@ async def test_holidays(c, users: Users, app_db) -> None:
     r = await post(
         c.exec, "/api/admin/holidays", {"date": "2030-03-01", "name": "삼일절", "kind": "public"}
     )
-    assert r.status_code == 201
+    assert r.status_code == 422  # 법정 공휴일은 seed 가 원천
+    app_db.add(Holiday(date=date(2030, 3, 1), name="삼일절", kind="public"))
+    await app_db.flush()
     assert (
         await post(
             c.exec, "/api/admin/holidays", {"date": "2030-02-30", "name": "x", "kind": "company"}
@@ -509,3 +515,97 @@ async def test_balances_and_summary(c, users: Users) -> None:
         await c.member.get("/api/attendance/me/summary?from=2030-01-01&to=2031-01-02")
     ).status_code == 422
     assert (await c.member.get("/api/attendance/me?month=2030-3")).status_code == 422
+
+
+async def test_leave_overlap_is_409(c) -> None:
+    r = await post(
+        c.member,
+        "/api/leaves",
+        {"type_code": "annual", "start_date": "2030-03-04", "end_date": "2030-03-06"},
+    )
+    assert r.status_code == 201
+    r = await post(c.member, "/api/leaves", {"type_code": "half_pm", "start_date": "2030-03-06"})
+    assert r.status_code == 409 and r.json()["code"] == "CONFLICT"
+    await post(
+        c.member,
+        f"/api/leaves/{(await c.member.get('/api/leaves')).json()['items'][0]['id']}/cancel",
+    )
+    r = await post(c.member, "/api/leaves", {"type_code": "half_pm", "start_date": "2030-03-06"})
+    assert r.status_code == 201  # 취소한 휴가와는 안 겹친다
+
+
+async def test_overtime_rules(c) -> None:
+    """12시간 상한 422, 같은 날 겹침 409, 쉬는 날은 전 구간을 센다."""
+    url = "/api/attendance/overtime"
+    r = await post(
+        c.member,
+        url,
+        {"work_date": "2030-03-04", "start_time": "18:00", "end_time": "06:30", "reason": "x"},
+    )
+    assert r.status_code == 422  # 12시간 30분
+    r = await post(
+        c.member,
+        url,
+        {"work_date": "2030-03-04", "start_time": "19:00", "end_time": "21:00", "reason": "x"},
+    )
+    assert r.status_code == 201
+    r = await post(
+        c.member,
+        url,
+        {"work_date": "2030-03-04", "start_time": "20:00", "end_time": "22:00", "reason": "x"},
+    )
+    assert r.status_code == 409 and r.json()["code"] == "CONFLICT"
+    r = await post(
+        c.member,
+        url,
+        {"work_date": "2030-03-04", "start_time": "21:00", "end_time": "22:00", "reason": "x"},
+    )
+    assert r.status_code == 201  # 맞닿기만 하면 겹침이 아니다
+    r = await post(
+        c.member,
+        url,
+        {"work_date": "2030-03-09", "start_time": "10:00", "end_time": "15:00", "reason": "x"},
+    )
+    assert r.status_code == 201 and r.json()["minutes"] == 300  # 토요일
+
+
+async def test_correction_rules(c) -> None:
+    url = "/api/attendance/corrections"
+    r = await post(
+        c.member, url, {"work_date": "2030-03-09", "after": {"note": "x"}, "reason": "x"}
+    )
+    assert r.status_code == 422  # 토요일
+    for status in ("leave", "holiday"):
+        r = await post(
+            c.member, url, {"work_date": "2030-03-04", "after": {"status": status}, "reason": "x"}
+        )
+        assert r.status_code == 422, status
+    r = await post(
+        c.member, url, {"work_date": "2030-03-04", "after": {"status": "absent"}, "reason": "x"}
+    )
+    assert r.status_code == 201
+
+
+async def test_calendar_masks_leave_type(c) -> None:
+    """홈 캘린더의 남의 휴가는 종류를 'leave' 로 뭉갠다 — 본인·exec 만 원래 코드."""
+    await post(
+        c.member, "/api/leaves", {"type_code": "sick", "start_date": "2030-03-04", "reason": "감기"}
+    )
+    await _approve(c.member, c.lead, "[휴가]")
+    q = "/api/leaves?scope=all&from=2030-03-01&to=2030-03-31"
+    assert [i["type_code"] for i in (await c.lead.get(q)).json()["items"]] == ["leave"]
+    assert [i["type_code"] for i in (await c.member.get(q)).json()["items"]] == ["sick"]
+    assert [i["type_code"] for i in (await c.exec.get(q)).json()["items"]] == ["sick"]
+
+
+async def test_report_keeps_inactive_with_rows(c, users: Users, app_db) -> None:
+    """그달 승인된 근태가 있는 퇴사자는 리포트·그리드에 남고, 아무것도 없는 비활성 계정은 빠진다."""
+    await post(c.member, "/api/leaves", {"type_code": "annual", "start_date": "2030-03-04"})
+    await _approve(c.member, c.lead, "[휴가]")
+    users.member.active = False
+    app_db.add(User(name="가나다", email="gone@zenith.co.kr", pw_hash=PW_HASH, active=False))
+    await app_db.flush()
+    text = (await c.exec.get("/api/attendance/report?month=2030-03")).content.decode("utf-8")
+    assert "김수진" in text and "가나다" not in text
+    grid = (await c.exec.get("/api/attendance/team?month=2030-03")).json()["items"]
+    assert "김수진" in [r["user"]["name"] for r in grid]

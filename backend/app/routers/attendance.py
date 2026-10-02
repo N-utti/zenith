@@ -20,7 +20,7 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select, union
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import audit
@@ -46,6 +46,7 @@ router = APIRouter(tags=["attendance"], dependencies=[Depends(current_user)])
 require_exec = require_role("exec")
 
 RANGE_MAX_DAYS = 366  # 기간 조회·신청 상한(목과 같다)
+OVERTIME_MAX_MINUTES = 12 * 60  # 연장근로 한 건(하루) 상한
 # 신청 상태 = 결재 문서 상태. 강제 종결은 승인되지 않은 채 끝난 것이라 반려로 보인다(프론트 상태는 넷뿐)
 REQUEST_STATUS = {
     "pending": "pending",
@@ -211,7 +212,8 @@ class OvertimePage(BaseModel):
 class CorrectionAfter(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    status: AttendanceStatus | None = None
+    # 휴가·휴일은 정정으로 만들지 않는다 — 휴가는 휴가 신청(잔여 차감), 휴일은 관리자 달력
+    status: Literal["normal", "half_leave", "remote", "field", "trip", "absent"] | None = None
     note: str | None = Field(None, max_length=200)
 
 
@@ -336,7 +338,20 @@ def workdays(start: date, end: date, holidays: dict[date, str]) -> list[date]:
 
 
 async def closed_between(db: AsyncSession, start: date, end: date) -> bool:
-    """기간이 마감된 달을 하나라도 지나는가 — 양끝만 보면 석 달짜리 출장의 가운데 달이 샌다."""
+    """기간이 마감된 달을 하나라도 지나는가 — 양끝만 보면 석 달짜리 출장의 가운데 달이 샌다.
+
+    걸치는 달마다 공유 자문 잠금을 잡는다 — 마감(close·reopen)은 같은 키의 배타 잠금이라, 확인한 뒤 commit
+    하기 전에 그 달이 마감돼 마감된 달에 신청·승인·휴일 변경이 끼어드는 경합을 막는다(트랜잭션 끝에 풀린다)."""
+    month = start.replace(day=1)
+    while month <= end:
+        await db.execute(
+            select(
+                func.pg_advisory_xact_lock_shared(
+                    func.hashtextextended(f"closing:{month:%Y-%m}", 0)
+                )
+            )
+        )
+        month = (month + timedelta(days=32)).replace(day=1)
     found = await db.scalar(
         select(AttClosing.month)
         .where(AttClosing.month >= f"{start:%Y-%m}", AttClosing.month <= f"{end:%Y-%m}")
@@ -621,17 +636,24 @@ async def list_arrangements(
     return Items(items=[_arrangement_out(r, _state(s, c)) for r, s, c in rows])
 
 
-def overtime_minutes(start: str, end: str) -> tuple[int, int]:
-    """(인정 분, 야간 분) — 10 §5.3. 소정 종업 18:00 이후만, 끝이 시작보다 이르면 자정을 넘긴 것(같으면 0).
-    야간은 [22:00, 익일 06:00] 과의 교집합. 프론트 `overtimeMinutes.ts` 와 같은 식."""
+def _span(start: str, end: str) -> tuple[int, int]:
+    """[시작, 끝) 분 — 끝이 시작보다 이르면 자정을 넘긴 것."""
     s = int(start[:2]) * 60 + int(start[3:])
     e = int(end[:2]) * 60 + int(end[3:])
-    if e < s:
-        e += 24 * 60
-    s = max(s, 18 * 60)
+    return s, e + 24 * 60 if e < s else e
+
+
+def overtime_minutes(start: str, end: str, day_off: bool = False) -> tuple[int, int]:
+    """(인정 분, 야간 분) — 10 §5.3. 근무일은 소정 종업 18:00 이후만, 쉬는 날(주말·휴일)은 전 구간이 휴일근로다.
+    같은 시각이면 0(24시간으로 읽지 않는다). 야간은 [00:00, 06:00]·[22:00, 익일 06:00] 과의 교집합.
+    근무일 식은 프론트 `overtimeMinutes.ts` 와 같다."""
+    s, e = _span(start, end)
+    if not day_off:
+        s = max(s, 18 * 60)
     if e <= s:
         return 0, 0
-    return e - s, max(0, min(e, 30 * 60) - max(s, 22 * 60))
+    night = sum(max(0, min(e, hi) - max(s, lo)) for lo, hi in ((0, 6 * 60), (22 * 60, 30 * 60)))
+    return e - s, night
 
 
 def _overtime_out(row: OvertimeRequest, state: dict) -> OvertimeOut:
@@ -657,10 +679,29 @@ def _overtime_out(row: OvertimeRequest, state: dict) -> OvertimeOut:
 async def create_overtime(
     body: OvertimeIn, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)
 ) -> OvertimeOut:
-    minutes, night = overtime_minutes(body.start_time, body.end_time)
+    s, e = _span(body.start_time, body.end_time)
+    if e - s > OVERTIME_MAX_MINUTES:
+        raise ApiError(422, "VALIDATION", "연장근로는 하루 12시간까지 신청할 수 있습니다.")
+    day = body.work_date
+    day_off = day.weekday() >= 5 or bool(await holidays_in(db, day, day))
+    minutes, night = overtime_minutes(body.start_time, body.end_time, day_off)
     if minutes == 0:
         raise ApiError(422, "VALIDATION", "소정 종업 시각(18:00) 이후 구간이 없습니다.")
-    if await closed_between(db, body.work_date, body.work_date):
+    await _lock(db, f"overtime:{user.id}")  # 겹침 확인과 넣기 사이
+    taken = await db.execute(
+        select(OvertimeRequest.start_time, OvertimeRequest.end_time)
+        .join(ApprovalDocument, ApprovalDocument.id == OvertimeRequest.approval_id)
+        .where(
+            OvertimeRequest.user_id == user.id,
+            OvertimeRequest.work_date == day,
+            ApprovalDocument.status.in_(["pending", "approved"]),
+        )
+    )
+    for a, b in taken:
+        os_, oe = _span(a, b)
+        if os_ < e and s < oe:
+            raise ApiError(409, "CONFLICT", "같은 날 시간이 겹치는 연장근로 신청이 있습니다.")
+    if await closed_between(db, day, day):
         raise _month_closed()
     now = datetime.now(UTC)
     row = OvertimeRequest(
@@ -739,6 +780,10 @@ async def create_correction(
     after = body.after.model_dump(exclude_none=True)
     if not after.get("status") and not (after.get("note") or "").strip():
         raise ApiError(422, "VALIDATION", "바꿀 내용이 없습니다.")
+    if not workdays(
+        body.work_date, body.work_date, await holidays_in(db, body.work_date, body.work_date)
+    ):
+        raise ApiError(422, "VALIDATION", "근무일만 정정할 수 있습니다.")
     if await closed_between(db, body.work_date, body.work_date):
         raise _month_closed()
     # ponytail: 승인 전 값(before)은 보관하지 않는다 — 일자 상태는 신청들로부터 언제든 다시 계산된다
@@ -857,13 +902,29 @@ def _brief(user: User, team: Team | None) -> UserBrief:
 
 
 async def _staff(
-    db: AsyncSession, team_id: uuid.UUID | None = None
+    db: AsyncSession,
+    team_id: uuid.UUID | None = None,
+    span: tuple[date, date] | None = None,
 ) -> list[tuple[User, Team | None]]:
-    """활성 사용자(이름순) + 팀."""
+    """활성 사용자 + (`span` 이 있으면) 그 기간에 승인된 근태 신청이 있는 사람 — 그달 중 퇴사한 사람이 리포트에서
+    빠지지 않게(이름순). ponytail: 비활성화 시각을 남기지 않아 "그 달에 활성이었나" 는 신청 행으로 대신 판단한다."""
+    who = User.active.is_(True)
+    if span is not None:
+        lo, hi = span
+        ids = [
+            _approved(m).with_only_columns(m.user_id).where(a <= hi, b >= lo)
+            for m, a, b in (
+                (LeaveRequest, LeaveRequest.start_date, LeaveRequest.end_date),
+                (WorkArrangement, WorkArrangement.start_date, WorkArrangement.end_date),
+                (OvertimeRequest, OvertimeRequest.work_date, OvertimeRequest.work_date),
+                (AttCorrection, AttCorrection.work_date, AttCorrection.work_date),
+            )
+        ]
+        who = or_(who, User.id.in_(union(*ids)))
     stmt = (
         select(User, Team)
         .outerjoin(Team, Team.id == User.team_id)
-        .where(User.active.is_(True))
+        .where(who)
         .order_by(User.name, User.id)
     )
     if team_id is not None:
@@ -931,7 +992,10 @@ async def list_leaves(
                 LeaveOnCalendar(
                     id=r.id,
                     user=Person(id=r.user_id, name=name),
-                    type_code=r.type_code,
+                    # 병가·경조사 같은 종류는 남에게 알릴 일이 아니다 — 본인·exec 만 원래 코드를 본다
+                    type_code=r.type_code
+                    if r.user_id == user.id or user.role == "exec"
+                    else "leave",
                     start_date=r.start_date,
                     end_date=r.end_date,
                 )
@@ -965,6 +1029,19 @@ async def create_leave(
     if kind.deduct_days == 0 and not reason:  # 연차·반차는 사유를 받지 않는다(근기법 §60)
         raise ApiError(422, "VALIDATION", "사유를 입력해 주세요.")
     await _lock(db, f"leave:{user.id}")  # 잔여 확인과 넣기 사이에 같은 사람의 다른 신청이 끼지 않게
+    overlap = await db.scalar(
+        select(LeaveRequest.id)
+        .join(ApprovalDocument, ApprovalDocument.id == LeaveRequest.approval_id)
+        .where(
+            LeaveRequest.user_id == user.id,
+            ApprovalDocument.status.in_(["pending", "approved"]),
+            LeaveRequest.start_date <= end,
+            LeaveRequest.end_date >= start,
+        )
+        .limit(1)
+    )
+    if overlap is not None:
+        raise ApiError(409, "CONFLICT", "기간이 겹치는 휴가 신청이 있습니다.")
     if await closed_between(db, start, end):
         raise _month_closed()
     n = len(workdays(start, end, await holidays_in(db, start, end)))
@@ -1046,7 +1123,7 @@ async def team_grid(
     if team_id is not None and team is None:
         raise ApiError(404, "NOT_FOUND", "없는 팀입니다.")
     first, last = _month_bounds(month)
-    staff = await _staff(db, team_id)
+    staff = await _staff(db, team_id, (first, last))
     days = await _days(db, [u.id for u, _ in staff], first, last)
     return Grid(
         month=month,
@@ -1058,9 +1135,9 @@ async def team_grid(
 
 
 def _cell(value) -> str:
-    """CSV 수식 주입 막기 — 엑셀이 =·+·-·@ 로 시작하는 칸을 수식으로 읽는다."""
+    """CSV 수식 주입 막기 — 엑셀이 =·+·-·@(와 앞의 탭·CR)로 시작하는 칸을 수식으로 읽는다."""
     text = str(value)
-    return "'" + text if text[:1] in ("=", "+", "-", "@") else text
+    return "'" + text if text[:1] in ("=", "+", "-", "@", "\t", "\r") else text
 
 
 @router.get(
@@ -1076,7 +1153,7 @@ async def report(
     db: AsyncSession = Depends(get_db),
 ) -> Response:
     first, last = _month_bounds(month)
-    staff = await _staff(db)
+    staff = await _staff(db, span=(first, last))
     days = await _days(db, [u.id for u, _ in staff], first, last)
     buf = io.StringIO()
     w = csv.writer(buf)

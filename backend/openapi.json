@@ -7857,12 +7857,10 @@
                 "type": "string",
                 "enum": [
                   "normal",
-                  "leave",
                   "half_leave",
                   "remote",
                   "field",
                   "trip",
-                  "holiday",
                   "absent"
                 ]
               },
@@ -9239,10 +9237,7 @@
           },
           "kind": {
             "type": "string",
-            "enum": [
-              "public",
-              "company"
-            ],
+            "const": "company",
             "title": "Kind"
           }
         },

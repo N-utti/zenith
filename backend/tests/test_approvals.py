@@ -1,7 +1,7 @@
 """13 §9 전자결재 — 기안·상신·승인·반려·회수·강제 종결·위임·참조·첨부. 규칙은 프론트 목(mocks/approvalsDb.ts)과 같다."""
 
 from contextlib import asynccontextmanager
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -142,9 +142,9 @@ async def test_draft_submit_approve_flow(c, users: Users, app_db) -> None:
     assert doc["steps"][0]["status"] == "approved" and doc["steps"][0]["comment"] == "좋습니다"
     assert doc["steps"][0]["version"] == 2 and doc["steps"][0]["acted_by"] is None
     assert doc["status"] == "pending" and doc["waiting_on"]["name"] == "최재호"
-    # 같은 버전으로 두 번 누르면(다른 탭) 이미 차례가 아니다
+    # 같은 버전으로 두 번 누르면(다른 탭) 권한 거부가 아니라 상태 충돌
     r = await post(c.lead, f"/api/approvals/{doc['id']}/approve", {"version": 1})
-    assert r.status_code == 403
+    assert r.status_code == 409 and r.json()["code"] == "ALREADY_DECIDED"
 
     r = await post(c.exec, f"/api/approvals/{doc['id']}/approve", {"version": 1})
     assert r.status_code == 200, r.text
@@ -490,3 +490,114 @@ async def test_attachments(c, users: Users, app_db, minio_bucket) -> None:
         client.list_objects(minio_bucket, prefix=f"approvals/{gone['id']}/", recursive=True)
     )
     assert left == []
+
+
+async def test_reclick_after_close_is_409(c) -> None:
+    """끝난 문서를 다시 누르면 409 NOT_PENDING — 403 + acl.denied 로 잡히지 않는다."""
+    doc = await _submitted(c)
+    await post(c.lead, f"/api/approvals/{doc['id']}/reject", {"version": 1, "reason": "x"})
+    r = await post(c.lead, f"/api/approvals/{doc['id']}/approve", {"version": 2})
+    assert r.status_code == 409 and r.json()["code"] == "NOT_PENDING"
+    r = await post(c.exec, f"/api/approvals/{doc['id']}/reject", {"version": 1, "reason": "x"})
+    assert r.status_code == 409
+
+
+async def test_line_without_team_lead_starts_at_exec(c, users: Users, app_db) -> None:
+    """lead_id 가 NULL 인 팀(관리 화면으로 만든 팀)의 사원은 결재선이 임원부터 — role=lead 는 보지 않는다."""
+    users.team.lead_id = None
+    await app_db.flush()
+    doc = await _submitted(c)
+    assert [s["approver"]["name"] for s in doc["steps"]] == ["최재호"]
+
+
+async def test_no_active_exec_is_422(c, users: Users, app_db) -> None:
+    users.exec.active = False
+    users.team.lead_id = None  # 팀장도 없는 팀
+    await app_db.flush()
+    r = await post(c.member, "/api/approvals/drafts", draft())
+    r = await post(c.member, f"/api/approvals/{r.json()['id']}/submit")
+    assert r.status_code == 422  # 결재할 사람이 없다고 자동 확정하지 않는다
+
+
+async def test_two_execs_make_three_steps(c, users: Users, app_db, make_client) -> None:
+    """활성 exec 전원이 계정 만든 순으로 선다 — 팀장 → 임원 1 → 임원 2 를 차례로 거쳐 확정."""
+    # 같은 트랜잭션의 now() 는 같은 값이라 만든 순서를 시각으로 정해 준다
+    later = datetime.now(UTC) + timedelta(days=1)
+    second = User(
+        name="한대표", email="ceo@zenith.co.kr", pw_hash=PW_HASH, role="exec", created_at=later
+    )
+    app_db.add(second)
+    await app_db.flush()
+    doc = await _submitted(c)
+    assert [s["approver"]["name"] for s in doc["steps"]] == ["박동현", "최재호", "한대표"]
+    await post(c.lead, f"/api/approvals/{doc['id']}/approve", {"version": 1})
+    r = await post(c.exec, f"/api/approvals/{doc['id']}/approve", {"version": 1})
+    assert r.json()["status"] == "pending" and r.json()["waiting_on"]["name"] == "한대표"
+    async with _as(make_client, "ceo@zenith.co.kr") as ceo:
+        r = await post(ceo, f"/api/approvals/{doc['id']}/approve", {"version": 1})
+    assert r.json()["status"] == "approved"
+
+
+async def test_delegation_segregation_of_duties(c, users: Users) -> None:
+    """같은 문서의 다른 승인 단계 결재자는 대결하지 못한다 — 한 사람이 두 단계를 채우지 않게."""
+    d = today().isoformat()
+    r = await post(
+        c.lead,
+        "/api/approvals/delegations",
+        {"delegate_id": str(users.exec.id), "start_date": d, "end_date": d},
+    )
+    assert r.status_code == 201
+    doc = await _submitted(c)  # 박동현 → 최재호, 박동현이 최재호에게 위임
+    assert (await c.exec.get("/api/approvals?box=inbox")).json()["items"] == []
+    assert (await c.exec.get(f"/api/approvals/{doc['id']}")).json()["can_decide"] is False
+    r = await post(c.exec, f"/api/approvals/{doc['id']}/approve", {"version": 1})
+    assert r.status_code == 403 and r.json()["code"] == "NOT_YOUR_TURN"
+
+
+async def test_attendance_delegation(c, users: Users, outsider: User, app_db) -> None:
+    """근태 문서 대결: 휴가는 위임 가능 유형이라 대결되고, 연장근로는 '모든 유형' 위임으로도 안 넘어간다."""
+    d = today().isoformat()
+    r = await post(
+        c.lead,
+        "/api/approvals/delegations",
+        {"delegate_id": str(outsider.id), "start_date": d, "end_date": d},
+    )
+    assert r.status_code == 201
+    await post(c.member, "/api/leaves", {"type_code": "annual", "start_date": "2030-03-04"})
+    await post(
+        c.member,
+        "/api/attendance/overtime",
+        {"work_date": "2030-03-05", "start_time": "18:00", "end_time": "20:00", "reason": "x"},
+    )
+    inbox = (await c.other.get("/api/approvals?box=inbox")).json()["items"]
+    assert [i["type_code"] for i in inbox] == ["leave"]
+    r = await post(c.other, f"/api/approvals/{inbox[0]['id']}/approve", {"version": 1})
+    assert r.status_code == 200 and r.json()["steps"][0]["status"] == "delegated_done"
+    lead_inbox = (await c.lead.get("/api/approvals?box=inbox")).json()["items"]
+    ot = next(i for i in lead_inbox if i["type_code"] == "overtime")
+    r = await post(c.other, f"/api/approvals/{ot['id']}/approve", {"version": 1})
+    assert r.status_code == 403
+    leaves = (await c.member.get("/api/leaves?scope=me")).json()["items"]
+    assert leaves[0]["status"] == "approved"
+    decided = await app_db.scalar(select(AuditEvent).where(AuditEvent.kind == "approvals.decided"))
+    assert decided.detail["acting_for"] == str(users.lead.id) and decided.actor_id == outsider.id
+
+
+async def test_delegation_period_limit_and_auto_approve_audit(c, users: Users, app_db) -> None:
+    d = today()
+    r = await post(
+        c.lead,
+        "/api/approvals/delegations",
+        {
+            "delegate_id": str(users.member.id),
+            "start_date": d.isoformat(),
+            "end_date": (d + timedelta(days=366)).isoformat(),
+        },
+    )
+    assert r.status_code == 422
+    doc = (await post(c.exec, "/api/approvals/drafts", draft())).json()
+    await post(c.exec, f"/api/approvals/{doc['id']}/submit")
+    event = await app_db.scalar(
+        select(AuditEvent).where(AuditEvent.kind == "approvals.auto_approved")
+    )
+    assert event is not None and event.actor_id == users.exec.id

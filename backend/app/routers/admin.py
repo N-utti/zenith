@@ -10,6 +10,7 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, Query, Request, Response
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 from sqlalchemy import select, tuple_, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import audit
@@ -350,7 +351,7 @@ class HolidayOut(BaseModel):
 class HolidayIn(BaseModel):
     date: date
     name: Name
-    kind: Literal["public", "company"]
+    kind: Literal["company"]  # 법정 공휴일은 seed(관보)가 원천 — 화면에서는 회사 휴일만 넣는다
 
 
 class HolidayPatchIn(BaseModel):
@@ -434,7 +435,11 @@ async def create_holiday(
         actor_id=actor.id,
         detail={"date": body.date.isoformat(), "name": body.name, "kind": body.kind},
     )
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError as e:  # 사전 검사와 commit 사이에 같은 날을 넣은 요청이 있었다
+        await db.rollback()
+        raise ApiError(409, "HOLIDAY_EXISTS", "이미 휴일로 등록된 날짜입니다.") from e
     return row
 
 
