@@ -93,27 +93,30 @@
   --zenith-info: oklch(0.58 0.11 200);
 }
 
-.dark {
-  --zenith-canvas: oklch(0.18 0.008 265);
-  --zenith-surface: oklch(0.22 0.01 265);
-  --zenith-surface-hover: oklch(0.26 0.012 265);
-  --zenith-sunken: oklch(0.15 0.008 265);
-  --zenith-line: oklch(0.3 0.012 265);
-  --zenith-line-strong: oklch(0.4 0.015 265);
+/* 어두운 색은 화면에서만. 인쇄(문서 PDF 내보내기)는 어두운 테마에서도 흰 종이에 짙은 글자로 나간다. */
+@media screen {
+  .dark {
+    --zenith-canvas: oklch(0.18 0.008 265);
+    --zenith-surface: oklch(0.22 0.01 265);
+    --zenith-surface-hover: oklch(0.26 0.012 265);
+    --zenith-sunken: oklch(0.15 0.008 265);
+    --zenith-line: oklch(0.3 0.012 265);
+    --zenith-line-strong: oklch(0.4 0.015 265);
 
-  --zenith-fg: oklch(0.95 0.005 265);
-  --zenith-muted: oklch(0.71 0.012 265);
-  --zenith-subtle: oklch(0.58 0.012 265);
+    --zenith-fg: oklch(0.95 0.005 265);
+    --zenith-muted: oklch(0.71 0.012 265);
+    --zenith-subtle: oklch(0.58 0.012 265);
 
-  --zenith-accent: oklch(0.68 0.16 265);
-  --zenith-accent-hover: oklch(0.74 0.15 265);
-  --zenith-on-accent: oklch(0.17 0.02 265);
-  --zenith-accent-soft: oklch(0.3 0.06 265);
+    --zenith-accent: oklch(0.68 0.16 265);
+    --zenith-accent-hover: oklch(0.74 0.15 265);
+    --zenith-on-accent: oklch(0.17 0.02 265);
+    --zenith-accent-soft: oklch(0.3 0.06 265);
 
-  --zenith-success: oklch(0.7 0.14 155);
-  --zenith-warning: oklch(0.79 0.14 75);
-  --zenith-danger: oklch(0.68 0.18 25);
-  --zenith-info: oklch(0.72 0.1 200);
+    --zenith-success: oklch(0.7 0.14 155);
+    --zenith-warning: oklch(0.79 0.14 75);
+    --zenith-danger: oklch(0.68 0.18 25);
+    --zenith-info: oklch(0.72 0.1 200);
+  }
 }
 
 /**
@@ -331,4 +334,69 @@
 
 .dark .collaboration-carets__selection {
   mix-blend-mode: screen;
+}
+
+/* ── 문서 인쇄 (PDF 내보내기) ─────────────────────────────────
+   `exportDoc.ts` 가 본문 사본(.zenith-print)을 body 끝에 붙이고 인쇄 창을 연다. 찍을 때는 앱을
+   통째로 숨기고 그 사본만 남긴다. 화면에서는 사본이 보이지 않는다. */
+.zenith-print {
+  display: none;
+}
+
+@media print {
+  /* 사본이 있을 때만 앱을 숨긴다. 조건이 없으면 다른 화면에서 Ctrl+P 를 눌러도 빈 종이가 나온다.
+     화면을 꽉 채우려고 건 높이(h-full)도 그때만 푼다. 남아 있으면 첫 쪽에서 잘린다. */
+  html:has(body > .zenith-print),
+  body:has(> .zenith-print) {
+    height: auto;
+    background: white;
+  }
+  body:has(> .zenith-print) > :not(.zenith-print) {
+    display: none !important;
+  }
+
+  /* 형광펜·코드 바탕·표 머리 칸의 색은 브라우저가 기본으로 빼고 찍는다. 그대로 찍게 한다. */
+  .zenith-print {
+    display: block;
+    /* 표의 바깥 테두리는 폭의 절반이 표 밖으로 나간다. 본문 끝에 닿은 표의 오른쪽 선이 잘리지 않게 둔다. */
+    padding-inline: 1px;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .zenith-print > h1 {
+    @apply mb-4 text-3xl font-bold tracking-tight;
+  }
+  /* 편집기 밖에서는 빈 문단에 높이가 없다. 띄워 둔 빈 줄이 사라지지 않게 한 줄 높이를 준다. */
+  .zenith-print p:empty {
+    min-height: 1lh;
+  }
+  .zenith-print figure {
+    @apply my-6;
+    break-inside: avoid;
+  }
+  .zenith-print img {
+    @apply h-auto max-w-full rounded-lg;
+  }
+  .zenith-print figcaption {
+    @apply text-subtle mt-2 text-sm;
+  }
+  .zenith-print [data-type='fileChip'] {
+    @apply border-line bg-sunken text-muted mx-0.5 rounded-lg border px-2 py-0.5 text-xs;
+  }
+  /* 종이는 가로로 구르지 못한다. 긴 코드 줄은 접는다. */
+  .zenith-print pre {
+    white-space: pre-wrap;
+    break-inside: avoid;
+  }
+  /* 편집기는 표에 너비를 px 로 적어 둔다. 화면에서는 표만 가로로 구르지만 종이는 못 구른다. */
+  .zenith-print table {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+  .zenith-print tr {
+    break-inside: avoid;
+  }
+  .zenith-print :is(h1, h2, h3) {
+    break-after: avoid;
+  }
 }

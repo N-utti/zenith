@@ -26,6 +26,7 @@ import { anchorBlock, flashBlock } from './blockId'
 import { CommentPanel, type CommentTarget } from './CommentPanel'
 import { DocBreadcrumb } from './DocBreadcrumb'
 import { EditorBubbleMenu } from './EditorBubbleMenu'
+import { ExportMenu } from './ExportMenu'
 import { InlineAiPopover } from './InlineAiPopover'
 import { buildDocExtensions } from './editorExtensions'
 import { EditorToolbar } from './EditorToolbar'
@@ -529,6 +530,7 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
         <DocBreadcrumb docId={meta.id} title={title} />
         <div className="ml-auto flex shrink-0 items-center gap-1">
           <PresenceBar session={session} />
+          {editor && <ExportMenu editor={editor} title={title || UNTITLED_DOC} />}
           <button
             type="button"
             aria-label="문서를 휴지통으로"
