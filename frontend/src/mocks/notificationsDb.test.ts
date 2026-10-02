@@ -1,6 +1,11 @@
 import { expect, it } from 'vitest'
 import { MOCK_USERS } from './db'
-import { listMentionNotifications, listNotifications, markRead } from './notificationsDb'
+import {
+  listMentionNotifications,
+  listNotifications,
+  markRead,
+  removeNotifications,
+} from './notificationsDb'
 
 const member = MOCK_USERS.find((u) => u.id === 'u-2')!
 const exec = MOCK_USERS.find((u) => u.role === 'exec')!
@@ -40,4 +45,17 @@ it('홈 한 벌의 멘션은 알림 그대로다. 멘션 종류만 실린다', (
   // 같은 사건이므로 알림 목록에도 그대로 있다. 두 벌이면 여기서 어긋난다.
   const ids = listNotifications(member).map((n) => n.id)
   expect(mentions.every((m) => ids.includes(m.id))).toBe(true)
+})
+
+// 맨 뒤에 둔다. 모듈 전역 배열에서 실제로 빼므로 앞의 케이스가 이 알림을 기대하면 깨진다.
+it('지운 알림은 목록에서 빠지고, 없는 id 는 건너뛴다', () => {
+  const before = listNotifications(member)
+  const target = before.at(-1)!
+
+  expect(removeNotifications([target.id, 'n-없는-알림'])).toBe(1)
+  const after = listNotifications(member)
+  expect(after.some((n) => n.id === target.id)).toBe(false)
+  expect(after).toHaveLength(before.length - 1)
+  // 같은 요청을 다시 보내도 아무 일이 없다.
+  expect(removeNotifications([target.id])).toBe(0)
 })

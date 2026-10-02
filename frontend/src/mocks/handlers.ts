@@ -43,6 +43,7 @@ import {
   listMentionNotifications,
   listNotifications,
   markRead as markNotificationsRead,
+  removeNotifications,
 } from './notificationsDb'
 import { search } from './searchDb'
 import {
@@ -656,6 +657,19 @@ export const handlers = [
       return validationError('읽음 처리할 알림 id 를 1개 이상 200개 이하로 보내 주세요.')
     }
     markNotificationsRead(body.ids.map(String))
+    return new HttpResponse(null, { status: 204 })
+  }),
+
+  // 알림 지우기. 실서버에는 아직 없는 경로다(04 §2 에 없음). 읽음 처리와 같은 모양으로 가정했다:
+  // `ids` 1개 이상 200개 이하, 204, 남의 것이나 없는 id 는 조용히 건너뛴다.
+  http.post('/api/me/notifications/delete', async ({ request }) => {
+    if (!authenticate()) return unauthorized()
+
+    const body = await readJson<{ ids?: unknown }>(request)
+    if (!body || !Array.isArray(body.ids) || body.ids.length === 0 || body.ids.length > 200) {
+      return validationError('지울 알림 id 를 1개 이상 200개 이하로 보내 주세요.')
+    }
+    removeNotifications(body.ids.map(String))
     return new HttpResponse(null, { status: 204 })
   }),
 

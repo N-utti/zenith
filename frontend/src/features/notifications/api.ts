@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
+import { MSW_ENABLED } from '@/mocks/accounts'
 import { homeKeys } from '@/features/home/keys'
 import type { Notification } from './types'
 import { countUnread } from './view'
@@ -44,6 +45,30 @@ export function useMarkNotificationsRead() {
     mutationFn: (ids: string[]) =>
       api<void>('/me/notifications/read', { method: 'POST', body: JSON.stringify({ ids }) }),
     onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: notificationKeys.list })
+      // 홈의 멘션 카드도 같은 알림을 본다.
+      void qc.invalidateQueries({ queryKey: homeKeys.home })
+    },
+  })
+}
+
+/**
+ * 알림 지우기를 보일지. 서버에는 아직 그 경로가 없어서(04 §2 는 목록과 읽음 처리뿐) 목이 켜진
+ * 개발 화면에서만 보인다. 서버가 받게 되면 이 스위치를 걷는다.
+ */
+export const NOTIFICATION_DELETE_ENABLED = MSW_ENABLED
+
+/**
+ * 알림을 지운다. 읽음 처리와 같은 모양(`ids` 를 본문으로)이다. 하나를 지울 때도 이 경로다.
+ *
+ * 바로 반영하지 않고 목록을 다시 받는다. 실패해도 다시 받는다. 일부만 지워진 채 실패했을 수 있다.
+ */
+export function useDeleteNotifications() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (ids: string[]) =>
+      api<void>('/me/notifications/delete', { method: 'POST', body: JSON.stringify({ ids }) }),
+    onSettled: () => {
       void qc.invalidateQueries({ queryKey: notificationKeys.list })
       // 홈의 멘션 카드도 같은 알림을 본다.
       void qc.invalidateQueries({ queryKey: homeKeys.home })
