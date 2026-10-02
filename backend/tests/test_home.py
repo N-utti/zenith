@@ -294,6 +294,83 @@ async def test_todos_crud_and_ownership(client: AsyncClient, users: Users, app_d
     ).status_code == 404
 
 
+async def test_events_crud(client: AsyncClient, users: Users, app_db) -> None:
+    """홈 캘린더 /me/events (README 31): 기간 안의 내 일정만 날짜·시각 순. 검증 422, 남의 것 404."""
+    await login(client, "sujin@zenith.co.kr")
+    h = csrf(client)
+    url = "/api/me/events"
+    r = await client.post(
+        url, json={"date": "2026-10-05", "title": " 주간 회의 ", "time": "10:00"}, headers=h
+    )
+    assert r.status_code == 201, r.text
+    meeting = r.json()
+    assert set(meeting) == {"id", "date", "title", "time", "created_at"}
+    assert (meeting["date"], meeting["title"], meeting["time"]) == (
+        "2026-10-05",
+        "주간 회의",
+        "10:00",
+    )
+    allday = (
+        await client.post(url, json={"date": "2026-10-05", "title": "보고서 마감"}, headers=h)
+    ).json()
+    assert allday["time"] is None
+    early = (
+        await client.post(
+            url, json={"date": "2026-10-05", "title": "치과", "time": "09:30"}, headers=h
+        )
+    ).json()
+    later = (
+        await client.post(
+            url, json={"date": "2026-10-20", "title": "다음", "time": None}, headers=h
+        )
+    ).json()
+    for bad in (
+        {"date": "2026-13-01", "title": "x"},
+        {"date": "2026-10-05", "title": "  "},
+        {"date": "2026-10-05", "title": "x" * 201},
+        {"date": "2026-10-05", "title": "x", "time": "25:00"},
+        {"date": "2026-10-05", "title": "x", "time": "9:30"},
+        {"date": "2026-10-05", "title": "x", "extra": 1},
+    ):
+        assert (await client.post(url, json=bad, headers=h)).status_code == 422, bad
+
+    r = await client.get(url, params={"from": "2026-10-01", "to": "2026-10-10"})
+    assert r.status_code == 200
+    assert [e["id"] for e in r.json()["items"]] == [early["id"], meeting["id"], allday["id"]]
+    assert later["id"] in [
+        e["id"]
+        for e in (await client.get(url, params={"from": "2026-10-01", "to": "2026-10-31"})).json()[
+            "items"
+        ]
+    ]
+    assert (
+        await client.get(url, params={"from": "2026-10-10", "to": "2026-10-01"})
+    ).status_code == 422
+    assert (
+        await client.get(url, params={"from": "2026-01-01", "to": "2027-12-31"})
+    ).status_code == 422
+    assert (await client.get(url, params={"from": "2026-10-01"})).status_code == 422
+
+    # 남의 것은 보이지도, 지워지지도 않는다
+    await login(client, "donghyun@zenith.co.kr")
+    assert (await client.get(url, params={"from": "2026-10-01", "to": "2026-10-31"})).json()[
+        "items"
+    ] == []
+    r = await client.delete(f"{url}/{meeting['id']}", headers=csrf(client))
+    assert r.status_code == 404
+    await login(client, "sujin@zenith.co.kr")
+    h = csrf(client)
+    assert (await client.delete(f"{url}/{meeting['id']}", headers=h)).status_code == 204
+    assert (await client.delete(f"{url}/{meeting['id']}", headers=h)).status_code == 404
+    ids = [
+        e["id"]
+        for e in (await client.get(url, params={"from": "2026-10-01", "to": "2026-10-10"})).json()[
+            "items"
+        ]
+    ]
+    assert ids == [early["id"], allday["id"]]
+
+
 async def test_notifications_list_and_read(client: AsyncClient, users: Users, app_db) -> None:
     await _fixture(app_db, users)
     await login(client, "sujin@zenith.co.kr")
@@ -351,7 +428,9 @@ async def test_notifications_delete(client: AsyncClient, users: Users, app_db) -
     assert (r.status_code, r.content) == (204, b"")
     left = (await client.get("/api/me/notifications")).json()["items"]
     assert [n["kind"] for n in left] == ["post", "comment"]
-    assert mention["id"] not in [n["id"] for n in (await client.get("/api/me/home")).json()["mentions"]]
+    assert mention["id"] not in [
+        n["id"] for n in (await client.get("/api/me/home")).json()["mentions"]
+    ]
     assert (
         await app_db.execute(Notification.__table__.select().where(Notification.id == theirs.id))
     ).first() is not None

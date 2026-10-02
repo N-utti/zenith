@@ -5,7 +5,7 @@
 """
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Response
@@ -23,6 +23,7 @@ from app.models import (
     Channel,
     ChannelMember,
     Document,
+    Event,
     Folder,
     Message,
     Notification,
@@ -107,6 +108,28 @@ class TodoCreateIn(BaseModel):
     text: NonBlank
 
 
+EventTitle = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+EventTime = Annotated[str, StringConstraints(pattern=r"^([01]\d|2[0-3]):[0-5]\d$")]  # "HH:MM"
+
+
+class EventOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    date: date
+    title: str
+    time: str | None
+    created_at: datetime
+
+
+class EventCreateIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    date: date
+    title: EventTitle
+    time: EventTime | None = None
+
+
 class TodoPatchIn(BaseModel):
     text: NonBlank | None = None
     done: bool | None = None
@@ -180,7 +203,9 @@ async def _unread_channels(db: AsyncSession, user: User) -> list[UnreadChannel]:
                 | (Message.created_at > ChannelMember.last_read_at)
             ),
         )
-        .where(ChannelMember.user_id == user.id, ChannelMember.hidden_at.is_(None))  # 목록과 같은 기준
+        .where(
+            ChannelMember.user_id == user.id, ChannelMember.hidden_at.is_(None)
+        )  # 목록과 같은 기준
         .group_by(Channel.id)
         .order_by(func.count(Message.id).desc(), Channel.id)
         .limit(20)  # 홈 카드는 상위 몇 개면 된다 — 전체 목록은 §5 /channels
@@ -331,6 +356,55 @@ async def delete_todo(
     id: uuid.UUID, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)
 ) -> Response:
     await db.delete(await _own_todo(db, user, id))
+    await db.commit()
+    return Response(status_code=204)
+
+
+# ── 개인 일정 (04 밖 — README 31) ──────────────────────────────────
+
+
+@router.get(
+    "/me/events",
+    response_model=Items[EventOut],
+    summary="내 일정 ?from&to (날짜, 둘 다 필수, 최대 366일) — 날짜·시각 순 (04 밖, README 31)",
+)
+async def list_events(
+    from_: Annotated[date, Query(alias="from")],
+    to: date,
+    user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Items[EventOut]:
+    if to < from_ or to - from_ > timedelta(days=366):
+        raise ApiError(422, "VALIDATION", "기간은 from ≤ to, 366일 이내여야 합니다.")
+    rows = await db.execute(
+        select(Event)
+        .where(Event.user_id == user.id, Event.date >= from_, Event.date <= to)
+        .order_by(Event.date, Event.time.nulls_last(), Event.created_at, Event.id)
+    )
+    return Items(items=[EventOut.model_validate(e) for e in rows.scalars()])
+
+
+@router.post(
+    "/me/events", status_code=201, response_model=EventOut, summary="일정 추가 {date, title, time?}"
+)
+async def create_event(
+    body: EventCreateIn, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)
+) -> Event:
+    event = Event(user_id=user.id, date=body.date, title=body.title, time=body.time)
+    db.add(event)
+    await db.commit()
+    await db.refresh(event)
+    return event
+
+
+@router.delete("/me/events/{id}", status_code=204, summary="일정 삭제 — 남의 것도 404")
+async def delete_event(
+    id: uuid.UUID, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)
+) -> Response:
+    event = await db.get(Event, id)
+    if event is None or event.user_id != user.id:
+        raise ApiError(404, "NOT_FOUND", "없는 일정입니다.")  # 할 일과 같은 규칙 (TC-AUTH-04)
+    await db.delete(event)
     await db.commit()
     return Response(status_code=204)
 
