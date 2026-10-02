@@ -192,7 +192,9 @@ class DocComment(Base):
     author_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
     body: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = created_at_col()
-    edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # 고친 적 없으면 NULL (#274)
+    edited_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )  # 고친 적 없으면 NULL (#274)
 
 
 class StoredFile(Base):
@@ -263,7 +265,9 @@ class Message(Base):
     doc_ref: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("documents.id"))  # 문서 카드
     attachments: Mapped[list | None] = mapped_column(JSONB)
     created_at: Mapped[datetime] = created_at_col()
-    edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # 고친 적 없으면 NULL (#264)
+    edited_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )  # 고친 적 없으면 NULL (#264)
     # 검색용 파생(03 §2.4 식). DB 가 본문에서 만들어 저장한다 — 앱은 쓰지 않고, 읽을 때도 딸려 오지 않는다
     # (deferred + 위 eager_defaults). 즉석 to_tsvector 는 일치한 행마다 ts_rank 가 다시 계산해 흔한 단어에서 느렸다.
     tsv: Mapped[str | None] = mapped_column(
@@ -313,6 +317,20 @@ class Todo(Base):
     text: Mapped[str] = mapped_column(Text, nullable=False)
     done: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=sql_text("false"))
     created_at: Mapped[datetime] = created_at_col()  # 03 에 없던 컬럼 — 목록 순서 (2026-09-07)
+
+
+class Event(Base):
+    """홈 캘린더의 개인 일정(03 에 없는 표, 2026-10-02 — README 31). 할 일(`todos`)과 같은 꼴, 본인만 본다."""
+
+    __tablename__ = "events"
+    __table_args__ = (Index("idx_events_user_date", "user_id", "date"),)
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    date: Mapped[date] = mapped_column(Date, nullable=False)
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    time: Mapped[str | None] = mapped_column(Text)  # "HH:MM" — 프론트가 그대로 그린다. 없으면 종일
+    created_at: Mapped[datetime] = created_at_col()
 
 
 class Notification(Base):
