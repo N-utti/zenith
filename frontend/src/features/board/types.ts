@@ -42,3 +42,19 @@ export type BoardPost = Omit<Schema<'PostOut'>, 'min_role'> & {
 }
 
 export type BoardPostDetail = BoardPost & Pick<Schema<'PostDetail'>, 'body'>
+
+/**
+ * 게시글 댓글. 서버에는 아직 없다(프론트가 먼저 만들었다, `api.ts` 의 `POST_COMMENTS_ENABLED`).
+ * 문서 댓글(`CommentOut`)에서 블록 칸을 뺀 모양으로 가정했다.
+ */
+export interface PostComment {
+  id: string
+  author: Person
+  body: string
+  created_at: string
+  /** 고친 시각. 고친 적이 없으면 `null`. */
+  edited_at: string | null
+}
+
+/** 댓글 글자 수 상한. 문서 댓글(`CommentCreateIn.body`)과 같게 잡았다. */
+export const POST_COMMENT_MAX = 10_000
