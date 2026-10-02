@@ -371,6 +371,7 @@ async def create_channel(
     db: AsyncSession = Depends(get_db),
 ) -> ChannelOut:
     ws_id = (await db.execute(select(Workspace.id).limit(1))).scalar()
+    notify: list[uuid.UUID] = []
     if ws_id is None:
         raise ApiError(
             409, "CONFLICT", "워크스페이스가 없습니다. scripts/seed.py 를 먼저 돌리세요."
@@ -406,12 +407,18 @@ async def create_channel(
         )
         if existing is not None:
             channel = existing
-            # 숨겨 둔 방을 다시 여는 길 — 상대 쪽은 건드리지 않는다
-            await db.execute(
+            # 숨겨 둔 방을 다시 여는 길 — 상대 쪽은 건드리지 않는다(#268)
+            unhidden = await db.execute(
                 update(ChannelMember)
-                .where(ChannelMember.channel_id == channel.id, ChannelMember.user_id == user.id)
+                .where(
+                    ChannelMember.channel_id == channel.id,
+                    ChannelMember.user_id == user.id,
+                    ChannelMember.hidden_at.is_not(None),
+                )
                 .values(hidden_at=None)
             )
+            if unhidden.rowcount:
+                notify = [user.id]  # 다른 탭의 목록도 맞춘다
         else:
             channel = Channel(ws_id=ws_id, name="", is_dm=True)
             db.add(channel)
@@ -457,7 +464,9 @@ async def create_channel(
     await db.commit()
     members = (await _members_of(db, [channel.id]))[channel.id]
     if channel.is_private:
-        await _notify_channels([u.id for u in members])
+        notify = [u.id for u in members]
+    if notify:
+        await _notify_channels(notify)
     return _channel_out(channel, members, user)
 
 
@@ -474,6 +483,9 @@ async def rename_channel(
     user: User = Depends(current_user),
     db: AsyncSession = Depends(get_db),
 ) -> ChannelOut:
+    await _lock_channel(
+        db, id
+    )  # 멤버 변경과 같은 이유 — 확인 뒤에 빠진 사람이 이름을 바꾸지 못하게
     await _require_member(db, request, user, id)
     channel = await db.get(Channel, id)
     assert channel is not None
@@ -525,6 +537,8 @@ async def hide_channel(
     assert channel is not None
     if not channel.is_dm:
         raise ApiError(422, "VALIDATION", "DM 만 숨길 수 있습니다.")
+    # ponytail: 숨기기와 새 메시지가 정확히 겹치면(메시지 쪽이 먼저 커밋) 새 글이 있는데도 숨겨진 채 남는다 —
+    # 다음 글이 오면 풀린다. 엄밀히 하려면 「last_read_at 이후 남의 글이 없을 때만」 조건을 건다.
     await db.execute(
         update(ChannelMember)
         .where(ChannelMember.channel_id == id, ChannelMember.user_id == user.id)

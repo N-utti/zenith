@@ -439,16 +439,17 @@ async def test_rename_channel(client: AsyncClient, users: Users, app_db, monkeyp
     # 멤버 아닌 채널은 없는 채널과 같은 403 + acl.denied
     r = await client.patch(f"/api/channels/{seeded['others'].id}", json={"name": "x"}, headers=h)
     assert (r.status_code, r.json()["code"]) == (403, "FORBIDDEN")
-    denied = (
-        await app_db.execute(select(AuditEvent).where(AuditEvent.kind == "acl.denied"))
-    ).scalar_one()
-    assert denied.target_id == seeded["others"].id
+    r = await client.patch(f"/api/channels/{uuid.uuid4()}", json={"name": "x"}, headers=h)
+    assert r.status_code == 403  # 없는 채널도 같은 답
+    denied = (await app_db.execute(select(AuditEvent).where(AuditEvent.kind == "acl.denied"))).all()
+    assert [e[0].target_id for e in denied][0] == seeded["others"].id and len(denied) == 2
     # 비공개 채널은 공개 채널과 같은 이름이라도 된다
     await login(client, "jaeho@zenith.co.kr")
     r = await client.patch(
         f"/api/channels/{seeded['secret'].id}", json={"name": "조용"}, headers=csrf(client)
     )
     assert r.status_code == 200 and r.json()["is_private"]
+    assert sent[-1] == ({users.exec.id}, {"ev": "channels"})  # 그 채널 멤버에게만
 
 
 async def test_hide_dm(client: AsyncClient, users: Users, app_db, monkeypatch) -> None:
@@ -462,6 +463,7 @@ async def test_hide_dm(client: AsyncClient, users: Users, app_db, monkeypatch) -
     assert r.status_code == 422
     r = await client.post(f"/api/channels/{seeded['others'].id}/hide", headers=h)
     assert r.status_code == 403
+    assert (await client.post(f"/api/channels/{uuid.uuid4()}/hide", headers=h)).status_code == 403
     r = await client.post(f"/api/channels/{dm_id}/hide", headers=h)
     assert (r.status_code, r.content) == (204, b"")
     assert sent == [({users.member.id}, {"ev": "channels"})]
@@ -476,13 +478,26 @@ async def test_hide_dm(client: AsyncClient, users: Users, app_db, monkeypatch) -
     # 상대의 목록에는 그대로
     await login(client, "jaeho@zenith.co.kr")
     assert dm_id in [i["id"] for i in (await client.get("/api/channels")).json()["items"]]
-    # 같은 상대와 DM 을 다시 열면 그 방이 돌아온다
+    # 상대도 숨겨 둔 상태에서 — 같은 상대와 DM 을 다시 열면 내 방만 돌아오고 상대 것은 그대로
+    assert (
+        await client.post(f"/api/channels/{dm_id}/hide", headers=csrf(client))
+    ).status_code == 204
     await login(client, "sujin@zenith.co.kr")
     r = await client.post(
         "/api/channels", json={"dm_user_id": str(users.exec.id)}, headers=csrf(client)
     )
     assert (r.status_code, r.json()["id"]) == (201, dm_id)
+    assert sent[-1] == ({users.member.id}, {"ev": "channels"})  # 다른 탭의 목록도 맞춘다
     assert dm_id in [i["id"] for i in (await client.get("/api/channels")).json()["items"]]
+    peer_row = await app_db.get(ChannelMember, (seeded["dm"].id, users.exec.id))
+    await app_db.refresh(peer_row)
+    assert peer_row.hidden_at is not None
+    # 이미 보이는 방을 다시 열면 이벤트가 더 없다
+    before = len(sent)
+    await client.post(
+        "/api/channels", json={"dm_user_id": str(users.exec.id)}, headers=csrf(client)
+    )
+    assert len(sent) == before
 
 
 async def test_member_change_locks_before_membership_check(
