@@ -343,15 +343,17 @@ async def _handle(ws: WebSocket, user: User, op: AnyOp) -> None:
                 )
         elif isinstance(op, EditOp | DelOp):
             # 쓴 사람만(#264). 없는 메시지·다른 채널의 id 는 NOT_FOUND, 남의 것은 FORBIDDEN + 감사(멤버 아님과 같은 취급)
-            message = await db.get(Message, op.message_id)
+            # 행 잠금 — 두 탭에서 고치기와 지우기가 겹치면 늦은 쪽이 0행에 닿아 StaleDataError 로 소켓이 닫힌다
+            message = await db.get(Message, op.message_id, with_for_update=True)
             if message is None or message.channel_id != op.channel_id:
                 await _send(
                     ws, _dumps(_error("NOT_FOUND", "없는 메시지입니다.", channel_id=op.channel_id))
                 )
                 return
             if message.author_id != user.id:
-                if (op.channel_id, op.op) not in ws.state.denied:
-                    ws.state.denied.add((op.channel_id, op.op))
+                # 멤버 아님 거부와 키를 가른다 — 멤버가 된 뒤 남의 글을 건드린 것도 한 번은 남게
+                if (op.channel_id, f"{op.op}:author") not in ws.state.denied:
+                    ws.state.denied.add((op.channel_id, f"{op.op}:author"))
                     audit.record(
                         db,
                         "acl.denied",
@@ -387,6 +389,25 @@ async def _handle(ws: WebSocket, user: User, op: AnyOp) -> None:
                         ),
                     )
                     return
+                # 이전 본문은 행에 남지 않는다 — 앞 120자를 감사에(지우기와 같은 기준). 멘션 알림의 미리보기도
+                # 보낸 시점 본문이라 같이 바꾼다(가리려고 고친 글이 알림함에 남지 않게)
+                audit.record(
+                    db,
+                    "chat.message_edited",
+                    request=ws,
+                    actor_id=user.id,
+                    target_id=op.channel_id,
+                    detail={"message_id": str(message.id), "before": message.body[:120]},
+                )
+                await db.execute(
+                    update(Notification)
+                    .where(Notification.payload["message_id"].astext == str(message.id))
+                    .values(
+                        payload=Notification.payload.op("||")(
+                            func.jsonb_build_object("preview", op.body[:120])
+                        )
+                    )
+                )
                 message.body = op.body
                 message.edited_at = now
                 await db.commit()
@@ -412,6 +433,7 @@ async def _handle(ws: WebSocket, user: User, op: AnyOp) -> None:
                 )
             else:
                 # 행을 지운다(자리표시 없음). 눌러서 갈 곳이 없는 멘션 알림도 함께. 첨부 오브젝트는 남는다(README 27)
+                # ponytail: payload->>'message_id' 조건이라 notifications 를 훑는다 — 쌓이면 식 인덱스
                 await db.execute(
                     delete(Notification).where(
                         Notification.payload["message_id"].astext == str(message.id)
@@ -423,7 +445,12 @@ async def _handle(ws: WebSocket, user: User, op: AnyOp) -> None:
                     request=ws,
                     actor_id=user.id,
                     target_id=op.channel_id,
-                    detail={"message_id": str(message.id), "preview": message.body[:120]},
+                    detail={
+                        "message_id": str(message.id),
+                        "preview": message.body[:120],
+                        # 오브젝트는 MinIO 에 남는다 — 나중에 고아를 찾을 단서는 여기뿐
+                        "attachments": [a["url"] for a in message.attachments or []],
+                    },
                 )
                 await db.delete(message)
                 await db.commit()

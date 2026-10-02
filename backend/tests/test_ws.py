@@ -373,22 +373,57 @@ async def test_edit_and_delete_own_message(app: FastAPI, users: Users, app_db) -
     """이슈 #264: 쓴 사람만 고치고 지운다. 남의 것 FORBIDDEN+감사, 없는 것 NOT_FOUND, 그대로면 조용, 빈 글 VALIDATION.
     고치면 msg_edit(edited_at)·GET 에도 실린다. 지우면 msg_del + unread 재계산, 멘션 알림·행이 사라진다."""
     channel = await make_channel(app_db, [users.member, users.lead])
+    other = await make_channel(app_db, [users.member, users.lead], name="딴 방")
     cid = str(channel.id)
-    async with ws_client(app) as a, ws_client(app) as b:
+    # 첨부만 있는 메시지 — 본문을 비워도 된다
+    photo = Message(
+        channel_id=channel.id,
+        author_id=users.member.id,
+        body="사진",
+        attachments=[
+            {
+                "url": f"/api/channels/{cid}/attachments/{uuid.uuid4()}/a.png",
+                "name": "a.png",
+                "size": 1,
+                "content_type": "image/png",
+            }
+        ],
+        created_at=datetime.now(UTC),
+    )
+    app_db.add(photo)
+    await app_db.flush()
+    async with ws_client(app) as a, ws_client(app) as b, ws_client(app) as c:
         await login(a, "sujin@zenith.co.kr")
         await login(b, "donghyun@zenith.co.kr")
-        async with aconnect_ws(WS, a) as a_ws, aconnect_ws(WS, b) as b_ws:
+        await login(c, "jaeho@zenith.co.kr")  # 멤버 아님
+        async with (
+            aconnect_ws(WS, a) as a_ws,
+            aconnect_ws(WS, b) as b_ws,
+            aconnect_ws(WS, c) as c_ws,
+        ):
             await send(a_ws, op="msg", channel_id=cid, body="처음 @박동현")
             first = (await recv_until(a_ws, "msg"))["message"]
             assert first["edited_at"] is None
             mid = first["id"]
             assert (await recv_until(b_ws, "notice"))["payload"]["message_id"] == mid
+            items = (await b.get(f"/api/channels/{cid}/messages")).json()["items"]
+            assert [m["edited_at"] for m in items] == [None, None]
+
+            await send(c_ws, op="edit", channel_id=cid, message_id=mid, body="밖에서")
+            assert (await recv_until(c_ws, "error"))["code"] == "FORBIDDEN"
+            await send(a_ws, op="edit", channel_id=cid, message_id=str(photo.id), body="  ")
+            assert (await recv_until(b_ws, "msg_edit"))["message"][
+                "body"
+            ] == ""  # 첨부가 있으면 빈 글도 된다
+            await recv_until(a_ws, "msg_edit")
 
             await send(b_ws, op="edit", channel_id=cid, message_id=mid, body="남이 바꿈")
             assert (await recv_until(b_ws, "error"))["code"] == "FORBIDDEN"
             await send(b_ws, op="del", channel_id=cid, message_id=mid)
             assert (await recv_until(b_ws, "error"))["code"] == "FORBIDDEN"
             await send(a_ws, op="edit", channel_id=cid, message_id=str(uuid.uuid4()), body="x")
+            assert (await recv_until(a_ws, "error"))["code"] == "NOT_FOUND"
+            await send(a_ws, op="del", channel_id=str(other.id), message_id=mid)  # 다른 채널의 id
             assert (await recv_until(a_ws, "error"))["code"] == "NOT_FOUND"
             await send(a_ws, op="edit", channel_id=cid, message_id=mid, body="  처음 @박동현  ")
             await silent(a_ws)  # 그대로면 아무 이벤트도 없다
@@ -399,43 +434,48 @@ async def test_edit_and_delete_own_message(app: FastAPI, users: Users, app_db) -
             got = (await recv_until(b_ws, "msg_edit"))["message"]
             assert (got["id"], got["body"]) == (mid, "고침 @최재호")
             assert got["edited_at"] is not None and got["created_at"] == first["created_at"]
-            assert (await recv_until(a_ws, "msg_edit"))["message"][
-                "id"
-            ] == mid  # 보낸 사람도 받는다
+            assert (await recv_until(a_ws, "msg_edit"))["message"]["id"] == mid  # 보낸 사람도
+            notes = (await b.get("/api/me/notifications")).json()["items"]
+            assert [n["payload"]["preview"] for n in notes] == [
+                "고침 @최재호"
+            ]  # 미리보기도 따라간다
             items = (await b.get(f"/api/channels/{cid}/messages")).json()["items"]
-            assert items[0]["body"] == "고침 @최재호"
+            assert items[-1]["body"] == "고침 @최재호"
             # REST 는 +00:00, 소켓은 Z — 같은 시각인지만 본다
-            assert datetime.fromisoformat(items[0]["edited_at"]) == datetime.fromisoformat(
+            assert datetime.fromisoformat(items[-1]["edited_at"]) == datetime.fromisoformat(
                 got["edited_at"]
             )
-            assert datetime.fromisoformat(items[0]["created_at"]) == datetime.fromisoformat(
+            assert datetime.fromisoformat(items[-1]["created_at"]) == datetime.fromisoformat(
                 first["created_at"]
             )
 
             await send(a_ws, op="del", channel_id=cid, message_id=mid)
             ev = await recv_until(b_ws, "msg_del")
             assert (ev["channel_id"], ev["message_id"]) == (cid, mid)
-            assert (await recv_until(b_ws, "unread"))["count"] == 0  # 안 읽은 글이 지워졌다
+            assert (await recv_until(b_ws, "unread"))["count"] == 1  # 안 읽은 글이 지워졌다(2→1)
             assert (await recv_until(a_ws, "msg_del"))["message_id"] == mid
             await send(a_ws, op="del", channel_id=cid, message_id=mid)
             assert (await recv_until(a_ws, "error"))["code"] == "NOT_FOUND"
         assert (await b.get(f"/api/channels/{cid}/messages")).json()["items"] == []
-        assert (await b.get("/api/me/home")).json()["unread"] == []
+        assert [u["count"] for u in (await b.get("/api/me/home")).json()["unread"]] == [1]
 
-    assert (await app_db.execute(select(Message))).scalars().all() == []
+    assert [m.id for m in (await app_db.execute(select(Message))).scalars()] == [photo.id]
     assert (
         await app_db.execute(select(Notification))
     ).scalars().all() == []  # 고친 멘션엔 알림 없음, 지우면 사라짐
-    kinds = sorted(
-        (e.kind, e.detail.get("op"), e.detail.get("message_id"))
-        for e in (await app_db.execute(select(AuditEvent))).scalars()
-        if e.kind in ("acl.denied", "chat.message_deleted")
-    )
-    assert kinds == [
+    events = {}
+    for e in (await app_db.execute(select(AuditEvent))).scalars():
+        if e.kind.startswith(("acl.", "chat.")):
+            events[(e.kind, e.detail.get("op"), e.detail.get("message_id"))] = e.detail
+    assert set(events) == {
+        ("acl.denied", "edit", mid),  # c(멤버 아님)와 b(남의 글)가 하나로 합쳐지지 않는다
         ("acl.denied", "del", mid),
-        ("acl.denied", "edit", mid),
+        ("chat.message_edited", None, str(photo.id)),
+        ("chat.message_edited", None, mid),
         ("chat.message_deleted", None, mid),
-    ]
+    }
+    assert events[("chat.message_edited", None, mid)]["before"] == "처음 @박동현"
+    assert events[("chat.message_deleted", None, mid)]["attachments"] == []
 
 
 async def test_dm_mention_notice_has_no_channel_name(app: FastAPI, users: Users, app_db) -> None:
