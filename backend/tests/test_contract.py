@@ -56,6 +56,8 @@ CONTRACT_PATHS = {
     # §6 게시판 · §7 검색
     "/api/boards",
     "/api/boards/{id}/posts",
+    "/api/boards/{id}/attachments",
+    "/api/boards/{id}/attachments/{file_id}/{name}",
     "/api/posts/{id}",
     "/api/posts/{id}/comments",
     "/api/posts/{id}/comments/{comment_id}",

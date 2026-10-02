@@ -323,6 +323,104 @@ async def test_post_comments(client: AsyncClient, users: Users, app_db) -> None:
     assert deleted.detail["comment_count"] == 1
 
 
+PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
+
+
+async def _attach(client: AsyncClient, board_id, name: str, data: bytes, content_type: str):
+    return await client.post(
+        f"/api/boards/{board_id}/attachments",
+        files={"file": (name, data, content_type)},
+        headers=csrf(client),
+    )
+
+
+async def test_post_attachments(client: AsyncClient, users: Users, app_db, minio_bucket) -> None:
+    """이슈 #299: 게시판 등급으로 올리고 받는다(밖은 403+감사). 글에 실리는 url 은 그 게시판 것만(422), [] 는 전부 뗌, null 422."""
+    s = await _seed(app_db, users)
+    await login(client, "sujin@zenith.co.kr")
+    r = await _attach(client, s["execs"].id, "x.png", PNG, "image/png")
+    assert (r.status_code, r.json()["code"]) == (403, "FORBIDDEN")
+    r = await _attach(client, s["notice"].id, "회의 사진.png", PNG, "image/png")
+    assert r.status_code == 201, r.text
+    att = r.json()
+    assert set(att) == {"url", "name", "size", "content_type"}
+    assert att["url"].startswith(f"/api/boards/{s['notice'].id}/attachments/") and att[
+        "size"
+    ] == len(PNG)
+    assert (await _attach(client, s["notice"].id, "e.txt", b"", "text/plain")).status_code == 422
+    doc = (await _attach(client, s["notice"].id, "자료.pdf", b"%PDF", "application/pdf")).json()
+
+    got = await client.get(att["url"])
+    assert got.status_code == 200 and got.content == PNG
+    assert got.headers["content-disposition"].startswith("inline;")
+    got = await client.get(doc["url"])
+    assert got.headers["content-disposition"].startswith("attachment;")
+    assert got.headers["x-content-type-options"] == "nosniff"
+    assert got.headers["content-security-policy"] == "default-src 'none'; sandbox"
+    assert got.headers["cache-control"] == "private, max-age=86400"
+    # 임원 게시판에 올린 파일은 등급 밖에서 못 받는다 — 403 + acl.denied(reason attach)
+    await login(client, "jaeho@zenith.co.kr")
+    sec = (await _attach(client, s["execs"].id, "비밀.pdf", b"%PDF", "application/pdf")).json()
+    await login(client, "sujin@zenith.co.kr")
+    r = await client.get(sec["url"])
+    assert (r.status_code, r.json()["code"]) == (403, "FORBIDDEN")
+    denied = (
+        (await app_db.execute(select(AuditEvent).where(AuditEvent.kind == "acl.denied")))
+        .scalars()
+        .all()
+    )
+    assert [e.detail["reason"] for e in denied] == ["attach", "attach"]  # 올리기 1 + 받기 1
+    # 다른 게시판 경로에 같은 file_id 를 끼워도 404 — 키에 게시판 id 가 있다
+    swapped = att["url"].replace(str(s["notice"].id), str(s["leads"].id))
+    await login(client, "donghyun@zenith.co.kr")
+    assert (await client.get(swapped)).status_code == 404
+    await login(client, "sujin@zenith.co.kr")
+    h = csrf(client)
+
+    # 글에 싣기: 그 게시판의 url 만. 다른 게시판 것·이름이 다른 것은 422
+    url = f"/api/boards/{s['notice'].id}/posts"
+    r = await client.post(
+        url, json={"title": "첨부 글", "body": "본문", "attachments": [att, doc]}, headers=h
+    )
+    assert r.status_code == 201, r.text
+    post = r.json()
+    assert [a["name"] for a in post["attachments"]] == ["회의 사진.png", "자료.pdf"]
+    bad = {**att, "url": swapped}
+    r = await client.post(url, json={"title": "x", "body": "y", "attachments": [bad]}, headers=h)
+    assert r.status_code == 422
+    r = await client.post(
+        url,
+        json={"title": "x", "body": "y", "attachments": [{**att, "name": "연봉.pdf"}]},
+        headers=h,
+    )
+    assert r.status_code == 422
+    r = await client.post(
+        url, json={"title": "x", "body": "y", "attachments": [att] * 11}, headers=h
+    )
+    assert r.status_code == 422
+    plain = (await client.post(url, json={"title": "없음", "body": "y"}, headers=h)).json()
+    assert plain["attachments"] == []
+    assert (await client.get(f"/api/posts/{post['id']}")).json()["attachments"][0]["url"] == att[
+        "url"
+    ]
+
+    # 고치기: 안 보내면 그대로, [] 는 전부 뗌, null 은 422, 다른 게시판 url 은 422
+    r = await client.patch(f"/api/posts/{post['id']}", json={"title": "제목만"}, headers=h)
+    assert r.status_code == 200 and len(r.json()["attachments"]) == 2
+    r = await client.patch(f"/api/posts/{post['id']}", json={"attachments": [bad]}, headers=h)
+    assert r.status_code == 422
+    tricky = {**att, "url": att["url"] + "?x", "name": att["name"] + "?x"}
+    r = await client.patch(f"/api/posts/{post['id']}", json={"attachments": [tricky]}, headers=h)
+    assert r.status_code == 422
+    r = await client.patch(f"/api/posts/{post['id']}", json={"attachments": None}, headers=h)
+    assert r.status_code == 422
+    r = await client.patch(f"/api/posts/{post['id']}", json={"attachments": [doc]}, headers=h)
+    assert r.status_code == 200 and [a["name"] for a in r.json()["attachments"]] == ["자료.pdf"]
+    r = await client.patch(f"/api/posts/{post['id']}", json={"attachments": []}, headers=h)
+    assert r.status_code == 200 and r.json()["attachments"] == []
+    assert (await client.get(att["url"])).status_code == 200  # 뗀 파일은 저장소에 남는다(README 34)
+
+
 async def test_review_edges(client: AsyncClient, users: Users, app_db) -> None:
     """리뷰 후속 — 강등 뒤 알림함 마스킹(HIGH), 모르는 등급 닫힘, 비활성 제외, lead 게시판 마스킹, exec 삭제 감사,
     null·빈 PATCH, 없는 게시판 POST, 잘못된 커서."""
