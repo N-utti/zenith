@@ -151,6 +151,12 @@ export function ToolMenu({
     if (entered === open) return
     hoverTimer.current = window.setTimeout(
       () => {
+        // 기다리는 사이에 트리거가 사라졌으면 열지 않는다(행 옆 버튼은 커서가 표를 떠나면 숨는다).
+        // 잴 자리가 없어 메뉴가 화면 구석에 뜬다.
+        if (entered && !triggerRef.current?.isConnected) return
+        // 포커스가 메뉴 안에 있으면 포인터가 떠나도 닫지 않는다. 눌러서 쓰는 중이라, 닫으면 포커스가
+        // 갈 곳을 잃고 편집기의 커서도 사라진다. 그때는 전처럼 바깥 클릭·Esc 로 닫는다.
+        if (!entered && menuRef.current?.contains(document.activeElement)) return
         openedByHover.current = entered
         if (entered) setSpot(null)
         setOpen(entered)
