@@ -73,7 +73,7 @@ function makeMessage(channelId, authorId, body, createdAt, files) {
     doc_ref: null,
     attachments: files?.length ? files : null,
     created_at: createdAt ?? new Date().toISOString(),
-    // 고친 적이 없으면 null. 실서버 `MessageOut` 에는 아직 없는 칸이다(아래 `edit` op 과 같이 제안 중).
+    // 고친 적이 없으면 null. 실서버 `MessageOut` 과 같은 칸이다(#284).
     edited_at: null,
   }
 }
@@ -285,7 +285,7 @@ export function handleChatConnection(conn, userId) {
       return publishUnread(channel)
     }
 
-    // 고치기·지우기. 실서버에는 아직 없는 op 이다(04 §4.1 에 없음, 프론트가 정한 가정).
+    // 고치기·지우기. 실서버(#284)가 아래 규칙대로 구현했다(04 §4.1 에는 아직 없다).
     //   {op:'edit', channel_id, message_id, body} → 멤버 전원에게 {ev:'msg_edit', channel_id, message}
     //   {op:'del',  channel_id, message_id}       → 멤버 전원에게 {ev:'msg_del', channel_id, message_id}
     // 쓴 사람만 할 수 있다. 첨부는 고치기로 바뀌지 않는다.

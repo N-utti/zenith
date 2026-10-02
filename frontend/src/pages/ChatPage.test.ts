@@ -60,6 +60,7 @@ function message(channelId: string, n: number): ChatMessage {
     doc_ref: null,
     attachments: null,
     created_at: `2026-10-01T03:0${n}:00Z`,
+    edited_at: null,
   }
 }
 

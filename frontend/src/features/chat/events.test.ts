@@ -20,6 +20,7 @@ function message(id: string): ChatMessage {
     doc_ref: null,
     attachments: null,
     created_at: '2026-09-21T02:00:00Z',
+    edited_at: null,
   }
 }
 
