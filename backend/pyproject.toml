@@ -18,6 +18,7 @@ dependencies = [
   "pycrdt>=0.14.4",
   "minio>=7.2",
   "python-multipart>=0.0.20",
+  "openpyxl>=3.1.5",
 ]
 
 [build-system]

@@ -80,7 +80,12 @@ def member(app: FastAPI) -> User:
 
 @pytest.fixture(scope="session")
 def test_db_url() -> str:
-    url = make_url(settings.database_url).set(database="zenith_test")
+    # 여러 세션이 동시에 돌 때 DB 이름을 비킨다(ZENITH_TEST_DB). 테스트는 DB 를 만들고 마이그레이션하므로
+    # zenith_test* 가 아닌 이름(실 DB)은 거부한다.
+    name = os.environ.get("ZENITH_TEST_DB", "zenith_test")
+    if not name.startswith("zenith_test"):
+        pytest.fail(f"ZENITH_TEST_DB 는 zenith_test 로 시작해야 한다: {name!r}")
+    url = make_url(settings.database_url).set(database=name)
 
     async def prepare() -> None:
         try:

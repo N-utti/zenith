@@ -19,6 +19,7 @@ from app.routers import (
     auth,
     boards,
     channels,
+    crm,
     docs,
     files,
     me,
@@ -128,6 +129,7 @@ def create_app() -> FastAPI:
         ai,
         attendance,
         approvals,
+        crm,
         admin,
     ):
         api.include_router(module.router)
