@@ -1254,7 +1254,7 @@
         "tags": [
           "chat"
         ],
-        "summary": "{name} 공개 채널(활성 사용자 전원 멤버) 또는 {dm_user_id} DM(있으면 그것) 생성",
+        "summary": "{name} 공개 채널(전원 멤버) · {name, is_private:true, member_ids} 비공개 채널(만든 사람+고른 사람) · {dm_user_id} DM(있으면 그것)",
         "operationId": "create_channel_api_channels_post",
         "requestBody": {
           "content": {
@@ -1278,7 +1278,106 @@
             }
           },
           "409": {
-            "description": "CONFLICT — 같은 이름의 채널"
+            "description": "CONFLICT — 같은 이름의 공개 채널(비공개는 중복 허용)"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/channels/{id}/members": {
+      "post": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "비공개 채널에 사람 더하기 {user_ids} — 멤버면 누구나. 이미 멤버인 사람은 건너뛴다. 공개·DM 은 422",
+        "operationId": "add_members_api_channels__id__members_post",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MembersIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChannelOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/channels/{id}/members/{user_id}": {
+      "delete": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "비공개 채널에서 사람 빼기 — 자기 자신이면 나가기. 멤버 아닌 사람 404, 공개·DM 은 422",
+        "operationId": "remove_member_api_channels__id__members__user_id__delete",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          },
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
           },
           "422": {
             "description": "Validation Error",
@@ -3320,8 +3419,36 @@
               }
             ],
             "title": "Dm User Id"
+          },
+          "is_private": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Private"
+          },
+          "member_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "type": "array",
+                "maxItems": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Member Ids"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "title": "ChannelCreateIn"
       },
@@ -3339,6 +3466,10 @@
           "is_dm": {
             "type": "boolean",
             "title": "Is Dm"
+          },
+          "is_private": {
+            "type": "boolean",
+            "title": "Is Private"
           },
           "members": {
             "items": {
@@ -3367,6 +3498,7 @@
           "id",
           "name",
           "is_dm",
+          "is_private",
           "members",
           "unread",
           "last_message"
@@ -4162,6 +4294,26 @@
         ],
         "title": "MeOut",
         "description": "04 §1 `GET /me` → {id, name, email, role, avatar} + team (03 §2.6 조직, 계약 확장)."
+      },
+      "MembersIn": {
+        "properties": {
+          "user_ids": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "maxItems": 200,
+            "minItems": 1,
+            "title": "User Ids"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "user_ids"
+        ],
+        "title": "MembersIn"
       },
       "MessageOut": {
         "properties": {
@@ -4996,6 +5148,10 @@
             "type": "boolean",
             "title": "Is Dm"
           },
+          "is_private": {
+            "type": "boolean",
+            "title": "Is Private"
+          },
           "peer_id": {
             "anyOf": [
               {
@@ -5018,6 +5174,7 @@
           "channel_id",
           "name",
           "is_dm",
+          "is_private",
           "peer_id",
           "count"
         ],

@@ -2,7 +2,8 @@
 
 멤버십 모델(README "설계와 어긋나는 것" 12): 공개 채널은 만들 때 활성 사용자 전원을 멤버로 넣는다(15명 사내,
 초대·탈퇴 없음 — 새 계정은 admin 이 만들 때 모든 공개 채널에 들어간다). DM 은 두 사람짜리 채널이고 같은 두 사람의
-DM 은 하나만 둔다. 멤버 아닌 채널은 없는 채널과 같은 403 + 감사(소켓과 같은 판정).
+DM 은 하나만 둔다. **비공개 채널**(2026-10-02, 이슈 #221)은 만든 사람 + 고른 사람만 멤버이고, 멤버면 누구나
+사람을 더하고 뺄 수 있다(`/channels/{id}/members`). 멤버 아닌 채널은 없는 채널과 같은 403 + 감사(소켓과 같은 판정).
 """
 
 import re
@@ -13,7 +14,7 @@ from urllib.parse import quote, unquote
 
 from fastapi import APIRouter, Depends, Query, Request, UploadFile
 from fastapi.responses import Response
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StringConstraints, model_validator
 from sqlalchemy import func, select, tuple_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -118,20 +119,46 @@ class ChannelOut(BaseModel):
     id: uuid.UUID
     name: str  # DM 은 상대 이름
     is_dm: bool
+    is_private: bool  # DM 은 false. 프론트는 이 칸이 있어야 「비공개로 만들기」를 그린다(#221)
     members: list[Person]
     unread: int
     last_message: MessageOut | None
 
 
+MemberIds = Annotated[list[uuid.UUID], Field(max_length=200)]
+
+
 class ChannelCreateIn(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid"
+    )  # `isPrivate` 처럼 칸 이름을 틀려도 조용한 공개가 되지 않게
+
     name: NonBlank | None = None
     dm_user_id: uuid.UUID | None = None
+    # 비공개는 두 칸이 **같이** 와야 한다. 한쪽만 오면 422 — 모르는 칸을 버리고 조용히 공개 채널을 만들던 것이
+    # 이슈 #221 의 사고였다. StrictBool: "true" 같은 문자열도 422.
+    is_private: StrictBool | None = None
+    member_ids: MemberIds | None = None
 
     @model_validator(mode="after")
     def _one_of(self) -> "ChannelCreateIn":
         if (self.name is None) == (self.dm_user_id is None):
             raise ValueError("name 또는 dm_user_id 중 하나만 보낸다.")
+        if "is_private" in self.model_fields_set and self.is_private is None:
+            raise ValueError("is_private 는 참·거짓이어야 한다.")
+        if self.dm_user_id is not None and (
+            self.is_private is not None or self.member_ids is not None
+        ):
+            raise ValueError("DM 에는 is_private·member_ids 를 보내지 않는다.")
+        if (self.is_private is True) != (self.member_ids is not None):
+            raise ValueError("비공개 채널은 is_private: true 와 member_ids 를 같이 보낸다.")
         return self
+
+
+class MembersIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    user_ids: MemberIds = Field(min_length=1)
 
 
 class Items[T](BaseModel):
@@ -193,10 +220,14 @@ async def join_public_channels(db: AsyncSession, user_id: uuid.UUID) -> None:
     """사용자를 모든 공개 채널에 넣는다(이미 있으면 건너뜀) — admin.create_user 와 seed 가 부른다. commit 은 호출한 쪽이.
 
     이 정책(공개 채널 = 전원) 위에 `routers/people.py` 의 "사람 목록은 전사 공개" 가 서 있다 —
-    초대제나 비공개 채널을 들이면 거기도 같이 좁힌다."""
+    비공개 채널은 건너뛰지만 공개 채널엔 여전히 전원이 들어간다. 공개 채널을 초대제로 바꾸면 거기도 같이 좁힌다."""
     rows = [
         {"channel_id": cid, "user_id": user_id}
-        for cid in (await db.execute(select(Channel.id).where(Channel.is_dm.is_(False)))).scalars()
+        for cid in (
+            await db.execute(
+                select(Channel.id).where(Channel.is_dm.is_(False), Channel.is_private.is_(False))
+            )
+        ).scalars()
     ]
     if rows:
         await db.execute(pg_insert(ChannelMember).values(rows).on_conflict_do_nothing())
@@ -256,6 +287,7 @@ async def list_channels(
             id=c.id,
             name=_display_name(c, members[c.id], user),
             is_dm=c.is_dm,
+            is_private=c.is_private,
             members=[Person.model_validate(u) for u in members[c.id]],
             unread=count,
             last_message=last.get(c.id),
@@ -273,6 +305,45 @@ async def list_channels(
     return Items(items=items)
 
 
+def _channel_out(channel: Channel, members: list[User], viewer: User) -> ChannelOut:
+    """생성·멤버 변경 응답 — unread 0·last_message null(목록은 GET 으로, README 12)."""
+    return ChannelOut(
+        id=channel.id,
+        name=_display_name(channel, members, viewer),
+        is_dm=channel.is_dm,
+        is_private=channel.is_private,
+        members=[Person.model_validate(u) for u in members],
+        unread=0,
+        last_message=None,
+    )
+
+
+async def _active_users(db: AsyncSession, ids: list[uuid.UUID]) -> list[User]:
+    """고른 사람 전부가 활성 계정이어야 한다 — 없거나 비활성이면 422(DM 상대와 같은 규칙)."""
+    wanted = set(ids)
+    users = list(
+        (await db.execute(select(User).where(User.id.in_(wanted), User.active.is_(True)))).scalars()
+    )
+    if len(users) != len(wanted):
+        raise ApiError(422, "VALIDATION", "없는 사용자입니다.")
+    return users
+
+
+async def _lock_channel(db: AsyncSession, channel_id: uuid.UUID) -> None:
+    """멤버 변경은 채널마다 직렬화 — 권한 확인과 반영 사이에 요청한 사람이 빠지면, 늦게 반영된 요청이
+    그 사람을 되살린다(#221 에서 릴레이로 재현). 트랜잭션 자문 잠금이라 commit·rollback 에 풀린다."""
+    await db.execute(select(func.pg_advisory_xact_lock(func.hashtextextended(str(channel_id), 0))))
+
+
+async def _notify_channels(user_ids) -> None:
+    """`{ev:"channels"}` — 「네 채널 목록이 바뀌었다, 다시 받아라」. 비공개 채널을 만들거나 멤버가 바뀔 때
+    전·후 멤버 모두에게. commit 뒤에 부른다."""
+    # realtime.chat 이 이 모듈을 import 하므로 함수 안에서 — 순환 import 회피
+    from app.realtime import chat
+
+    await chat.push(user_ids, {"ev": "channels"})
+
+
 def _display_name(channel: Channel, members: list[User], viewer: User) -> str:
     if not channel.is_dm:
         return channel.name
@@ -284,11 +355,12 @@ def _display_name(channel: Channel, members: list[User], viewer: User) -> str:
     "/channels",
     status_code=201,
     response_model=ChannelOut,
-    summary="{name} 공개 채널(활성 사용자 전원 멤버) 또는 {dm_user_id} DM(있으면 그것) 생성",
-    responses={409: {"description": "CONFLICT — 같은 이름의 채널"}},
+    summary="{name} 공개 채널(전원 멤버) · {name, is_private:true, member_ids} 비공개 채널(만든 사람+고른 사람) · {dm_user_id} DM(있으면 그것)",
+    responses={409: {"description": "CONFLICT — 같은 이름의 공개 채널(비공개는 중복 허용)"}},
 )
 async def create_channel(
     body: ChannelCreateIn,
+    request: Request,
     user: User = Depends(current_user),
     db: AsyncSession = Depends(get_db),
 ) -> ChannelOut:
@@ -335,11 +407,30 @@ async def create_channel(
             db.add_all(
                 [ChannelMember(channel_id=channel.id, user_id=uid) for uid in (user.id, peer.id)]
             )
+    elif body.member_ids is not None:
+        assert body.name is not None
+        # 비공개: 이름 중복은 보지 않는다(409 가 안 보이는 채널의 존재를 샌다). 만든 사람은 명단에 없어도 들어간다.
+        member_ids = {*body.member_ids, user.id}
+        await _active_users(db, [uid for uid in member_ids if uid != user.id])
+        channel = Channel(ws_id=ws_id, name=body.name, is_dm=False, is_private=True)
+        db.add(channel)
+        await db.flush()
+        db.add_all([ChannelMember(channel_id=channel.id, user_id=uid) for uid in member_ids])
+        audit.record(  # 이후 더하기·빼기와 같은 kind — 생성 시점 명단도 감사로 따라갈 수 있게
+            db,
+            "channels.members_changed",
+            request=request,
+            actor_id=user.id,
+            target_id=channel.id,
+            detail={"created": True, "added": sorted(str(uid) for uid in member_ids)},
+        )
     else:
         assert body.name is not None
         # 친절한 409 — 경합은 uq_channels_public_name 이 막고 IntegrityError 핸들러가 409 로 돌려준다
         dup = await db.execute(
-            select(Channel.id).where(Channel.is_dm.is_(False), Channel.name == body.name)
+            select(Channel.id).where(
+                Channel.is_dm.is_(False), Channel.is_private.is_(False), Channel.name == body.name
+            )
         )
         if dup.first():
             raise ApiError(409, "CONFLICT", "같은 이름의 채널이 있습니다.")
@@ -353,14 +444,91 @@ async def create_channel(
         db.add_all([ChannelMember(channel_id=channel.id, user_id=uid) for uid in member_ids])
     await db.commit()
     members = (await _members_of(db, [channel.id]))[channel.id]
-    return ChannelOut(
-        id=channel.id,
-        name=_display_name(channel, members, user),
-        is_dm=channel.is_dm,
-        members=[Person.model_validate(u) for u in members],
-        unread=0,
-        last_message=None,
+    if channel.is_private:
+        await _notify_channels([u.id for u in members])
+    return _channel_out(channel, members, user)
+
+
+async def _private_channel(
+    db: AsyncSession, request: Request, user: User, channel_id: uuid.UUID
+) -> Channel:
+    """멤버 변경의 공통 앞부분: 채널 잠금 → 멤버 확인(403) → 비공개 채널만(422).
+
+    잠금이 먼저다 — 확인 뒤에 잠그면 그 사이 빠진 사람의 요청이 통과한다(H1). 없는 채널 id 를 잠그는 것은
+    무해하고, 403 경로의 commit 이 잠금도 풀어 준다."""
+    await _lock_channel(db, channel_id)
+    await _require_member(db, request, user, channel_id)
+    channel = await db.get(Channel, channel_id)
+    assert channel is not None  # 멤버 행이 있으면 채널도 있다(FK)
+    if not channel.is_private:
+        raise ApiError(422, "VALIDATION", "공개 채널은 전원, DM 은 두 사람으로 고정입니다.")
+    return channel
+
+
+@router.post(
+    "/channels/{id}/members",
+    response_model=ChannelOut,
+    summary="비공개 채널에 사람 더하기 {user_ids} — 멤버면 누구나. 이미 멤버인 사람은 건너뛴다. 공개·DM 은 422",
+)
+async def add_members(
+    id: uuid.UUID,
+    body: MembersIn,
+    request: Request,
+    user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_db),
+) -> ChannelOut:
+    channel = await _private_channel(db, request, user, id)
+    before = {u.id for u in (await _members_of(db, [id]))[id]}
+    added = [u.id for u in await _active_users(db, list(set(body.user_ids))) if u.id not in before]
+    if added:
+        db.add_all([ChannelMember(channel_id=id, user_id=uid) for uid in added])
+        audit.record(
+            db,
+            "channels.members_changed",
+            request=request,
+            actor_id=user.id,
+            target_id=id,
+            detail={"added": [str(uid) for uid in added]},
+        )
+    await db.commit()
+    members = (await _members_of(db, [id]))[id]
+    if added:
+        await _notify_channels([u.id for u in members])
+    return _channel_out(channel, members, user)
+
+
+@router.delete(
+    "/channels/{id}/members/{user_id}",
+    status_code=204,
+    summary="비공개 채널에서 사람 빼기 — 자기 자신이면 나가기. 멤버 아닌 사람 404, 공개·DM 은 422",
+    response_class=Response,
+)
+async def remove_member(
+    id: uuid.UUID,
+    user_id: uuid.UUID,
+    request: Request,
+    user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    await _private_channel(db, request, user, id)
+    row = await db.get(ChannelMember, (id, user_id))
+    if row is None:
+        raise ApiError(404, "NOT_FOUND", "이 채널의 멤버가 아닙니다.")
+    before = [u.id for u in (await _members_of(db, [id]))[id]]
+    await db.delete(row)
+    # ponytail: 마지막 사람이 나가면 채널은 멤버 0 으로 남는다(아무에게도 안 보임, 메시지·첨부 보존) — 지우려면
+    # 메시지·첨부까지 캐스케이드라 사람 확인이 먼저. 필요해지면 admin 정리 경로.
+    audit.record(
+        db,
+        "channels.members_changed",
+        request=request,
+        actor_id=user.id,
+        target_id=id,
+        detail={"removed": [str(user_id)]},
     )
+    await db.commit()
+    await _notify_channels(before)  # 빠진 사람도 받아야 사이드바에서 채널이 사라진다
+    return Response(status_code=204)
 
 
 @router.get(
