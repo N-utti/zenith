@@ -1134,7 +1134,7 @@
         "tags": [
           "files"
         ],
-        "summary": "문서 이미지 업로드 — multipart `file`(png·jpeg·gif·webp, 10MB, 하루 200장) → MinIO. 04 에 없던 경로",
+        "summary": "문서 파일 업로드 — multipart `file`(어떤 형식이든, 10MB, 하루 200개) + `doc_id`(선택) → MinIO. 04 에 없던 경로",
         "operationId": "upload_file_api_files_post",
         "requestBody": {
           "content": {
@@ -1175,7 +1175,7 @@
         "tags": [
           "files"
         ],
-        "summary": "문서 이미지 — 로그인한 사람 누구나(문서에 열람 등급 없음). <img src> 가 쿠키로 인증된다",
+        "summary": "문서 파일 — 로그인한 사람 누구나(문서에 열람 등급 없음). 그림 넷은 inline(<img src>), 나머지는 attachment",
         "operationId": "download_file_api_files__id__get",
         "parameters": [
           {
@@ -1193,7 +1193,7 @@
           "200": {
             "description": "Successful Response",
             "content": {
-              "image/*": {}
+              "application/octet-stream": {}
             }
           },
           "422": {
@@ -3385,6 +3385,18 @@
             "type": "string",
             "contentMediaType": "application/octet-stream",
             "title": "File"
+          },
+          "doc_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Doc Id"
           }
         },
         "type": "object",
@@ -3804,6 +3816,10 @@
           "size": {
             "type": "integer",
             "title": "Size"
+          },
+          "content_type": {
+            "type": "string",
+            "title": "Content Type"
           }
         },
         "type": "object",
@@ -3811,7 +3827,8 @@
           "id",
           "url",
           "name",
-          "size"
+          "size",
+          "content_type"
         ],
         "title": "FileOut"
       },
