@@ -1485,7 +1485,7 @@ export const handlers = [
     return HttpResponse.json(result)
   }),
 
-  // ── 내 일정 (04 에 없음. §2 /me/todos 와 같은 꼴로 가정) ──────
+  // ── 내 일정 (04 에 없는 경로. 백엔드 #300 이 이 모양 그대로 넣었다) ──────
   http.get(
     '/api/me/events',
     authed((user, request) => {

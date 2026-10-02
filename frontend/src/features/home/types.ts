@@ -45,20 +45,9 @@ export const TODO_TEXT_MAX = 500
 export type TodayTask = Schema<'TodoOut'>
 
 /**
- * 내 개인 일정(홈 캘린더). 04 에 없는 개념이라 `/me/todos`(§2)와 같은 꼴로 `/me/events` 를 가정했다(PR 본문).
- * 하루 단위. 시각은 선택이고 `HH:MM`.
+ * 내 개인 일정(홈 캘린더). 04 에 없는 개념이라 프론트가 먼저 모양을 정했고 백엔드가 그대로 넣었다(#300).
+ * 하루 단위. `date` 는 `2026-09-08`, 시각은 선택이고 `HH:MM` 문자열이다(시간대 변환 없음).
  */
-export interface CalendarEvent {
-  id: string
-  /** `2026-09-08` */
-  date: string
-  title: string
-  time: string | null
-  created_at: string
-}
+export type CalendarEvent = Schema<'EventOut'>
 
-export interface CalendarEventInput {
-  date: string
-  title: string
-  time?: string | null
-}
+export type CalendarEventInput = Schema<'EventCreateIn'>
