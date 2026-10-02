@@ -2023,9 +2023,8 @@ data: ${JSON.stringify(data)}
     })
   }),
 
-  // 댓글 고치기. 실서버에는 아직 없는 경로다(이슈 #274). 모양은 프론트가 정한 가정이다: `{body}` 를 받아
-  // 고친 뒤의 `CommentOut`(+ `edited_at`)을 돌려준다. 쓴 사람이 아니면 403, 없는 댓글과 휴지통
-  // 문서는 404, 글 규칙은 등록과 같다.
+  // 댓글 고치기(백엔드 #296). `{body}` 를 받아 고친 뒤의 `CommentOut` 을 돌려준다. 쓴 사람이 아니면
+  // 403, 없는 댓글과 휴지통 문서는 404, 글 규칙은 등록과 같다.
   http.patch('/api/docs/:docId/comments/:commentId', async ({ request, params }) => {
     const user = authenticate()
     if (!user) return unauthorized()

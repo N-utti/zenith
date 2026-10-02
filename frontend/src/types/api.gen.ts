@@ -450,7 +450,8 @@ export interface paths {
         delete: operations["delete_comment_api_docs__id__comments__comment_id__delete"];
         options?: never;
         head?: never;
-        patch?: never;
+        /** 댓글 고치기 {body} — 쓴 사람만. 그대로면 edited_at 을 찍지 않는다 (이슈 #274) */
+        patch: operations["edit_comment_api_docs__id__comments__comment_id__patch"];
         trace?: never;
     };
     "/api/files": {
@@ -1580,6 +1581,13 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Edited At */
+            edited_at: string | null;
+        };
+        /** CommentPatchIn */
+        CommentPatchIn: {
+            /** Body */
+            body: string;
         };
         /**
          * DocCreateIn
@@ -3281,6 +3289,56 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description 남의 댓글 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 없는 문서·댓글, 휴지통 문서 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    edit_comment_api_docs__id__comments__comment_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                comment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CommentPatchIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommentOut"];
+                };
             };
             /** @description 남의 댓글 */
             403: {
