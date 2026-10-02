@@ -6,6 +6,7 @@ import { useSearchParams } from 'react-router'
 import { Avatar } from '@/components/ui/Avatar'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
+import { Textarea } from '@/components/ui/Textarea'
 import { useToast } from '@/components/ui/ToastContext'
 import { ApiError } from '@/lib/api'
 import { cn } from '@/lib/cn'
@@ -64,18 +65,25 @@ export function CommentRow({
   /** 고치는 중인 글. 고치는 중이 아니면 `null`. */
   const [draft, setDraft] = useState<string | null>(null)
   const [editError, setEditError] = useState<string | null>(null)
+  const row = useRef<HTMLDivElement>(null)
+
+  /** 고치는 칸을 닫는다. 칸이 사라지면 초점이 body 로 떨어지므로 이 줄로 돌려놓는다. */
+  const closeEdit = () => {
+    setDraft(null)
+    row.current?.focus({ preventScroll: true })
+  }
 
   const save = () => {
     if (draft === null || edit.isPending) return
     const next = draft.trim()
     // 비우면 저장하지 않는다. 댓글을 없애려면 지우기를 쓴다.
     if (!next) return
-    if (next === comment.body) return setDraft(null)
+    if (next === comment.body) return closeEdit()
     setEditError(null)
     edit.mutate(
       { id: comment.id, body: next },
       {
-        onSuccess: () => setDraft(null),
+        onSuccess: closeEdit,
         // 고치던 글 바로 아래에 낸다. 토스트로 내면 무엇이 안 됐는지와 고칠 곳이 떨어진다.
         onError: (err) =>
           setEditError(err instanceof ApiError ? err.message : '댓글을 고치지 못했습니다.'),
@@ -84,7 +92,15 @@ export function CommentRow({
   }
 
   return (
-    <div id={id} className="group/comment -mx-2 flex gap-2.5 rounded-lg px-2 py-1">
+    <div
+      ref={row}
+      id={id}
+      // 고치기를 끝내면 초점이 여기로 온다(tabIndex). 블록 옆 창은 고치는 줄이 있는 동안 닫히지
+      // 않는다. 닫히면 쓰던 글이 줄과 함께 사라진다(`BlockComments` 가 이 표시를 본다).
+      tabIndex={-1}
+      data-comment-editing={draft !== null || undefined}
+      className="group/comment -mx-2 flex gap-2.5 rounded-lg px-2 py-1"
+    >
       <Avatar name={comment.author.name} hue={hueOf(comment.author.id)} size="sm" />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1">
@@ -133,23 +149,24 @@ export function CommentRow({
         {children}
         {draft !== null ? (
           <div className="mt-1">
-            {/* 등록 칸과 같은 입력이다. `@` 를 치면 사람 목록이 뜨고 Enter 로 저장한다. */}
-            <MentionTextarea
+            {/* ponytail: 멘션 자동 완성 없이 글자로만 고친다(채팅 메시지 고치기와 같다). 이미 쓴
+                `@이름` 은 그대로 남는다. 사람 목록은 입력칸 위로 뜨는데, 이 줄은 스크롤되는 목록
+                안이라 첫 줄에서는 목록이 잘린다. */}
+            <Textarea
               autoFocus
               value={draft}
-              onValueChange={(next) => {
-                setDraft(next)
+              onChange={(e) => {
+                setDraft(e.target.value)
                 setEditError(null)
               }}
               submitOnEnter
               onSubmitEnter={save}
               onKeyDown={(e) => {
+                if (e.key !== 'Escape') return
+                // 블록 옆 창은 Esc 로 창째 닫힌다. 고치기만 그만두고 창은 둔다.
+                e.stopPropagation()
                 // 한글을 조합하는 중의 Esc 는 조합만 취소한다. 쓰던 글까지 버리지 않는다.
-                if (e.key === 'Escape' && !e.nativeEvent.isComposing) {
-                  // 블록 옆 창은 Esc 로 창째 닫힌다. 고치기만 그만두고 창은 둔다.
-                  e.stopPropagation()
-                  setDraft(null)
-                }
+                if (!e.nativeEvent.isComposing) closeEdit()
               }}
               rows={Math.min(6, Math.max(draft.split('\n').length, Math.ceil(draft.length / 30)))}
               maxLength={COMMENT_BODY_MAX}
@@ -166,12 +183,7 @@ export function CommentRow({
               <Button size="sm" onClick={save} disabled={!draft.trim() || edit.isPending}>
                 {edit.isPending ? <Spinner className="border-t-on-accent" /> : '저장'}
               </Button>
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => setDraft(null)}
-                disabled={edit.isPending}
-              >
+              <Button size="sm" variant="secondary" onClick={closeEdit} disabled={edit.isPending}>
                 취소
               </Button>
             </div>

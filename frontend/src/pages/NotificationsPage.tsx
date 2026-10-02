@@ -70,7 +70,11 @@ function NotificationRow({ row, onOpen }: { row: Row; onOpen: () => void }) {
   if (!view.to) return <div className={shared}>{body}</div>
 
   return (
-    <Link to={view.to} onClick={onOpen} className={`${shared} hover:bg-surface-hover transition-colors`}>
+    <Link
+      to={view.to}
+      onClick={onOpen}
+      className={`${shared} hover:bg-surface-hover transition-colors`}
+    >
       {body}
     </Link>
   )
@@ -96,7 +100,9 @@ export function NotificationsPage() {
     return view ? [{ notification, view }] : []
   })
   const shown = filter === 'unread' ? rows.filter((r) => r.notification.read_at === null) : rows
-  const unreadIds = rows.filter((r) => r.notification.read_at === null).map((r) => r.notification.id)
+  const unreadIds = rows
+    .filter((r) => r.notification.read_at === null)
+    .map((r) => r.notification.id)
 
   const readAll = () => {
     if (unreadIds.length === 0) return
