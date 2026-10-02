@@ -1,5 +1,6 @@
 """04-API §2 홈·개인 — FR-HOM-01~05 · FR-SHL-04 · TC-BRD-01(홈 공지 마스킹) · TC-AUTH-04. 전부 실 Postgres."""
 
+import uuid
 from datetime import UTC, datetime, timedelta
 
 from httpx import AsyncClient
@@ -329,6 +330,39 @@ async def test_notifications_list_and_read(client: AsyncClient, users: Users, ap
         await client.post("/api/me/notifications/read", json=too_many, headers=csrf(client))
     ).status_code == 422
     assert (await client.get("/api/me/notifications", params={"limit": 0})).status_code == 422
+
+
+async def test_notifications_delete(client: AsyncClient, users: Users, app_db) -> None:
+    """이슈 #269: 내 알림만 지운다. 남의 id·없는 id 는 조용히 건너뛰고, 홈 mentions 에서도 빠진다."""
+    await _fixture(app_db, users)
+    await login(client, "sujin@zenith.co.kr")
+    items = (await client.get("/api/me/notifications")).json()["items"]
+    mention = next(n for n in items if n["kind"] == "mention")
+    theirs = (
+        await app_db.execute(
+            Notification.__table__.select().where(Notification.user_id == users.lead.id)
+        )
+    ).first()
+    r = await client.post(
+        "/api/me/notifications/delete",
+        json={"ids": [mention["id"], str(theirs.id), str(uuid.uuid4())]},
+        headers=csrf(client),
+    )
+    assert (r.status_code, r.content) == (204, b"")
+    left = (await client.get("/api/me/notifications")).json()["items"]
+    assert [n["kind"] for n in left] == ["post", "comment"]
+    assert mention["id"] not in [n["id"] for n in (await client.get("/api/me/home")).json()["mentions"]]
+    assert (
+        await app_db.execute(Notification.__table__.select().where(Notification.id == theirs.id))
+    ).first() is not None
+    # 같은 요청을 다시 보내도 204
+    r = await client.post(
+        "/api/me/notifications/delete", json={"ids": [mention["id"]]}, headers=csrf(client)
+    )
+    assert r.status_code == 204
+    assert (
+        await client.post("/api/me/notifications/delete", json={"ids": []}, headers=csrf(client))
+    ).status_code == 422
 
 
 async def test_unread_dm_peer_id_edges(client: AsyncClient, users: Users, app_db) -> None:
