@@ -15,7 +15,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Request, Response
 from pydantic import BaseModel, ConfigDict, StringConstraints
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import defer
 
@@ -148,10 +148,17 @@ class CommentOut(BaseModel):
     author: Person
     body: str
     created_at: datetime
+    edited_at: datetime | None  # 고친 적 없으면 null (#274)
 
 
 class CommentCreateIn(BaseModel):
     block_id: BlockId | None = None
+    body: LongText
+
+
+class CommentPatchIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # block_id 는 못 바꾼다
+
     body: LongText
 
 
@@ -613,18 +620,46 @@ async def list_comments(id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> It
         .where(DocComment.doc_id == doc.id)
         .order_by(DocComment.created_at, DocComment.id)
     )
-    return Items(
-        items=[
-            CommentOut(
-                id=c.id,
-                block_id=c.block_id,
-                author=Person.model_validate(a),
-                body=c.body,
-                created_at=c.created_at,
-            )
-            for c, a in rows
-        ]
+    return Items(items=[_comment_out(c, a) for c, a in rows])
+
+
+def _comment_out(c: DocComment, author: User) -> CommentOut:
+    return CommentOut(
+        id=c.id,
+        block_id=c.block_id,
+        author=Person.model_validate(author),
+        body=c.body,
+        created_at=c.created_at,
+        edited_at=c.edited_at,
     )
+
+
+async def _own_comment(
+    db: AsyncSession, request: Request, user: User, doc_id: uuid.UUID, comment_id: uuid.UUID
+) -> tuple[Document, DocComment]:
+    """고치기·지우기의 공통 앞부분: 문서(휴지통 404) → 댓글(다른 문서의 것 404) → 쓴 사람(403 + acl.denied)."""
+    doc = await _get_doc(db, doc_id)
+    # 행 잠금 — 두 탭에서 고치기와 지우기가 겹치면 늦은 쪽이 0행에 닿아 500(StaleDataError)이 나던 것.
+    # 잠금을 기다리는 사이 지워졌으면 None 이 와서 404 로 떨어진다(#278 의 문서 잠금과 같은 방식)
+    comment = await db.get(DocComment, comment_id, with_for_update=True, populate_existing=True)
+    if comment is None or comment.doc_id != doc.id:
+        raise ApiError(404, "NOT_FOUND", "없는 댓글입니다.")
+    if comment.author_id != user.id:
+        audit.record(
+            db,
+            "acl.denied",
+            request=request,
+            actor_id=user.id,
+            target_id=doc.id,
+            detail={
+                "path": request.url.path,
+                "method": request.method,  # 고치기와 지우기가 같은 경로라 method 로 가른다
+                "comment_id": str(comment.id),
+            },
+        )
+        await db.commit()
+        raise ApiError(403, "FORBIDDEN", "내 댓글만 고치거나 지울 수 있습니다.")
+    return doc, comment
 
 
 @router.post(
@@ -671,13 +706,52 @@ async def create_comment(
     await db.commit()
     await db.refresh(comment)
     await asyncio.gather(*(chat.push_notice(n) for n in notices))  # 04 §3: 푸시는 /ws 몫
-    return CommentOut(
-        id=comment.id,
-        block_id=comment.block_id,
-        author=Person.model_validate(user),
-        body=comment.body,
-        created_at=comment.created_at,
+    return _comment_out(comment, user)
+
+
+@router.patch(
+    "/docs/{id}/comments/{comment_id}",
+    response_model=CommentOut,
+    responses={
+        403: {"description": "남의 댓글"},
+        404: {"description": "없는 문서·댓글, 휴지통 문서"},
+    },
+    summary="댓글 고치기 {body} — 쓴 사람만. 그대로면 edited_at 을 찍지 않는다 (이슈 #274)",
+)
+async def edit_comment(
+    id: uuid.UUID,
+    comment_id: uuid.UUID,
+    body: CommentPatchIn,
+    request: Request,
+    user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_db),
+) -> CommentOut:
+    doc, comment = await _own_comment(db, request, user, id, comment_id)
+    if body.body == comment.body:
+        return _comment_out(comment, user)  # 고친 것으로 치지 않는다
+    # 이전 본문은 행에 안 남는다 — 앞 120자를 감사에. 멘션 알림의 미리보기도 새 본문으로(채팅 #284 와 같은 규칙).
+    # 새로 넣은 @이름에는 알림을 만들지 않는다 — 멘션은 달 때 한 번
+    audit.record(
+        db,
+        "docs.comment_edited",
+        request=request,
+        actor_id=user.id,
+        target_id=doc.id,
+        detail={"comment_id": str(comment.id), "before": comment.body[:120]},
     )
+    await db.execute(
+        update(Notification)
+        .where(Notification.payload["comment_id"].astext == str(comment.id))
+        .values(
+            payload=Notification.payload.op("||")(
+                func.jsonb_build_object("preview", body.body[:120])
+            )
+        )
+    )
+    comment.body = body.body
+    comment.edited_at = _now()
+    await db.commit()
+    return _comment_out(comment, user)
 
 
 @router.delete(
@@ -696,21 +770,7 @@ async def delete_comment(
     user: User = Depends(current_user),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
-    doc = await _get_doc(db, id)  # 휴지통 문서는 등록과 같이 404
-    comment = await db.get(DocComment, comment_id)
-    if comment is None or comment.doc_id != doc.id:
-        raise ApiError(404, "NOT_FOUND", "없는 댓글입니다.")
-    if comment.author_id != user.id:
-        audit.record(
-            db,
-            "acl.denied",
-            request=request,
-            actor_id=user.id,
-            target_id=doc.id,
-            detail={"path": request.url.path, "comment_id": str(comment.id)},
-        )
-        await db.commit()
-        raise ApiError(403, "FORBIDDEN", "내 댓글만 지울 수 있습니다.")
+    doc, comment = await _own_comment(db, request, user, id, comment_id)
     # 답글 구조가 없어 자리표시 없이 행을 지운다. 알림을 눌러 올 곳이 없어지므로 멘션 알림도 함께.
     await db.execute(
         delete(Notification).where(Notification.payload["comment_id"].astext == str(comment.id))
