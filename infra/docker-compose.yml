@@ -19,11 +19,14 @@ services:
     environment:
       # 인증서의 사이트 이름. 사내 DNS 이름이나 IP 로 바꾼다(브라우저 주소창과 같아야 한다).
       ZENITH_SITE: ${ZENITH_SITE:-localhost}
+      # 비면 자체 CA(internal). 인증서 파일을 쓰면 `/certs/cert.pem /certs/key.pem`(caddy/Caddyfile 의 tls 줄)
+      ZENITH_TLS: ${ZENITH_TLS:-internal}
     ports:
       - "${ZENITH_HTTP_PORT:-80}:80"
       - "${ZENITH_HTTPS_PORT:-443}:443"
     volumes:
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./certs:/certs:ro  # 비어 있어도 된다 — ZENITH_TLS 가 파일을 가리킬 때만 읽는다(미커밋, .gitignore)
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
@@ -75,10 +78,12 @@ services:
       - path: ../backend/.env
         required: false
     environment:
-      DATABASE_URL: postgresql+asyncpg://zenith:${ZENITH_DB_PASSWORD:-zenith}@db:5432/zenith
+      # 같은 db 컨테이너 안의 다른 DB·버킷을 쓸 때(이 PC 의 실테스트 zenith_live) 이름만 바꾼다
+      DATABASE_URL: postgresql+asyncpg://zenith:${ZENITH_DB_PASSWORD:-zenith}@db:5432/${ZENITH_DB_NAME:-zenith}
       REDIS_URL: redis://redis:6379/0
       MINIO_ENDPOINT: minio:9000
       MINIO_SECRET_KEY: ${ZENITH_MINIO_PASSWORD:-zenith-minio}
+      MINIO_BUCKET: ${ZENITH_MINIO_BUCKET:-zenith}
       # caddy 가 TLS 를 끝내므로 Secure 쿠키. caddy 없이 api 에 평문 http 로 붙는 실험에서만 false.
       COOKIE_SECURE: ${ZENITH_COOKIE_SECURE:-true}
       # JWT_SECRET 은 backend/.env 로 넣는다 (기본값 없음 — 비어 있으면 api 가 뜨지 않는다).
@@ -100,7 +105,7 @@ services:
       PGHOST: db
       PGUSER: zenith
       PGPASSWORD: ${ZENITH_DB_PASSWORD:-zenith}
-      PGDATABASE: zenith
+      PGDATABASE: ${ZENITH_DB_NAME:-zenith}
       TZ: Asia/Seoul
     # 덤프에는 전 계정(해시)·전 문서·채팅이 들어 있다 — umask 077 로 0600. 임시 이름에 쓰고 성공해야 날짜 이름으로 옮긴다
     # (잘린 파일이 정상 백업처럼 남지 않게). 실패는 로그에 남긴다(조용히 14일 뒤 백업 0 이 되지 않게).
