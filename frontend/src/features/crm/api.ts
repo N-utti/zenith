@@ -12,6 +12,7 @@ import type {
   DealInput,
   DealKind,
   DealStatus,
+  DeletedOrg,
   ImportResult,
   OrgCreated,
   OrgDetail,
@@ -147,7 +148,28 @@ export function useDeleteOrg() {
       qc.removeQueries({ queryKey: [...crmKey, 'activities', 'org', id] })
       void qc.invalidateQueries({ queryKey: [...crmKey, 'orgs'] })
       void qc.invalidateQueries({ queryKey: [...crmKey, 'deals'] })
+      // 지운 기관 목록도 낡았다. 안 하면 창을 한 번 연 뒤 바로 지운 기관이 거기 안 보인다.
+      void qc.invalidateQueries({ queryKey: [...crmKey, 'deleted-orgs'] })
     },
+  })
+}
+
+/** 지운 기관 목록. 임원만(서버가 403 으로 막는다). 창을 열 때만 받는다. */
+export function useDeletedOrgs(enabled: boolean) {
+  return useQuery({
+    queryKey: [...crmKey, 'deleted-orgs'],
+    queryFn: () => api<{ items: DeletedOrg[] }>('/crm/orgs/deleted'),
+    enabled,
+  })
+}
+
+/** 지운 기관을 되살린다. 임원만. 담당자·안건·활동 기록이 같이 돌아오므로 전체를 다시 읽는다. */
+export function useRestoreOrg() {
+  const refetch = useRefetchCrm()
+  return useMutation({
+    mutationFn: (id: string) => api<OrgDetail>(`/crm/orgs/${id}/restore`, { method: 'POST' }),
+    // 실패해도 다시 읽는다. 다른 임원이 먼저 되살렸으면(404) 이 목록이 낡은 것이다.
+    onSettled: refetch,
   })
 }
 

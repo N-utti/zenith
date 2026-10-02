@@ -15,7 +15,9 @@ import {
   exportRows,
   getDeal,
   listDeals,
+  listDeletedOrgs,
   reopenDeal,
+  restoreOrg,
   updateDeal,
   getOrg,
   importContacts,
@@ -641,5 +643,82 @@ describe('CRM 지우기 (15 §9 에 없는 경로. 등록한 사람은 활동 �
     expect(ok(eraseContact(exec, used.id))).toMatchObject({ name: '', erased: true })
     const erased = ok(listActivities(fund, { orgId: 'org-4' })).find((a) => a.id === activity.id)
     expect(erased?.contacts).toEqual([{ id: used.id, name: '' }])
+  })
+})
+
+describe('지운 기관 되살리기 (15 §9 에 없는 경로. 임원만)', () => {
+  it('되살리면 담당자·안건·활동 기록이 그대로 돌아온다', () => {
+    const made = ok(
+      createOrg(infra, { name: '되살릴 기관', org_type: 'etc', memo: '', owner_ids: [] }),
+    )
+    const id = made.org.id
+    const contact = ok(
+      createContact(infra, {
+        org_id: id,
+        name: '남을 사람',
+        title: '',
+        phone: '',
+        email: '',
+        memo: '',
+      }),
+    )
+    const deal = ok(
+      createDeal(infra, {
+        kind: 'investment',
+        name: '남을 안건',
+        org_id: id,
+        owner_id: null,
+        amount_krw: null,
+        target_date: null,
+        next_action: '',
+        next_action_due: null,
+      }),
+    )
+    // 진행 중 안건이 있으면 기관을 지울 수 없다. 중단해 둔다.
+    ok(dropDeal(infra, deal.id, { reason: '보류', version: deal.version }))
+    ok(
+      createActivity(infra, {
+        kind: 'memo',
+        occurred_at: new Date().toISOString(),
+        org_id: id,
+        deal_id: deal.id,
+        contact_ids: [contact.id],
+        user_ids: [],
+        body: '남을 기록',
+      }),
+    )
+    expect(deleteOrg(exec, id, '잘못 등록')).toBeNull()
+
+    // 지운 기관 목록은 임원만 본다. 사유가 같이 온다.
+    expect(listDeletedOrgs(infra)).toMatchObject({ status: 403 })
+    expect(ok(listDeletedOrgs(exec)).find((o) => o.id === id)).toMatchObject({
+      name: '되살릴 기관',
+      reason: '잘못 등록',
+      duplicate: null,
+    })
+
+    expect(restoreOrg(infra, id)).toMatchObject({ status: 403 })
+    const back = ok(restoreOrg(exec, id))
+    expect(back.contacts.map((c) => c.name)).toEqual(['남을 사람'])
+    expect(listDeals({ orgId: id }).map((d) => d.name)).toEqual(['남을 안건'])
+    expect(ok(listActivities(infra, { orgId: id })).map((a) => a.body)).toEqual(['남을 기록'])
+    expect(ok(listDeletedOrgs(exec)).some((o) => o.id === id)).toBe(false)
+    // 살아 있는 기관은 되살릴 것이 없다.
+    expect(restoreOrg(exec, id)).toMatchObject({ status: 404 })
+  })
+
+  it('그사이 같은 이름의 기관이 생겼으면 알려 주되 되살리기를 막지 않는다', () => {
+    const first = ok(
+      createOrg(infra, { name: '(주)쌍둥이운용', org_type: 'am', memo: '', owner_ids: [] }),
+    )
+    expect(deleteOrg(exec, first.org.id, '중복')).toBeNull()
+    const second = ok(
+      createOrg(infra, { name: '쌍둥이운용 주식회사', org_type: 'am', memo: '', owner_ids: [] }),
+    )
+    expect(ok(listDeletedOrgs(exec)).find((o) => o.id === first.org.id)?.duplicate).toEqual({
+      id: second.org.id,
+      name: '쌍둥이운용 주식회사',
+    })
+    expect(ok(restoreOrg(exec, first.org.id)).name).toBe('(주)쌍둥이운용')
   })
 })

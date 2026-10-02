@@ -87,6 +87,21 @@ export interface OrgDetail extends OrgListItem {
   created_at: string
 }
 
+/**
+ * 지운 기관. 임원만 본다. 되살리면 담당자·안건·활동 기록이 그대로 돌아온다(기관 삭제는 목록에서만
+ * 빼는 것이다, 15 §3).
+ */
+export interface DeletedOrg {
+  id: string
+  name: string
+  org_type: OrgType
+  deleted_at: string
+  /** 지울 때 적은 사유. */
+  reason: string
+  /** 그사이 같은 이름으로 새로 생긴 기관. 되살리기를 막지는 않고 알려만 준다(FR-CRM-01). */
+  duplicate: Person | null
+}
+
 export interface OrgInput {
   name: string
   org_type: OrgType

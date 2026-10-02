@@ -129,8 +129,10 @@ import {
   getOrg,
   listActivities,
   listDeals,
+  listDeletedOrgs,
   listOrgs,
   reopenDeal,
+  restoreOrg,
   updateActivity,
   updateContact,
   updateDeal,
@@ -2172,6 +2174,23 @@ data: ${JSON.stringify(data)}
         contacts: result.new_contacts,
       })
     }
+    return approvalResponse(result)
+  }),
+  // 지운 기관 목록과 되살리기. 15 §9 에 없는 경로다(프론트가 정한 가정). 임원만.
+  // `/orgs/:id` 보다 앞에 둔다. 뒤에 두면 `deleted` 가 기관 id 로 읽힌다.
+  http.get('/api/crm/orgs/deleted', () => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    const result = listDeletedOrgs(user)
+    return approvalResponse('error' in result ? result : { items: result })
+  }),
+  http.post('/api/crm/orgs/:id/restore', async ({ params }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    await delay(300)
+    const id = String(params.id)
+    const result = restoreOrg(user, id)
+    if (!('error' in result)) crmAudit('crm.org_restored', user, id, { name: result.name })
     return approvalResponse(result)
   }),
   http.get('/api/crm/orgs/:id', ({ params }) => {
