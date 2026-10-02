@@ -313,6 +313,22 @@ export function useAddComment(docId: string) {
   })
 }
 
+/**
+ * 내 댓글의 글을 고친다. 응답을 캐시에 꽂지 않고 목록을 다시 받는다(지우기와 같은 규약).
+ * 실패해도 다시 받는다. 다른 탭에서 지운 댓글(404)이면 이 목록이 옛것이다.
+ */
+export function useEditComment(docId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: string }) =>
+      api<DocComment>(`/docs/${docId}/comments/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ body }),
+      }),
+    onSettled: () => qc.invalidateQueries({ queryKey: docKeys.comments(docId) }),
+  })
+}
+
 export function useDeleteComment(docId: string) {
   const qc = useQueryClient()
   return useMutation({

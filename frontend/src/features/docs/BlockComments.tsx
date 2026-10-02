@@ -240,6 +240,8 @@ function BlockCommentPopover({
       const target = e.target
       if (!(target instanceof Element)) return
       if (ref.current?.contains(target) || target.closest('[data-comment-marker]')) return
+      // 댓글을 고치는 중이면 닫지 않는다. 고치던 글은 그 줄이 들고 있어 창이 닫히면 사라진다.
+      if (ref.current?.querySelector('[data-comment-editing]')) return
       onOpenChange(null)
     }
     document.addEventListener('pointerdown', onPointerDown)
@@ -274,6 +276,8 @@ function BlockCommentPopover({
       onKeyDown={(e) => {
         // 사람 목록이 떠 있으면 Esc 는 그 목록을 닫는 데 쓰인다(MentionTextarea 가 먼저 받는다).
         if (e.key !== 'Escape' || e.defaultPrevented) return
+        // 고치는 줄이 있으면 닫지 않는다(바깥 누름과 같은 이유). 고치기를 끝낸 뒤에 닫는다.
+        if (ref.current?.querySelector('[data-comment-editing]')) return
         onOpenChange(null)
         // 굴리지 않는다. 말풍선으로 연 창은 커서가 다른 블록에 있어, 굴리면 본문이 그리로 튄다.
         editor.commands.focus(null, { scrollIntoView: false })

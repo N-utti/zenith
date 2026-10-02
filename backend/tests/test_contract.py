@@ -47,6 +47,8 @@ CONTRACT_PATHS = {
     "/api/files/{id}",
     # §5 채팅
     "/api/channels",
+    "/api/channels/{id}",
+    "/api/channels/{id}/hide",
     "/api/channels/{id}/messages",
     "/api/channels/{id}/attachments",
     # §6 게시판 · §7 검색

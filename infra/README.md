@@ -29,6 +29,7 @@ db·redis·minio 의 호스트 포트는 **127.0.0.1 에만** 묶인다 — 다�
 
 - `ZENITH_SITE`(기본 `localhost`)가 인증서의 이름이다. 사내 DNS 이름이나 IP 로 바꾸고 `docker compose restart caddy`. 브라우저 주소창과 같아야 한다 — api 의 CSRF 가 `Origin` 과 `X-Forwarded-Host` 를 대조한다.
 - 인증서는 `ZENITH_TLS`(기본 `internal`)가 정한다. 비우면 Caddy 자체 CA 가 서명한다 — 루트 인증서를 뽑아 사내 PC·앱의 신뢰 저장소에 넣는다(MDM). **Tailscale(이슈 #265, 2026-10-02)**: 서버 PC 에 Tailscale 을 깔고 관리자 콘솔 DNS 탭에서 MagicDNS·HTTPS Certificates 를 켠 뒤 `tailscale cert --cert-file infra/certs/cert.pem --key-file infra/certs/key.pem <호스트>.<테일넷>.ts.net` 으로 받아 `ZENITH_TLS=/certs/cert.pem /certs/key.pem`, `ZENITH_SITE=<호스트>.<테일넷>.ts.net`. 인증서는 90일 — 갱신은 같은 명령을 다시 돌리고 `docker compose restart caddy`(작업 스케줄러로 월 1회). 서버는 공유기 밖에 포트를 열지 않으니 Tailscale 에 로그인한 기기만 닿는다. 사내 CA 인증서도 같은 모양으로.
+- **사내망 평문 HTTP(2026-10-02)**: 사무실 PC 에 Tailscale 을 깔지 않고 `http://<서버 LAN IP>:5180` 으로 들어오게 한다 — `ZENITH_LAN_SITE=http://192.168.x.x:5180` + `ZENITH_COOKIE_SECURE=false`(평문이라 Secure 쿠키는 안 심긴다). 안 주면 5180 은 localhost 만 받아 빈 응답. 공유기가 밖으로 안 열려 있으니 사내망·Tailscale 안에서만 닿는다. 밖에서는 HTTPS 사이트(Tailscale)로.
 - 같은 db 컨테이너 안의 다른 DB·버킷을 쓰려면 `ZENITH_DB_NAME`·`ZENITH_MINIO_BUCKET`(기본 `zenith`) — 이 PC 의 파일럿은 실테스트 DB `zenith_live`·버킷 `zenith-live` 를 그대로 쓴다. 변수는 전부 compose 옆 `.env`(미커밋)에.
 
 ```sh

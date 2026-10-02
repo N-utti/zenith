@@ -8,14 +8,14 @@ DM 은 하나만 둔다. **비공개 채널**(2026-10-02, 이슈 #221)은 만든
 
 import re
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Annotated
 from urllib.parse import quote, unquote
 
 from fastapi import APIRouter, Depends, Query, Request, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StringConstraints, model_validator
-from sqlalchemy import func, select, tuple_
+from sqlalchemy import func, select, tuple_, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
@@ -155,6 +155,12 @@ class ChannelCreateIn(BaseModel):
         return self
 
 
+class ChannelPatchIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: NonBlank
+
+
 class MembersIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -256,7 +262,7 @@ async def list_channels(
                     | (Message.created_at > ChannelMember.last_read_at)
                 ),
             )
-            .where(ChannelMember.user_id == user.id)
+            .where(ChannelMember.user_id == user.id, ChannelMember.hidden_at.is_(None))
             .group_by(Channel.id)
         )
     ).all()
@@ -365,6 +371,7 @@ async def create_channel(
     db: AsyncSession = Depends(get_db),
 ) -> ChannelOut:
     ws_id = (await db.execute(select(Workspace.id).limit(1))).scalar()
+    notify: list[uuid.UUID] = []
     if ws_id is None:
         raise ApiError(
             409, "CONFLICT", "워크스페이스가 없습니다. scripts/seed.py 를 먼저 돌리세요."
@@ -400,6 +407,18 @@ async def create_channel(
         )
         if existing is not None:
             channel = existing
+            # 숨겨 둔 방을 다시 여는 길 — 상대 쪽은 건드리지 않는다(#268)
+            unhidden = await db.execute(
+                update(ChannelMember)
+                .where(
+                    ChannelMember.channel_id == channel.id,
+                    ChannelMember.user_id == user.id,
+                    ChannelMember.hidden_at.is_not(None),
+                )
+                .values(hidden_at=None)
+            )
+            if unhidden.rowcount:
+                notify = [user.id]  # 다른 탭의 목록도 맞춘다
         else:
             channel = Channel(ws_id=ws_id, name="", is_dm=True)
             db.add(channel)
@@ -445,8 +464,89 @@ async def create_channel(
     await db.commit()
     members = (await _members_of(db, [channel.id]))[channel.id]
     if channel.is_private:
-        await _notify_channels([u.id for u in members])
+        notify = [u.id for u in members]
+    if notify:
+        await _notify_channels(notify)
     return _channel_out(channel, members, user)
+
+
+@router.patch(
+    "/channels/{id}",
+    response_model=ChannelOut,
+    summary="채널 이름 바꾸기 {name} — 멤버면 누구나. DM 은 422, 같은 이름의 공개 채널은 409",
+    responses={409: {"description": "CONFLICT — 같은 이름의 공개 채널(비공개는 중복 허용)"}},
+)
+async def rename_channel(
+    id: uuid.UUID,
+    body: ChannelPatchIn,
+    request: Request,
+    user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_db),
+) -> ChannelOut:
+    await _lock_channel(
+        db, id
+    )  # 멤버 변경과 같은 이유 — 확인 뒤에 빠진 사람이 이름을 바꾸지 못하게
+    await _require_member(db, request, user, id)
+    channel = await db.get(Channel, id)
+    assert channel is not None
+    if channel.is_dm:
+        raise ApiError(422, "VALIDATION", "DM 에는 이름이 없습니다.")
+    members = (await _members_of(db, [id]))[id]
+    if body.name == channel.name:
+        return _channel_out(channel, members, user)  # 그대로면 감사도 이벤트도 없다
+    if not channel.is_private:
+        # 만들 때와 같은 친절한 409 — 경합은 uq_channels_public_name 이 막는다
+        dup = await db.execute(
+            select(Channel.id).where(
+                Channel.is_dm.is_(False),
+                Channel.is_private.is_(False),
+                Channel.name == body.name,
+                Channel.id != id,
+            )
+        )
+        if dup.first():
+            raise ApiError(409, "CONFLICT", "같은 이름의 채널이 있습니다.")
+    audit.record(
+        db,
+        "channels.renamed",
+        request=request,
+        actor_id=user.id,
+        target_id=id,
+        detail={"from": channel.name, "to": body.name},
+    )
+    channel.name = body.name
+    await db.commit()
+    await _notify_channels([u.id for u in members])
+    return _channel_out(channel, members, user)
+
+
+@router.post(
+    "/channels/{id}/hide",
+    status_code=204,
+    summary="DM 을 내 목록에서 숨긴다 — 새 메시지가 오거나 같은 상대와 DM 을 다시 열면 돌아온다. 채널은 422",
+    response_class=Response,
+)
+async def hide_channel(
+    id: uuid.UUID,
+    request: Request,
+    user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    await _require_member(db, request, user, id)
+    channel = await db.get(Channel, id)
+    assert channel is not None
+    if not channel.is_dm:
+        raise ApiError(422, "VALIDATION", "DM 만 숨길 수 있습니다.")
+    # ponytail: 숨기기와 새 메시지가 정확히 겹치면(메시지 쪽이 먼저 커밋) 새 글이 있는데도 숨겨진 채 남는다 —
+    # 다음 글이 오면 풀린다. 엄밀히 하려면 「last_read_at 이후 남의 글이 없을 때만」 조건을 건다.
+    await db.execute(
+        update(ChannelMember)
+        .where(ChannelMember.channel_id == id, ChannelMember.user_id == user.id)
+        .values(hidden_at=datetime.now(UTC))
+    )
+    await db.commit()
+    await _notify_channels([user.id])  # 다른 탭의 목록도 맞춘다
+    return Response(status_code=204)
 
 
 async def _private_channel(
