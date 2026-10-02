@@ -107,14 +107,19 @@ export function ExceptionSection() {
   // 임시저장도 본다. 안 그러면 저장만 해 둔 결의서를 두고 "결의서 작성"이 또 떠서 두 장이 된다.
   const sent = useApprovals('sent')
   const drafts = useApprovals('draft')
-  const expenseOf = (arrangementId: string) =>
-    [...(sent.data?.items ?? []), ...(drafts.data?.items ?? [])].find(
-      (d) => d.related?.type === 'arrangement' && d.related.id === arrangementId,
-    )
-
   /** 끝난 결의서는 다시 올릴 수 있어야 한다. 반려·회수·강제 종결은 "다시 하라" 는 뜻이다. */
   const canRewrite = (status: DocumentStatus | undefined) =>
     status === undefined || status === 'rejected' || status === 'canceled' || status === 'closed'
+
+  // 한 출장에 결의서가 여럿일 수 있다(반려된 것과 다시 쓴 것). 살아 있는 것(임시저장·대기·승인)을
+  // 먼저 고른다. 끝난 것부터 보면, 다시 써서 저장만 해 둔 임시저장이 있어도 「다시 작성」이 또 떠서
+  // 한 장이 더 생긴다.
+  const expenseOf = (arrangementId: string) => {
+    const linked = [...(drafts.data?.items ?? []), ...(sent.data?.items ?? [])].filter(
+      (d) => d.related?.type === 'arrangement' && d.related.id === arrangementId,
+    )
+    return linked.find((d) => !canRewrite(d.status)) ?? linked[0]
+  }
 
   const isPending = arrangements.isPending || overtime.isPending || corrections.isPending
   const isError = arrangements.isError || overtime.isError || corrections.isError

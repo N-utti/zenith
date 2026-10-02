@@ -374,3 +374,49 @@ export function usePurgeDoc() {
     },
   })
 }
+
+/**
+ * 휴지통 비우기. 넘겨받은 문서를 하나씩 영구 삭제한다(위와 같은 `?hard=1`, 임원만).
+ *
+ * 한 번에 지우는 서버 경로는 없다. 있는 경로를 차례로 부른다. 중간에 하나가 실패해도 멈추지
+ * 않고 끝까지 간 뒤 몇 개가 남았는지 돌려준다. 멈추면 앞의 것만 지워진 채로 이유도 모른다.
+ *
+ * **지우기 직전에 휴지통을 다시 받아, 아직 거기 있는 문서만 지운다.** 서버의 영구 삭제는 그
+ * 문서가 휴지통에 있는지 보지 않는다(`routers/docs.py` 의 `delete_doc`). 확인 창을 열어 둔 사이
+ * 누가 되돌린 문서에 그대로 보내면 살아 있는 문서가 버전·댓글째 사라진다. 다시 받은 뒤에도
+ * 문서마다 요청이 나가는 사이의 틈은 남는다. 완전히 막는 것은 서버 몫이다.
+ *
+ * ponytail: 차례로 보내서 문서가 많으면 그만큼 오래 걸린다. 휴지통은 30일이면 서버가 스스로
+ * 비우고 목록도 한 쪽(서버 기본 개수)뿐이라 지금은 충분하다. 느려지면 서버에 한 번에 지우는
+ * 경로를 청한다.
+ */
+export function useEmptyTrash() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (docIds: string[]) => {
+      const trash = await api<{ items: DocSummary[] }>('/trash')
+      const stillTrashed = new Set(trash.items.map((doc) => doc.id))
+      const targets = docIds.filter((docId) => stillTrashed.has(docId))
+      let failed = 0
+      for (const docId of targets) {
+        try {
+          await api<void>(`/docs/${docId}?hard=1`, { method: 'DELETE' })
+          qc.removeQueries({ queryKey: docKeys.detail(docId) })
+        } catch (err) {
+          // 권한이 없거나(403) 로그인이 풀렸으면(401) 나머지도 같은 답이다. 문서마다 거부 기록을
+          // 남기지 않게 멈춘다.
+          if (err instanceof ApiError && (err.status === 403 || err.status === 401)) throw err
+          failed += 1
+        }
+      }
+      return {
+        removed: targets.length - failed,
+        failed,
+        /** 그사이 누가 되돌렸거나 이미 지워져 건드리지 않은 문서 수. */
+        skipped: docIds.length - targets.length,
+      }
+    },
+    // 일부만 지워졌어도, 중간에 던졌어도 목록은 다시 받는다.
+    onSettled: () => invalidateDocLists(qc),
+  })
+}

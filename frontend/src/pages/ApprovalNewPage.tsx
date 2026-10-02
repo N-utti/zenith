@@ -45,6 +45,9 @@ import { ApiError } from '@/lib/api'
  * `?arrangement=<id>` 로 열면 출장비 결의서 서식이다. 출장 기간·사유를 칸에 미리 채우고 문서를 그 출장에 건다.
  * 서식 목록에서 출장비 결의서를 고르면 칸을 직접 적고, 출장 신청과는 이어지지 않는다.
  * `?draft=<id>` 로 열면 임시저장을 이어 쓴다.
+ * `?from=<id>` 로 열면 그 문서(반려·회수·강제 종결로 끝난 내 문서)의 내용을 채운 **새** 기안이다.
+ * 끝난 문서는 고칠 수 없어서, 고쳐 다시 올리려면 이 길로 온다. 첨부는 가져오지 않는다(첨부는
+ * 올린 문서에 딸려 있어 다른 문서에 붙일 수 없다).
  * 첨부(영수증, FR-APV-05)는 문서에 딸려 올라가서 문서 id 가 있어야 한다. 고른 파일은 들고 있다가
  * 저장할 때 올린다. 새 기안이면 먼저 임시저장을 만들고, 올린 뒤 첨부 목록을 한 번 더 저장한다.
  * 결재선 미리보기는 서버가 만들어 주는 값이라 상신 뒤 상세에서 본다.
@@ -53,11 +56,14 @@ export function ApprovalNewPage() {
   const [params] = useSearchParams()
   const arrangementId = params.get('arrangement')
   const draftId = params.get('draft') ?? ''
+  // 다시 작성은 빈 폼에서만 시작한다. 임시저장이나 출장과 같이 오면 그쪽이 이기므로 받지 않는다.
+  const fromId = draftId || arrangementId ? '' : (params.get('from') ?? '')
   const navigate = useNavigate()
   const toast = useToast()
   const user = useCurrentUser()
   const arrangements = useMyArrangements(!!arrangementId)
   const draft = useApproval(draftId)
+  const source = useApproval(fromId)
   const create = useCreateDraft()
   const update = useUpdateDraft()
   const submit = useSubmitApproval()
@@ -111,18 +117,41 @@ export function ApprovalNewPage() {
       </div>
     )
   }
+  if (fromId && source.isPending) return <SkeletonRows rows={4} />
+  // 다시 작성은 끝난 내 문서에서만 한다. 버튼도 그때만 뜨지만 주소를 직접 쓰면 여기로 온다.
+  // 대기·승인 문서를 베끼면 같은 출장에 결의서가 둘 걸린다.
+  const rewritable =
+    source.data?.drafter.id === user.id &&
+    ['rejected', 'canceled', 'closed'].includes(source.data.status)
+  if (fromId && (source.isError || !rewritable)) {
+    return (
+      <div className="py-16 text-center">
+        <p className="text-muted text-sm">
+          {source.isError
+            ? '다시 작성할 문서를 불러오지 못했습니다.'
+            : '반려·회수·강제 종결로 끝난 내 문서만 다시 작성할 수 있습니다.'}
+        </p>
+        <Link to="/approvals" className="text-accent mt-4 inline-block text-sm hover:underline">
+          결재함으로
+        </Link>
+      </div>
+    )
+  }
   if (arrangementId && arrangements.isPending) return <SkeletonRows rows={4} />
 
-  // 첫 렌더 값: 임시저장 → 출장 채움 → 빈 폼 순. 입력을 시작하면 그 값이 이긴다.
+  // 첫 렌더 값: 임시저장 → 다시 작성할 문서 → 출장 채움 → 빈 폼 순. 입력을 시작하면 그 값이 이긴다.
   const seed = draft.data
+  // 칸을 채울 원본. 임시저장이면 그 문서 자신이고, 다시 작성이면 끝난 문서다. 끝난 문서에서는
+  // 내용만 가져온다. 저장은 `seed` 가 없으니 새 문서로 간다.
+  const base = seed ?? source.data
   const titleValue =
-    title ?? seed?.title ?? (trip ? APPROVAL_TEMPLATES.trip.prefix + tripPeriod : '')
-  const amountValue = amount ?? (seed?.amount != null ? String(seed.amount) : '')
-  const bodyValue = body ?? seed?.subject.body ?? ''
-  const related = seed?.related ?? (trip ? { type: 'arrangement' as const, id: trip.id } : null)
+    title ?? base?.title ?? (trip ? APPROVAL_TEMPLATES.trip.prefix + tripPeriod : '')
+  const amountValue = amount ?? (base?.amount != null ? String(base.amount) : '')
+  const bodyValue = body ?? base?.subject.body ?? ''
+  const related = base?.related ?? (trip ? { type: 'arrangement' as const, id: trip.id } : null)
   // 임시저장에는 참조자가 결재선에 섞여 저장돼 있다. 역할로 갈라 낸다.
   const savedReferences =
-    seed?.steps.filter((step) => step.role === 'reference').map((step) => step.approver.id) ?? []
+    base?.steps.filter((step) => step.role === 'reference').map((step) => step.approver.id) ?? []
   const referenceIds = references ?? savedReferences
   const toggleReference = (id: string) =>
     // 저장돼 있던 값에서 출발한다. `null` 은 "아직 안 건드림" 이라 그때는 그 값이 시작점이다.
@@ -133,16 +162,16 @@ export function ApprovalNewPage() {
 
   const attached = attachments ?? seed?.subject.attachments ?? []
 
-  // 임시저장·출장비 결의서는 이미 서식이 정해져 있다. 서식은 빈 폼에서만 고른다.
-  const templatable = !seed && !trip
-  // 임시저장은 쓰던 서식의 칸으로 이어 쓴다. 출장에서 열면 출장비 결의서다.
+  // 임시저장·다시 작성·출장비 결의서는 이미 서식이 정해져 있다. 서식은 빈 폼에서만 고른다.
+  const templatable = !base && !trip
+  // 임시저장과 다시 작성은 쓰던 서식의 칸으로 이어 쓴다. 출장에서 열면 출장비 결의서다.
   const active =
-    template ?? (seed ? templateOf(seed.subject.extra?.form) : trip ? 'trip' : 'general')
+    template ?? (base ? templateOf(base.subject.extra?.form) : trip ? 'trip' : 'general')
   const form = APPROVAL_TEMPLATES[active]
   const structured = form.fields.length > 0
   const fieldValues =
     values ??
-    seed?.subject.extra?.fields ??
+    base?.subject.extra?.fields ??
     (trip ? { period: tripPeriod, purpose: trip.reason } : {})
   const pickTemplate = (next: ApprovalTemplate) => {
     const switched = switchTemplate(next, {
@@ -254,7 +283,9 @@ export function ApprovalNewPage() {
         description={
           trip
             ? `${tripPeriod} 출장에 딸린 지출 결의서입니다.`
-            : `일반 기안. 결재선은 상신할 때 정해집니다. 기안자: ${user.name}`
+            : source.data
+              ? '끝난 문서의 내용을 가져온 새 기안입니다. 첨부는 가져오지 않으니 다시 붙여 주세요.'
+              : `일반 기안. 결재선은 상신할 때 정해집니다. 기안자: ${user.name}`
         }
       />
       <Card>

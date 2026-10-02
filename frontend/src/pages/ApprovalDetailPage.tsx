@@ -12,9 +12,11 @@ import { Spinner } from '@/components/ui/Spinner'
 import { Textarea } from '@/components/ui/Textarea'
 import { useToast } from '@/components/ui/ToastContext'
 import {
+  DRAFT_DELETE_ENABLED,
   useApproval,
   useApproveStep,
   useCancelApproval,
+  useDeleteDraft,
   useForceCloseApproval,
   useRejectStep,
   useSubmitApproval,
@@ -54,6 +56,7 @@ export function ApprovalDetailPage() {
   const toast = useToast()
   const submit = useSubmitApproval()
   const cancel = useCancelApproval()
+  const removeDraft = useDeleteDraft()
   const approve = useApproveStep()
   const reject = useRejectStep()
   const forceClose = useForceCloseApproval()
@@ -87,9 +90,12 @@ export function ApprovalDetailPage() {
   // 임원은 남의 문서도 끝낼 수 있다. 결재자가 자리를 비워 영영 대기로 남는 문서를 끊는 길이다.
   // 내 차례일 때는 안 보인다. 그건 부재가 아니라 내 판단이고, 승인·반려로 남겨야 이력이 정확하다.
   const canForceClose = d.status === 'pending' && !myTurn && ROLE_RANK[user.role] >= ROLE_RANK.exec
+  // 반려·회수·강제 종결로 끝난 문서는 고칠 수 없다. 기안자가 같은 내용으로 새 문서를 시작한다.
+  const canRewrite = isDrafter && ['rejected', 'canceled', 'closed'].includes(d.status)
   const busy =
     submit.isPending ||
     cancel.isPending ||
+    removeDraft.isPending ||
     approve.isPending ||
     reject.isPending ||
     forceClose.isPending
@@ -142,6 +148,26 @@ export function ApprovalDetailPage() {
             <Badge tone={statusTone(d.status)}>{statusLabel(d.status)}</Badge>
             {isDrafter && d.status === 'draft' && (
               <>
+                {DRAFT_DELETE_ENABLED && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="hover:text-danger"
+                    disabled={busy}
+                    onClick={() => {
+                      if (!confirm('이 임시저장을 지울까요? 되돌릴 수 없습니다.')) return
+                      removeDraft.mutate(d.id, {
+                        onSuccess: () => {
+                          toast.success('임시저장을 지웠습니다.')
+                          void navigate('/approvals?box=draft')
+                        },
+                        onError,
+                      })
+                    }}
+                  >
+                    삭제
+                  </Button>
+                )}
                 <Button
                   variant="secondary"
                   size="sm"
@@ -163,6 +189,15 @@ export function ApprovalDetailPage() {
                   {submit.isPending ? <Spinner className="border-t-on-accent" /> : '상신'}
                 </Button>
               </>
+            )}
+            {canRewrite && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => void navigate(`/approvals/new?from=${d.id}`)}
+              >
+                다시 작성
+              </Button>
             )}
             {isDrafter && d.status === 'pending' && (
               <Button

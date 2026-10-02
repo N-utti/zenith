@@ -107,6 +107,7 @@ import {
   listApprovals,
   submitApproval,
   updateDraft,
+  deleteDraft,
 } from './approvalsDb'
 import {
   createActivity,
@@ -137,7 +138,7 @@ import { listFiles, readFile, saveFile } from './filesDb'
 import { isImage } from '@/features/chat/attachments'
 import { buildXlsx } from '@/lib/xlsx'
 import { closeMonth, getClosing, listClosings, reopenMonth } from './closingsDb'
-import { addHoliday, listHolidays, removeHoliday } from './holidaysDb'
+import { addHoliday, listHolidays, removeHoliday, renameHoliday } from './holidaysDb'
 import { createEvent, deleteEvent, listEvents } from './eventsDb'
 import {
   cancelLeave,
@@ -824,6 +825,16 @@ export const handlers = [
     await delay(300)
     return approvalResponse(updateDraft(user, String(params.id), input))
   }),
+  // 임시저장 지우기. 실서버에는 아직 없는 경로다(13 §9.3 에 없음, 프론트가 정한 가정):
+  // 내 임시저장만 204, 남의 것이나 없는 것은 404, 상신한 문서는 409 `NOT_DRAFT`.
+  http.delete('/api/approvals/drafts/:id', async ({ params }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    await delay(300)
+    const failure = deleteDraft(user, String(params.id))
+    if (failure) return approvalResponse(failure)
+    return new HttpResponse(null, { status: 204 })
+  }),
   http.get(
     '/api/approvals/:id',
     authed((user, request) => {
@@ -1179,6 +1190,33 @@ export const handlers = [
       )
     }
     return HttpResponse.json(result.item, { status: 201 })
+  }),
+  // 휴일 이름 고치기. 지우기와 같이 프론트 확장이다(계약에는 목록과 추가뿐). 이름만 바꾼다.
+  http.patch('/api/admin/holidays/:date', async ({ request, params }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    if (user.role !== 'exec') {
+      return HttpResponse.json(
+        { detail: '휴일 설정은 임원만 할 수 있습니다.', code: 'FORBIDDEN' },
+        { status: 403 },
+      )
+    }
+    const body = await readJson<{ name?: unknown }>(request)
+    await delay(300)
+    const result = renameHoliday(String(params.date), body?.name)
+    if (result === 'not_found') {
+      return HttpResponse.json(
+        { detail: '등록되지 않은 휴일입니다.', code: 'NOT_FOUND' },
+        { status: 404 },
+      )
+    }
+    if ('error' in result) {
+      return HttpResponse.json(
+        { detail: result.error, code: result.code },
+        { status: result.status },
+      )
+    }
+    return HttpResponse.json(result.item)
   }),
   http.delete('/api/admin/holidays/:date', async ({ params }) => {
     const user = authenticate()

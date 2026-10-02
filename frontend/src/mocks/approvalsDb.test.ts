@@ -9,6 +9,7 @@ import {
   createDelegation,
   createDraft,
   deleteDelegation,
+  deleteDraft,
   decide,
   forceClose,
   getApproval,
@@ -513,5 +514,28 @@ describe('결재 첨부 (13 FR-APV-05)', () => {
     if ('error' in made) throw new Error(made.error)
     expect(checkAttachmentDownload(other, doc.id, url)).toBeNull()
     deleteDelegation(senior, made.id)
+  })
+})
+
+describe('임시저장 지우기', () => {
+  it('내 임시저장만 지워지고, 상신한 문서와 남의 문서는 남는다', () => {
+    const draft = createDraft(member, {
+      type_code: 'general',
+      title: '지울 임시저장',
+      subject: { body: '본문', amount: null, related: null },
+    })
+    if ('error' in draft) throw new Error(draft.error)
+
+    // 남의 임시저장은 있는지조차 알려 주지 않는다.
+    expect(deleteDraft(other, draft.id)).toMatchObject({ status: 404 })
+    expect(deleteDraft(member, draft.id)).toBeNull()
+    expect(listApprovals(member, 'draft').some((d) => d.id === draft.id)).toBe(false)
+    // 같은 요청을 다시 보내면 없는 문서다.
+    expect(deleteDraft(member, draft.id)).toMatchObject({ status: 404 })
+
+    // 상신한 문서는 이력이라 지우지 않는다.
+    const pending = draftAndSubmit('상신한 문서는 못 지운다')
+    expect(deleteDraft(member, pending.id)).toMatchObject({ status: 409, code: 'NOT_DRAFT' })
+    expect(getApproval(member, pending.id)).toMatchObject({ id: pending.id })
   })
 })

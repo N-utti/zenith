@@ -71,6 +71,26 @@ export function addHoliday(input: HolidayInput): { item: Holiday } | Failure {
   return { item }
 }
 
+/**
+ * 회사 휴일의 이름을 고친다. 날짜는 못 바꾼다(날짜를 옮기려면 지우고 다시 넣는다. 근무 달력이
+ * 바뀌는 일이라 두 동작으로 남기는 편이 기록에 맞다). 이름만 바뀌고 달력은 그대로라 마감된 달도 된다.
+ */
+export function renameHoliday(
+  date: string,
+  rawName: unknown,
+): { item: Holiday } | 'not_found' | Failure {
+  const found = holidays.get(date)
+  if (!found) return 'not_found'
+  if (found.kind === 'public') {
+    return { error: '법정 공휴일은 여기서 고칠 수 없습니다.', status: 403, code: 'FORBIDDEN' }
+  }
+  const name = typeof rawName === 'string' ? rawName.trim() : ''
+  if (!name || name.length > 100) return invalid('이름은 1~100자입니다.')
+  const item: Holiday = { ...found, name }
+  holidays.set(date, item)
+  return { item }
+}
+
 export function removeHoliday(date: string): 'ok' | 'not_found' | Failure {
   const found = holidays.get(date)
   if (!found) return 'not_found'

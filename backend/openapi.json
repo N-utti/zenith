@@ -4698,6 +4698,18 @@
             "type": "string",
             "format": "date-time",
             "title": "Created At"
+          },
+          "edited_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Edited At"
           }
         },
         "type": "object",
@@ -4708,7 +4720,8 @@
           "body",
           "doc_ref",
           "attachments",
-          "created_at"
+          "created_at",
+          "edited_at"
         ],
         "title": "MessageOut",
         "description": "§4.1 `msg` 이벤트의 message 와 같은 모양."
