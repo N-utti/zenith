@@ -521,10 +521,16 @@ async def test_edit_comment_author_only(client: AsyncClient, users: Users, app_d
     denied = (
         await app_db.execute(select(AuditEvent).where(AuditEvent.kind == "acl.denied"))
     ).scalar_one()
-    assert denied.detail["comment_id"] == mine["id"]
+    assert (denied.detail["comment_id"], denied.detail["method"]) == (mine["id"], "PATCH")
+    assert (await client.get(url)).json()["items"][0]["body"] == "@박동현 처음"  # 거부됐으니 그대로
 
     await login(client, "sujin@zenith.co.kr")
     h = csrf(client)
+    other = await _doc(client, root.id, "다른 문서")
+    r = await client.patch(
+        f"/api/docs/{other['id']}/comments/{mine['id']}", json={"body": "x"}, headers=h
+    )
+    assert r.status_code == 404  # 다른 문서 아래의 댓글 id
     r = await client.patch(f"{url}/{mine['id']}", json={"body": " @박동현 처음 "}, headers=h)
     assert r.status_code == 200 and r.json()["edited_at"] is None  # 그대로면 고친 것이 아니다
     assert (
@@ -540,6 +546,9 @@ async def test_edit_comment_author_only(client: AsyncClient, users: Users, app_d
     assert (listed[0]["body"], listed[0]["edited_at"]) == ("고침 @최재호", r.json()["edited_at"])
     notes = list((await app_db.execute(select(Notification))).scalars())
     assert [(n.user_id, n.payload["preview"]) for n in notes] == [(users.lead.id, "고침 @최재호")]
+    # || 합치기라 나머지 키는 그대로
+    assert (notes[0].payload["comment_id"], notes[0].payload["doc_id"]) == (mine["id"], doc["id"])
+    assert notes[0].payload["from"]["name"] == "김수진"
     edited = (
         await app_db.execute(select(AuditEvent).where(AuditEvent.kind == "docs.comment_edited"))
     ).scalar_one()

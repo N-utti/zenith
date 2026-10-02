@@ -639,7 +639,9 @@ async def _own_comment(
 ) -> tuple[Document, DocComment]:
     """고치기·지우기의 공통 앞부분: 문서(휴지통 404) → 댓글(다른 문서의 것 404) → 쓴 사람(403 + acl.denied)."""
     doc = await _get_doc(db, doc_id)
-    comment = await db.get(DocComment, comment_id)
+    # 행 잠금 — 두 탭에서 고치기와 지우기가 겹치면 늦은 쪽이 0행에 닿아 500(StaleDataError)이 나던 것.
+    # 잠금을 기다리는 사이 지워졌으면 None 이 와서 404 로 떨어진다(#278 의 문서 잠금과 같은 방식)
+    comment = await db.get(DocComment, comment_id, with_for_update=True, populate_existing=True)
     if comment is None or comment.doc_id != doc.id:
         raise ApiError(404, "NOT_FOUND", "없는 댓글입니다.")
     if comment.author_id != user.id:
@@ -649,7 +651,11 @@ async def _own_comment(
             request=request,
             actor_id=user.id,
             target_id=doc.id,
-            detail={"path": request.url.path, "comment_id": str(comment.id)},
+            detail={
+                "path": request.url.path,
+                "method": request.method,  # 고치기와 지우기가 같은 경로라 method 로 가른다
+                "comment_id": str(comment.id),
+            },
         )
         await db.commit()
         raise ApiError(403, "FORBIDDEN", "내 댓글만 고치거나 지울 수 있습니다.")
