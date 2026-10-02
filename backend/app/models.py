@@ -196,9 +196,13 @@ class DocComment(Base):
 
 class Channel(Base):
     __tablename__ = "channels"
-    __table_args__ = (  # 공개 채널 이름 유일 — 사전 검사와 commit 사이 경합은 이게 막는다(409)
+    __table_args__ = (  # 공개 채널 이름 유일 — 사전 검사와 commit 사이 경합은 이게 막는다(409).
+        # 비공개 채널은 빼야 한다 — 같은 이름으로 409 가 나면 안 보이는 채널이 있다는 사실이 샌다(README 12).
         Index(
-            "uq_channels_public_name", "name", unique=True, postgresql_where=sql_text("NOT is_dm")
+            "uq_channels_public_name",
+            "name",
+            unique=True,
+            postgresql_where=sql_text("NOT is_dm AND NOT is_private"),
         ),
     )
 
@@ -206,6 +210,10 @@ class Channel(Base):
     ws_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("workspaces.id"), nullable=False)
     name: Mapped[str] = mapped_column(Text, nullable=False)
     is_dm: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=sql_text("false"))
+    # 고른 사람만 멤버(03 에 없는 칸, 2026-10-02). 공개 채널(전원)·DM(두 사람)과 달리 멤버를 더하고 뺀다.
+    is_private: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=sql_text("false")
+    )
 
 
 class ChannelMember(Base):

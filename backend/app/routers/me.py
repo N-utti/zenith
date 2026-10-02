@@ -68,6 +68,7 @@ class UnreadChannel(BaseModel):
     channel_id: uuid.UUID
     name: str
     is_dm: bool
+    is_private: bool  # 화면이 `#` 대신 자물쇠를 그린다(#221)
     # DM 상대 — 아바타 색을 이름이 아니라 사람으로 정하려면 id 가 있어야 한다(홈·채팅이 같은 색).
     # 채널이면 null 이지만 키는 늘 있다(기본값을 두면 계약에서 선택 필드가 된다)
     peer_id: uuid.UUID | None
@@ -204,6 +205,7 @@ async def _unread_channels(db: AsyncSession, user: User) -> list[UnreadChannel]:
                 channel_id=c.id,
                 name=peer[1] if peer else c.name,
                 is_dm=c.is_dm,
+                is_private=c.is_private,
                 peer_id=peer[0] if peer else None,
                 count=count,
             )
