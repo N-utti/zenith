@@ -1,10 +1,7 @@
 # 제니스 리버스 프록시 · TLS · 정적 파일 (ARCHITECTURE §7). compose 가 이 파일을 /etc/caddy/Caddyfile 로 마운트한다.
 # 사이트 주소는 ZENITH_SITE (기본 localhost). 바꾸면 `docker compose restart caddy`.
-{$ZENITH_SITE:localhost} {
-	# ZENITH_TLS 가 비면 `internal`(Caddy 자체 CA — 루트는 caddy_data 의 caddy/pki/authorities/local/root.crt,
-	# 사내 PC·앱의 신뢰 저장소에 배포). Tailscale(이슈 #265)이면 `tailscale cert` 로 받은 파일을 ./certs 에 두고
-	# `ZENITH_TLS=/certs/cert.pem /certs/key.pem`. 사내 CA 인증서도 같은 모양.
-	tls {$ZENITH_TLS:internal}
+# 라우팅은 스니펫 (zenith) 하나 — HTTPS 사이트(밖·Tailscale)와 사내망 평문 HTTP 사이트(아래)가 같이 쓴다.
+(zenith) {
 	encode zstd gzip
 
 	header {
@@ -55,4 +52,19 @@
 		try_files {path} /index.html
 		file_server
 	}
+}
+
+{$ZENITH_SITE:localhost} {
+	# ZENITH_TLS 가 비면 `internal`(Caddy 자체 CA — 루트는 caddy_data 의 caddy/pki/authorities/local/root.crt,
+	# 사내 PC·앱의 신뢰 저장소에 배포). Tailscale(이슈 #265)이면 `tailscale cert` 로 받은 파일을 ./certs 에 두고
+	# `ZENITH_TLS=/certs/cert.pem /certs/key.pem`. 사내 CA 인증서도 같은 모양.
+	tls {$ZENITH_TLS:internal}
+	import zenith
+}
+
+# 사내망 평문 HTTP (2026-10-02, 이슈 #265): 사무실 PC 는 Tailscale 없이 `http://<서버 LAN IP>:5180` 으로.
+# ZENITH_LAN_SITE 를 안 주면 localhost 만 받아 사실상 꺼진 것과 같다(호스트 포트는 compose 가 늘 연다).
+# 평문이라 api 쿠키의 Secure 를 꺼야 로그인이 된다 — compose 의 ZENITH_COOKIE_SECURE=false. 사내망·Tailscale 안에서만 쓴다.
+{$ZENITH_LAN_SITE:http://localhost:5180} {
+	import zenith
 }
