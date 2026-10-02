@@ -27,9 +27,11 @@ import { FolderNameModal } from '@/features/docs/FolderNameModal'
 import { MoveNodeModal } from '@/features/docs/MoveNodeModal'
 import { TrashDocModal } from '@/features/docs/TrashDocModal'
 import {
+  UNTITLED_DOC,
   useCreateDoc,
   useCreateFolder,
   useMoveNode,
+  useRenameDoc,
   useRenameFolder,
   useTree,
 } from '@/features/docs/api'
@@ -325,6 +327,7 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
   const createDoc = useCreateDoc()
   const createFolder = useCreateFolder()
   const renameFolder = useRenameFolder()
+  const renameDoc = useRenameDoc()
   const moveNode = useMoveNode()
 
   // data 는 react-query 캐시 객체라 그대로가 안정적인 참조다. `?? …`를 memo 밖에 두면
@@ -333,10 +336,11 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
   const tree = useMemo(() => buildTree(data ?? empty), [data, empty])
   const openPath = useMemo(() => new Set(ancestorsOf(docId, data ?? empty)), [docId, data, empty])
 
-  /** 열려 있는 이름 입력창. 새 폴더는 부모 id 를, 이름 변경은 그 폴더를 들고 있다. */
+  /** 열려 있는 이름 입력창. 새 폴더는 부모 id 를, 이름 변경은 그 폴더나 문서를 들고 있다. */
   const [naming, setNaming] = useState<
     | { mode: 'create'; parentId: string | null }
     | { mode: 'rename'; id: string; title: string }
+    | { mode: 'rename-doc'; id: string; title: string }
     | null
   >(null)
   const [nameError, setNameError] = useState<string | null>(null)
@@ -516,6 +520,21 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
       )
       return
     }
+    if (naming.mode === 'rename-doc') {
+      renameDoc.mutate(
+        { id: naming.id, title: value },
+        {
+          onSuccess: () => {
+            setNaming(null)
+            toast.success('문서 이름을 바꿨습니다.')
+          },
+          // 릴레이에 못 붙은 실패는 ApiError 가 아니다. 그 문구를 그대로 보여 준다.
+          onError: (err) =>
+            setNameError(err instanceof Error ? err.message : '이름을 바꾸지 못했습니다.'),
+        },
+      )
+      return
+    }
     renameFolder.mutate(
       { id: naming.id, title: value },
       {
@@ -595,10 +614,20 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
 
       {naming && (
         <FolderNameModal
-          title={naming.mode === 'create' ? '새 폴더' : '폴더 이름 변경'}
-          initial={naming.mode === 'rename' ? naming.title : ''}
+          title={
+            naming.mode === 'create'
+              ? '새 폴더'
+              : naming.mode === 'rename'
+                ? '폴더 이름 변경'
+                : '문서 이름 변경'
+          }
+          initial={naming.mode === 'create' ? '' : naming.title}
           submitLabel={naming.mode === 'create' ? '만들기' : '저장'}
-          pending={createFolder.isPending || renameFolder.isPending}
+          pending={createFolder.isPending || renameFolder.isPending || renameDoc.isPending}
+          {...(naming.mode === 'rename-doc' && {
+            label: '문서 이름',
+            placeholder: '예: 주간 보고',
+          })}
           error={nameError}
           onDirty={() => setNameError(null)}
           onSubmit={submitName}
@@ -645,6 +674,19 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
                 icon={Link2}
                 label="링크 복사"
                 onSelect={() => copyLink(menu.item.id)}
+              />
+              {/* 제목 없는 문서는 빈 칸으로 연다. 기본 문구를 지우고 치게 하지 않는다. */}
+              <ContextMenuItem
+                icon={Pencil}
+                label="이름 변경"
+                onSelect={() => {
+                  setNameError(null)
+                  setNaming({
+                    mode: 'rename-doc',
+                    id: menu.item.id,
+                    title: menuTarget.title === UNTITLED_DOC ? '' : menuTarget.title,
+                  })
+                }}
               />
               <ContextMenuItem
                 icon={FolderInput}
