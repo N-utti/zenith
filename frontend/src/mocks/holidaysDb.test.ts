@@ -2,7 +2,7 @@ import { expect, it } from 'vitest'
 import { currentMonth, shiftMonth } from '@/lib/datetime'
 import { MOCK_USERS } from './db'
 import { attendanceMonth } from './attendanceDb'
-import { addHoliday, isHoliday, listHolidays, removeHoliday } from './holidaysDb'
+import { addHoliday, isHoliday, listHolidays, removeHoliday, renameHoliday } from './holidaysDb'
 
 // closingsDb 의 데모 시드가 모듈 로드 때 지난달을 마감해 둔다. 그 달의 날짜로 차단을 본다.
 const closed = `${shiftMonth(currentMonth(), -1)}-15`
@@ -45,4 +45,20 @@ it('휴일을 넣으면 그 날 근무일 행이 사라지고, 빼면 돌아온�
   expect(attendanceMonth(user, '2031-07').days.length).toBe(before - 1)
   removeHoliday('2031-07-17')
   expect(attendanceMonth(user, '2031-07').days.length).toBe(before)
+})
+
+it('회사 휴일은 이름만 고친다. 법정 공휴일과 없는 날짜는 안 된다', () => {
+  expect(addHoliday({ date: '2032-07-17', name: '창림기념일', kind: 'company' })).toHaveProperty(
+    'item',
+  )
+  expect(renameHoliday('2032-07-17', '  창립기념일  ')).toMatchObject({
+    item: { date: '2032-07-17', name: '창립기념일', kind: 'company' },
+  })
+  expect(listHolidays(2032).map((h) => h.name)).toEqual(['창립기념일'])
+  // 날짜는 그대로다. 여전히 휴일이다.
+  expect(isHoliday('2032-07-17')).toBe(true)
+
+  expect(renameHoliday('2032-07-17', '   ')).toMatchObject({ status: 422 })
+  expect(renameHoliday('2032-07-18', '없는 날')).toBe('not_found')
+  expect(renameHoliday('2026-01-01', '새해')).toMatchObject({ status: 403 })
 })

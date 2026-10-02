@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Trash2 } from 'lucide-react'
+import { Pencil, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { YearHeader } from '@/components/ui/Calendar'
 import { Card } from '@/components/ui/Card'
@@ -10,7 +10,14 @@ import { Table, TableEmpty, TBody, TD, TH, THead, TR } from '@/components/ui/Tab
 import { useToast } from '@/components/ui/ToastContext'
 import { ApiError } from '@/lib/api'
 import { currentMonth, formatISODate } from '@/lib/datetime'
-import { useAddHoliday, useHolidays, useRebuildCalendar, useRemoveHoliday } from './api'
+import { FolderNameModal } from '@/features/docs/FolderNameModal'
+import {
+  useAddHoliday,
+  useHolidays,
+  useRebuildCalendar,
+  useRemoveHoliday,
+  useRenameHoliday,
+} from './api'
 
 /**
  * 회사 휴일(임원, FR-ATT-11 · 10 §6). 넣고 빼면 근태 달력이 바로 바뀐다. 마감된 달의 날짜는 서버가 409 로 막는다(§6.2).
@@ -21,8 +28,12 @@ export function HolidaySection() {
   const [year, setYear] = useState(() => Number(currentMonth().slice(0, 4)))
   const holidays = useHolidays(year)
   const remove = useRemoveHoliday()
+  const rename = useRenameHoliday()
   const rebuild = useRebuildCalendar()
   const toast = useToast()
+  /** 이름을 고치는 중인 휴일. 날짜는 못 바꾼다(옮기려면 지우고 다시 넣는다). */
+  const [renaming, setRenaming] = useState<{ date: string; name: string } | null>(null)
+  const [renameError, setRenameError] = useState<string | null>(null)
   // 법정 공휴일은 서버가 관리한다. 여기서는 회사 휴일만.
   const items = (holidays.data?.items ?? []).filter((h) => h.kind === 'company')
 
@@ -110,7 +121,18 @@ export function HolidaySection() {
                 {/* formatISODate 가 요일까지 붙인다. */}
                 <TD className="whitespace-nowrap tabular-nums">{formatISODate(h.date)}</TD>
                 <TD>{h.name}</TD>
-                <TD className="text-right">
+                <TD className="text-right whitespace-nowrap">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setRenameError(null)
+                      setRenaming({ date: h.date, name: h.name })
+                    }}
+                    aria-label={`${formatISODate(h.date)} ${h.name} 이름 고치기`}
+                  >
+                    <Pencil className="size-4" aria-hidden="true" />
+                  </Button>
                   <Button
                     variant="ghost"
                     size="sm"
@@ -126,6 +148,36 @@ export function HolidaySection() {
           })}
         </TBody>
       </Table>
+
+      {renaming && (
+        <FolderNameModal
+          title={`${formatISODate(renaming.date)} 휴일 이름 고치기`}
+          label="이름"
+          placeholder="예: 창립기념일, 종무식"
+          maxLength={100}
+          initial={renaming.name}
+          submitLabel="저장"
+          pending={rename.isPending}
+          error={renameError}
+          onDirty={() => setRenameError(null)}
+          onSubmit={(name) =>
+            rename.mutate(
+              { date: renaming.date, name },
+              {
+                onSuccess: (item) => {
+                  setRenaming(null)
+                  toast.success(`휴일 이름을 고쳤습니다: ${formatISODate(item.date)} ${item.name}`)
+                },
+                onError: (err) =>
+                  setRenameError(
+                    err instanceof ApiError ? err.message : '휴일 이름을 고치지 못했습니다.',
+                  ),
+              },
+            )
+          }
+          onClose={() => setRenaming(null)}
+        />
+      )}
     </div>
   )
 }
