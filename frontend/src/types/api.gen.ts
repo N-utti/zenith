@@ -358,7 +358,7 @@ export interface paths {
         get: operations["get_doc_api_docs__id__get"];
         put?: never;
         post?: never;
-        /** 휴지통 이동(30일) / ?hard=1 은 exec 만 — 버전·댓글·색인까지 지운다 */
+        /** 휴지통 이동(30일) / ?hard=1 은 exec 만, 휴지통에 든 문서만 — 버전·댓글·색인까지 지운다 */
         delete: operations["delete_doc_api_docs__id__delete"];
         options?: never;
         head?: never;
@@ -3007,6 +3007,13 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description NOT_TRASHED — hard=1 인데 휴지통에 없는 문서(이슈 #278) */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

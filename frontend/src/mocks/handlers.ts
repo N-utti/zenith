@@ -1826,6 +1826,13 @@ data: ${JSON.stringify(data)}
           { status: 403 },
         )
       }
+      // 휴지통에 든 문서만 지운다(백엔드 #294). 그사이 누가 되돌린 문서는 그대로 둔다.
+      if (!doc.deleted_at) {
+        return HttpResponse.json(
+          { detail: '휴지통에 있는 문서만 영구 삭제할 수 있습니다.', code: 'NOT_TRASHED' },
+          { status: 409 },
+        )
+      }
       purgeDoc(doc.id)
       return new HttpResponse(null, { status: 204 })
     }
