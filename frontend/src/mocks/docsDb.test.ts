@@ -12,6 +12,7 @@ import {
   listTrash,
   listVersions,
   purgeDoc,
+  removeComment,
   trashDoc,
   untrashDoc,
 } from './docsDb'
@@ -96,6 +97,23 @@ it('댓글의 block_id 를 저장했다가 그대로 돌려준다', () => {
   addComment(doc.id, user, '이 문단 확인', 'blk-1')
   addComment(doc.id, user, '문서 전체', null)
   expect(listComments(doc.id).map((c) => c.block_id)).toEqual(['blk-1', null])
+  purgeDoc(doc.id)
+})
+
+it('댓글은 쓴 사람만 지운다', () => {
+  const other = MOCK_USERS.find((u) => u.id === 'u-1')!
+  const doc = createDoc(user, 'f-1', '댓글 삭제 시험')
+  const mine = addComment(doc.id, user, '지울 댓글', null)
+  const kept = addComment(doc.id, user, '남길 댓글', 'blk-1')
+
+  expect(removeComment(doc.id, other, mine.id)).toBe('forbidden')
+  expect(listComments(doc.id)).toHaveLength(2)
+
+  expect(removeComment(doc.id, user, mine.id)).toBe('ok')
+  expect(listComments(doc.id).map((c) => c.id)).toEqual([kept.id])
+  // 이미 지운 댓글과 다른 문서의 댓글은 없는 것이다.
+  expect(removeComment(doc.id, user, mine.id)).toBe('not_found')
+  expect(removeComment('d-2', user, kept.id)).toBe('not_found')
   purgeDoc(doc.id)
 })
 

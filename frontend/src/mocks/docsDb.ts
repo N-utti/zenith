@@ -474,3 +474,19 @@ export function addComment(
   comments[docId] = [...(comments[docId] ?? []), comment]
   return comment
 }
+
+/**
+ * 댓글을 지운다. 쓴 사람만 지울 수 있다(이슈 #253 의 가정).
+ * 화면은 버튼을 감출 뿐이고 여기가 판정한다.
+ */
+export function removeComment(
+  docId: string,
+  user: User,
+  commentId: string,
+): 'ok' | 'not_found' | 'forbidden' {
+  const comment = comments[docId]?.find((c) => c.id === commentId)
+  if (!comment) return 'not_found'
+  if (comment.author.id !== user.id) return 'forbidden'
+  comments[docId] = comments[docId].filter((c) => c !== comment)
+  return 'ok'
+}

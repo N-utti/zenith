@@ -61,6 +61,7 @@ import {
   DOC_SEEDS,
   findDoc,
   listComments,
+  removeComment,
   listTrash,
   recentDocs,
   listVersions,
@@ -1868,6 +1869,18 @@ data: ${JSON.stringify(data)}
     return HttpResponse.json(addComment(String(params.docId), user, body, blockId), {
       status: 201,
     })
+  }),
+
+  // 실서버에는 아직 없는 경로다(이슈 #253). 모양은 프론트가 정한 가정이다.
+  http.delete('/api/docs/:docId/comments/:commentId', ({ params }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    const docId = String(params.docId)
+    if (!aliveDoc(docId)) return notFound()
+    const result = removeComment(docId, user, String(params.commentId))
+    if (result === 'not_found') return notFound('댓글을 찾을 수 없습니다.')
+    if (result === 'forbidden') return forbidden()
+    return new HttpResponse(null, { status: 204 })
   }),
 
   // ── CRM 주소록 (15 CRM 모듈 설계서 §9) ─────────────────────

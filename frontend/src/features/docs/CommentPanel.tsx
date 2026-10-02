@@ -1,42 +1,87 @@
 import { hueOf } from '@/lib/avatar'
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { useEditorState, type Editor } from '@tiptap/react'
-import { Quote } from 'lucide-react'
+import { Quote, Trash2 } from 'lucide-react'
 import { useSearchParams } from 'react-router'
 import { Avatar } from '@/components/ui/Avatar'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
+import { useToast } from '@/components/ui/ToastContext'
+import { ApiError } from '@/lib/api'
 import { formatRelative } from '@/lib/datetime'
 import { useCurrentUser } from '@/features/auth/AuthContext'
 import { MentionTextarea } from '@/features/people/MentionTextarea'
 import { useMentionNames } from '@/features/people/colleagues'
 import { MentionText } from '@/features/people/MentionText'
-import { useAddComment, useComments } from './api'
+import { MSW_ENABLED } from '@/mocks/accounts'
+import { useAddComment, useComments, useDeleteComment } from './api'
 import { anchoredBlocks, flashElement } from './blockId'
 import { COMMENT_BODY_MAX, type DocComment } from './types'
 
-/** 댓글 한 줄. 옆 패널과 블록 옆 창(BlockComments)이 같이 쓴다. `children` 은 이름과 본문 사이(인용). */
+// ponytail: 서버에 댓글을 지우는 경로가 아직 없다(이슈 #253). 목이 흉내 낼 때만 버튼을 낸다.
+// 운영 빌드와 실서버에 붙인 개발 서버에서는 안 보인다. 서버에 경로가 생기면 이 스위치를 걷는다.
+const COMMENT_DELETE_ENABLED = MSW_ENABLED
+
+/**
+ * 댓글 한 줄. 옆 패널과 블록 옆 창(BlockComments)이 같이 쓴다. `children` 은 이름과 본문 사이(인용).
+ * 내가 쓴 댓글에는 지우는 버튼이 붙는다. `onDelete` 는 지우기를 시작한 직후에 불린다.
+ */
 export function CommentRow({
+  docId,
   comment,
   names,
   id,
+  onDelete,
   children,
 }: {
+  docId: string
   comment: DocComment
   names: ReadonlySet<string>
   id?: string
+  onDelete?: () => void
   children?: ReactNode
 }) {
+  const user = useCurrentUser()
+  const remove = useDeleteComment(docId)
+  const toast = useToast()
+  // 화면 편의일 뿐이다. 남의 댓글을 지우는 요청의 실제 차단은 서버의 403 이다.
+  const canDelete = COMMENT_DELETE_ENABLED && comment.author.id === user.id
+
   return (
-    <div id={id} className="-mx-2 flex gap-2.5 rounded-lg px-2 py-1">
+    <div id={id} className="group/comment -mx-2 flex gap-2.5 rounded-lg px-2 py-1">
       <Avatar name={comment.author.name} hue={hueOf(comment.author.id)} size="sm" />
       <div className="min-w-0 flex-1">
-        <p className="text-fg text-xs font-medium">
-          {comment.author.name}
-          <span className="text-subtle ml-1.5 font-normal">
-            {formatRelative(comment.created_at)}
-          </span>
-        </p>
+        <div className="flex items-center gap-1">
+          <p className="text-fg min-w-0 flex-1 text-xs font-medium">
+            {comment.author.name}
+            <span className="text-subtle ml-1.5 font-normal">
+              {formatRelative(comment.created_at)}
+            </span>
+          </p>
+          {canDelete && (
+            <button
+              type="button"
+              aria-label={`${formatRelative(comment.created_at)} 댓글 삭제`}
+              title="댓글 삭제"
+              disabled={remove.isPending}
+              onClick={() => {
+                if (!confirm('이 댓글을 지울까요? 되돌릴 수 없습니다.')) return
+                // mutate 의 onError 는 이 줄이 사라지면(창 닫기, 탭 바꾸기) 불리지 않는다.
+                // 약속에 붙인 처리는 그래도 돈다.
+                remove.mutateAsync(comment.id).catch((err: unknown) => {
+                  toast.error(err instanceof ApiError ? err.message : '댓글을 지우지 못했습니다.')
+                })
+                onDelete?.()
+              }}
+              // 줄 위에 올리거나 Tab 으로 닿을 때만 보인다. 호버가 없는 기기에서는 늘 보인다.
+              // 숨어 있을 때는 눌리지도 않는다(할 일 카드의 지우기 버튼과 같은 규약).
+              // -my-1: 이름 줄(16px)보다 큰 버튼이 줄 높이를 키우지 않게 한다.
+              className="text-subtle hover:text-danger pointer-events-none -my-1 grid size-6 shrink-0 cursor-pointer place-items-center rounded opacity-0 transition-opacity group-focus-within/comment:pointer-events-auto group-focus-within/comment:opacity-100 group-hover/comment:pointer-events-auto group-hover/comment:opacity-100 pointer-coarse:pointer-events-auto pointer-coarse:opacity-100"
+            >
+              <Trash2 className="size-3.5" />
+            </button>
+          )}
+        </div>
         {children}
         <p className="text-muted mt-0.5 text-sm break-words whitespace-pre-wrap">
           <MentionText body={comment.body} names={names} />
@@ -158,6 +203,7 @@ export function CommentPanel({
           return (
             <CommentRow
               key={comment.id}
+              docId={docId}
               comment={comment}
               names={names}
               id={`comment-${comment.id}`}
