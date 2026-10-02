@@ -1167,6 +1167,73 @@
       }
     },
     "/api/docs/{id}/comments/{comment_id}": {
+      "patch": {
+        "tags": [
+          "docs"
+        ],
+        "summary": "댓글 고치기 {body} — 쓴 사람만. 그대로면 edited_at 을 찍지 않는다 (이슈 #274)",
+        "operationId": "edit_comment_api_docs__id__comments__comment_id__patch",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          },
+          {
+            "name": "comment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Comment Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CommentPatchIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommentOut"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "남의 댓글"
+          },
+          "404": {
+            "description": "없는 문서·댓글, 휴지통 문서"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
       "delete": {
         "tags": [
           "docs"
@@ -3915,6 +3982,18 @@
             "type": "string",
             "format": "date-time",
             "title": "Created At"
+          },
+          "edited_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Edited At"
           }
         },
         "type": "object",
@@ -3923,9 +4002,26 @@
           "block_id",
           "author",
           "body",
-          "created_at"
+          "created_at",
+          "edited_at"
         ],
         "title": "CommentOut"
+      },
+      "CommentPatchIn": {
+        "properties": {
+          "body": {
+            "type": "string",
+            "maxLength": 10000,
+            "minLength": 1,
+            "title": "Body"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "body"
+        ],
+        "title": "CommentPatchIn"
       },
       "DocCreateIn": {
         "properties": {
