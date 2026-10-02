@@ -7,11 +7,11 @@ import Highlight from '@tiptap/extension-highlight'
 import TextAlign from '@tiptap/extension-text-align'
 import { TextStyleKit } from '@tiptap/extension-text-style'
 import { TaskItem, TaskList } from '@tiptap/extension-list'
-import { TableCell, TableHeader, TableKit } from '@tiptap/extension-table'
 import { BlockId } from './blockId'
 import { FileChip } from './FileChip'
 import { ImageBlock } from './ImageBlock'
 import { SlashCommand } from './slashCommand'
+import { tableExtensions } from './tableExtensions'
 import type { CollabSession } from './useCollabSession'
 
 type BuildOptions = Pick<CollabSession, 'doc' | 'provider'> & {
@@ -62,12 +62,7 @@ export function docContentExtensions(): Extensions {
       // 기본값은 영어("Task item checkbox for …")라 스크린리더가 영어로 읽는다.
       a11y: { checkboxLabel: (node) => `할 일: ${node.textContent || '빈 항목'}` },
     }),
-    // 표. 지금은 AI "표로 정리"가 넣는 표만 있다(슬래시 메뉴·행·열 편집 UI 는 아직 없다).
-    // resizable 은 기본값이 false 지만 뜻을 남긴다: 열 너비 끌기는 셀 속성(colwidth)을 문서에 쓰는 동작이라
-    // 두 사람이 동시에 끌면 경합한다. 셀 내용을 문단으로 제한해 셀 안에 표가 들어가는 것을 스키마에서 막는다.
-    TableKit.configure({ table: { resizable: false }, tableCell: false, tableHeader: false }),
-    TableCell.extend({ content: 'paragraph+' }),
-    TableHeader.extend({ content: 'paragraph+' }),
+    ...tableExtensions(),
     ImageBlock,
     FileChip,
     // 댓글 닻. 미리보기에도 있어야 버전을 되돌릴 때 닻이 살아남는다.

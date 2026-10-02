@@ -25,6 +25,7 @@ import {
   BlockMenu,
   ColorMenu,
   LinkMenu,
+  TableMenu,
   ToolButton,
   ToolDivider,
 } from './editorControls'
@@ -130,6 +131,7 @@ export function EditorToolbar({
         onClick={run('codeBlock')}
       />
       <ToolButton icon={Minus} label="구분선" onClick={run('horizontalRule')} />
+      <TableMenu editor={editor} inTable={state.inTable} />
 
       <ToolButton
         icon={uploading ? LoaderCircle : ImagePlus}

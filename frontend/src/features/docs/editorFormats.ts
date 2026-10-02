@@ -49,6 +49,7 @@ export function useFormatState(editor: Editor) {
       strike: e.isActive('strike'),
       code: e.isActive('code'),
       blockKey: activeBlock(e).key,
+      inTable: e.isActive('table'),
       color: (e.getAttributes('textStyle').color as string | undefined) ?? null,
       highlight: (e.getAttributes('highlight').color as string | undefined) ?? null,
       link: (e.getAttributes('link').href as string | undefined) ?? null,
