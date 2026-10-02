@@ -83,7 +83,7 @@ function menuPosition(trigger: DOMRect, menu: DOMRect, align: 'start' | 'end') {
 
   /**
    * 세로로 쓸 수 있는 구간. 키보드가 올라오면 레이아웃 높이는 그대로인데 실제로 보이는
-   * 영역만 줄어든다. 레이아웃 높이로 재면 «아래가 넉넉하다» 고 판단해 메뉴를 키보드 뒤에
+   * 영역만 줄어든다. 레이아웃 높이로 재면 "아래가 넉넉하다" 고 판단해 메뉴를 키보드 뒤에
    * 그린다. 툴바가 키보드 위로 올라가 있을 때(05·SCR-08) 늘 그 상황이 된다.
    */
   const visual = window.visualViewport

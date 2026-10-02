@@ -122,7 +122,7 @@ export function TrashPage() {
                       disabled={busy}
                       onClick={() =>
                         untrash.mutate(doc.id, {
-                          onSuccess: () => toast.success(`«${title}» 를 되돌렸습니다.`),
+                          onSuccess: () => toast.success(`되돌렸습니다: ${title}`),
                           onError: fail('되돌리지 못했습니다.'),
                         })
                       }
@@ -200,7 +200,8 @@ export function TrashPage() {
         }
       >
         <p className="text-muted text-sm leading-relaxed">
-          «{confirmPurge?.title}» 문서가 영구 삭제됩니다. 되돌릴 수 없습니다.
+          <span className="text-fg font-medium">{confirmPurge?.title}</span> 문서가 영구 삭제됩니다.
+          되돌릴 수 없습니다.
         </p>
       </Modal>
     </>

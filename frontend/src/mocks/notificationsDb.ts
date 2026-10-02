@@ -43,7 +43,7 @@ const NOTIFICATIONS: Notification[] = [
     },
   },
   {
-    // DM 멘션. 채널 이름(`channel_name`)이 `null` 이라 요약에 «»가 들어가지 않는다.
+    // DM 멘션. 채널 이름(`channel_name`)이 `null` 이라 요약에 채널 이름이 들어가지 않는다.
     id: 'n-6',
     kind: 'mention',
     read_at: null,

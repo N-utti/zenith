@@ -36,7 +36,7 @@ export function imageSources(doc: JSONContent): string[] {
  * 파일에 링크로 실어도 되는 주소면 정돈해서, 아니면 `null`.
  *
  * 링크는 남의 편집(Y.Doc)에서도 온다. `javascript:`·`file:` 같은 것을 문서 파일에 옮겨 심지 않는다.
- * 주소로 읽히지 않는 글자는 워드가 파일째 «손상됨» 으로 거부하므로 그것도 여기서 거른다.
+ * 주소로 읽히지 않는 글자는 워드가 파일째 "손상됨" 으로 거부하므로 그것도 여기서 거른다.
  */
 export function safeHref(href: unknown): string | null {
   if (typeof href !== 'string') return null
@@ -112,7 +112,7 @@ export interface TableColumn {
 
 /**
  * 표의 칸마다 실제 열 자리를 매긴다. 세로로 합친 칸은 아래 행에 칸이 아예 없어서, 그 행의 칸이
- * 몇 번째 열인지는 위에서부터 세어야만 안다. 워드는 그 빈자리에도 «위와 이어짐» 칸을 요구한다.
+ * 몇 번째 열인지는 위에서부터 세어야만 안다. 워드는 그 빈자리에도 "위와 이어짐" 칸을 요구한다.
  */
 export function layoutTable(table: JSONContent): { rows: PlacedCell[][]; columns: TableColumn[] } {
   const tableRows = table.content ?? []

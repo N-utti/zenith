@@ -5,7 +5,7 @@ import { MenuItem, ToolMenu } from './editorControls'
 
 /**
  * 본문 폭 고르기. 고른 값은 문서에 저장돼 같이 보는 사람에게도 같은 폭으로 보인다(`useCollabWidth`).
- * 화면이 본문보다 좁으면 어느 단계든 똑같이 보인다. 폭은 «여기까지 넓어져도 된다» 는 상한이다.
+ * 화면이 본문보다 좁으면 어느 단계든 똑같이 보인다. 폭은 "여기까지 넓어져도 된다" 는 상한이다.
  */
 export function DocWidthMenu({ doc }: { doc: Y.Doc }) {
   const { width, setWidth } = useCollabWidth(doc)

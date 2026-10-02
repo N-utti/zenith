@@ -34,7 +34,7 @@ export function TrashDocModal({
         onTrashed?.()
         // 제목을 싣는다. 짧은 사이에 둘을 지우면 똑같은 토스트가 겹쳐 어느 것을 되돌리는지
         // 가릴 근거가 없어진다.
-        toast.success(`«${title}» 를 휴지통으로 옮겼습니다.`, {
+        toast.success(`휴지통으로 옮겼습니다: ${title}`, {
           durationMs: 10_000,
           action: {
             label: '되돌리기',

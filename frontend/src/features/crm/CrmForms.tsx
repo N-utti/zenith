@@ -83,7 +83,7 @@ function FormModal({
 }) {
   const formId = useId()
   // 저장 중에는 닫지도 고치지도 못하게 한다. 요청이 둘로 이어지는 폼(담당자 수정의 새 기관 등록)은
-  // 도중에 닫으면 앞의 것만 서버에 남고, 도중에 고친 값은 저장되지 않은 채 «저장했습니다» 로 닫힌다.
+  // 도중에 닫으면 앞의 것만 서버에 남고, 도중에 고친 값은 저장되지 않은 채 "저장했습니다" 로 닫힌다.
   const close = busy ? () => {} : onClose
   return (
     <Modal
@@ -125,7 +125,7 @@ function FormModal({
 
 const TYPE_OPTIONS = ORG_TYPES.map((value) => ({ value, label: ORG_TYPE_LABEL[value] }))
 
-/** 담당자 수정의 소속 기관 선택지 끝에 붙는 «새 기관 등록». 기관 id 와 겹치지 않는 값. */
+/** 담당자 수정의 소속 기관 선택지 끝에 붙는 "새 기관 등록". 기관 id 와 겹치지 않는 값. */
 const NEW_ORG = '__new'
 
 /** 기관 등록·수정. `org` 가 없으면 등록이고, 저장하면 새 기관 상세로 간다. */
@@ -293,7 +293,7 @@ export function ContactFormModal({
         },
         onError: (err) => {
           const why = errorText(err, '담당자를 저장하지 못했습니다.')
-          setError(made ? `기관 «${made.name}» 등록은 끝났습니다. ${why}` : why)
+          setError(made ? `기관 ${made.name} 등록은 끝났습니다. ${why}` : why)
         },
       },
     )
@@ -557,7 +557,7 @@ export function ActivityFormModal({
             {...slot}
             value={deal}
             options={dealOptions}
-            // 목록이 오기 전에는 고른 안건이 선택지에 없어 «안건 없음» 으로 보인다. 잠가 둔다.
+            // 목록이 오기 전에는 고른 안건이 선택지에 없어 "안건 없음" 으로 보인다. 잠가 둔다.
             disabled={orgDeals.isPending}
             onChange={(e) => setDeal(e.target.value)}
           />

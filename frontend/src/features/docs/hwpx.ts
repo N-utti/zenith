@@ -247,7 +247,7 @@ export function buildHwpx({ title, doc, images, origin }: ExportSource): Uint8Ar
   }
   const charId = (char: Partial<Char> = {}) => lookup(chars, { ...CHAR, ...char })
   const paraId = (para: Partial<Para> = {}) => lookup(paras, { ...PARA, ...para })
-  // 0번은 «바탕글» 스타일이 가리키는 기본 모양이다. 본문보다 먼저 자리를 잡아 둔다.
+  // 0번은 "바탕글" 스타일이 가리키는 기본 모양이다. 본문보다 먼저 자리를 잡아 둔다.
   charId()
   paraId()
 
@@ -285,7 +285,7 @@ export function buildHwpx({ title, doc, images, origin }: ExportSource): Uint8Ar
    * 거기서는 `:` `?` `;` `#` 앞에 역슬래시를 붙여야 한다. 이름만 채우면 어디도 가리키지 않는다.
    */
   const hyperlink = (address: string, inner: string) => {
-    // `|` 는 그 자리에서 «여기부터 풍선 도움말» 이고 역슬래시는 감싸는 글자다. 주소에 그대로 두면
+    // `|` 는 그 자리에서 "여기부터 풍선 도움말" 이고 역슬래시는 감싸는 글자다. 주소에 그대로 두면
     // 한글이 주소를 거기서 잘라 읽는다. 주소 표기(%7C·%5C)로 바꿔 싣는다.
     const href = address.replace(/[\\|]/g, encodeURIComponent)
     const id = ++serial

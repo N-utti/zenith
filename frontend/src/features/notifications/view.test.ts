@@ -38,7 +38,7 @@ it('방금 온 알림의 OS 알림 문구. 채팅 멘션은 msg 가 이미 울�
       kind: 'mention',
       payload: { doc_id: 'd-1', doc_title: '로드맵', from, preview: '확인 부탁' },
     }),
-  ).toEqual({ title: '정성운님이 «로드맵»에서 회원님을 불렀습니다', body: '확인 부탁' })
+  ).toEqual({ title: '정성운님이 로드맵 문서에서 회원님을 불렀습니다', body: '확인 부탁' })
   expect(
     noticeToast({
       kind: 'post',
@@ -64,7 +64,7 @@ it('배지는 알림함이 그릴 수 있는 안 읽은 알림만 센다', () =>
 it('채팅 멘션은 채널 이름을 요약에 넣는다. DM 은 넣지 않는다', () => {
   // 공개 채널이면 어느 채널인지 누르기 전에 알 수 있어야 한다.
   expect(view('mention', { channel_id: 'c-1', channel_name: '개발', from })?.summary).toBe(
-    '정성운님이 «개발»에서 회원님을 불렀습니다',
+    '정성운님이 개발 채널에서 회원님을 불렀습니다',
   )
   // DM 은 `channel_name` 이 `null`(#150).
   expect(view('mention', { channel_id: 'dm-1', channel_name: null, from })?.summary).toBe(

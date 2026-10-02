@@ -61,7 +61,7 @@ export function MoveNodeModal({
       open
       onClose={onClose}
       title="다른 폴더로 옮기기"
-      description={`«${title}» 를 어디로 옮길까요?`}
+      description={`옮길 것: ${title}`}
       size="sm"
     >
       <ul>

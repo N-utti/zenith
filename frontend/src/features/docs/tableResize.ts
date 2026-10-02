@@ -9,10 +9,10 @@ import { Decoration, DecorationSet, type EditorView } from '@tiptap/pm/view'
  * 달라진 만큼 민다. 달라진 구간 안이면 -1.
  *
  * Yjs 에서 온 변경은 문서 전체를 한 번에 갈아 끼우는 모양이라 ProseMirror 의 위치 매핑이 자리를 잃는다.
- * 끌기처럼 «지금 잡고 있는 자리» 를 들고 있는 플러그인은 남의 편집이 올 때 이걸로 자리를 다시 찾는다.
+ * 끌기처럼 "지금 잡고 있는 자리" 를 들고 있는 플러그인은 남의 편집이 올 때 이걸로 자리를 다시 찾는다.
  *
  * ponytail: 달라진 구간 하나로 본다. 끄는 그 순간에 남이 그 표의 열을 더하면, 끼어든 칸이 잡고 있던
- * 칸과 모양이 같아 «내용만 바뀐 같은 칸» 으로 읽히고 너비가 새 열에 쓰인다(Ctrl+Z 로 돌아온다).
+ * 칸과 모양이 같아 "내용만 바뀐 같은 칸" 으로 읽히고 너비가 새 열에 쓰인다(Ctrl+Z 로 돌아온다).
  * 거슬리면 Yjs 상대 위치로 칸 자체를 따라간다.
  */
 function movedPos(before: PmNode, pos: number, after: PmNode): number {
@@ -30,7 +30,7 @@ function movedPos(before: PmNode, pos: number, after: PmNode): number {
  * 세로선 끌기가 남의 편집을 견디게 한다.
  *
  * 끌기 플러그인은 잡고 있는 칸의 자리를 위치 매핑으로 따라가는데, 남의 편집에서는 그 자리를 잃는다
- * (`movedPos`). 끄는 도중에 동료가 글자 하나만 쳐도 자리는 -1 이 되고 «끄는 중» 표시만 남아, 마우스를
+ * (`movedPos`). 끄는 도중에 동료가 글자 하나만 쳐도 자리는 -1 이 되고 "끄는 중" 표시만 남아, 마우스를
  * 움직일 때마다 예외가 나고 놓아도 풀리지 않는다(문서를 다시 열 때까지 끌기를 못 쓴다). 그래서 남의
  * 편집으로 자리를 잃었을 때는 그 칸이 옮겨 간 자리를 다시 찾아 준다. 못 찾으면(내 편집으로 그 칸이
  * 사라진 경우도 같다) 끌기를 접는다.
@@ -72,7 +72,7 @@ export function settleColumnResize(cellMinWidth: number) {
       const resize = columnResizingPluginKey.getState(oldState) as ResizeState | undefined
       if (!view || !resize || !resize.dragging || resize.activeHandle < 0) return null
       // 끌기를 놓는 것은 늘 내가 직접 보낸 트랜잭션이다. 끄는 중에 들어온 남의 변경이나 다른 플러그인이
-      // 덧붙인 변경은 «놓은 것» 이 아니다. 남의 변경 뒤에는 잡은 자리가 새 문서 밖일 수도 있어, 여기서
+      // 덧붙인 변경은 "놓은 것" 이 아니다. 남의 변경 뒤에는 잡은 자리가 새 문서 밖일 수도 있어, 여기서
       // 거르지 않으면 아래에서 예외가 나고 그 변경이 내 화면에 반영되지 못한다(그 뒤 내 입력이 남이
       // 지운 것을 되살린다).
       if (isChangeOrigin(root) || root.getMeta('appendedTransaction')) return null
@@ -193,7 +193,7 @@ function rowUnderPointer(view: EditorView, event: MouseEvent): number {
  * 행 아래 가로선을 끌어 행 높이를 바꾼다. 표 확장에는 열 너비 끌기만 있어 같은 방식으로 만든 것이다.
  *
  * 높이는 행 속성(height)으로 문서에 남는다. 끄는 동안은 장식(decoration)으로 내 화면에만 보이고 놓을
- * 때 한 번 쓴다. 표의 행 높이는 «최소 높이» 라, 글이 그보다 길면 행은 그만큼 더 커진다.
+ * 때 한 번 쓴다. 표의 행 높이는 "최소 높이" 라, 글이 그보다 길면 행은 그만큼 더 커진다.
  * 끌지 않고 누르기만 한 것은 쓰지 않는다.
  *
  * 끄는 동안의 높이는 장식에 `height` 로 직접 주지 않고 변수(`--row-height`)로 준다(그리는 것은

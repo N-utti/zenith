@@ -117,7 +117,7 @@ function DocSidebar({
   ]
 
   return (
-    // max-h: 펼쳐도 본문이 절반 넘게 남아야 «본문을 넓게» 라는 목적이 유지된다.
+    // max-h: 펼쳐도 본문이 절반 넘게 남아야 "본문을 넓게" 라는 목적이 유지된다.
     // shrink-0 은 접힌 탭 줄이 본문에 눌려 사라지지 않게 하는 것이라 좁은 폭에만 건다.
     <aside className="border-line bg-surface flex min-h-0 w-full flex-col border-t max-lg:max-h-[45%] max-lg:shrink-0 lg:w-80 lg:border-t-0 lg:border-l">
       <div className="border-line flex shrink-0 border-b">

@@ -14,7 +14,7 @@ const GAP = 6
  * 커서가 든 행의 오른쪽 끝에서 틈만큼 떨어진 자리. 표가 본문보다 넓어 가로로 구르고 있으면 보이는 쪽
  * 끝(tableWrapper)에 맞춘다. 안 그러면 버튼이 화면 밖으로 구른 표 끝을 따라가 사라진다.
  *
- * 틈을 offset 옵션으로 주지 않고 여기에 넣는다. 버블 메뉴는 offset 을 «스크롤 영역 안으로 밀기» 뒤에
+ * 틈을 offset 옵션으로 주지 않고 여기에 넣는다. 버블 메뉴는 offset 을 "스크롤 영역 안으로 밀기" 뒤에
  * 적용해서, 좁은 화면에서 안으로 민 버튼을 틈만큼 다시 밖으로 내보낸다(가로 스크롤바가 생긴다).
  */
 function rowEnd(editor: Editor) {
@@ -72,7 +72,7 @@ export function TableRowMenu({ editor }: { editor: Editor }) {
   const reference = useCallback(() => rowEnd(editor), [editor])
 
   // 포커스가 편집기·버튼·메뉴 밖으로 가면 숨긴다. 버블 메뉴가 스스로 숨기는 것만 믿으면 남는 때가 있다.
-  // 버튼 위에서 누르면 «다음 blur 한 번은 숨기지 않는다» 는 표시가 켜지는데, 버튼을 다시 눌러 메뉴를
+  // 버튼 위에서 누르면 "다음 blur 한 번은 숨기지 않는다" 는 표시가 켜지는데, 버튼을 다시 눌러 메뉴를
   // 닫을 때는 편집기에 포커스가 없어 blur 가 오지 않고, 그 표시가 다음 번(진짜로 떠날 때)에 쓰인다.
   useEffect(() => {
     const onFocusIn = ({ target }: FocusEvent) => {

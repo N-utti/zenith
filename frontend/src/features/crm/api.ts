@@ -98,7 +98,7 @@ function useRefetchCrm() {
 /**
  * 안건을 바꾸는 요청의 뒷정리. 응답(새 version)을 상세 캐시에 바로 넣고 전체를 다시 읽는다.
  * 넣지 않으면 다시 읽기가 끝날 때까지 화면이 옛 version·옛 상태를 들고 있어, 그 사이에 한 번 더
- * 누르면 내가 만든 409 가 «다른 사람이 먼저 고쳤습니다» 로 뜬다.
+ * 누르면 내가 만든 409 가 "다른 사람이 먼저 고쳤습니다" 로 뜬다.
  */
 function useSettleDeal() {
   const qc = useQueryClient()
