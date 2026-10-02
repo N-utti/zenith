@@ -42,7 +42,7 @@ export function TrashDocModal({
             // 나타나게만 한다.
             onClick: () => {
               void untrashDoc(id)
-                .then(() => toast.success('문서를 되돌렸습니다.'))
+                .then(() => toast.success(`${title} 문서를 되돌렸습니다.`))
                 .catch((err: unknown) =>
                   toast.error(err instanceof ApiError ? err.message : '되돌리지 못했습니다.'),
                 )
