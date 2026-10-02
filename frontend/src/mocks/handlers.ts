@@ -244,6 +244,18 @@ const forbidden = () =>
 const validationError = (detail: string) =>
   HttpResponse.json({ detail, code: 'VALIDATION' }, { status: 422 })
 
+/**
+ * 문서 파일의 형식. 그림 넷이면 그 형식, 아니면 `application/octet-stream` (백엔드 `files.py` 의 `_sniff`).
+ *
+ * ponytail: 목은 이름의 확장자로 가른다. 실서버는 내용(앞 바이트)으로 판정하므로, 이름만 `.png` 인
+ * PDF 가 칩으로 들어가는지는 목으로 확인할 수 없다. 필요해지면 `filesDb` 에 판정한 형식을 같이 저장한다.
+ */
+function mockContentType(name: string): string {
+  if (!isImage(name)) return 'application/octet-stream'
+  const ext = name.slice(name.lastIndexOf('.') + 1).toLowerCase()
+  return `image/${ext === 'jpg' ? 'jpeg' : ext}`
+}
+
 /** 서버 `_require_team` 과 같은 판정. 없는 팀이면 422 라 목도 같이 막아야 한다. */
 const unknownTeam = (teamId: string | null | undefined) =>
   typeof teamId === 'string' && !MOCK_TEAM_LIST.some((team) => team.id === teamId)
@@ -1786,15 +1798,13 @@ data: ${JSON.stringify(data)}
 
     const form = await request.formData()
     const file = form.get('file')
-    // 어느 문서에서 올렸는지. 계약에 아직 없고 목이 먼저 받는다. 자료실의 출처가 된다.
+    // 어느 문서에서 올렸는지. 자료실의 출처가 된다. 거절하는 경우와 문구는 백엔드 `files.py` 와 같다.
     const docId = form.get('doc_id')
-    if (!(file instanceof File)) {
-      return HttpResponse.json({ detail: '파일이 없습니다.' }, { status: 400 })
-    }
-    // 형식을 가리지 않는다. 문서 파일 칩이 아무 파일이나 올린다. 실서버는 아직 이미지 넷만 받는다.
-    if (file.size > MAX_UPLOAD_BYTES) {
-      return HttpResponse.json({ detail: '10MB 이하 파일만 올릴 수 있습니다.' }, { status: 413 })
-    }
+    if (!(file instanceof File)) return validationError('파일이 없습니다.')
+    if (typeof docId === 'string' && !aliveDoc(docId)) return validationError('없는 문서입니다.')
+    // 형식은 가리지 않는다. 문서 파일 칩이 아무 파일이나 올린다.
+    if (file.size > MAX_UPLOAD_BYTES) return validationError('10MB 이하 파일만 올릴 수 있습니다.')
+    if (file.size === 0) return validationError('빈 파일입니다.')
 
     const stored = await saveFile(file, 'f', {
       doc_id: typeof docId === 'string' ? docId : null,
@@ -1802,7 +1812,13 @@ data: ${JSON.stringify(data)}
       created_at: new Date().toISOString(),
     })
     return HttpResponse.json(
-      { id: stored.id, url: `/api/files/${stored.id}`, name: stored.name, size: stored.size },
+      {
+        id: stored.id,
+        url: `/api/files/${stored.id}`,
+        name: stored.name,
+        size: stored.size,
+        content_type: mockContentType(stored.name),
+      },
       { status: 201 },
     )
   }),
@@ -1813,14 +1829,15 @@ data: ${JSON.stringify(data)}
     // 결재 첨부는 문서 경로로만 내준다. 여기서 주면 열람 판정 없이 받아진다.
     if (String(params.fileId).startsWith('a-')) return notFound('파일을 찾을 수 없습니다.')
     const stored = await readFile(String(params.fileId))
-    if (!stored) return HttpResponse.json({ detail: '파일을 찾을 수 없습니다.' }, { status: 404 })
+    if (!stored) return notFound('파일을 찾을 수 없습니다.')
     return new HttpResponse(stored.blob, {
       headers: {
-        'Content-Type': stored.type,
+        'Content-Type': mockContentType(stored.name),
         'Content-Length': String(stored.size),
         // 채팅 첨부와 같은 규칙: 그림 넷만 화면에 그리고 나머지는 내려받기로만 준다.
-        // 목은 이름으로 가르지만 실서버는 내용(앞 바이트)으로 판정한다. 이름은 올린 쪽이 정하는 값이다.
-        'Content-Disposition': isImage(stored.name) ? 'inline' : 'attachment',
+        'Content-Disposition': isImage(stored.name)
+          ? 'inline'
+          : `attachment; filename*=UTF-8''${encodeURIComponent(stored.name)}`,
         'X-Content-Type-Options': 'nosniff',
       },
     })

@@ -214,8 +214,8 @@ export function useSaveVersion(docId: string) {
  * 파일을 올리고 접근 URL을 받는다. 캐시할 것이 없어 react-query를 거치지 않는다.
  * 본문(Y.Doc)에는 바이너리가 아니라 여기서 받은 url만 들어간다.
  *
- * `doc_id` 는 어느 문서에서 올렸는지다. 자료실이 출처로 쓴다. 계약에 아직 없어 실서버는 이 칸을
- * 읽지 않고 버린다(README "백엔드에 요청한 것").
+ * `doc_id` 는 어느 문서에서 올렸는지다. 자료실이 출처로 쓴다. 없는 문서나 휴지통에 든 문서면
+ * 서버가 422 로 거절한다.
  */
 export function uploadFile(file: File, docId: string) {
   const form = new FormData()
