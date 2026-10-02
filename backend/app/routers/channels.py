@@ -45,8 +45,18 @@ def _clean_name(value: str) -> str:
     `str.strip()` 은 앞뒤 공백만 벗겨서 `"공지\u200b"`(제로폭 공백)·전각 문자·RTL 제어문자가 눈으로는 같은
     이름으로 통과해 공개 채널 이름 유일성(`uq_channels_public_name`)을 피해 갔고, `"\x00"` 은 Postgres 가 거절해 500 이었다."""
     value = unicodedata.normalize("NFKC", value).strip()
-    if not value or any(unicodedata.category(c) in ("Cc", "Cf") for c in value):
+    # C*(제어·서식·대리·사용자 정의·미할당)와 줄·문단 구분자(Zl·Zp). ZWJ 이모지(👨‍👩‍👧)도 Cf 라 막힌다 —
+    # 허용하면 `공지\u200d` 우회가 생긴다. 변형 선택자(Mn)·한글 채움(U+3164) 같은 잔여 우회는 README 26.
+    if any(
+        unicodedata.category(c)[0] == "C" or unicodedata.category(c) in ("Zl", "Zp") for c in value
+    ):
         raise ValueError("이름에 쓸 수 없는 문자가 있습니다.")
+    if not value:
+        raise ValueError("이름을 적어 주세요.")
+    if (
+        len(value) > 100
+    ):  # NFKC 는 합자(ﬃ→ffi)·호환 문자를 풀어 길이가 늘 수 있다 — 정규화 뒤에도 100자
+        raise ValueError("이름은 100자 이하여야 합니다.")
     return value
 
 

@@ -132,6 +132,18 @@ async def test_create_public_channel_and_dm(client: AsyncClient, users: Users, a
     assert (
         await client.post("/api/channels", json={"name": " ＡＢ "}, headers=csrf(client))
     ).status_code == 409
+    # 정규화로 길이가 늘어 100자를 넘으면 422(ﬃ×40 → ffi 120자), 한글·이모지·NBSP 는 통과
+    r = await client.post("/api/channels", json={"name": "\ufb03" * 40}, headers=csrf(client))
+    assert r.status_code == 422
+    r = await client.post(
+        "/api/channels", json={"name": "\u00a0한글 👍\u00a0"}, headers=csrf(client)
+    )
+    assert r.status_code == 201 and r.json()["name"] == "한글 👍"
+    # 바꾸기도 같은 규칙
+    r = await client.patch(
+        f"/api/channels/{r.json()['id']}", json={"name": "공지\u200b"}, headers=csrf(client)
+    )
+    assert r.status_code == 422
 
     r = await client.post(
         "/api/channels", json={"dm_user_id": str(users.lead.id)}, headers=csrf(client)
