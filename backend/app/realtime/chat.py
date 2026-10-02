@@ -1,7 +1,8 @@
 """04-API §4.1 `/api/ws` — 채팅·알림·presence 단일 소켓.
 
-프레임은 JSON 텍스트. 클라이언트 → 서버 `{"op": sub|msg|read|typing, ...}`, 서버 → 클라이언트
-`{"ev": msg|unread|notice|presence|typing|error, ...}`. 04 에 없는 `typing`·`error` 이벤트는 구현이 더했다(README).
+프레임은 JSON 텍스트. 클라이언트 → 서버 `{"op": sub|msg|read|typing|edit|del, ...}`, 서버 → 클라이언트
+`{"ev": msg|unread|notice|presence|typing|error|msg_edit|msg_del, ...}`. 04 에 없는 `typing`·`error` 이벤트는
+구현이 더했고(README 11), `edit`·`del`·`msg_edit`·`msg_del` 은 이슈 #264(README 27).
 
 구독 범위는 `sub` 가 아니라 DB 의 channel_members 가 정한다 — 내가 멤버인 채널의 일은 전부 받고, `sub` 는
 받아들이되 아무것도 바꾸지 않는다. 소켓이 "무엇을 구독했다" 고 주장하는 것과 권한이 어긋날 수 없게.
@@ -37,7 +38,7 @@ from pydantic import (
     ValidationError,
     model_validator,
 )
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import audit
@@ -80,6 +81,21 @@ class MsgOp(BaseModel):
         return self
 
 
+class EditOp(BaseModel):
+    op: Literal["edit"]
+    channel_id: uuid.UUID
+    message_id: uuid.UUID
+    body: Body = (
+        ""  # 첨부가 있는 메시지는 비울 수 있다 — _handle 이 본다. 첨부는 고치기로 안 바뀐다
+    )
+
+
+class DelOp(BaseModel):
+    op: Literal["del"]
+    channel_id: uuid.UUID
+    message_id: uuid.UUID
+
+
 class ReadOp(BaseModel):
     op: Literal["read"]
     channel_id: uuid.UUID
@@ -90,7 +106,8 @@ class TypingOp(BaseModel):
     channel_id: uuid.UUID
 
 
-ClientOp = TypeAdapter(Annotated[SubOp | MsgOp | ReadOp | TypingOp, Field(discriminator="op")])
+AnyOp = SubOp | MsgOp | EditOp | DelOp | ReadOp | TypingOp
+ClientOp = TypeAdapter(Annotated[AnyOp, Field(discriminator="op")])
 
 
 def _dumps(event: dict) -> str:
@@ -188,7 +205,7 @@ def _error(code: str, detail, **extra) -> dict:
     return {"ev": "error", "code": code, "detail": detail, **extra}
 
 
-async def _handle(ws: WebSocket, user: User, op: SubOp | MsgOp | ReadOp | TypingOp) -> None:
+async def _handle(ws: WebSocket, user: User, op: AnyOp) -> None:
     if isinstance(op, SubOp):
         return  # 구독 범위는 멤버십이 정한다 — 받아들이기만
     events: list[tuple[list[uuid.UUID], dict]] = []  # (받을 사람들, 이벤트) — commit 뒤에 보낸다
@@ -315,6 +332,7 @@ async def _handle(ws: WebSocket, user: User, op: SubOp | MsgOp | ReadOp | Typing
                             "doc_ref": op.doc_ref,
                             "attachments": attachments,
                             "created_at": now,
+                            "edited_at": None,
                         },
                     },
                 )
@@ -323,6 +341,103 @@ async def _handle(ws: WebSocket, user: User, op: SubOp | MsgOp | ReadOp | Typing
                 events.append(
                     ([uid], {"ev": "unread", "channel_id": op.channel_id, "count": count})
                 )
+        elif isinstance(op, EditOp | DelOp):
+            # 쓴 사람만(#264). 없는 메시지·다른 채널의 id 는 NOT_FOUND, 남의 것은 FORBIDDEN + 감사(멤버 아님과 같은 취급)
+            message = await db.get(Message, op.message_id)
+            if message is None or message.channel_id != op.channel_id:
+                await _send(
+                    ws, _dumps(_error("NOT_FOUND", "없는 메시지입니다.", channel_id=op.channel_id))
+                )
+                return
+            if message.author_id != user.id:
+                if (op.channel_id, op.op) not in ws.state.denied:
+                    ws.state.denied.add((op.channel_id, op.op))
+                    audit.record(
+                        db,
+                        "acl.denied",
+                        request=ws,
+                        actor_id=user.id,
+                        target_id=op.channel_id,
+                        detail={"path": "/api/ws", "op": op.op, "message_id": str(message.id)},
+                    )
+                    await db.commit()
+                await _send(
+                    ws,
+                    _dumps(
+                        _error(
+                            "FORBIDDEN",
+                            "내 메시지만 고치거나 지울 수 있습니다.",
+                            channel_id=op.channel_id,
+                        )
+                    ),
+                )
+                return
+            if isinstance(op, EditOp):
+                if op.body == message.body:
+                    return  # 그대로면 「수정됨」을 붙이지 않는다 — 이벤트 없음
+                if not op.body and not message.attachments:
+                    await _send(
+                        ws,
+                        _dumps(
+                            _error(
+                                "VALIDATION",
+                                "본문이나 첨부 중 하나는 있어야 한다.",
+                                channel_id=op.channel_id,
+                            )
+                        ),
+                    )
+                    return
+                message.body = op.body
+                message.edited_at = now
+                await db.commit()
+                # 새로 넣은 @이름에는 알림을 만들지 않는다(README 27) — 멘션은 보낼 때 한 번
+                events.append(
+                    (
+                        list(members),
+                        {
+                            "ev": "msg_edit",
+                            "channel_id": op.channel_id,
+                            "message": {
+                                "id": message.id,
+                                "channel_id": op.channel_id,
+                                "author": {"id": user.id, "name": user.name},
+                                "body": message.body,
+                                "doc_ref": message.doc_ref,
+                                "attachments": message.attachments,
+                                "created_at": message.created_at,
+                                "edited_at": now,
+                            },
+                        },
+                    )
+                )
+            else:
+                # 행을 지운다(자리표시 없음). 눌러서 갈 곳이 없는 멘션 알림도 함께. 첨부 오브젝트는 남는다(README 27)
+                await db.execute(
+                    delete(Notification).where(
+                        Notification.payload["message_id"].astext == str(message.id)
+                    )
+                )
+                audit.record(
+                    db,
+                    "chat.message_deleted",
+                    request=ws,
+                    actor_id=user.id,
+                    target_id=op.channel_id,
+                    detail={"message_id": str(message.id), "preview": message.body[:120]},
+                )
+                await db.delete(message)
+                await db.commit()
+                events.append(
+                    (
+                        list(members),
+                        {"ev": "msg_del", "channel_id": op.channel_id, "message_id": message.id},
+                    )
+                )
+                # 안 읽은 메시지가 지워졌으면 숫자가 준다 — 멤버마다 다시 센다
+                for uid, count in (await _unread_counts(db, op.channel_id)).items():
+                    events.append(
+                        ([uid], {"ev": "unread", "channel_id": op.channel_id, "count": count})
+                    )
         elif isinstance(op, ReadOp):
             await db.execute(
                 update(ChannelMember)

@@ -369,6 +369,75 @@ async def test_hidden_dm_returns_on_new_message(app: FastAPI, users: Users, app_
         assert [i["id"] for i in items] == [str(dm.id)]
 
 
+async def test_edit_and_delete_own_message(app: FastAPI, users: Users, app_db) -> None:
+    """이슈 #264: 쓴 사람만 고치고 지운다. 남의 것 FORBIDDEN+감사, 없는 것 NOT_FOUND, 그대로면 조용, 빈 글 VALIDATION.
+    고치면 msg_edit(edited_at)·GET 에도 실린다. 지우면 msg_del + unread 재계산, 멘션 알림·행이 사라진다."""
+    channel = await make_channel(app_db, [users.member, users.lead])
+    cid = str(channel.id)
+    async with ws_client(app) as a, ws_client(app) as b:
+        await login(a, "sujin@zenith.co.kr")
+        await login(b, "donghyun@zenith.co.kr")
+        async with aconnect_ws(WS, a) as a_ws, aconnect_ws(WS, b) as b_ws:
+            await send(a_ws, op="msg", channel_id=cid, body="처음 @박동현")
+            first = (await recv_until(a_ws, "msg"))["message"]
+            assert first["edited_at"] is None
+            mid = first["id"]
+            assert (await recv_until(b_ws, "notice"))["payload"]["message_id"] == mid
+
+            await send(b_ws, op="edit", channel_id=cid, message_id=mid, body="남이 바꿈")
+            assert (await recv_until(b_ws, "error"))["code"] == "FORBIDDEN"
+            await send(b_ws, op="del", channel_id=cid, message_id=mid)
+            assert (await recv_until(b_ws, "error"))["code"] == "FORBIDDEN"
+            await send(a_ws, op="edit", channel_id=cid, message_id=str(uuid.uuid4()), body="x")
+            assert (await recv_until(a_ws, "error"))["code"] == "NOT_FOUND"
+            await send(a_ws, op="edit", channel_id=cid, message_id=mid, body="  처음 @박동현  ")
+            await silent(a_ws)  # 그대로면 아무 이벤트도 없다
+            await send(a_ws, op="edit", channel_id=cid, message_id=mid, body="   ")
+            assert (await recv_until(a_ws, "error"))["code"] == "VALIDATION"
+
+            await send(a_ws, op="edit", channel_id=cid, message_id=mid, body=" 고침 @최재호 ")
+            got = (await recv_until(b_ws, "msg_edit"))["message"]
+            assert (got["id"], got["body"]) == (mid, "고침 @최재호")
+            assert got["edited_at"] is not None and got["created_at"] == first["created_at"]
+            assert (await recv_until(a_ws, "msg_edit"))["message"][
+                "id"
+            ] == mid  # 보낸 사람도 받는다
+            items = (await b.get(f"/api/channels/{cid}/messages")).json()["items"]
+            assert items[0]["body"] == "고침 @최재호"
+            # REST 는 +00:00, 소켓은 Z — 같은 시각인지만 본다
+            assert datetime.fromisoformat(items[0]["edited_at"]) == datetime.fromisoformat(
+                got["edited_at"]
+            )
+            assert datetime.fromisoformat(items[0]["created_at"]) == datetime.fromisoformat(
+                first["created_at"]
+            )
+
+            await send(a_ws, op="del", channel_id=cid, message_id=mid)
+            ev = await recv_until(b_ws, "msg_del")
+            assert (ev["channel_id"], ev["message_id"]) == (cid, mid)
+            assert (await recv_until(b_ws, "unread"))["count"] == 0  # 안 읽은 글이 지워졌다
+            assert (await recv_until(a_ws, "msg_del"))["message_id"] == mid
+            await send(a_ws, op="del", channel_id=cid, message_id=mid)
+            assert (await recv_until(a_ws, "error"))["code"] == "NOT_FOUND"
+        assert (await b.get(f"/api/channels/{cid}/messages")).json()["items"] == []
+        assert (await b.get("/api/me/home")).json()["unread"] == []
+
+    assert (await app_db.execute(select(Message))).scalars().all() == []
+    assert (
+        await app_db.execute(select(Notification))
+    ).scalars().all() == []  # 고친 멘션엔 알림 없음, 지우면 사라짐
+    kinds = sorted(
+        (e.kind, e.detail.get("op"), e.detail.get("message_id"))
+        for e in (await app_db.execute(select(AuditEvent))).scalars()
+        if e.kind in ("acl.denied", "chat.message_deleted")
+    )
+    assert kinds == [
+        ("acl.denied", "del", mid),
+        ("acl.denied", "edit", mid),
+        ("chat.message_deleted", None, mid),
+    ]
+
+
 async def test_dm_mention_notice_has_no_channel_name(app: FastAPI, users: Users, app_db) -> None:
     """DM 은 `channels.name` 이 "" — `channel_name` 을 null 로 줘서 프론트가 DM 인지 안다(보낸 사람은 `from`)."""
     channel = await make_channel(app_db, [users.member, users.lead], name="", is_dm=True)

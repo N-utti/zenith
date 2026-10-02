@@ -113,6 +113,7 @@ class MessageOut(BaseModel):
     doc_ref: uuid.UUID | None
     attachments: list[AttachmentOut] | None
     created_at: datetime
+    edited_at: datetime | None  # 고친 적 없으면 null (#264)
 
 
 class ChannelOut(BaseModel):
@@ -185,6 +186,7 @@ def _message_out(m: Message, author: User) -> MessageOut:
         doc_ref=m.doc_ref,
         attachments=m.attachments,
         created_at=m.created_at,
+        edited_at=m.edited_at,
     )
 
 

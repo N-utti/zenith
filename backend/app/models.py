@@ -262,6 +262,7 @@ class Message(Base):
     doc_ref: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("documents.id"))  # 문서 카드
     attachments: Mapped[list | None] = mapped_column(JSONB)
     created_at: Mapped[datetime] = created_at_col()
+    edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # 고친 적 없으면 NULL (#264)
     # 검색용 파생(03 §2.4 식). DB 가 본문에서 만들어 저장한다 — 앱은 쓰지 않고, 읽을 때도 딸려 오지 않는다
     # (deferred + 위 eager_defaults). 즉석 to_tsvector 는 일치한 행마다 ts_rank 가 다시 계산해 흔한 단어에서 느렸다.
     tsv: Mapped[str | None] = mapped_column(
