@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, apiBytes } from '@/lib/api'
 import { toISODate } from '@/lib/datetime'
 import { downloadBytes } from '@/lib/download'
+import { MSW_ENABLED } from '@/mocks/accounts'
 import type {
   Activity,
   ActivityInput,
@@ -19,6 +20,13 @@ import type {
   OrgInput,
   OrgListItem,
 } from './types'
+
+/**
+ * 서버에 아직 없는 CRM 기능을 보일지: 지운 기관 되살리기. 백엔드의 CRM(#311)은 이 기능을 만들기 전의
+ * 목을 옮긴 것이라 그 경로가 없다. 목이 켜진 개발 화면에서만 보인다. 서버가 받게 되면 걷는다.
+ * 안건·담당자 지우기는 서버가 `can_delete` 를 주지 않아 버튼이 저절로 안 보인다.
+ */
+export const CRM_EXTRAS_ENABLED = MSW_ENABLED
 
 /** 기관·담당자·활동이 서로의 화면에 숫자로 걸려 있다(담당자 수·마지막 연락). 한 키 아래 둔다. */
 const crmKey = ['crm'] as const

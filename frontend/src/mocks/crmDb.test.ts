@@ -153,7 +153,7 @@ describe('CRM 목 저장소 (15 CRM 모듈 설계서 §4·§9)', () => {
       user_ids: [],
       body: '메모',
     })
-    expect(result).toMatchObject({ status: 400 })
+    expect(result).toMatchObject({ status: 422 })
   })
 
   it('남의 활동 기록은 사원이 고치거나 지울 수 없고, 작성자와 임원은 된다', () => {
@@ -184,7 +184,7 @@ describe('CRM 목 저장소 (15 CRM 모듈 설계서 §4·§9)', () => {
       createOrg(infra, { name: '지울 기관', org_type: 'etc', memo: '', owner_ids: [] }),
     )
     expect(deleteOrg(infra, made.org.id, '정리')).toMatchObject({ status: 403 })
-    expect(deleteOrg(exec, made.org.id, '  ')).toMatchObject({ status: 400 })
+    expect(deleteOrg(exec, made.org.id, '  ')).toMatchObject({ status: 422 })
     expect(deleteOrg(exec, made.org.id, '중복 등록')).toBeNull()
     expect(getOrg(infra, made.org.id)).toMatchObject({ status: 404 })
     expect(listOrgs({}).some((o) => o.id === made.org.id)).toBe(false)
@@ -407,9 +407,9 @@ describe('CRM 목 저장소 (15 CRM 모듈 설계서 §4·§9)', () => {
       ).toMatchObject({ next_action: '', next_action_due: null })
     })
 
-    it('중단은 사유가 없으면 400, 재개하면 같은 안건으로 돌아온다', () => {
+    it('중단은 사유가 없으면 422, 재개하면 같은 안건으로 돌아온다', () => {
       const deal = newDeal()
-      expect(dropDeal(fund, deal.id, { reason: ' ', version: 1 })).toMatchObject({ status: 400 })
+      expect(dropDeal(fund, deal.id, { reason: ' ', version: 1 })).toMatchObject({ status: 422 })
       const dropped = ok(dropDeal(fund, deal.id, { reason: '조건 불일치', version: 1 }))
       expect(dropped).toMatchObject({ status: 'dropped', drop_reason: '조건 불일치' })
       const back = ok(reopenDeal(infra, deal.id, { version: dropped.version }))
