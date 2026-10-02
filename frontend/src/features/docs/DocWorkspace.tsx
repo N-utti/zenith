@@ -5,23 +5,13 @@ import DragHandle, { type DragHandleProps } from '@tiptap/extension-drag-handle-
 import { ChevronDown, GripVertical, MessageSquarePlus, Trash2, WifiOff, X } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router'
 import { Avatar } from '@/components/ui/Avatar'
-import { Button } from '@/components/ui/Button'
-import { Modal } from '@/components/ui/Modal'
 import { Spinner } from '@/components/ui/Spinner'
-import { useToast } from '@/components/ui/ToastContext'
 import { ApiError } from '@/lib/api'
 import { useCurrentUser } from '@/features/auth/AuthContext'
 import { cn } from '@/lib/cn'
 import { formatRelative } from '@/lib/datetime'
 import { useDragAutoScroll } from '@/lib/useDragAutoScroll'
-import {
-  UNTITLED_DOC,
-  untrashDoc,
-  useSaveVersion,
-  useTouchDoc,
-  useTrashDoc,
-  useVersionSnapshot,
-} from './api'
+import { UNTITLED_DOC, useSaveVersion, useTouchDoc, useVersionSnapshot } from './api'
 import { anchorBlock, flashBlock } from './blockId'
 import { CommentPanel, type CommentTarget } from './CommentPanel'
 import { DocBreadcrumb } from './DocBreadcrumb'
@@ -33,6 +23,7 @@ import { InlineAiPopover } from './InlineAiPopover'
 import { buildDocExtensions } from './editorExtensions'
 import { EditorToolbar } from './EditorToolbar'
 import { TableRowMenu } from './TableRowMenu'
+import { TrashDocModal } from './TrashDocModal'
 import { VersionPanel } from './VersionPanel'
 import { VersionPreview } from './VersionPreview'
 import {
@@ -318,43 +309,7 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
   const versionSnapshot = useVersionSnapshot(meta.id)
 
   const navigate = useNavigate()
-  const toast = useToast()
-  const trash = useTrashDoc(meta.id)
   const [confirmTrash, setConfirmTrash] = useState(false)
-
-  /**
-   * 휴지통으로 보내고 문서 목록으로 나간다. 토스트의 버튼이 바로 되돌리는 길이고,
-   * 놓쳤으면 휴지통 화면(`/docs/trash`)에서 되돌린다.
-   * 그래서 토스트를 오래 띄운다.
-   */
-  const moveToTrash = () =>
-    trash.mutate(undefined, {
-      onSuccess: () => {
-        setConfirmTrash(false)
-        void navigate('/docs', { replace: true })
-        // 제목을 싣는다. 짧은 사이에 둘을 지우면 똑같은 토스트가 겹쳐 어느 것을 되돌리는지
-        // 가릴 근거가 없어진다.
-        toast.success(`«${title || UNTITLED_DOC}» 를 휴지통으로 옮겼습니다.`, {
-          durationMs: 10_000,
-          action: {
-            label: '되돌리기',
-            // 여기는 이미 문서를 떠난 뒤다. 되돌린 문서로 다시 들어가지 않고 목록에 다시
-            // 나타나게만 한다. 떠난 화면의 이동 함수는 더 이상 듣지 않는다.
-            onClick: () => {
-              void untrashDoc(meta.id)
-                .then(() => toast.success('문서를 되돌렸습니다.'))
-                .catch((err: unknown) =>
-                  toast.error(err instanceof ApiError ? err.message : '되돌리지 못했습니다.'),
-                )
-            },
-          },
-        })
-      },
-      onError: (err) => {
-        setConfirmTrash(false)
-        toast.error(err instanceof ApiError ? err.message : '휴지통으로 옮기지 못했습니다.')
-      },
-    })
 
   const [tab, setTab] = useState<SidebarTab>('comments')
   const [sideOpen, setSideOpen] = useState(false)
@@ -559,32 +514,15 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
         </div>
       </div>
 
-      <Modal
-        open={confirmTrash}
-        onClose={() => {
-          if (!trash.isPending) setConfirmTrash(false)
-        }}
-        title="휴지통으로 옮길까요?"
-        description="30일 동안 되돌릴 수 있고, 그 뒤에는 영구 삭제됩니다. 다른 사람에게도 사라집니다."
-        size="sm"
-        footer={
-          <>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => setConfirmTrash(false)}
-              disabled={trash.isPending}
-            >
-              취소
-            </Button>
-            <Button variant="danger" size="sm" onClick={moveToTrash} disabled={trash.isPending}>
-              {trash.isPending ? <Spinner className="border-t-white" /> : '휴지통으로'}
-            </Button>
-          </>
-        }
-      >
-        <p className="text-muted text-sm leading-relaxed">{title || UNTITLED_DOC}</p>
-      </Modal>
+      {confirmTrash && (
+        <TrashDocModal
+          id={meta.id}
+          title={title || UNTITLED_DOC}
+          onClose={() => setConfirmTrash(false)}
+          // 휴지통으로 보내면 문서 목록으로 나간다.
+          onTrashed={() => void navigate('/docs', { replace: true })}
+        />
+      )}
 
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
         {preview ? (
