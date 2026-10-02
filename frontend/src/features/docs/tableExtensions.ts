@@ -3,13 +3,8 @@ import { isChangeOrigin } from '@tiptap/extension-collaboration'
 import { Table, TableCell, TableHeader, TableRow, TableView } from '@tiptap/extension-table'
 import type { Node as PmNode } from '@tiptap/pm/model'
 import type { Plugin } from '@tiptap/pm/state'
-import {
-  ResizeState,
-  columnResizingPluginKey,
-  pointsAtCell,
-  tableEditingKey,
-  updateColumnsOnResize,
-} from '@tiptap/pm/tables'
+import { columnResizingPluginKey, tableEditingKey, updateColumnsOnResize } from '@tiptap/pm/tables'
+import { keepHandleAcrossRemoteEdits, rowResizing, settleColumnResize } from './tableResize'
 
 /**
  * 표를 그리는 뷰. 표 확장(3.30.5)의 것은 열을 더하거나 지워 열 자리가 밀릴 때, 너비가 없어진 자리의
@@ -23,45 +18,6 @@ class ColumnWidthTableView extends TableView {
     this.node = node
     updateColumnsOnResize(node, this.colgroup, this.table, this.cellMinWidth)
     return true
-  }
-}
-
-/**
- * `pos` 가 가리키던 칸이 새 문서에서 어디로 갔는지. 두 문서에서 달라진 구간을 찾아, 그 앞이면 그대로,
- * 뒤면 길이가 달라진 만큼 민다. 달라진 구간 안이거나 옮긴 자리가 칸이 아니면 -1.
- */
-function samePlace(before: PmNode, pos: number, after: PmNode): number {
-  const start = before.content.findDiffStart(after.content)
-  const end = before.content.findDiffEnd(after.content)
-  if (start == null || !end) return pos
-  // 같은 글자가 이어진 자리에 끼워 넣으면 앞에서 찾은 끝이 뒤에서 찾은 끝을 지나친다. 그만큼 되돌린다.
-  const overlap = Math.max(0, start - Math.min(end.a, end.b))
-  const moved = pos < start ? pos : pos >= end.a + overlap ? pos + end.b - end.a : -1
-  return moved > -1 && pointsAtCell(after.resolve(moved)) ? moved : -1
-}
-
-/**
- * 세로선 끌기가 남의 편집을 견디게 한다.
- *
- * 끌기 플러그인은 잡고 있는 칸의 자리를 위치 매핑으로 따라간다. 그런데 Yjs 에서 온 변경은 문서 전체를
- * 한 번에 갈아 끼우는 모양이라 매핑이 자리를 잃는다. 끄는 도중에 동료가 글자 하나만 쳐도 자리는 -1 이
- * 되고 «끄는 중» 표시만 남아, 마우스를 움직일 때마다 예외가 나고 놓아도 풀리지 않는다(문서를 다시
- * 열 때까지 끌기를 못 쓴다). 그래서 남의 편집으로 자리를 잃었을 때는 그 칸이 옮겨 간 자리를 다시 찾아
- * 준다. 못 찾으면(내 편집으로 그 칸이 사라진 경우도 같다) 끌기를 접는다.
- *
- * ponytail: 달라진 구간 하나로 본다. 끄는 그 순간에 남이 그 표의 열을 더하면, 끼어든 칸이 잡고 있던
- * 칸과 모양이 같아 «내용만 바뀐 같은 칸» 으로 읽히고 너비가 새 열에 쓰인다(Ctrl+Z 로 돌아온다).
- * 거슬리면 Yjs 상대 위치로 칸 자체를 따라간다.
- */
-function keepHandleAcrossRemoteEdits(plugin: Plugin) {
-  const field = plugin.spec.state
-  if (!field) return
-  const apply = field.apply
-  field.apply = function (tr, prev: ResizeState, oldState, newState) {
-    const next = apply.call(this, tr, prev, oldState, newState) as ResizeState
-    if (next.activeHandle > -1 || prev.activeHandle === -1 || !tr.docChanged) return next
-    const pos = isChangeOrigin(tr) ? samePlace(oldState.doc, prev.activeHandle, tr.doc) : -1
-    return new ResizeState(pos, pos > -1 && next.dragging)
   }
 }
 
@@ -92,22 +48,49 @@ function keepFixupsOutOfHistory(plugin: Plugin) {
 const DocTable = Table.extend({
   addProseMirrorPlugins() {
     const plugins = this.parent?.() ?? []
+    let resizable = false
     for (const plugin of plugins) {
-      if (plugin.spec.key === columnResizingPluginKey) keepHandleAcrossRemoteEdits(plugin)
       if (plugin.spec.key === tableEditingKey) keepFixupsOutOfHistory(plugin)
+      if (plugin.spec.key === columnResizingPluginKey) {
+        keepHandleAcrossRemoteEdits(plugin)
+        resizable = true
+      }
     }
-    return plugins
+    // 끌기 플러그인이 붙었을 때(끌 수 있는 기기의 편집 화면)만 행 높이 끌기도 붙인다.
+    // 순서: 행 높이 끌기는 표 편집 플러그인보다 앞이어야 한다(rowResizing 의 설명).
+    return resizable
+      ? [rowResizing(), settleColumnResize(this.options.cellMinWidth), ...plugins]
+      : plugins
+  },
+})
+
+const DocTableRow = TableRow.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      // 행 아래 가로선을 끌어 준 높이(px). 표의 행 높이는 «최소 높이» 라 글이 더 길면 그만큼 더 커진다.
+      // 읽을 때는 px 값만 받는다. 엑셀·워드에서 붙여넣은 표는 행마다 pt·% 높이를 싣고 오는데,
+      // 숫자만 떼어 px 로 읽으면 다른 높이가 된다. 그런 값은 버리고 내용에 맞는 높이로 둔다.
+      height: {
+        default: null,
+        parseHTML: (element) => {
+          const px = /^(\d+(?:\.\d+)?)px$/.exec(element.style.height)
+          return px ? Math.round(Number(px[1])) : null
+        },
+        renderHTML: (attrs) => (attrs.height ? { style: `height: ${attrs.height}px` } : {}),
+      },
+    }
   },
 })
 
 /**
- * 표. 행·열 편집은 서식 툴바의 표 메뉴(editorControls 의 TableMenu)가 맡는다.
+ * 표. 행·열 편집은 표 메뉴(editorControls 의 TableMenu)가, 크기는 끌기(tableResize)가 맡는다.
  *
- * resizable: 세로선을 끌어 열 너비를 바꾼다. 너비는 셀 속성(colwidth)으로 문서에 남아 같이 보는
- * 사람에게도 전해진다. 끄는 동안은 내 화면만 바뀌고 놓을 때 한 번 쓰므로, 두 사람이 같은 열을
- * 끌면 나중에 놓은 쪽 값이 남는다. 손가락 기기에서는 끈다. 끌 수 없는데도 세로선 근처를 누르면
- * 그 누름이 «끌기 시작과 끝» 으로 읽혀 커서 대신 너비가 기록된다. 저장된 너비는 그대로 그려진다.
- * cellMinWidth 는 index.css 의 칸 최소 폭(min-w-16)과 같은 값이다.
+ * resizable: 세로선을 끌어 열 너비를, 가로선을 끌어 행 높이를 바꾼다. 크기는 칸·행 속성(colwidth,
+ * height)으로 문서에 남아 같이 보는 사람에게도 전해진다. 끄는 동안은 내 화면만 바뀌고 놓을 때 한 번
+ * 쓰므로, 두 사람이 같은 선을 끌면 나중에 놓은 쪽 값이 남는다. 손가락 기기에서는 끈다. 끌 수 없는데도
+ * 선 근처를 누르면 그 누름이 «끌기 시작과 끝» 으로 읽혀 커서가 잡히지 않는다. 저장된 크기는 그대로
+ * 그려진다. cellMinWidth 는 index.css 의 칸 최소 폭(min-w-16)과 같은 값이다.
  * 셀 내용을 문단으로 제한해 셀 안에 표가 들어가는 것을 스키마에서 막는다.
  */
 export function tableExtensions(): Extensions {
@@ -118,7 +101,7 @@ export function tableExtensions(): Extensions {
       cellMinWidth: 64,
       View: ColumnWidthTableView,
     }),
-    TableRow,
+    DocTableRow,
     TableCell.extend({ content: 'paragraph+' }),
     TableHeader.extend({ content: 'paragraph+' }),
   ]

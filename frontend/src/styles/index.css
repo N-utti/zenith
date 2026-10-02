@@ -256,6 +256,19 @@
   .zenith-editor.resize-cursor {
     @apply cursor-col-resize;
   }
+  /* 행 높이 끌기(tableResize 의 rowResizing). 포인터가 가로선 가까이 오면 그 행에 클래스가 붙는다.
+     막대를 따로 그리지 않고 칸 아래쪽 안으로 그림자를 넣는다. 크기를 안 바꿔 표가 들썩이지 않는다. */
+  .zenith-editor tr.row-resize-active > * {
+    box-shadow: inset 0 -3px 0 var(--color-accent);
+  }
+  /* 끄는 동안의 높이. 행이 제 속성으로 그린 height 를 이겨야 해서 !important 다. 변수로 받는 이유는
+     rowResizing 의 설명에 있다. */
+  .zenith-editor tr.row-resize-dragging {
+    height: var(--row-height) !important;
+  }
+  .zenith-editor.resize-cursor-row {
+    @apply cursor-row-resize;
+  }
 
   .zenith-editor hr {
     @apply border-line my-8 border-t;
