@@ -1,11 +1,12 @@
 """04-API §6 게시판 — FR-BRD-01~04 · TC-BRD-01(마스킹) · 02(403+감사) · 03(lead 열람·작성) · 04(알림은 열람 가능 등급만)."""
 
+import uuid
 from datetime import UTC, datetime, timedelta
 
 from httpx import AsyncClient
 from sqlalchemy import select
 
-from app.models import AuditEvent, Board, Notification, Post
+from app.models import AuditEvent, Board, Notification, Post, PostComment
 
 from .conftest import Users, csrf, login
 
@@ -180,6 +181,146 @@ async def test_edit_delete_by_author_or_exec_only(
         .all()
     )
     assert {n.user_id for n in notes} == {users.member.id, users.lead.id}  # 전원(글쓴이 제외)
+
+
+async def test_post_comments(client: AsyncClient, users: Users, app_db) -> None:
+    """이슈 #292: 열람·작성은 글과 같은 등급(403+감사), 고치기는 쓴 사람만, 지우기는 쓴 사람·exec. 글을 지우면 같이 사라진다."""
+    s = await _seed(app_db, users)
+    notice = str(s["posts"][2].id)  # 전체공지 — 전원
+    secret = str(s["posts"][0].id)  # 경영 보고 — exec 만
+    await login(client, "sujin@zenith.co.kr")
+    h = csrf(client)
+    # 등급 밖 글은 목록·등록 모두 403 + acl.denied
+    r = await client.get(f"/api/posts/{secret}/comments")
+    assert (r.status_code, r.json()["code"]) == (403, "FORBIDDEN")
+    r = await client.post(f"/api/posts/{secret}/comments", json={"body": "x"}, headers=h)
+    assert r.status_code == 403
+    denied = (
+        (await app_db.execute(select(AuditEvent).where(AuditEvent.kind == "acl.denied")))
+        .scalars()
+        .all()
+    )
+    assert len(denied) == 2 and {e.detail["post_id"] for e in denied} == {secret}
+    assert (await client.get(f"/api/posts/{uuid.uuid4()}/comments")).status_code == 404
+
+    r = await client.post(
+        f"/api/posts/{notice}/comments", json={"body": " 첫 댓글 @최재호 "}, headers=h
+    )
+    assert r.status_code == 201, r.text
+    mine = r.json()
+    assert set(mine) == {"id", "author", "body", "created_at", "edited_at"}
+    assert (mine["body"], mine["author"]["name"], mine["edited_at"]) == (
+        "첫 댓글 @최재호",
+        "김수진",
+        None,
+    )
+    assert (
+        await client.post(f"/api/posts/{notice}/comments", json={"body": "  "}, headers=h)
+    ).status_code == 422
+    r = await client.post(
+        f"/api/posts/{notice}/comments", json={"body": "x", "block_id": "b"}, headers=h
+    )
+    assert r.status_code == 422
+    assert (
+        list((await app_db.execute(select(Notification))).scalars()) == []
+    )  # 멘션은 해석하지 않는다
+
+    # 남이 고치면 403, 쓴 사람은 그대로면 edited_at 없음, 고치면 edited_at + 감사
+    await login(client, "donghyun@zenith.co.kr")
+    r = await client.patch(
+        f"/api/posts/{notice}/comments/{mine['id']}", json={"body": "남이"}, headers=csrf(client)
+    )
+    assert r.status_code == 403
+    second = (
+        await client.post(
+            f"/api/posts/{notice}/comments", json={"body": "둘째"}, headers=csrf(client)
+        )
+    ).json()
+    await login(client, "sujin@zenith.co.kr")
+    h = csrf(client)
+    r = await client.patch(
+        f"/api/posts/{notice}/comments/{mine['id']}", json={"body": "첫 댓글 @최재호"}, headers=h
+    )
+    assert r.status_code == 200 and r.json()["edited_at"] is None
+    r = await client.patch(
+        f"/api/posts/{notice}/comments/{mine['id']}", json={"body": "고침"}, headers=h
+    )
+    assert r.status_code == 200 and r.json()["body"] == "고침" and r.json()["edited_at"] is not None
+    items = (await client.get(f"/api/posts/{notice}/comments")).json()["items"]
+    assert [c["body"] for c in items] == ["고침", "둘째"]  # 오래된 순
+    edited = (
+        await app_db.execute(select(AuditEvent).where(AuditEvent.kind == "boards.comment_edited"))
+    ).scalar_one()
+    assert edited.detail["before"] == "첫 댓글 @최재호"
+    # 다른 글 아래의 댓글 id 는 404
+    other = str(s["posts"][3].id)
+    r = await client.patch(
+        f"/api/posts/{other}/comments/{mine['id']}", json={"body": "x"}, headers=h
+    )
+    assert r.status_code == 404
+
+    # 지우기: 남의 것은 403(감사에 comment_id), 없는 것 404, 쓴 사람은 자기 것을 지운다
+    r = await client.delete(f"/api/posts/{notice}/comments/{second['id']}", headers=h)
+    assert r.status_code == 403
+    last = (
+        (await app_db.execute(select(AuditEvent).where(AuditEvent.kind == "acl.denied")))
+        .scalars()
+        .all()
+    )[-1]
+    assert (last.detail["reason"], last.detail["comment_id"]) == ("comment_delete", second["id"])
+    assert (
+        await client.delete(f"/api/posts/{notice}/comments/{uuid.uuid4()}", headers=h)
+    ).status_code == 404
+    third = (
+        await client.post(f"/api/posts/{notice}/comments", json={"body": "셋째"}, headers=h)
+    ).json()
+    assert (
+        await client.delete(f"/api/posts/{notice}/comments/{third['id']}", headers=h)
+    ).status_code == 204
+    # 등급 밖 글의 댓글은 쓴 사람이라도(강등) 고치기·지우기 전부 403 — 등급 판정이 소유 판정보다 먼저
+    await login(client, "jaeho@zenith.co.kr")
+    sc = (
+        await client.post(
+            f"/api/posts/{secret}/comments", json={"body": "임원 댓글"}, headers=csrf(client)
+        )
+    ).json()
+    await login(client, "sujin@zenith.co.kr")
+    h = csrf(client)
+    r = await client.patch(
+        f"/api/posts/{secret}/comments/{sc['id']}", json={"body": "x"}, headers=h
+    )
+    assert r.status_code == 403
+    assert (
+        await client.delete(f"/api/posts/{secret}/comments/{sc['id']}", headers=h)
+    ).status_code == 403
+    # 임원은 남의 것도 지운다(감사에 author_id)
+    await login(client, "jaeho@zenith.co.kr")
+    r = await client.delete(f"/api/posts/{notice}/comments/{second['id']}", headers=csrf(client))
+    assert (r.status_code, r.content) == (204, b"")
+    gone = (
+        await app_db.execute(
+            select(AuditEvent).where(
+                AuditEvent.kind == "boards.comment_deleted",
+                AuditEvent.detail["comment_id"].astext == second["id"],
+            )
+        )
+    ).scalar_one()
+    assert (gone.actor_id, gone.detail["author_id"], gone.detail["preview"]) == (
+        users.exec.id,
+        str(users.lead.id),
+        "둘째",
+    )
+    assert [
+        c["id"] for c in (await client.get(f"/api/posts/{notice}/comments")).json()["items"]
+    ] == [mine["id"]]
+    # 글을 지우면 댓글도 같이 — 몇 개가 사라졌는지는 감사에
+    assert (await client.delete(f"/api/posts/{notice}", headers=csrf(client))).status_code == 204
+    rows = (await app_db.execute(select(PostComment).where(PostComment.post_id == notice))).all()
+    assert rows == []
+    deleted = (
+        await app_db.execute(select(AuditEvent).where(AuditEvent.kind == "boards.post_deleted"))
+    ).scalar_one()
+    assert deleted.detail["comment_count"] == 1
 
 
 async def test_review_edges(client: AsyncClient, users: Users, app_db) -> None:
