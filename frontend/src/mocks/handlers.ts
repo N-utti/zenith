@@ -134,7 +134,7 @@ import { listFiles, readFile, saveFile } from './filesDb'
 import { isImage } from '@/features/chat/attachments'
 import { buildXlsx } from '@/lib/xlsx'
 import { closeMonth, getClosing, listClosings, reopenMonth } from './closingsDb'
-import { addHoliday, listHolidays, removeHoliday } from './holidaysDb'
+import { addHoliday, listHolidays, removeHoliday, renameHoliday } from './holidaysDb'
 import { createEvent, deleteEvent, listEvents } from './eventsDb'
 import {
   cancelLeave,
@@ -1127,6 +1127,33 @@ export const handlers = [
       )
     }
     return HttpResponse.json(result.item, { status: 201 })
+  }),
+  // 휴일 이름 고치기. 지우기와 같이 프론트 확장이다(계약에는 목록과 추가뿐). 이름만 바꾼다.
+  http.patch('/api/admin/holidays/:date', async ({ request, params }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    if (user.role !== 'exec') {
+      return HttpResponse.json(
+        { detail: '휴일 설정은 임원만 할 수 있습니다.', code: 'FORBIDDEN' },
+        { status: 403 },
+      )
+    }
+    const body = await readJson<{ name?: unknown }>(request)
+    await delay(300)
+    const result = renameHoliday(String(params.date), body?.name)
+    if (result === 'not_found') {
+      return HttpResponse.json(
+        { detail: '등록되지 않은 휴일입니다.', code: 'NOT_FOUND' },
+        { status: 404 },
+      )
+    }
+    if ('error' in result) {
+      return HttpResponse.json(
+        { detail: result.error, code: result.code },
+        { status: result.status },
+      )
+    }
+    return HttpResponse.json(result.item)
   }),
   http.delete('/api/admin/holidays/:date', async ({ params }) => {
     const user = authenticate()

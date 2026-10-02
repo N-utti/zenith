@@ -388,6 +388,22 @@ export function useRebuildCalendar() {
   })
 }
 
+/**
+ * `PATCH /admin/holidays/{date}` 도 프론트 확장이다. 이름만 고친다. 오타 하나 때문에 지우고 다시
+ * 넣으면 그사이 근무 달력이 두 번 바뀐다. 날짜는 못 바꾼다.
+ */
+export function useRenameHoliday() {
+  const refetch = useRefetchHolidays()
+  return useMutation({
+    mutationFn: ({ date, name }: { date: string; name: string }) =>
+      api<Holiday>(`/admin/holidays/${encodeURIComponent(date)}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ name }),
+      }),
+    onSuccess: refetch,
+  })
+}
+
 /** `DELETE /admin/holidays/{date}` 는 프론트 확장(PR 본문). 잘못 넣은 날을 되돌릴 길이 있어야 한다. */
 export function useRemoveHoliday() {
   const refetch = useRefetchHolidays()
