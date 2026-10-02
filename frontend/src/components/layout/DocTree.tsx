@@ -29,7 +29,6 @@ import { TrashDocModal } from '@/features/docs/TrashDocModal'
 import {
   UNTITLED_DOC,
   useCreateDoc,
-  FOLDER_DELETE_ENABLED,
   useCreateFolder,
   useDeleteFolder,
   useMoveNode,
@@ -677,22 +676,18 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
                 label="다른 폴더로 옮기기"
                 onSelect={() => setMoving(menu.item)}
               />
-              {FOLDER_DELETE_ENABLED && (
-                <>
-                  <hr className="border-line my-1" />
-                  {/* 빈 폴더만 지운다. 안에 든 것이 있으면 흐리게 두고 이유를 적는다. 휴지통에 든
-                      문서는 트리에 없어 여기서는 모른다. 그 경우는 서버가 거절하고 이유를 준다. */}
-                  <ContextMenuItem
-                    icon={Trash2}
-                    label="폴더 지우기"
-                    danger
-                    disabledReason={
-                      folderHasChildren(menu.item.id) ? '안에 문서나 폴더가 있습니다' : undefined
-                    }
-                    onSelect={() => removeFolder(menu.item.id, menuTarget.title)}
-                  />
-                </>
-              )}
+              <hr className="border-line my-1" />
+              {/* 빈 폴더만 지운다. 안에 든 것이 있으면 흐리게 두고 이유를 적는다. 휴지통에 든
+                  문서는 트리에 없어 여기서는 모른다. 그 경우는 서버가 거절하고 이유를 준다. */}
+              <ContextMenuItem
+                icon={Trash2}
+                label="폴더 지우기"
+                danger
+                disabledReason={
+                  folderHasChildren(menu.item.id) ? '안에 문서나 폴더가 있습니다' : undefined
+                }
+                onSelect={() => removeFolder(menu.item.id, menuTarget.title)}
+              />
             </>
           ) : (
             <>

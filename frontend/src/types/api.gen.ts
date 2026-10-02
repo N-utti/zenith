@@ -323,7 +323,8 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        delete?: never;
+        /** 빈 폴더 삭제 — 하위 폴더·살아 있는 문서·휴지통 문서가 하나라도 있으면 409 */
+        delete: operations["delete_folder_api_folders__id__delete"];
         options?: never;
         head?: never;
         /** 폴더 이름·이동·정렬 */
@@ -2889,6 +2890,42 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["FolderOut"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_folder_api_folders__id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description FOLDER_NOT_EMPTY — 하위 폴더·문서(휴지통 포함)가 있다 (이슈 #271) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

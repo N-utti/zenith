@@ -1,7 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, ApiError } from '@/lib/api'
 import { queryClient } from '@/lib/queryClient'
-import { MSW_ENABLED } from '@/mocks/accounts'
 import { homeKeys } from '@/features/home/keys'
 import { meQueryKey } from '@/features/auth/queries'
 import type { TreeItem } from './tree'
@@ -54,14 +53,8 @@ export function useRenameFolder() {
 }
 
 /**
- * 폴더 지우기를 보일지. 서버에는 아직 그 경로가 없어서(04 §3 의 폴더는 만들기와 고치기뿐) 목이
- * 켜진 개발 화면에서만 보인다. 서버가 받게 되면 이 스위치를 걷는다.
- */
-export const FOLDER_DELETE_ENABLED = MSW_ENABLED
-
-/**
- * 빈 폴더를 지운다. 안에 문서나 폴더가 있으면 서버가 409 로 거절한다. 휴지통에 그 폴더의
- * 문서가 남아 있을 때도 그렇다(트리에는 안 보인다. 문구는 서버가 준다).
+ * 빈 폴더를 지운다(백엔드 #298). 안에 문서나 폴더가 있으면 서버가 409 `FOLDER_NOT_EMPTY` 로
+ * 거절한다. 휴지통에 그 폴더의 문서가 남아 있을 때도 그렇다(트리에는 안 보인다. 문구는 서버가 준다).
  */
 export function useDeleteFolder() {
   const qc = useQueryClient()

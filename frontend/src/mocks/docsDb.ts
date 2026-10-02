@@ -330,7 +330,6 @@ export function updateFolder(
  *
  * 휴지통에 든 문서도 그 폴더의 것이다. 폴더가 없어지면 되살릴 자리가 없다(문서는 폴더 안에만
  * 있을 수 있다). 트리에는 안 보이므로 이유를 따로 가른다.
- * 서버에는 아직 없는 경로다(`handlers.ts` 의 주석).
  */
 export function removeFolder(folder: Folder): 'not_empty' | 'has_trashed' | null {
   const inside = DOCS.filter((doc) => doc.folder_id === folder.id)
