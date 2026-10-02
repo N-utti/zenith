@@ -349,6 +349,26 @@ async def test_mention_off_gets_message_but_no_notice(app: FastAPI, users: Users
     assert (await app_db.execute(select(Notification))).scalars().all() == []
 
 
+async def test_hidden_dm_returns_on_new_message(app: FastAPI, users: Users, app_db) -> None:
+    """이슈 #268: 숨긴 DM 에 누가 글을 쓰든 숨긴 사람의 목록에 다시 나타난다."""
+    dm = await make_channel(app_db, [users.member, users.lead], name="", is_dm=True)
+    await app_db.execute(
+        update(ChannelMember)
+        .where(ChannelMember.channel_id == dm.id, ChannelMember.user_id == users.member.id)
+        .values(hidden_at=datetime.now(UTC))
+    )
+    await app_db.flush()
+    async with ws_client(app) as a, ws_client(app) as b:
+        await login(a, "sujin@zenith.co.kr")
+        await login(b, "donghyun@zenith.co.kr")
+        assert (await a.get("/api/channels")).json()["items"] == []
+        async with aconnect_ws(WS, a) as a_ws, aconnect_ws(WS, b) as b_ws:
+            await send(b_ws, op="msg", channel_id=str(dm.id), body="안 보여?")
+            assert (await recv_until(a_ws, "msg"))["channel_id"] == str(dm.id)
+        items = (await a.get("/api/channels")).json()["items"]
+        assert [i["id"] for i in items] == [str(dm.id)]
+
+
 async def test_dm_mention_notice_has_no_channel_name(app: FastAPI, users: Users, app_db) -> None:
     """DM 은 `channels.name` 이 "" — `channel_name` 을 null 로 줘서 프론트가 DM 인지 안다(보낸 사람은 `from`)."""
     channel = await make_channel(app_db, [users.member, users.lead], name="", is_dm=True)
