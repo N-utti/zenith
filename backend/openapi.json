@@ -5014,6 +5014,7 @@
               "format": "uuid"
             },
             "type": "array",
+            "maxItems": 200,
             "title": "Contact Ids",
             "default": []
           },
@@ -5023,6 +5024,7 @@
               "format": "uuid"
             },
             "type": "array",
+            "maxItems": 200,
             "title": "User Ids",
             "default": []
           },
@@ -5166,7 +5168,8 @@
                   "type": "string",
                   "format": "uuid"
                 },
-                "type": "array"
+                "type": "array",
+                "maxItems": 200
               },
               {
                 "type": "null"
@@ -5181,7 +5184,8 @@
                   "type": "string",
                   "format": "uuid"
                 },
-                "type": "array"
+                "type": "array",
+                "maxItems": 200
               },
               {
                 "type": "null"
@@ -7818,6 +7822,7 @@
               "format": "uuid"
             },
             "type": "array",
+            "maxItems": 200,
             "title": "Owner Ids",
             "default": []
           }
@@ -7935,7 +7940,8 @@
                   "type": "string",
                   "format": "uuid"
                 },
-                "type": "array"
+                "type": "array",
+                "maxItems": 200
               },
               {
                 "type": "null"

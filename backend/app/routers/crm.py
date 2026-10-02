@@ -24,7 +24,7 @@ from fastapi import APIRouter, Depends, Query, Request, Response, UploadFile
 from openpyxl import Workbook
 from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 from openpyxl.styles import Font
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StrictInt, StringConstraints
 from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -131,7 +131,10 @@ Email = Annotated[
 ]
 DealName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
 NextAction = Annotated[str, StringConstraints(strip_whitespace=True, max_length=500)]
-Amount = Annotated[int, Field(ge=0, le=2**53 - 1)]  # 프론트 number 가 정확히 담는 범위
+Amount = Annotated[
+    StrictInt, Field(ge=0, le=2**53 - 1)
+]  # 정수만("1000"·1.0 거부), 프론트 number 가 정확히 담는 범위
+Ids = Annotated[list[uuid.UUID], Field(max_length=200)]  # 참석자·창구 상한
 ActivityBody = Annotated[
     str, StringConstraints(strip_whitespace=True, min_length=1, max_length=5000)
 ]
@@ -195,14 +198,14 @@ class OrgIn(BaseModel):
     name: OrgName
     org_type: OrgType
     memo: Memo = ""
-    owner_ids: list[uuid.UUID] = []
+    owner_ids: Ids = []
 
 
 class OrgPatch(BaseModel):
     name: OrgName | None = None
     org_type: OrgType | None = None
     memo: Memo | None = None
-    owner_ids: list[uuid.UUID] | None = None
+    owner_ids: Ids | None = None
 
 
 class OrgDeleteIn(BaseModel):
@@ -310,8 +313,8 @@ class ActivityIn(BaseModel):
     occurred_at: AwareDatetime
     org_id: uuid.UUID
     deal_id: uuid.UUID | None = None
-    contact_ids: list[uuid.UUID] = []
-    user_ids: list[uuid.UUID] = []
+    contact_ids: Ids = []
+    user_ids: Ids = []
     body: ActivityBody
 
 
@@ -319,8 +322,8 @@ class ActivityPatch(BaseModel):
     kind: ActivityKind | None = None
     occurred_at: AwareDatetime | None = None
     deal_id: uuid.UUID | Literal[""] | None = None  # null 이나 "" 는 안건 연결 해제
-    contact_ids: list[uuid.UUID] | None = None
-    user_ids: list[uuid.UUID] | None = None
+    contact_ids: Ids | None = None
+    user_ids: Ids | None = None
     body: ActivityBody | None = None
 
 
@@ -715,7 +718,8 @@ async def update_contact(
     contact = (
         await db.execute(select(CrmContact).where(CrmContact.id == id).with_for_update())
     ).scalar_one_or_none()
-    if contact is None:
+    # 지운 기관의 담당자는 조회(기관 상세)와 같게 404
+    if contact is None or await _alive_org(db, contact.org_id) is None:
         _not_found("담당자를")
     if contact.erased:
         _conflict("개인정보가 삭제된 담당자는 고칠 수 없습니다.")
@@ -1068,14 +1072,20 @@ def _check_when(at: datetime) -> None:
 
 
 async def _check_contacts(db: AsyncSession, org_id: uuid.UUID, ids: set[uuid.UUID]) -> None:
-    """외부 참석자는 그 기관 소속 담당자만 — 다른 기관 사람을 섞으면 타임라인이 거짓말을 한다."""
+    """외부 참석자는 그 기관 소속 담당자만 — 다른 기관 사람을 섞으면 타임라인이 거짓말을 한다.
+
+    개인정보를 지운 담당자는 새로 넣지 못한다(수정 때 이미 있던 참석자는 호출하는 쪽이 빼고 넘긴다)."""
     if not ids:
         return
     n = (
         await db.execute(
             select(func.count())
             .select_from(CrmContact)
-            .where(CrmContact.id.in_(ids), CrmContact.org_id == org_id)
+            .where(
+                CrmContact.id.in_(ids),
+                CrmContact.org_id == org_id,
+                CrmContact.erased.is_(False),
+            )
         )
     ).scalar_one()
     if n != len(ids):
@@ -1169,7 +1179,8 @@ async def _own_activity(
             )
         )
     ).scalar_one_or_none()
-    if activity is None:
+    # 지운 기관의 활동은 타임라인(조회)과 같게 404
+    if activity is None or await _alive_org(db, activity.org_id) is None:
         _not_found("활동 기록을")
     if not _can_edit(user, activity):
         await _deny(db, request, user, activity.id, why)
@@ -1253,11 +1264,13 @@ def _parse_csv(data: bytes) -> list[list[str]]:
         text = data.decode("utf-8")
     except UnicodeDecodeError:
         text = data.decode("cp949", errors="replace")
+    # BOM 을 떼고, NUL 은 버린다(Postgres text 가 받지 않는다)
+    text = text.removeprefix("\ufeff").replace("\x00", "")
     try:
         # strict: 닫히지 않은 따옴표·닫는 따옴표 뒤의 글자를 오류로 — 칸이 밀린 채 반영되지 않게
-        return list(csv.reader(io.StringIO(text.removeprefix("﻿"), newline=""), strict=True))
-    except csv.Error:
-        _invalid("따옴표 짝이 맞지 않습니다. 엑셀에서 CSV 로 다시 저장해 주세요.")
+        return list(csv.reader(io.StringIO(text, newline=""), strict=True))
+    except csv.Error:  # 따옴표 짝·칸 길이 상한(field_size_limit) 등
+        _invalid("CSV 형식이 잘못됐습니다(따옴표 짝·칸 길이). 엑셀에서 CSV 로 다시 저장해 주세요.")
 
 
 def _row_error(org_name: str, name: str, cells: dict[str, str]) -> str | None:

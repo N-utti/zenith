@@ -765,3 +765,89 @@ async def test_export(client: AsyncClient, users: Users, app_db) -> None:
     r = await client.post(f"{API}/export", params={"entity": "users"}, headers=h)
     assert (r.status_code, r.json()["code"]) == (422, "VALIDATION")
     assert len(await _audits(app_db, "crm.exported")) == 3
+
+
+async def test_review_followups(
+    client: AsyncClient, make_client: Callable[[], AsyncClient], users: Users, app_db
+) -> None:
+    """리뷰 후속: lead 도 삭제·erase 403, 상한 422, erased 담당자를 새 활동에 못 넣음, 지운 기관의 안건·활동·담당자."""
+    h = await _as(client, "sujin@zenith.co.kr")
+    org = await _org(client, h, "한결연금공단")
+    keep = await _org(client, h, "누리공제회", "mutual_aid")
+    c1 = await _contact(client, h, org["id"], "박서준")
+    c2 = await _contact(client, h, org["id"], "이하은")
+    act = await _activity(client, h, org["id"], contact_ids=[c1["id"]])
+
+    async with make_client() as lead:
+        hl = await _as(lead, "donghyun@zenith.co.kr")
+        r = await lead.request(
+            "DELETE", f"{API}/orgs/{org['id']}", json={"reason": "x"}, headers=hl
+        )
+        assert r.status_code == 403
+        assert (await lead.post(f"{API}/contacts/{c1['id']}/erase", headers=hl)).status_code == 403
+    denied = await _audits(app_db, "acl.denied")
+    assert [(a.actor_id, a.detail["reason"]) for a in denied] == [
+        (users.lead.id, "org_delete"),
+        (users.lead.id, "contact_erase"),
+    ]
+
+    # 상한
+    assert (await client.get(f"{API}/orgs", params={"stale_days": 36501})).status_code == 422
+    many = [str(users.member.id)] * 201
+    r = await client.post(
+        f"{API}/orgs", json={"name": "x", "org_type": "etc", "owner_ids": many}, headers=h
+    )
+    assert r.status_code == 422
+    r = await client.patch(f"{API}/activities/{act['id']}", json={"user_ids": many}, headers=h)
+    assert r.status_code == 422
+    for amount in ("1000", 1.0, True):
+        body = {"kind": "investment", "name": "x", "org_id": org["id"], "amount_krw": amount}
+        assert (await client.post(f"{API}/deals", json=body, headers=h)).status_code == 422, amount
+
+    # erased 담당자는 새 활동에 못 넣는다 — 이미 참석자였던 기록은 그대로 고칠 수 있다
+    async with make_client() as boss:
+        hx = await _as(boss, "jaeho@zenith.co.kr")
+        assert (await boss.post(f"{API}/contacts/{c1['id']}/erase", headers=hx)).status_code == 200
+    body = {"kind": "call", "occurred_at": _ago(0), "org_id": org["id"], "body": "x"}
+    r = await client.post(f"{API}/activities", json={**body, "contact_ids": [c1["id"]]}, headers=h)
+    assert r.status_code == 422
+    url = f"{API}/activities/{act['id']}"
+    r = await client.patch(url, json={"contact_ids": [c1["id"], c2["id"]]}, headers=h)
+    assert r.status_code == 200, r.text
+    assert [p["name"] for p in r.json()["contacts"]] == ["", "이하은"]
+
+    # CSV 의 NUL 은 버린다
+    csv_body = "기관,이름\r\n세움\x00은행,김\x00새봄\r\n".encode()
+    r = await client.post(
+        f"{API}/orgs/import",
+        params={"dry_run": "true"},
+        files={"file": ("a.csv", csv_body, "text/csv")},
+        headers=h,
+    )
+    assert r.json()["rows"][0] | {"note": ""} == {
+        "line": 2,
+        "org_name": "세움은행",
+        "contact_name": "김새봄",
+        "status": "ok",
+        "note": "",
+    }
+
+    # 지운 기관: 안건은 deals 내보내기에서, 활동·담당자 수정은 404
+    gone = await _deal(client, h, org["id"], name="지울 안건")
+    await _deal(client, h, keep["id"], name="남는 안건")
+    await client.post(
+        f"{API}/deals/{gone['id']}/drop", json={"reason": "x", "version": 1}, headers=h
+    )
+    async with make_client() as boss:
+        hx = await _as(boss, "jaeho@zenith.co.kr")
+        r = await boss.request(
+            "DELETE", f"{API}/orgs/{org['id']}", json={"reason": "정리"}, headers=hx
+        )
+        assert r.status_code == 204
+        r = await boss.post(f"{API}/export", params={"entity": "deals"}, headers=hx)
+        rows = list(load_workbook(io.BytesIO(r.content)).active.iter_rows(values_only=True))
+        assert [row[1] for row in rows[1:]] == ["남는 안건"]
+        assert (await boss.patch(url, json={"body": "x"}, headers=hx)).status_code == 404
+        assert (await boss.delete(url, headers=hx)).status_code == 404
+    r = await client.patch(f"{API}/contacts/{c2['id']}", json={"memo": "x"}, headers=h)
+    assert r.status_code == 404
