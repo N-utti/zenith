@@ -294,7 +294,6 @@ export function canDownloadPostAttachment(user: User, boardId: string, url: stri
 }
 
 // ── 게시글 댓글 ──────────────────────────────────────────
-// 서버에는 아직 없다. 모양은 프론트가 정한 가정이다(`handlers.ts` 의 주석).
 // 글을 읽을 수 있는지(게시판 등급)는 핸들러가 먼저 본다. 여기는 댓글 한 줄의 권한만 본다.
 
 /** 글 id → 댓글(오래된 순). */

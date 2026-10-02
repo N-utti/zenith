@@ -114,12 +114,6 @@ export function useDeletePost(boardId: string, postId: string) {
   })
 }
 
-/**
- * 게시글 댓글을 보일지. 서버에는 아직 그 경로가 없어서(04 §6 의 게시판은 글뿐이다) 목이 켜진
- * 개발 화면에서만 보인다. 서버가 받게 되면 이 스위치를 걷는다.
- */
-export const POST_COMMENTS_ENABLED = MSW_ENABLED
-
 const commentsKey = (postId: string) => ['posts', postId, 'comments'] as const
 
 /** 그 글의 댓글. 오래된 순. 글을 못 보는 사람은 댓글도 못 본다(403). */
@@ -127,7 +121,7 @@ export function usePostComments(postId: string) {
   return useQuery({
     queryKey: commentsKey(postId),
     queryFn: () => api<{ items: PostComment[] }>(`/posts/${postId}/comments`),
-    enabled: POST_COMMENTS_ENABLED && Boolean(postId),
+    enabled: Boolean(postId),
     retry: false,
   })
 }

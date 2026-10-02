@@ -749,6 +749,42 @@ export interface paths {
         patch: operations["update_post_api_posts__id__patch"];
         trace?: never;
     };
+    "/api/posts/{id}/comments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 댓글 목록 (오래된 순) — 글을 못 보는 사람은 403 + 감사 */
+        get: operations["list_post_comments_api_posts__id__comments_get"];
+        put?: never;
+        /** 댓글 등록 {body} — 글을 읽을 수 있는 사람. @이름은 해석하지 않는다(등급 밖으로 새지 않게) */
+        post: operations["create_post_comment_api_posts__id__comments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/posts/{id}/comments/{comment_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** 댓글 삭제 — 쓴 사람 또는 exec(글 삭제와 같은 기준). 감사 boards.comment_deleted */
+        delete: operations["delete_post_comment_api_posts__id__comments__comment_id__delete"];
+        options?: never;
+        head?: never;
+        /** 댓글 고치기 {body} — 쓴 사람만. 그대로면 edited_at 을 찍지 않는다 */
+        patch: operations["edit_post_comment_api_posts__id__comments__comment_id__patch"];
+        trace?: never;
+    };
     "/api/search": {
         parameters: {
             query?: never;
@@ -1889,6 +1925,11 @@ export interface components {
             /** Items */
             items: components["schemas"]["PersonOut"][];
         };
+        /** Items[PostCommentOut] */
+        Items_PostCommentOut_: {
+            /** Items */
+            items: components["schemas"]["PostCommentOut"][];
+        };
         /** Items[TodoOut] */
         Items_TodoOut_: {
             /** Items */
@@ -2079,6 +2120,32 @@ export interface components {
             name: string;
             /** Active */
             active: boolean;
+        };
+        /** PostCommentIn */
+        PostCommentIn: {
+            /** Body */
+            body: string;
+        };
+        /**
+         * PostCommentOut
+         * @description 문서 댓글(`CommentOut`)에서 블록 칸을 뺀 모양 (이슈 #292).
+         */
+        PostCommentOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            author: components["schemas"]["Person"];
+            /** Body */
+            body: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Edited At */
+            edited_at: string | null;
         };
         /** PostCreateIn */
         PostCreateIn: {
@@ -4155,6 +4222,194 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["PostDetail"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_post_comments_api_posts__id__comments_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Items_PostCommentOut_"];
+                };
+            };
+            /** @description 글을 못 보는 등급 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 없는 글 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_post_comment_api_posts__id__comments_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PostCommentIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PostCommentOut"];
+                };
+            };
+            /** @description 글을 못 보는 등급 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 없는 글 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_post_comment_api_posts__id__comments__comment_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                comment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 글을 못 보거나, 쓴 사람·임원이 아님 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 없는 글·댓글 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    edit_post_comment_api_posts__id__comments__comment_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                comment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PostCommentIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PostCommentOut"];
+                };
+            };
+            /** @description 글을 못 보거나 남의 댓글 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 없는 글·댓글 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

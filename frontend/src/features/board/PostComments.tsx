@@ -18,8 +18,8 @@ const NO_MENTIONS: ReadonlySet<string> = new Set()
  * 줄은 문서 댓글과 같은 부품이다(`features/comments/CommentRow`). 고치기는 쓴 사람만, 지우기는
  * 쓴 사람과 임원이 한다(글 지우기와 같은 기준). 버튼을 감추는 것은 화면 편의이고 차단은 서버의 403 이다.
  *
- * ponytail: 멘션(`@`)이 없다. 등급 게시판의 댓글에서 등급 밖 사람을 부르면 그 사람에게 가는 알림에
- * 글 제목과 댓글이 실린다. 누구를 부를 수 있는지는 서버가 정해야 해서 뺐다.
+ * 멘션(`@`)이 없다. 등급 게시판의 댓글에서 등급 밖 사람을 부르면 그 사람에게 가는 알림에 글 제목과
+ * 댓글이 실린다. 서버도 본문의 `@이름` 을 해석하지 않는다(백엔드 #303).
  */
 export function PostComments({ postId }: { postId: string }) {
   const me = useCurrentUser()
