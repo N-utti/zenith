@@ -72,6 +72,11 @@ export interface Contact {
   email: string
   memo: string
   erased: boolean
+  /**
+   * 지울 수 있는지. 등록한 사람(활동 기록에 붙기 전)과 임원. 서버가 판정한다.
+   * 지우면 목록에서 빠지고, 활동 기록의 참석자 이름으로만 남는다.
+   */
+  can_delete: boolean
   /** 이전 소속, 최근 것부터(FR-CRM-04). 옛 활동 기록은 기록 당시 기관에 그대로 있다. */
   moves: { from: Person; moved_at: string }[]
 }
@@ -223,6 +228,8 @@ export interface DealDetail extends Deal {
   closed_at: string | null
   created_at: string
   events: DealEvent[]
+  /** 지울 수 있는지. 등록한 사람(활동 기록이 붙기 전)과 임원. 서버가 판정한다. */
+  can_delete: boolean
 }
 
 export interface DealInput {

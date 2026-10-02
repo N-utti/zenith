@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
-import { Copy, Mail, Pencil, Phone, Plus, Trash2 } from 'lucide-react'
+import { Copy, Eraser, Mail, Pencil, Phone, Plus, Trash2 } from 'lucide-react'
 import { BackLink } from '@/components/ui/BackLink'
 import { Button } from '@/components/ui/Button'
 import { Card, CardEmpty, CardHeader } from '@/components/ui/Card'
@@ -13,7 +13,13 @@ import { Textarea } from '@/components/ui/Textarea'
 import { useToast } from '@/components/ui/ToastContext'
 import { useCurrentUser } from '@/features/auth/AuthContext'
 import { ActivityCard, iconButton } from '@/features/crm/ActivityCard'
-import { useDeals, useDeleteOrg, useEraseContact, useOrg } from '@/features/crm/api'
+import {
+  useDeals,
+  useDeleteContact,
+  useDeleteOrg,
+  useEraseContact,
+  useOrg,
+} from '@/features/crm/api'
 import {
   ActivityFormModal,
   ContactFormModal,
@@ -50,6 +56,9 @@ export function CrmOrgPage() {
   const org = useOrg(orgId)
   const deals = useDeals({ orgId })
   const erase = useEraseContact()
+  const removeContact = useDeleteContact()
+  // 같은 줄의 개인정보 삭제와 지우기가 겹쳐 나가지 않게 둘을 같이 잠근다.
+  const contactBusy = erase.isPending || removeContact.isPending
   const [dialog, setDialog] = useState<Dialog | null>(null)
   const close = () => setDialog(null)
   // 화면 편의일 뿐이다. 삭제·개인정보 삭제의 실제 차단은 서버 403 이다(15 §3).
@@ -208,8 +217,8 @@ export function CrmOrgPage() {
                         </p>
                       ))}
                   </div>
-                  {!c.erased && (
-                    <div className="flex shrink-0 items-start">
+                  <div className="flex shrink-0 items-start">
+                    {!c.erased && (
                       <button
                         type="button"
                         aria-label={`${c.name} 수정`}
@@ -218,31 +227,59 @@ export function CrmOrgPage() {
                       >
                         <Pencil className="size-3.5" />
                       </button>
-                      {isExec && (
-                        <button
-                          type="button"
-                          aria-label={`${c.name} 개인정보 삭제`}
-                          title="개인정보 삭제"
-                          className={iconButton}
-                          disabled={erase.isPending}
-                          onClick={() => {
-                            if (
-                              !confirm(
-                                `${c.name} 님의 이름·연락처·메모를 지웁니다. 활동 기록에는 삭제된 담당자로 남습니다. 되돌릴 수 없습니다.`,
-                              )
+                    )}
+                    {!c.erased && isExec && (
+                      <button
+                        type="button"
+                        aria-label={`${c.name} 개인정보 삭제`}
+                        title="개인정보 삭제"
+                        className={iconButton}
+                        disabled={contactBusy}
+                        onClick={() => {
+                          if (
+                            !confirm(
+                              `${c.name} 님의 이름·연락처·메모를 지웁니다. 활동 기록에는 삭제된 담당자로 남습니다. 되돌릴 수 없습니다.`,
                             )
-                              return
-                            erase.mutate(c.id, {
-                              onSuccess: () => toast.success('개인정보를 삭제했습니다.'),
-                              onError,
-                            })
-                          }}
-                        >
-                          <Trash2 className="size-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  )}
+                          )
+                            return
+                          erase.mutate(c.id, {
+                            onSuccess: () => toast.success('개인정보를 삭제했습니다.'),
+                            onError,
+                          })
+                        }}
+                      >
+                        <Eraser className="size-3.5" />
+                      </button>
+                    )}
+                    {/* 잘못 넣은 사람을 목록에서 치운다. 등록한 사람(활동 기록에 붙기 전)과 임원에게만
+                        온다(서버가 판정한 값). 연락처를 비우는 개인정보 삭제와는 다른 일이다. */}
+                    {c.can_delete && (
+                      <button
+                        type="button"
+                        aria-label={`${contactName(c)} 지우기`}
+                        title="목록에서 지우기"
+                        className={iconButton}
+                        disabled={contactBusy}
+                        onClick={() => {
+                          // 지워도 활동 기록에는 이름이 남는다. 이름까지 지우는 길(개인정보 삭제)은
+                          // 임원에게만 있어서 그 안내는 임원에게만 낸다.
+                          const message = c.erased
+                            ? '개인정보를 지운 담당자를 목록에서 지웁니다. 활동 기록의 참석자 자리는 남습니다. 되돌릴 수 없습니다.'
+                            : `${c.name} 님을 담당자 목록에서 지웁니다. 되돌릴 수 없습니다.` +
+                              (isExec
+                                ? ' 활동 기록에는 이름이 그대로 남습니다. 이름까지 지우려면 먼저 개인정보 삭제를 하세요.'
+                                : '')
+                          if (!confirm(message)) return
+                          removeContact.mutate(c.id, {
+                            onSuccess: () => toast.success('담당자를 지웠습니다.'),
+                            onError,
+                          })
+                        }}
+                      >
+                        <Trash2 className="size-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </li>
               ))}
             </ul>

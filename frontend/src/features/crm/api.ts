@@ -178,6 +178,19 @@ export function useEraseContact() {
   })
 }
 
+/**
+ * 담당자 지우기. 등록한 사람(활동 기록에 붙기 전)과 임원. 잘못 넣은 사람을 치우는 길이다.
+ * 목록에서만 빠지고 활동 기록의 참석자 이름은 남는다. 연락처를 비우는 것은 개인정보 삭제다.
+ */
+export function useDeleteContact() {
+  const refetch = useRefetchCrm()
+  return useMutation({
+    mutationFn: (id: string) => api<void>(`/crm/contacts/${id}`, { method: 'DELETE' }),
+    // 실패해도 다시 읽는다. 그사이 누가 활동 기록에 붙여서 난 거절이면 버튼이 낡은 것이다.
+    onSettled: refetch,
+  })
+}
+
 export function useSaveActivity() {
   const refetch = useRefetchCrm()
   return useMutation({
@@ -238,6 +251,30 @@ export function useReopenDeal() {
     mutationFn: ({ id, version }: { id: string; version: number }) =>
       api<DealDetail>(`/crm/deals/${id}/reopen`, json('POST', { version })),
     onSettled: settle,
+  })
+}
+
+/**
+ * 안건 지우기. 등록한 사람(활동 기록이 붙기 전)과 임원. 잘못 만든 안건을 치우는 길이다.
+ * 진행하다 접는 안건은 지우지 않고 중단한다(사유가 남는다).
+ */
+export function useDeleteDeal() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => api<void>(`/crm/deals/${id}`, { method: 'DELETE' }),
+    // 지운 안건의 상세·활동은 다시 부르면 404 뿐이다. 그 둘은 다시 받지 않고 낡았다는 표시만
+    // 남긴다(아직 그 화면이 떠 있다). 보드와 기관 쪽 목록·타임라인은 새로 읽는다.
+    onSuccess: (_, id) => {
+      void qc.invalidateQueries({ queryKey: [...crmKey, 'deal', id], refetchType: 'none' })
+      void qc.invalidateQueries({
+        queryKey: [...crmKey, 'activities', 'deal', id],
+        refetchType: 'none',
+      })
+      void qc.invalidateQueries({ queryKey: [...crmKey, 'deals'] })
+      void qc.invalidateQueries({ queryKey: [...crmKey, 'activities', 'org'] })
+    },
+    // 거절이면 화면이 낡은 것이다(그사이 활동 기록이 붙었다). 버튼과 타임라인을 다시 읽는다.
+    onError: () => void qc.invalidateQueries({ queryKey: crmKey }),
   })
 }
 

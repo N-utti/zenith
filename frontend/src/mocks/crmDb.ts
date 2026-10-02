@@ -55,7 +55,14 @@ interface OrgRow {
   deleted_at: string | null
 }
 
-type ContactRow = Omit<Contact, 'moves'>
+/**
+ * `created_by` 는 등록한 사람(시드에는 없다. 그때는 임원만 지운다). `deleted_at` 이 있으면 목록에서
+ * 빠지고 활동 기록의 참석자 이름으로만 남는다.
+ */
+type ContactRow = Omit<Contact, 'moves' | 'can_delete'> & {
+  created_by?: string
+  deleted_at?: string
+}
 
 /** 담당자 이직 이력(설계서 §4.1 `crm_contact_moves`). */
 interface MoveRow {
@@ -265,6 +272,7 @@ export function normalizeOrgName(name: string): string {
 
 const aliveOrg = (id: string) => orgs.find((o) => o.id === id && !o.deleted_at)
 const aliveActivities = () => activities.filter((a) => !a.deleted_at)
+const aliveContacts = () => contacts.filter((c) => !c.deleted_at)
 
 /** 활동 기록에서 바로 뽑는다. 실서버는 `crm_orgs.last_contacted_at` 에 들고 있다(설계서 §4.2.3). */
 function lastContacted(orgId: string): string | null {
@@ -282,15 +290,23 @@ function toListItem(org: OrgRow): OrgListItem {
     org_type: org.org_type,
     owners: people(org.owner_ids),
     // 개인정보를 지운 담당자는 행만 남은 것이라 세지 않는다(내보내기와 같은 기준).
-    contact_count: contacts.filter((c) => c.org_id === org.id && !c.erased).length,
+    contact_count: aliveContacts().filter((c) => c.org_id === org.id && !c.erased).length,
     last_contacted_at: lastContacted(org.id),
   }
 }
 
 /** 지워진 기관으로 옮긴 적이 있어도 이력은 남긴다. 이름은 지워지기 전 것을 그대로 쓴다. */
-function toContact(row: ContactRow): Contact {
+function toContact(user: User, row: ContactRow): Contact {
   return {
-    ...row,
+    id: row.id,
+    org_id: row.org_id,
+    name: row.name,
+    title: row.title,
+    phone: row.phone,
+    email: row.email,
+    memo: row.memo,
+    erased: row.erased,
+    can_delete: canDeleteContact(user, row),
     moves: contactMoves
       .filter((m) => m.contact_id === row.id)
       .sort((a, b) => b.moved_at.localeCompare(a.moved_at))
@@ -301,11 +317,13 @@ function toContact(row: ContactRow): Contact {
   }
 }
 
-function toDetail(org: OrgRow): OrgDetail {
+function toDetail(user: User, org: OrgRow): OrgDetail {
   return {
     ...toListItem(org),
     memo: org.memo,
-    contacts: contacts.filter((c) => c.org_id === org.id).map(toContact),
+    contacts: aliveContacts()
+      .filter((c) => c.org_id === org.id)
+      .map((c) => toContact(user, c)),
     created_at: org.created_at,
   }
 }
@@ -328,9 +346,9 @@ export function listOrgs(filter: {
     .sort((a, b) => normalizeOrgName(a.name).localeCompare(normalizeOrgName(b.name), 'ko'))
 }
 
-export function getOrg(id: string): OrgDetail | Failure {
+export function getOrg(user: User, id: string): OrgDetail | Failure {
   const org = aliveOrg(id)
-  return org ? toDetail(org) : notFound('기관을')
+  return org ? toDetail(user, org) : notFound('기관을')
 }
 
 /** `current` 는 지금 앉아 있는 창구. 그 사람이 퇴사했다고 다른 칸 수정까지 막지 않는다. */
@@ -362,7 +380,7 @@ function checkOrgInput(input: Partial<OrgInput>, current: string[] = []): Failur
   return null
 }
 
-export function createOrg(input: OrgInput): OrgCreated | Failure {
+export function createOrg(user: User, input: OrgInput): OrgCreated | Failure {
   const bad =
     checkOrgInput(input) ??
     (input.name === undefined || input.org_type === undefined
@@ -386,10 +404,10 @@ export function createOrg(input: OrgInput): OrgCreated | Failure {
     deleted_at: null,
   }
   orgs.push(row)
-  return { org: toDetail(row), duplicates }
+  return { org: toDetail(user, row), duplicates }
 }
 
-export function updateOrg(id: string, patch: Partial<OrgInput>): OrgDetail | Failure {
+export function updateOrg(user: User, id: string, patch: Partial<OrgInput>): OrgDetail | Failure {
   const org = aliveOrg(id)
   if (!org) return notFound('기관을')
   const bad = checkOrgInput(patch, org.owner_ids)
@@ -398,7 +416,7 @@ export function updateOrg(id: string, patch: Partial<OrgInput>): OrgDetail | Fai
   if (patch.org_type !== undefined) org.org_type = patch.org_type
   if (patch.memo !== undefined) org.memo = patch.memo
   if (patch.owner_ids !== undefined) org.owner_ids = [...new Set(patch.owner_ids)]
-  return toDetail(org)
+  return toDetail(user, org)
 }
 
 /**
@@ -411,7 +429,7 @@ export function deleteOrg(user: User, id: string, reason: unknown): Failure | nu
   if (!org) return notFound('기관을')
   if (typeof reason !== 'string' || !reason.trim())
     return fail(400, 'VALIDATION', '사유를 적어 주세요.')
-  const open = deals.filter((d) => d.org_id === id && d.status === 'open').length
+  const open = aliveDeals().filter((d) => d.org_id === id && d.status === 'open').length
   if (open) {
     return fail(
       409,
@@ -434,7 +452,7 @@ function checkContactInput(input: Partial<ContactInput>): Failure | null {
   return null
 }
 
-export function createContact(input: ContactInput): Contact | Failure {
+export function createContact(user: User, input: ContactInput): Contact | Failure {
   if (!aliveOrg(input.org_id)) return invalid('기관을 먼저 골라 주세요.')
   const bad =
     checkContactInput(input) ?? (input.name ? null : invalid('담당자 이름을 입력해 주세요.'))
@@ -448,14 +466,19 @@ export function createContact(input: ContactInput): Contact | Failure {
     email: input.email?.trim() ?? '',
     memo: input.memo ?? '',
     erased: false,
+    created_by: user.id,
   }
   contacts.push(row)
-  return toContact(row)
+  return toContact(user, row)
 }
 
 /** `org_id` 가 바뀌면 이직이다. 이력을 남기고, 옛 활동 기록은 기록 당시 기관에 둔다(FR-CRM-04). */
-export function updateContact(id: string, patch: Partial<ContactInput>): Contact | Failure {
-  const contact = contacts.find((c) => c.id === id)
+export function updateContact(
+  user: User,
+  id: string,
+  patch: Partial<ContactInput>,
+): Contact | Failure {
+  const contact = aliveContacts().find((c) => c.id === id)
   if (!contact) return notFound('담당자를')
   if (contact.erased) return fail(409, 'CONFLICT', '개인정보가 삭제된 담당자는 고칠 수 없습니다.')
   const bad = checkContactInput(patch)
@@ -475,7 +498,7 @@ export function updateContact(id: string, patch: Partial<ContactInput>): Contact
     })
     contact.org_id = patch.org_id!
   }
-  return toContact(contact)
+  return toContact(user, contact)
 }
 
 /**
@@ -484,10 +507,40 @@ export function updateContact(id: string, patch: Partial<ContactInput>): Contact
  */
 export function eraseContact(user: User, id: string): Contact | Failure {
   if (user.role !== 'exec') return forbidden()
+  // 목록에서 지운 담당자도 된다. 지운 뒤에도 활동 기록에 이름이 남아 있어서다.
   const contact = contacts.find((c) => c.id === id)
   if (!contact) return notFound('담당자를')
   Object.assign(contact, { name: '', title: '', phone: '', email: '', memo: '', erased: true })
-  return toContact(contact)
+  return toContact(user, contact)
+}
+
+/**
+ * 등록한 사람은 활동 기록에 붙기 전까지(잘못 넣은 사람을 치우는 길), 임원은 언제나 지운다.
+ * 15 §9 에 없는 경로다. 프론트가 정한 가정이다.
+ */
+function canDeleteContact(user: User, row: ContactRow): boolean {
+  if (user.role === 'exec') return true
+  return (
+    row.created_by === user.id && !aliveActivities().some((a) => a.contact_ids.includes(row.id))
+  )
+}
+
+/**
+ * 담당자 지우기. 행은 남기고 목록에서만 뺀다. 행을 지우면 활동 기록의 참석자가 사라져 이력이 깨진다.
+ * 이름·연락처는 그대로 남는다. 비우는 것은 개인정보 삭제(`eraseContact`)다.
+ */
+export function deleteContact(user: User, id: string): Failure | null {
+  const contact = aliveContacts().find((c) => c.id === id)
+  if (!contact || !aliveOrg(contact.org_id)) return notFound('담당자를')
+  if (!canDeleteContact(user, contact)) {
+    return fail(
+      403,
+      'FORBIDDEN',
+      '담당자는 등록한 사람(활동 기록에 붙기 전)과 임원만 지울 수 있습니다.',
+    )
+  }
+  contact.deleted_at = new Date().toISOString()
+  return null
 }
 
 /** 기기 시계가 서버보다 조금 빠른 것은 봐준다. */
@@ -561,9 +614,12 @@ function dealOutside(orgId: string, dealId: string | null | undefined) {
   return !!dealId && findDeal(dealId)?.org_id !== orgId
 }
 
-/** 외부 참석자는 그 기관 소속 담당자만. 다른 기관 사람을 섞으면 타임라인이 거짓말을 한다. */
+/**
+ * 외부 참석자는 그 기관 소속 담당자만. 다른 기관 사람을 섞으면 타임라인이 거짓말을 한다.
+ * 목록에서 지운 담당자도 새로 붙일 수 없다(이미 붙어 있던 기록에는 남는다).
+ */
 function contactsOutside(orgId: string, ids: string[] | undefined) {
-  return (ids ?? []).some((id) => contacts.find((c) => c.id === id)?.org_id !== orgId)
+  return (ids ?? []).some((id) => aliveContacts().find((c) => c.id === id)?.org_id !== orgId)
 }
 
 export function createActivity(user: User, input: ActivityInput): Activity | Failure {
@@ -609,7 +665,11 @@ export function updateActivity(
   if (contactsOutside(row.org_id, added)) {
     return invalid('외부 참석자는 이 기관의 담당자여야 합니다.')
   }
-  if (dealOutside(row.org_id, patch.deal_id)) return invalid('이 기관의 안건이 아닙니다.')
+  // 안건도 바뀔 때만 본다. 그사이 지운 안건에 걸려 있던 기록을 낡은 화면에서 고쳐도 막히지 않게.
+  const dealChanged = patch.deal_id !== undefined && (patch.deal_id || null) !== row.deal_id
+  if (dealChanged && dealOutside(row.org_id, patch.deal_id)) {
+    return invalid('이 기관의 안건이 아닙니다.')
+  }
   if (patch.deal_id !== undefined) row.deal_id = patch.deal_id || null
   if (patch.kind !== undefined) row.kind = patch.kind
   if (patch.occurred_at !== undefined) row.occurred_at = new Date(patch.occurred_at).toISOString()
@@ -646,6 +706,8 @@ interface DealRow {
   version: number
   closed_at: string | null
   created_at: string
+  /** 있으면 지운 안건이다. 보드·목록·내보내기에서 빠지고 상세는 404 다. */
+  deleted_at?: string
 }
 
 interface DealEventRow {
@@ -780,8 +842,20 @@ const dealEvents: DealEventRow[] = deals.map((d) => ({
   created_at: d.created_at,
 }))
 
+const aliveDeals = () => deals.filter((d) => !d.deleted_at)
+
 function findDeal(id: string) {
-  return deals.find((d) => d.id === id)
+  return aliveDeals().find((d) => d.id === id)
+}
+
+/**
+ * 등록한 사람은 활동 기록이 붙기 전까지(잘못 만든 안건을 치우는 길), 임원은 언제나 지운다.
+ * 등록한 사람은 등록 이력(첫 줄)의 주인이다. 15 §9 에 없는 경로다. 프론트가 정한 가정이다.
+ */
+function canDeleteDeal(user: User, row: DealRow): boolean {
+  if (user.role === 'exec') return true
+  const creator = dealEvents.find((e) => e.deal_id === row.id && e.from_stage === null)?.actor_id
+  return creator === user.id && !aliveActivities().some((a) => a.deal_id === row.id)
 }
 const stages = (kind: DealKind) => DEAL_STAGES[kind].map((s) => s.key)
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/
@@ -804,12 +878,13 @@ function toDeal(row: DealRow): Deal {
   }
 }
 
-function toDealDetail(row: DealRow): DealDetail {
+function toDealDetail(user: User, row: DealRow): DealDetail {
   return {
     ...toDeal(row),
     drop_reason: row.drop_reason,
     closed_at: row.closed_at,
     created_at: row.created_at,
+    can_delete: canDeleteDeal(user, row),
     // 최신이 위. 같은 시각(연달아 누른 경우)이면 나중에 쌓인 쪽이 위다. 정렬은 안정적이라
     // 뒤집어 놓고 정렬하면 동률끼리는 뒤집힌 순서를 지킨다.
     events: dealEvents
@@ -829,7 +904,7 @@ function toDealDetail(row: DealRow): DealDetail {
 }
 
 export function listDeals(filter: { kind?: string; status?: string; orgId?: string }): Deal[] {
-  return deals
+  return aliveDeals()
     .filter((d) => !filter.kind || d.kind === filter.kind)
     .filter((d) => !filter.status || d.status === filter.status)
     .filter((d) => !filter.orgId || d.org_id === filter.orgId)
@@ -838,9 +913,27 @@ export function listDeals(filter: { kind?: string; status?: string; orgId?: stri
     .map(toDeal)
 }
 
-export function getDeal(id: string): DealDetail | Failure {
+export function getDeal(user: User, id: string): DealDetail | Failure {
   const row = findDeal(id)
-  return row && aliveOrg(row.org_id) ? toDealDetail(row) : notFound('안건을')
+  return row && aliveOrg(row.org_id) ? toDealDetail(user, row) : notFound('안건을')
+}
+
+/**
+ * 안건 지우기. 행과 단계 이력은 남기고 보드·목록에서만 뺀다. 붙어 있던 활동 기록은 기관의
+ * 타임라인에 그대로 남는다(안건 표시만 빠진다).
+ */
+export function deleteDeal(user: User, id: string): Failure | null {
+  const row = findDeal(id)
+  if (!row || !aliveOrg(row.org_id)) return notFound('안건을')
+  if (!canDeleteDeal(user, row)) {
+    return fail(
+      403,
+      'FORBIDDEN',
+      '안건은 등록한 사람(활동 기록이 붙기 전)과 임원만 지울 수 있습니다.',
+    )
+  }
+  row.deleted_at = new Date().toISOString()
+  return null
 }
 
 function checkDealInput(input: Partial<DealInput>, currentOwner: string | null): Failure | null {
@@ -917,7 +1010,7 @@ export function createDeal(user: User, input: DealInput): DealDetail | Failure {
   }
   deals.push(row)
   record(row, user, { from_stage: null, to_stage: first, action: 'move', reason: null })
-  return toDealDetail(row)
+  return toDealDetail(user, row)
 }
 
 const conflict = () =>
@@ -971,7 +1064,7 @@ export function updateDeal(
   if (patch.next_action !== undefined) row.next_action = patch.next_action.trim()
   if (patch.next_action_due !== undefined) row.next_action_due = patch.next_action_due || null
   row.version += 1
-  return toDealDetail(row)
+  return toDealDetail(user, row)
 }
 
 /** 중단. 진행 중인 안건만, 사유 필수(15 FR-CRM-12, TC-CRM-04 는 400). */
@@ -991,7 +1084,7 @@ export function dropDeal(
   row.closed_at = new Date().toISOString()
   row.version += 1
   record(row, user, { from_stage: row.stage, to_stage: row.stage, action: 'drop', reason })
-  return toDealDetail(row)
+  return toDealDetail(user, row)
 }
 
 /**
@@ -1012,7 +1105,7 @@ export function reopenDeal(
   row.closed_at = null
   row.version += 1
   record(row, user, { from_stage: row.stage, to_stage: row.stage, action: 'reopen', reason: null })
-  return toDealDetail(row)
+  return toDealDetail(user, row)
 }
 
 // ── 내보내기 (15 FR-CRM-32) ───────────────────────────────────────
@@ -1036,7 +1129,7 @@ export interface ExportTable {
  */
 export function exportRows(entity: string): ExportTable | Failure {
   const orgName = (id: string) => orgs.find((o) => o.id === id)?.name ?? ''
-  const shownContacts = contacts.filter((c) => !c.erased && aliveOrg(c.org_id))
+  const shownContacts = aliveContacts().filter((c) => !c.erased && aliveOrg(c.org_id))
 
   if (entity === 'orgs') {
     const rows = listOrgs({}).map((o) => {
@@ -1088,7 +1181,7 @@ export function exportRows(entity: string): ExportTable | Failure {
       '중단 사유',
       '등록일',
     ]
-    const rows = deals
+    const rows = aliveDeals()
       .filter((d) => aliveOrg(d.org_id))
       .sort((a, b) => b.created_at.localeCompare(a.created_at))
       .map((d) => [
@@ -1133,7 +1226,11 @@ const TYPE_BY_LABEL = new Map(ORG_TYPES.map((t) => [ORG_TYPE_LABEL[t], t]))
  * 같은 기관에 같은 이름의 담당자가 있으면 건너뛴다. 실패 행은 사유와 함께 돌려주고 나머지는 반영한다.
  * `dryRun` 이면 판정만 하고 아무것도 만들지 않는다.
  */
-export function importContacts(rows: string[][], dryRun: boolean): ImportResult | Failure {
+export function importContacts(
+  user: User,
+  rows: string[][],
+  dryRun: boolean,
+): ImportResult | Failure {
   const [header = [], ...rest] = rows
   // 줄 번호는 빈 행을 걸러내기 전에 매긴다. 엑셀의 행 번호와 같게(머리글이 1행).
   const body = rest
@@ -1154,7 +1251,7 @@ export function importContacts(rows: string[][], dryRun: boolean): ImportResult 
   for (const o of orgs) if (!o.deleted_at) known.set(normalizeOrgName(o.name), o)
   // 이미 있는 담당자와 이 파일에서 앞서 받은 담당자(기관 정규화 이름 + 담당자 이름).
   const seen = new Set(
-    contacts
+    aliveContacts()
       .filter((c) => !c.erased && aliveOrg(c.org_id))
       .map((c) => `${normalizeOrgName(aliveOrg(c.org_id)!.name)}\n${c.name}`),
   )
@@ -1208,7 +1305,7 @@ export function importContacts(rows: string[][], dryRun: boolean): ImportResult 
         id: dryRun
           ? null
           : ok(
-              createOrg({
+              createOrg(user, {
                 name: orgName,
                 org_type: orgType,
                 memo: name ? '' : contact.memo,
@@ -1232,7 +1329,7 @@ export function importContacts(rows: string[][], dryRun: boolean): ImportResult 
         return
       }
       seen.add(key)
-      if (!dryRun) ok(createContact({ org_id: org.id!, ...contact }))
+      if (!dryRun) ok(createContact(user, { org_id: org.id!, ...contact }))
       result.new_contacts++
     }
     row.note = notes.join(' · ')

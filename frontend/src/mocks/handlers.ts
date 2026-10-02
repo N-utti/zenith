@@ -120,6 +120,8 @@ import {
   createDeal,
   createOrg,
   deleteActivity,
+  deleteContact,
+  deleteDeal,
   deleteOrg,
   dropDeal,
   eraseContact,
@@ -2142,11 +2144,12 @@ data: ${JSON.stringify(data)}
     }),
   ),
   http.post('/api/crm/orgs', async ({ request }) => {
-    if (!authenticate()) return unauthorized()
+    const user = authenticate()
+    if (!user) return unauthorized()
     const body = await readJson<OrgInput>(request)
     if (!body) return validationError('본문이 올바르지 않습니다.')
     await delay(300)
-    return approvalResponse(createOrg(body), 201)
+    return approvalResponse(createOrg(user, body), 201)
   }),
   // 15 FR-CRM-05. `dry_run=true` 면 판정만 돌려준다. 반영할 때만 감사 기록을 남긴다(§8.1 대량 반입).
   http.post('/api/crm/orgs/import', async ({ request }) => {
@@ -2161,7 +2164,7 @@ data: ${JSON.stringify(data)}
     await delay(300)
     if (!rows)
       return validationError('따옴표 짝이 맞지 않습니다. 엑셀에서 CSV 로 다시 저장해 주세요.')
-    const result = importContacts(rows, dryRun)
+    const result = importContacts(user, rows, dryRun)
     if (!dryRun && !('error' in result)) {
       crmAudit('crm.imported', user, null, {
         orgs: result.new_orgs,
@@ -2171,15 +2174,17 @@ data: ${JSON.stringify(data)}
     return approvalResponse(result)
   }),
   http.get('/api/crm/orgs/:id', ({ params }) => {
-    if (!authenticate()) return unauthorized()
-    return approvalResponse(getOrg(String(params.id)))
+    const user = authenticate()
+    if (!user) return unauthorized()
+    return approvalResponse(getOrg(user, String(params.id)))
   }),
   http.patch('/api/crm/orgs/:id', async ({ request, params }) => {
-    if (!authenticate()) return unauthorized()
+    const user = authenticate()
+    if (!user) return unauthorized()
     const body = await readJson<Partial<OrgInput>>(request)
     if (!body) return validationError('본문이 올바르지 않습니다.')
     await delay(300)
-    return approvalResponse(updateOrg(String(params.id), body))
+    return approvalResponse(updateOrg(user, String(params.id), body))
   }),
   http.delete('/api/crm/orgs/:id', async ({ request, params }) => {
     const user = authenticate()
@@ -2188,7 +2193,7 @@ data: ${JSON.stringify(data)}
     await delay(300)
     const id = String(params.id)
     // 지운 뒤에는 목록에서 빠지니, 감사 화면에서 알아보게 이름을 먼저 잡아 둔다.
-    const before = getOrg(id)
+    const before = getOrg(user, id)
     const failure = deleteOrg(user, id, body?.reason)
     if (failure) return approvalResponse(failure)
     // 삭제 창이 「사유는 감사 기록에 남습니다」라고 약속한다(15 NFR-CRM-03).
@@ -2199,18 +2204,32 @@ data: ${JSON.stringify(data)}
     return new HttpResponse(null, { status: 204 })
   }),
   http.post('/api/crm/contacts', async ({ request }) => {
-    if (!authenticate()) return unauthorized()
+    const user = authenticate()
+    if (!user) return unauthorized()
     const body = await readJson<ContactInput>(request)
     if (!body) return validationError('본문이 올바르지 않습니다.')
     await delay(300)
-    return approvalResponse(createContact(body), 201)
+    return approvalResponse(createContact(user, body), 201)
   }),
   http.patch('/api/crm/contacts/:id', async ({ request, params }) => {
-    if (!authenticate()) return unauthorized()
+    const user = authenticate()
+    if (!user) return unauthorized()
     const body = await readJson<Partial<ContactInput>>(request)
     if (!body) return validationError('본문이 올바르지 않습니다.')
     await delay(300)
-    return approvalResponse(updateContact(String(params.id), body))
+    return approvalResponse(updateContact(user, String(params.id), body))
+  }),
+  // 담당자 지우기. 15 §9 에 없는 경로다(프론트가 정한 가정). 등록한 사람(활동 기록에 붙기 전)과
+  // 임원. 목록에서만 빠진다. 감사 기록에 이름은 남기지 않는다(개인정보 삭제와 같은 이유).
+  http.delete('/api/crm/contacts/:id', async ({ params }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    await delay(300)
+    const id = String(params.id)
+    const failure = deleteContact(user, id)
+    if (failure) return approvalResponse(failure)
+    crmAudit('crm.contact_deleted', user, id)
+    return new HttpResponse(null, { status: 204 })
   }),
   http.post('/api/crm/contacts/:id/erase', async ({ params }) => {
     const user = authenticate()
@@ -2304,8 +2323,23 @@ data: ${JSON.stringify(data)}
     return approvalResponse(createDeal(user, body), 201)
   }),
   http.get('/api/crm/deals/:id', ({ params }) => {
-    if (!authenticate()) return unauthorized()
-    return approvalResponse(getDeal(String(params.id)))
+    const user = authenticate()
+    if (!user) return unauthorized()
+    return approvalResponse(getDeal(user, String(params.id)))
+  }),
+  // 안건 지우기. 15 §9 에 없는 경로다(프론트가 정한 가정). 등록한 사람(활동 기록이 붙기 전)과
+  // 임원. 보드·목록에서만 빠지고 활동 기록은 기관의 타임라인에 남는다.
+  http.delete('/api/crm/deals/:id', async ({ params }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    await delay(300)
+    const id = String(params.id)
+    // 지운 뒤에는 찾을 수 없으니, 감사 화면에서 알아보게 이름을 먼저 잡아 둔다.
+    const before = getDeal(user, id)
+    const failure = deleteDeal(user, id)
+    if (failure) return approvalResponse(failure)
+    crmAudit('crm.deal_deleted', user, id, { name: 'name' in before ? before.name : '' })
+    return new HttpResponse(null, { status: 204 })
   }),
   http.patch('/api/crm/deals/:id', async ({ request, params }) => {
     const user = authenticate()
