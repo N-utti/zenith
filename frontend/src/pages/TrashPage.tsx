@@ -253,12 +253,15 @@ export function TrashPage() {
               onClick={() => {
                 if (!confirmEmpty) return
                 empty.mutate(confirmEmpty, {
-                  onSuccess: ({ removed, failed }) => {
+                  onSuccess: ({ removed, failed, skipped }) => {
                     setConfirmEmpty(null)
-                    if (failed === 0) toast.success(`문서 ${removed}개를 영구 삭제했습니다.`)
+                    // 그사이 누가 되돌린 문서는 지우지 않았다. 숫자가 창에서 본 것과 다른 이유를 적는다.
+                    const kept =
+                      skipped > 0 ? ` 그사이 휴지통에서 빠진 ${skipped}개는 두었습니다.` : ''
+                    if (failed === 0) toast.success(`문서 ${removed}개를 영구 삭제했습니다.${kept}`)
                     else
                       toast.error(
-                        `문서 ${removed}개를 영구 삭제했고 ${failed}개는 지우지 못했습니다.`,
+                        `문서 ${removed}개를 영구 삭제했고 ${failed}개는 지우지 못했습니다.${kept}`,
                       )
                   },
                   onError: (err) => {
