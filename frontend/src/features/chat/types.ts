@@ -26,7 +26,8 @@ export type ChatMessage = Schema<'MessageOut'>
  *
  * ponytail: 여기서는 아직 «없을 수도 있는 값» 으로 둔다. 이 칸이 실려 오는지로 서버가 비공개
  * 채널을 아는지를 가리는 코드(`api.ts` 의 `supportsPrivate`)와 그 테스트가 남아 있어서다.
- * 그 판정은 이제 늘 참이다. 걷어 낼 때 이 타입도 명세 그대로(`Schema<'ChannelOut'>`)로 돌린다.
+ * 실서버에서 그 판정은 채널이 하나라도 있으면 참이다(목록이 비면 알 길이 없어 거짓이다. 빈 서버의
+ * 첫 채널은 비공개로 못 만든다). 걷어 낼 때 이 타입도 명세 그대로(`Schema<'ChannelOut'>`)로 돌린다.
  */
 export type ChatChannel = Omit<Schema<'ChannelOut'>, 'is_private'> & { is_private?: boolean }
 
