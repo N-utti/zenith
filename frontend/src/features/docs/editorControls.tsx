@@ -394,7 +394,8 @@ export function TableMenu({
   return (
     <ToolMenu
       label={label}
-      className="w-48"
+      // 손가락 기기에서는 표 넣기 격자의 칸이 커져 w-48 을 넘는다. 내용에 맞춰 늘어나게 둔다.
+      className="w-fit min-w-48"
       trigger={<Table className={cn('size-4', inTable && 'text-accent')} />}
     >
       {(close) => {

@@ -57,11 +57,15 @@ export function TableSizePicker({ onPick }: { onPick: (rows: number, cols: numbe
               tabIndex={picked ? 0 : -1}
               // 편집기가 포커스를 잃으면 커서 자리가 사라져 표가 엉뚱한 곳에 들어간다.
               onMouseDown={(e) => e.preventDefault()}
-              onMouseEnter={() => setSize({ rows, cols })}
+              // 포인터가 지나가면 포커스도 따라간다. 크기를 정하는 곳을 포커스 하나로 둬야, 포인터를
+              // 올린 크기와 Enter·방향키가 보는 크기가 어긋나지 않는다.
+              onMouseEnter={(e) => e.currentTarget.focus()}
               onFocus={() => setSize({ rows, cols })}
               onClick={() => onPick(rows, cols)}
               className={cn(
-                'size-[18px] cursor-pointer rounded-[3px] border transition-colors',
+                // 포커스 테두리는 뺀다. 칠해진 영역의 끝이 곧 지금 고른 칸이다.
+                // 손가락 기기에서는 칸을 키운다. 미리 칠해 보는 단계가 없어 칸을 세어 눌러야 한다.
+                'size-[18px] cursor-pointer rounded-[3px] border transition-colors focus-visible:outline-none pointer-coarse:size-6',
                 rows <= size.rows && cols <= size.cols
                   ? 'border-accent bg-accent-soft'
                   : 'border-line bg-surface',
