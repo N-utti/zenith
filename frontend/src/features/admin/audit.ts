@@ -239,6 +239,13 @@ export function auditView(event: AuditEvent): AuditView {
     case 'crm.contact_erased':
       return { summary: 'CRM 담당자 개인정보 삭제', tone: 'warning' }
 
+    case 'crm.org_restored':
+      return {
+        summary: 'CRM 기관 되살리기',
+        detail: text(detail, 'name') || undefined,
+        tone: 'neutral',
+      }
+
     case 'crm.deal_deleted':
       return {
         summary: 'CRM 안건 삭제',

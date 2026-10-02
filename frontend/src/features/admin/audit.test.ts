@@ -37,6 +37,9 @@ describe('auditView', () => {
       auditView(event({ kind: 'crm.deal_deleted', detail: { name: '잘못 만든 안건' } })),
     ).toMatchObject({ summary: 'CRM 안건 삭제', detail: '잘못 만든 안건' })
     expect(auditView(event({ kind: 'crm.contact_deleted' })).summary).toBe('CRM 담당자 삭제')
+    expect(
+      auditView(event({ kind: 'crm.org_restored', detail: { name: '한결연금공단' } })),
+    ).toMatchObject({ summary: 'CRM 기관 되살리기', detail: '한결연금공단' })
   })
 
   it('로그인 실패는 이유를 가른다', () => {

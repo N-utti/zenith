@@ -20,6 +20,7 @@ import {
   type DealEvent,
   type DealInput,
   type DealKind,
+  type DeletedOrg,
   type OrgCreated,
   type OrgDetail,
   type OrgInput,
@@ -53,6 +54,8 @@ interface OrgRow {
   owner_ids: string[]
   created_at: string
   deleted_at: string | null
+  /** 지울 때 적은 사유. 지운 기관 목록에서 되살릴지 판단할 때 본다. */
+  deleted_reason?: string
 }
 
 /**
@@ -438,7 +441,41 @@ export function deleteOrg(user: User, id: string, reason: unknown): Failure | nu
     )
   }
   org.deleted_at = new Date().toISOString()
+  org.deleted_reason = reason.trim()
   return null
+}
+
+/** 지운 기관. 임원만 본다. 최근에 지운 것부터. 15 §9 에 없는 경로다(프론트가 정한 가정). */
+export function listDeletedOrgs(user: User): DeletedOrg[] | Failure {
+  if (user.role !== 'exec') return forbidden()
+  return orgs
+    .filter((o) => o.deleted_at)
+    .sort((a, b) => b.deleted_at!.localeCompare(a.deleted_at!))
+    .map((o) => {
+      const norm = normalizeOrgName(o.name)
+      const twin = orgs.find((other) => !other.deleted_at && normalizeOrgName(other.name) === norm)
+      return {
+        id: o.id,
+        name: o.name,
+        org_type: o.org_type,
+        deleted_at: o.deleted_at!,
+        reason: o.deleted_reason ?? '',
+        duplicate: twin ? { id: twin.id, name: twin.name } : null,
+      }
+    })
+}
+
+/**
+ * 지운 기관 되살리기. 임원만. 기관 삭제는 목록에서만 빼는 것이라, 되살리면 담당자·안건·활동
+ * 기록이 그대로 돌아온다. 그사이 같은 이름의 기관이 새로 생겼어도 막지 않는다(등록과 같다, FR-CRM-01).
+ */
+export function restoreOrg(user: User, id: string): OrgDetail | Failure {
+  if (user.role !== 'exec') return forbidden()
+  const org = orgs.find((o) => o.id === id && o.deleted_at)
+  if (!org) return notFound('지운 기관을')
+  org.deleted_at = null
+  org.deleted_reason = undefined
+  return toDetail(user, org)
 }
 
 function checkContactInput(input: Partial<ContactInput>): Failure | null {
