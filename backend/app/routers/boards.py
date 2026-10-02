@@ -187,8 +187,8 @@ def _att_url(board_id: uuid.UUID, file_id: uuid.UUID, name: str) -> str:
 def _parse_att_url(url: str, board_id: uuid.UUID) -> str | None:
     """이 게시판의 업로드 URL 이면 파일명, 아니면 None — 임원 게시판 파일 id 를 공지 글에 끼워 등급 밖에서 받는 길을 막는다."""
     prefix = f"/api/boards/{board_id}/attachments/"
-    if not url.startswith(prefix):
-        return None
+    if not url.startswith(prefix) or any(c in url for c in "?#\\"):
+        return None  # ?·# 는 브라우저가 떼어 내 칩의 이름과 실제로 받는 파일이 달라진다
     rest = url[len(prefix) :].split("/")
     if len(rest) != 2 or not rest[1]:
         return None

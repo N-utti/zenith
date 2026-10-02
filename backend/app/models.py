@@ -298,9 +298,8 @@ class Post(Base):
     title: Mapped[str] = mapped_column(Text, nullable=False)
     body: Mapped[str] = mapped_column(Text, nullable=False)
     author_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
-    attachments: Mapped[list | None] = mapped_column(
-        JSONB
-    )  # 채팅 첨부와 같은 모양 (#299, README 34)
+    # 채팅 첨부와 같은 모양 (#299, README 34). none_as_null — 없는 글은 SQL NULL(JSON null 이면 IS NULL 로 못 거른다)
+    attachments: Mapped[list | None] = mapped_column(JSONB(none_as_null=True))
     created_at: Mapped[datetime] = created_at_col()
     # Message.tsv 와 같은 이유. 제목도 검색 대상이라 함께 넣는다
     tsv: Mapped[str | None] = mapped_column(

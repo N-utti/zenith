@@ -356,6 +356,20 @@ async def test_post_attachments(client: AsyncClient, users: Users, app_db, minio
     got = await client.get(doc["url"])
     assert got.headers["content-disposition"].startswith("attachment;")
     assert got.headers["x-content-type-options"] == "nosniff"
+    assert got.headers["content-security-policy"] == "default-src 'none'; sandbox"
+    assert got.headers["cache-control"] == "private, max-age=86400"
+    # 임원 게시판에 올린 파일은 등급 밖에서 못 받는다 — 403 + acl.denied(reason attach)
+    await login(client, "jaeho@zenith.co.kr")
+    sec = (await _attach(client, s["execs"].id, "비밀.pdf", b"%PDF", "application/pdf")).json()
+    await login(client, "sujin@zenith.co.kr")
+    r = await client.get(sec["url"])
+    assert (r.status_code, r.json()["code"]) == (403, "FORBIDDEN")
+    denied = (
+        (await app_db.execute(select(AuditEvent).where(AuditEvent.kind == "acl.denied")))
+        .scalars()
+        .all()
+    )
+    assert [e.detail["reason"] for e in denied] == ["attach", "attach"]  # 올리기 1 + 받기 1
     # 다른 게시판 경로에 같은 file_id 를 끼워도 404 — 키에 게시판 id 가 있다
     swapped = att["url"].replace(str(s["notice"].id), str(s["leads"].id))
     await login(client, "donghyun@zenith.co.kr")
@@ -390,9 +404,14 @@ async def test_post_attachments(client: AsyncClient, users: Users, app_db, minio
         "url"
     ]
 
-    # 고치기: 안 보내면 그대로, [] 는 전부 뗌, null 은 422
+    # 고치기: 안 보내면 그대로, [] 는 전부 뗌, null 은 422, 다른 게시판 url 은 422
     r = await client.patch(f"/api/posts/{post['id']}", json={"title": "제목만"}, headers=h)
     assert r.status_code == 200 and len(r.json()["attachments"]) == 2
+    r = await client.patch(f"/api/posts/{post['id']}", json={"attachments": [bad]}, headers=h)
+    assert r.status_code == 422
+    tricky = {**att, "url": att["url"] + "?x", "name": att["name"] + "?x"}
+    r = await client.patch(f"/api/posts/{post['id']}", json={"attachments": [tricky]}, headers=h)
+    assert r.status_code == 422
     r = await client.patch(f"/api/posts/{post['id']}", json={"attachments": None}, headers=h)
     assert r.status_code == 422
     r = await client.patch(f"/api/posts/{post['id']}", json={"attachments": [doc]}, headers=h)
