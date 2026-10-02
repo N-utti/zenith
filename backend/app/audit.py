@@ -28,10 +28,13 @@ def record(
     actor_id: uuid.UUID | None = None,
     target_id: uuid.UUID | None = None,
     detail: dict | None = None,
+    at: datetime | None = None,
 ) -> None:
+    """`at` 을 안 주면 DB 의 now()(트랜잭션 시작 시각). 순서가 뜻을 갖는 기록(월 마감 이력)은 앱 시각을 준다."""
     db.add(
         AuditEvent(
             kind=kind,
+            **({"at": at} if at else {}),  # None 을 넘기면 server_default 대신 NULL 이 들어간다
             actor_id=actor_id,
             target_id=target_id,
             ip=client_ip(request) if request else None,

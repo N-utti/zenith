@@ -66,6 +66,14 @@ def _get_sync(key: str) -> tuple[bytes, str] | None:
         resp.release_conn()
 
 
+def _remove_prefix_sync(prefix: str) -> None:
+    c = _client()
+    if not c.bucket_exists(settings.minio_bucket):
+        return
+    for obj in list(c.list_objects(settings.minio_bucket, prefix=prefix, recursive=True)):
+        c.remove_object(settings.minio_bucket, obj.object_name)
+
+
 async def _call(fn, *args):
     try:
         return await asyncio.to_thread(fn, *args)
@@ -80,6 +88,11 @@ async def put(key: str, data: bytes, content_type: str) -> None:
 
 async def get(key: str) -> tuple[bytes, str] | None:
     return await _call(_get_sync, key)
+
+
+async def remove_prefix(prefix: str) -> None:
+    """`prefix` 로 시작하는 오브젝트를 전부 지운다 — 결재 임시저장을 지울 때 그 문서의 첨부(#281)."""
+    await _call(_remove_prefix_sync, prefix)
 
 
 def safe_name(filename: str | None) -> str:
