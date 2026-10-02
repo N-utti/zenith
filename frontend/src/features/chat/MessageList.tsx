@@ -164,6 +164,33 @@ export function MessageList({
     }
   }, [count, channelId, lastId, lastMine])
 
+  // 더 과거를 앞에 붙이면 읽던 줄이 그만큼 아래로 밀린다. 누르는 순간 바닥에서 얼마나 떨어져
+  // 있었는지 적어 두고, 붙은 뒤 같은 거리로 되돌린다. 위에서부터 재면 브라우저가 스스로 자리를
+  // 잡아 주는 경우(크롬)와 겹쳐 두 번 밀린다. 바닥부터 재면 어느 쪽이든 같은 자리가 나온다.
+  //
+  // 되돌리는 때는 「첫 메시지가 바뀌었을 때」가 아니라 「받기가 끝났을 때」다. 첫 메시지는 목록을
+  // 다시 받아도 바뀌는데, 그때 적어 둔 거리를 써 버리면 정작 과거가 붙을 때는 남은 것이 없다.
+  // 받은 쪽을 버린 경우(`prependOlder`)에는 같은 자리로 맞추는 것이라 아무 일도 없다.
+  // 찾아온 메시지(`?m=`)가 붙인 쪽에 들어 있으면 아래 효과가 뒤이어 그 줄로 데려간다.
+  const older = useOlderMessages(channelId)
+  const keepFromBottom = useRef<number | null>(null)
+  const [loadedOlder, setLoadedOlder] = useState(0)
+  useLayoutEffect(() => {
+    const scroller = scrollerRef.current
+    if (!scroller || keepFromBottom.current === null) return
+    scroller.scrollTop = scroller.scrollHeight - keepFromBottom.current
+    keepFromBottom.current = null
+  }, [loadedOlder])
+  const loadOlder = (cursor: string) => {
+    const scroller = scrollerRef.current
+    if (scroller) keepFromBottom.current = scroller.scrollHeight - scroller.scrollTop
+    older.mutate(cursor, {
+      onSuccess: () => setLoadedOlder((n) => n + 1),
+      // 못 받았으면 되돌릴 것도 없다. 남겨 두면 다음에 받을 때 엉뚱한 자리로 간다.
+      onError: () => (keepFromBottom.current = null),
+    })
+  }
+
   // 찾아온 메시지로 내려 주고 잠깐 밝힌다. 아래 붙이기보다 뒤에 둬야 한다: 같은 로딩에
   // 둘 다 돌면 나중에 부른 쪽이 자리를 정하고, 위로 올라간 뒤에는 아래 붙이기가 200px
   // 조건에 걸려 스스로 비킨다(내가 새로 보낸 메시지만 예외).
@@ -176,27 +203,6 @@ export function MessageList({
   // 키보드는 탭 순서가 ⌘K 를 눌렀던 자리에 남아 다음 탭이 화면 밖으로 튄다. 자리 이동은
   // `scrollIntoView` 에 맡기고(`preventScroll`), 전역 스타일이 외곽선을 `:focus-visible` 에만
   // 걸어 두어 프로그램이 옮긴 포커스에는 테가 생기지 않는다.
-  // 더 과거를 앞에 붙이면 읽던 줄이 그만큼 아래로 밀린다. 누르는 순간 바닥에서 얼마나 떨어져
-  // 있었는지 적어 두고, 붙은 뒤 같은 거리로 되돌린다. 위에서부터 재면 브라우저가 스스로 자리를
-  // 잡아 주는 경우(크롬)와 겹쳐 두 번 밀린다. 바닥부터 재면 어느 쪽이든 같은 자리가 나온다.
-  const older = useOlderMessages(channelId)
-  const keepFromBottom = useRef<number | null>(null)
-  const firstId = data?.items[0]?.id
-  useLayoutEffect(() => {
-    const scroller = scrollerRef.current
-    if (!scroller || keepFromBottom.current === null) return
-    scroller.scrollTop = scroller.scrollHeight - keepFromBottom.current
-    keepFromBottom.current = null
-  }, [firstId])
-  const loadOlder = (cursor: string) => {
-    const scroller = scrollerRef.current
-    if (scroller) keepFromBottom.current = scroller.scrollHeight - scroller.scrollTop
-    older.mutate(cursor, {
-      // 못 받았으면 되돌릴 것도 없다. 남겨 두면 다음에 목록이 바뀔 때 엉뚱하게 튄다.
-      onError: () => (keepFromBottom.current = null),
-    })
-  }
-
   const found = data?.items.some((message) => message.id === focusId) ?? false
   useEffect(() => {
     if (!focusId || !found) return

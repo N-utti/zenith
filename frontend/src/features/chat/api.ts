@@ -49,9 +49,9 @@ export function useOlderMessages(channelId: string) {
       api<MessagePage>(
         `/channels/${channelId}/messages?limit=${PAGE_SIZE}&cursor=${encodeURIComponent(cursor)}`,
       ),
-    onSuccess: (older) =>
+    onSuccess: (older, cursor) =>
       qc.setQueryData<MessagePage>(chatKeys.messages(channelId), (page) =>
-        prependOlder(page, older),
+        prependOlder(page, older, cursor),
       ),
   })
 }

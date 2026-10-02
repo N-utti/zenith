@@ -28,14 +28,18 @@ export function appendMessage<P extends { items: ChatMessage[] }>(
 /**
  * 더 과거 한 쪽을 목록 앞에 붙인다. 커서는 새로 받은 쪽의 것으로 바꾼다(그보다 더 과거를 가리킨다).
  *
- * 이미 있는 id 는 뺀다. 과거를 받는 사이 목록을 다시 받으면 두 쪽이 겹칠 수 있다.
- * 목록이 사라졌으면(`undefined`, 그사이 채널을 나갔다) 붙일 곳이 없다.
+ * `cursor` 는 그 쪽을 청할 때 쓴 커서다. 목록의 지금 커서와 다르면 버린다. 받는 사이에 목록이
+ * 다시 받아져(창 복귀, 소켓 재연결) 최근 한 쪽으로 돌아갔다는 뜻인데, 그대로 붙이면 두 쪽
+ * 사이가 빈 채로 커서만 더 과거로 넘어가 그 구간을 다시 받을 길이 없어진다.
+ *
+ * 이미 있는 id 는 뺀다. 목록이 사라졌으면(`undefined`, 그사이 채널을 나갔다) 붙일 곳이 없다.
  */
 export function prependOlder(
   page: MessagePage | undefined,
   older: MessagePage,
+  cursor: string,
 ): MessagePage | undefined {
-  if (!page) return page
+  if (!page || page.next_cursor !== cursor) return page
   const known = new Set(page.items.map((item) => item.id))
   return {
     items: [...older.items.filter((item) => !known.has(item.id)), ...page.items],

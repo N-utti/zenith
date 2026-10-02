@@ -150,7 +150,8 @@ export function ChatPage() {
             )}
           </header>
 
-          <MessageList channelId={channelId} mentionNames={mentionNames} />
+          {/* 채널마다 새로 만든다. 과거를 받는 중이라는 표시와 스크롤 자리가 옆 채널로 새지 않게. */}
+          <MessageList key={channelId} channelId={channelId} mentionNames={mentionNames} />
 
           <div className="px-4">
             <TypingLine names={typingByChannel[channelId] ?? []} />

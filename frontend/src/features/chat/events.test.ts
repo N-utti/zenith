@@ -44,27 +44,36 @@ describe('appendMessage', () => {
 describe('prependOlder', () => {
   it('더 과거 한 쪽을 앞에 붙이고 커서를 그 쪽의 것으로 바꾼다', () => {
     const page = { items: [message('m3'), message('m4')], next_cursor: 'c-3' }
-    const next = prependOlder(page, { items: [message('m1'), message('m2')], next_cursor: 'c-1' })
+    const older = { items: [message('m1'), message('m2')], next_cursor: 'c-1' }
+    const next = prependOlder(page, older, 'c-3')
     expect(next?.items.map((m) => m.id)).toEqual(['m1', 'm2', 'm3', 'm4'])
     expect(next?.next_cursor).toBe('c-1')
   })
 
   it('맨 처음까지 받으면 커서가 비어 버튼이 사라진다', () => {
     const page = { items: [message('m2')], next_cursor: 'c-2' }
-    expect(
-      prependOlder(page, { items: [message('m1')], next_cursor: null })?.next_cursor,
-    ).toBeNull()
+    const next = prependOlder(page, { items: [message('m1')], next_cursor: null }, 'c-2')
+    expect(next?.next_cursor).toBeNull()
   })
 
   it('이미 있는 메시지는 두 번 넣지 않는다', () => {
     // 과거를 받는 사이 목록을 다시 받으면 두 쪽이 겹친다.
     const page = { items: [message('m2'), message('m3')], next_cursor: 'c-2' }
-    const next = prependOlder(page, { items: [message('m1'), message('m2')], next_cursor: null })
-    expect(next?.items.map((m) => m.id)).toEqual(['m1', 'm2', 'm3'])
+    const older = { items: [message('m1'), message('m2')], next_cursor: null }
+    expect(prependOlder(page, older, 'c-2')?.items.map((m) => m.id)).toEqual(['m1', 'm2', 'm3'])
+  })
+
+  it('받는 사이 목록이 다시 받아졌으면 붙이지 않는다', () => {
+    // 100개까지 붙여 둔 상태에서 더 과거(c-100 앞)를 청했는데, 응답 전에 목록이 최근 50개로
+    // 돌아갔다(커서 c-50). 붙이면 51~100번째가 빈 채로 커서만 넘어간다.
+    const page = { items: [message('m151')], next_cursor: 'c-50' }
+    const older = { items: [message('m1')], next_cursor: 'c-150' }
+    expect(prependOlder(page, older, 'c-100')).toBe(page)
   })
 
   it('목록이 사라졌으면 아무것도 하지 않는다', () => {
-    expect(prependOlder(undefined, { items: [message('m1')], next_cursor: null })).toBeUndefined()
+    const older = { items: [message('m1')], next_cursor: null }
+    expect(prependOlder(undefined, older, 'c-1')).toBeUndefined()
   })
 })
 
