@@ -11,7 +11,7 @@ const attachment = (name: string) => ({
 })
 
 it('메시지의 첨부를 한 줄씩 꺼내고, 올린 사람과 시각은 메시지의 것이다', () => {
-  const files = chatFiles({ id: 'c-1', name: '개발', is_dm: false }, [
+  const files = chatFiles({ id: 'c-1', name: '개발', is_dm: false, is_private: false }, [
     { author, attachments: null, created_at: '2026-10-01T01:00:00Z' },
     {
       author,
@@ -35,12 +35,12 @@ it('비공개 채널과 DM 의 파일은 열람 범위가 멤버로 좁혀진다
   const message = [
     { author, attachments: [attachment('a.pdf')], created_at: '2026-10-01T02:00:00Z' },
   ]
-  const scope = (channel: { is_dm: boolean; is_private?: boolean }) =>
+  const scope = (channel: { is_dm: boolean; is_private: boolean }) =>
     chatFiles({ id: 'c-1', name: '방', ...channel }, message)[0].scope
-  expect(scope({ is_dm: false })).toBe('all')
   expect(scope({ is_dm: false, is_private: false })).toBe('all')
   expect(scope({ is_dm: false, is_private: true })).toBe('members')
-  expect(scope({ is_dm: true })).toBe('members')
+  // DM 은 서버가 `is_private: false` 로 준다.
+  expect(scope({ is_dm: true, is_private: false })).toBe('members')
 })
 
 const stored = (extra: Partial<StoredFile>): StoredFile => ({
