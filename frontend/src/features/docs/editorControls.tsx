@@ -19,6 +19,7 @@ import type { LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { BLOCK_BY_KEY, EDITOR_BLOCKS } from './editorBlocks'
 import { ALIGNMENTS, HIGHLIGHT_COLORS, TEXT_COLORS } from './editorFormats'
+import { TableSizePicker } from './TableSizePicker'
 
 /* ── 공통 버튼 ──────────────────────────────────────────────── */
 
@@ -115,12 +116,18 @@ export function ToolMenu({
   label,
   trigger,
   align = 'start',
+  hover = false,
   className,
   children,
 }: {
   label: string
   trigger: ReactNode
   align?: 'start' | 'end'
+  /**
+   * 포인터를 올리기만 해도 연다(떠나면 닫는다). 누르러 가는 길이 짧아야 하는 자리에만 쓴다.
+   * 서식 툴바처럼 포인터가 자주 지나가는 줄에 쓰면 스칠 때마다 열린다.
+   */
+  hover?: boolean
   className?: string
   children: (close: () => void) => ReactNode
 }) {
@@ -128,6 +135,35 @@ export function ToolMenu({
   const [spot, setSpot] = useState<ReturnType<typeof menuPosition> | null>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
+  /** 포인터를 올려서 연 것인지. 그때는 포커스를 메뉴로 옮기지 않는다. */
+  const openedByHover = useRef(false)
+  const hoverTimer = useRef<number | undefined>(undefined)
+
+  useEffect(() => () => window.clearTimeout(hoverTimer.current), [])
+
+  /**
+   * 포인터가 들어오고 나갈 때. 둘 다 잠깐 기다린다. 여는 쪽은 지나가다 스친 것을 거르고, 닫는 쪽은
+   * 버튼에서 메뉴로 건너가는 틈(4px)에서 닫히지 않게 한다. 메뉴는 body 로 나가 있지만 React 트리로는
+   * 이 상자의 자식이라, 메뉴 위에 있는 동안은 나간 것으로 치지 않는다.
+   */
+  const onHover = (entered: boolean) => {
+    window.clearTimeout(hoverTimer.current)
+    if (entered === open) return
+    hoverTimer.current = window.setTimeout(
+      () => {
+        // 기다리는 사이에 트리거가 사라졌으면 열지 않는다(행 옆 버튼은 커서가 표를 떠나면 숨는다).
+        // 잴 자리가 없어 메뉴가 화면 구석에 뜬다.
+        if (entered && !triggerRef.current?.isConnected) return
+        // 포커스가 메뉴 안에 있으면 포인터가 떠나도 닫지 않는다. 눌러서 쓰는 중이라, 닫으면 포커스가
+        // 갈 곳을 잃고 편집기의 커서도 사라진다. 그때는 전처럼 바깥 클릭·Esc 로 닫는다.
+        if (!entered && menuRef.current?.contains(document.activeElement)) return
+        openedByHover.current = entered
+        if (entered) setSpot(null)
+        setOpen(entered)
+      },
+      entered ? 100 : 150,
+    )
+  }
 
   /** 닫고 포커스를 트리거로 되돌린다. 키보드로 들어왔으면 되돌려 줘야 이어서 쓸 수 있다. */
   const close = (focusTrigger = false) => {
@@ -145,8 +181,9 @@ export function ToolMenu({
     setSpot(menuPosition(button.getBoundingClientRect(), menu.getBoundingClientRect(), align))
     // 포털로 나간 메뉴는 트리거의 다음 형제가 아니라서 Tab 으로 들어갈 수 없다. 열면서
     // 첫 항목으로 옮겨 준다. 입력칸이 있는 메뉴(링크)는 그쪽 autoFocus 가 이미 가져갔으므로
-    // 뺏지 않는다.
-    if (!menu.contains(document.activeElement)) {
+    // 뺏지 않는다. 포인터를 올려서 연 것도 옮기지 않는다. 글을 치는 중에 버튼이 포인터 밑으로
+    // 들어와 열렸다면, 포커스를 가져가는 순간 치던 글이 끊긴다.
+    if (!openedByHover.current && !menu.contains(document.activeElement)) {
       menu.querySelector<HTMLElement>('[role="menuitem"]')?.focus()
     }
   }, [open, align])
@@ -163,7 +200,9 @@ export function ToolMenu({
       if (!inside(e.target)) setOpen(false)
     }
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') close(true)
+      // 포커스가 메뉴 안에 있을 때만 트리거로 되돌린다. 포인터를 올려서 연 메뉴는 포커스가
+      // 편집기에 그대로 있어, 되돌리면 치던 자리를 뺏는다.
+      if (e.key === 'Escape') close(!!menuRef.current?.contains(document.activeElement))
     }
     const onFocusOut = (e: FocusEvent) => {
       // Tab 으로 메뉴 밖으로 나가면 닫는다. 메뉴는 body 끝에 있어서 마지막 항목에서 Tab 을
@@ -193,7 +232,11 @@ export function ToolMenu({
   }, [open])
 
   return (
-    <div className="relative shrink-0">
+    <div
+      className="relative shrink-0"
+      onMouseEnter={hover ? () => onHover(true) : undefined}
+      onMouseLeave={hover ? () => onHover(false) : undefined}
+    >
       <button
         ref={triggerRef}
         type="button"
@@ -203,6 +246,15 @@ export function ToolMenu({
         aria-haspopup="menu"
         onMouseDown={(e) => e.preventDefault()}
         onClick={() => {
+          window.clearTimeout(hoverTimer.current)
+          // 포인터를 올려 이미 열린 것을 누르면 닫지 않는다. 열려고 누른 것이다. 포커스만 메뉴로
+          // 옮겨 키보드로 이어 쓸 수 있게 한다.
+          if (open && openedByHover.current) {
+            openedByHover.current = false
+            menuRef.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus()
+            return
+          }
+          openedByHover.current = false
           // 열 때 지난번 자리를 지운다. 안 지우면 다시 열리는 첫 프레임에 이전 자리로
           // 한 번 번쩍인 뒤 제자리를 찾는다. 트리거가 툴바 가로 스크롤을 따라 움직인다.
           if (!open) setSpot(null)
@@ -377,25 +429,37 @@ function lastOfTable(editor: Editor): Partial<Record<TableCommand, boolean>> {
 }
 
 /**
- * 표 넣기와 행·열 편집. 표 밖에서는 넣기만, 표 안에서는 행·열을 더하고 지운다.
- * 열 너비는 여기가 아니라 표의 세로선을 끌어 바꾼다(editorExtensions 의 resizable).
+ * 표 넣기와 행·열 편집. 표 밖에서는 크기를 골라 넣고, 표 안에서는 행·열을 더하고 지운다.
+ * 열 너비는 여기가 아니라 표의 세로선을 끌어 바꾼다(tableExtensions 의 resizable).
+ * 서식 툴바와, 커서가 든 행 옆에 뜨는 버튼(TableRowMenu)이 같이 쓴다.
  */
-export function TableMenu({ editor, inTable }: { editor: Editor; inTable: boolean }) {
+export function TableMenu({
+  editor,
+  inTable,
+  label = '표',
+  hover,
+}: {
+  editor: Editor
+  inTable: boolean
+  label?: string
+  /** 포인터를 올리기만 해도 연다(ToolMenu 의 hover). 행 옆 버튼이 쓴다. */
+  hover?: boolean
+}) {
   return (
     <ToolMenu
-      label="표"
-      className="w-48"
+      label={label}
+      hover={hover}
+      // 손가락 기기에서는 표 넣기 격자의 칸이 커져 w-48 을 넘는다. 내용에 맞춰 늘어나게 둔다.
+      className="w-fit min-w-48"
       trigger={<Table className={cn('size-4', inTable && 'text-accent')} />}
     >
       {(close) => {
         if (!inTable) {
           return (
-            <MenuItem
-              icon={Table}
-              label="표 넣기"
-              hint="3x3"
-              onClick={() => {
-                BLOCK_BY_KEY.table.run(editor)
+            <TableSizePicker
+              onPick={(rows, cols) => {
+                // 첫 행은 머리 행이다. 슬래시 메뉴가 넣는 표와 같다.
+                editor.chain().focus().insertTable({ rows, cols, withHeaderRow: true }).run()
                 close()
               }}
             />
