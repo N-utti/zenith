@@ -446,6 +446,40 @@
         }
       }
     },
+    "/api/me/notifications/delete": {
+      "post": {
+        "tags": [
+          "me"
+        ],
+        "summary": "알림 지우기 {ids[]} — 내 알림만, 남의 것·없는 id 는 건너뛴다 (04 밖, 이슈 #269)",
+        "operationId": "delete_notifications_api_me_notifications_delete_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReadIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/me/preferences": {
       "get": {
         "tags": [
