@@ -124,6 +124,11 @@ PR 본문에 흩어져 있던 것을 한곳에 모았다. 위는 **없어서 못
 - **사람 목록의 등급**(#193): 새 기안 참조자를 임원·사원 두 줄로 가르려면 `GET /people` 의
   `PersonOut` 에 `role` 이 있어야 한다. 목만 먼저 주고, 서버가 안 주면 가르지 않고 한 줄로 보인다.
   넣으면 로그인한 누구나 전원의 등급을 보게 되므로 공개 범위는 백엔드가 정한다.
+- **문서 댓글 삭제**(#253): 서버의 `/docs/{id}/comments` 는 목록과 등록뿐이다. 프론트가 가정한
+  모양은 `DELETE /docs/{id}/comments/{comment_id}` → 204, 쓴 사람이 아니면 403, 없는 댓글과 휴지통
+  문서는 404. 목만 먼저 주고, 휴지통 버튼은 목이 켜져 있을 때만 보인다(`features/docs/CommentPanel.tsx`
+  의 `COMMENT_DELETE_ENABLED`). 임원이 남의 댓글을 지울 수 있는지, 그 댓글의 멘션 알림을 같이
+  지울지는 백엔드가 정한다.
 
 자료실(#226)도 백엔드가 요청한 모양 그대로 넣었다(#240, `GET /archive?limit=`). 운영 빌드에서도
 메뉴가 뜬다. 백엔드가 정한 것: 열람 권한은 파일마다 매기지 않고 원래 자리를 따른다(공개 채널과
@@ -241,6 +246,7 @@ GET   /api/docs/:id                    메타 (+ seedHtml, 아래 참조)
 PATCH /api/docs/:id                    제목·수정시각 투영
 GET   /api/docs/:id/comments
 POST  /api/docs/:id/comments
+DELETE /api/docs/:id/comments/:commentId   쓴 사람만. 실서버에 아직 없다(#253)
 GET   /api/docs/:id/versions        목록에 스냅샷은 없다. 내용은 /restore 로 한 건씩
 POST  /api/docs/:id/versions        { snapshot, label? } → 스냅샷까지 실린 버전
 POST  /api/docs/:id/restore         { version_id } → 그 버전의 스냅샷. 서버는 되돌리지 않는다

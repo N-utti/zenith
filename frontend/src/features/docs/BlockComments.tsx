@@ -222,8 +222,9 @@ function BlockCommentPopover({
     inputRef.current?.focus({ preventScroll: true })
   }, [])
 
-  // 열릴 때와 새 댓글이 실릴 때: 목록은 끝(가장 새 댓글)으로, 창이 화면 아래로 잘렸으면 보이는
+  // 열릴 때와 댓글 수가 바뀔 때: 목록은 끝(가장 새 댓글)으로, 창이 화면 아래로 잘렸으면 보이는
   // 데까지 본문을 굴린다. 댓글이 실리면 창이 그만큼 길어진다.
+  // ponytail: 지워서 줄 때도 끝으로 간다. 목록이 창 높이를 넘을 만큼 길 때만 보인다.
   useEffect(() => {
     const list = listRef.current
     if (list) list.scrollTop = list.scrollHeight
@@ -281,7 +282,14 @@ function BlockCommentPopover({
       {comments.length > 0 && (
         <div ref={listRef} className="max-h-64 space-y-2 overflow-y-auto px-4 pt-3">
           {comments.map((comment) => (
-            <CommentRow key={comment.id} comment={comment} names={names} />
+            <CommentRow
+              key={comment.id}
+              docId={docId}
+              comment={comment}
+              names={names}
+              // 지운 줄은 곧 사라진다. 초점이 body 로 떨어지면 Esc 로 이 창을 닫을 수 없다.
+              onDelete={() => inputRef.current?.focus({ preventScroll: true })}
+            />
           ))}
         </div>
       )}

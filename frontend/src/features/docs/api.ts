@@ -269,6 +269,17 @@ export function useAddComment(docId: string) {
   })
 }
 
+export function useDeleteComment(docId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (commentId: string) =>
+      api<void>(`/docs/${docId}/comments/${commentId}`, { method: 'DELETE' }),
+    // 실패해도 다시 받는다. 다른 탭에서 이미 지운 댓글(404)이면 이 목록이 옛것이다.
+    // 다시 받기를 기다린다. 안 기다리면 줄이 사라지기 전에 버튼이 되살아나 한 번 더 눌린다.
+    onSettled: () => qc.invalidateQueries({ queryKey: docKeys.comments(docId) }),
+  })
+}
+
 /** 휴지통 목록. 지운 지 최근 순으로 서버가 정렬해 준다. */
 export function useTrash() {
   return useQuery({
