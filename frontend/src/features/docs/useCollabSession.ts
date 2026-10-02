@@ -121,7 +121,11 @@ export function setCollabTitle(docId: string, title: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const doc = new Y.Doc({ gc: false })
     const provider = new WebsocketProvider(relayUrl(), docId, doc)
+    // 이 연결은 접속자가 아니다. 그대로 두면 빈 상태가 나가서, 그 문서를 보고 있는 사람의
+    // 접속자 줄에 「알 수 없음」 한 명이 잠깐 떴다 사라진다. 소켓이 열리기 전에 비운다.
+    provider.awareness.setLocalState(null)
     let done = false
+    let written = false
     const finish = (error?: Error) => {
       if (done) return
       done = true
@@ -131,15 +135,23 @@ export function setCollabTitle(docId: string, title: string): Promise<void> {
       if (error) reject(error)
       else resolve()
     }
-    const timeout = window.setTimeout(
-      () => finish(new Error('문서 서버에 연결하지 못해 이름을 바꾸지 못했습니다.')),
-      TITLE_SYNC_WAIT_MS,
+    const unreachable = new Error('문서 서버에 연결하지 못해 이름을 바꾸지 못했습니다.')
+    const timeout = window.setTimeout(() => finish(unreachable), TITLE_SYNC_WAIT_MS)
+    // 서버가 거절한 연결(로그인이 풀렸다 4401, 문서가 없거나 휴지통에 있다 4404)은 다시 붙어도
+    // 같다(y-websocket 은 44xx 를 영구 종료로 보고 `closed` 를 낸다). 5초를 기다리게 하지 않는다.
+    provider.on('closed', () =>
+      finish(new Error('이 문서의 이름을 바꿀 수 없습니다. 지워졌거나 로그인이 풀렸습니다.')),
     )
     provider.on('sync', (synced: boolean) => {
-      if (!synced || done) return
+      if (!synced || done || written) return
+      written = true
       window.clearTimeout(timeout)
       doc.getMap<string>('meta').set('title', title)
-      window.setTimeout(() => finish(), TITLE_FLUSH_MS)
+      // 그사이 끊겼으면 제목이 서버에 못 갔다. 성공으로 넘기면 서버 사본만 새 이름이 된다.
+      window.setTimeout(
+        () => finish(provider.wsconnected ? undefined : unreachable),
+        TITLE_FLUSH_MS,
+      )
     })
   })
 }

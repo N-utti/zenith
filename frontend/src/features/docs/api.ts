@@ -133,8 +133,10 @@ export function useRenameDoc() {
       await setCollabTitle(id, title)
       return api<DocSummary>(`/docs/${id}`, { method: 'PATCH', body: JSON.stringify({ title }) })
     },
-    onSuccess: (doc) => {
-      qc.setQueryData(docKeys.detail(doc.id), doc)
+    onSuccess: (doc) => qc.setQueryData(docKeys.detail(doc.id), doc),
+    // 실패해도 목록은 다시 받는다. Y.Doc 까지는 바뀌고 서버 사본 맞추기만 실패한 경우, 실서버는
+    // 릴레이가 닫히며 제목을 스스로 맞춘다(`yjs.py` 의 `save_room`). 트리가 옛 이름으로 남으면 안 된다.
+    onSettled: () => {
       void qc.invalidateQueries({ queryKey: docKeys.tree })
       void qc.invalidateQueries({ queryKey: homeKeys.home })
     },
