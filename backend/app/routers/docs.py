@@ -663,3 +663,48 @@ async def create_comment(
         body=comment.body,
         created_at=comment.created_at,
     )
+
+
+@router.delete(
+    "/docs/{id}/comments/{comment_id}",
+    status_code=204,
+    responses={403: {"description": "남의 댓글"}, 404: {"description": "없는 문서·댓글, 휴지통 문서"}},
+    summary="댓글 삭제 — 쓴 사람만. 그 댓글의 멘션 알림도 같이 지운다 (이슈 #253)",
+)
+async def delete_comment(
+    id: uuid.UUID,
+    comment_id: uuid.UUID,
+    request: Request,
+    user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    doc = await _get_doc(db, id)  # 휴지통 문서는 등록과 같이 404
+    comment = await db.get(DocComment, comment_id)
+    if comment is None or comment.doc_id != doc.id:
+        raise ApiError(404, "NOT_FOUND", "없는 댓글입니다.")
+    if comment.author_id != user.id:
+        audit.record(
+            db,
+            "acl.denied",
+            request=request,
+            actor_id=user.id,
+            target_id=doc.id,
+            detail={"path": request.url.path, "comment_id": str(comment.id)},
+        )
+        await db.commit()
+        raise ApiError(403, "FORBIDDEN", "내 댓글만 지울 수 있습니다.")
+    # 답글 구조가 없어 자리표시 없이 행을 지운다. 알림을 눌러 올 곳이 없어지므로 멘션 알림도 함께.
+    await db.execute(
+        delete(Notification).where(Notification.payload["comment_id"].astext == str(comment.id))
+    )
+    await db.delete(comment)
+    audit.record(
+        db,
+        "docs.comment_deleted",
+        request=request,
+        actor_id=user.id,
+        target_id=doc.id,
+        detail={"comment_id": str(comment.id), "preview": comment.body[:120]},
+    )
+    await db.commit()
+    return Response(status_code=204)
