@@ -443,7 +443,7 @@ async def test_comments_and_mentions(client: AsyncClient, users: Users, app_db) 
     )
     assert r.status_code == 201
     c = r.json()
-    assert set(c) == {"id", "block_id", "author", "body", "created_at"}
+    assert set(c) == {"id", "block_id", "author", "body", "created_at", "edited_at"}
     assert (c["block_id"], c["author"]["name"]) == ("b-1", "김수진")
     await client.post(url, json={"body": "두 번째"}, headers=csrf(client))
 
@@ -504,6 +504,53 @@ async def test_delete_comment_author_only(client: AsyncClient, users: Users, app
     assert r.status_code == 404
     await client.delete(f"/api/docs/{doc['id']}", headers=csrf(client))  # 휴지통
     assert (await client.delete(f"{url}/{keep['id']}", headers=csrf(client))).status_code == 404
+
+
+async def test_edit_comment_author_only(client: AsyncClient, users: Users, app_db) -> None:
+    """이슈 #274: 쓴 사람만 고친다(남의 것 403 + acl.denied). 그대로면 edited_at 없음, 고치면 edited_at·알림 미리보기·감사."""
+    root = await _root(app_db)
+    await login(client, "sujin@zenith.co.kr")
+    doc = await _doc(client, root.id)
+    url = f"/api/docs/{doc['id']}/comments"
+    mine = (await client.post(url, json={"body": "@박동현 처음"}, headers=csrf(client))).json()
+    assert mine["edited_at"] is None
+
+    await login(client, "donghyun@zenith.co.kr")
+    r = await client.patch(f"{url}/{mine['id']}", json={"body": "남이"}, headers=csrf(client))
+    assert (r.status_code, r.json()["code"]) == (403, "FORBIDDEN")
+    denied = (
+        await app_db.execute(select(AuditEvent).where(AuditEvent.kind == "acl.denied"))
+    ).scalar_one()
+    assert denied.detail["comment_id"] == mine["id"]
+
+    await login(client, "sujin@zenith.co.kr")
+    h = csrf(client)
+    r = await client.patch(f"{url}/{mine['id']}", json={"body": " @박동현 처음 "}, headers=h)
+    assert r.status_code == 200 and r.json()["edited_at"] is None  # 그대로면 고친 것이 아니다
+    assert (
+        await client.patch(f"{url}/{mine['id']}", json={"body": "  "}, headers=h)
+    ).status_code == 422
+    r = await client.patch(f"{url}/{mine['id']}", json={"body": "x", "block_id": "b"}, headers=h)
+    assert r.status_code == 422  # block_id 는 못 바꾼다
+    r = await client.patch(f"{url}/{mine['id']}", json={"body": " 고침 @최재호 "}, headers=h)
+    assert r.status_code == 200, r.text
+    assert (r.json()["body"], r.json()["block_id"]) == ("고침 @최재호", None)
+    assert r.json()["edited_at"] is not None and r.json()["created_at"] == mine["created_at"]
+    listed = (await client.get(url)).json()["items"]
+    assert (listed[0]["body"], listed[0]["edited_at"]) == ("고침 @최재호", r.json()["edited_at"])
+    notes = list((await app_db.execute(select(Notification))).scalars())
+    assert [(n.user_id, n.payload["preview"]) for n in notes] == [(users.lead.id, "고침 @최재호")]
+    edited = (
+        await app_db.execute(select(AuditEvent).where(AuditEvent.kind == "docs.comment_edited"))
+    ).scalar_one()
+    assert (edited.actor_id, edited.detail["before"]) == (users.member.id, "@박동현 처음")
+    assert (
+        await client.patch(f"{url}/{uuid.uuid4()}", json={"body": "x"}, headers=h)
+    ).status_code == 404
+    await client.delete(f"/api/docs/{doc['id']}", headers=h)  # 휴지통
+    assert (
+        await client.patch(f"{url}/{mine['id']}", json={"body": "x"}, headers=h)
+    ).status_code == 404
 
 
 async def test_purge_trash_after_30_days(client: AsyncClient, users: Users, app_db) -> None:
