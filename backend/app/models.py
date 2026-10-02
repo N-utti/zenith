@@ -308,6 +308,22 @@ class Post(Base):
     )
 
 
+class PostComment(Base):
+    """게시글 댓글(03 에 없는 표, 2026-10-02 — README 33). 문서 댓글에서 블록 칸을 뺀 모양. 글이 지워지면 DB 가 같이 지운다."""
+
+    __tablename__ = "post_comments"
+    __table_args__ = (Index("idx_post_comments_post", "post_id", "created_at"),)
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    post_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("posts.id", ondelete="CASCADE"), nullable=False
+    )
+    author_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = created_at_col()
+    edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class Todo(Base):
     __tablename__ = "todos"
     __table_args__ = (Index("idx_todos_user", "user_id", "created_at"),)

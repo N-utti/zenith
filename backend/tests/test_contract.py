@@ -57,6 +57,8 @@ CONTRACT_PATHS = {
     "/api/boards",
     "/api/boards/{id}/posts",
     "/api/posts/{id}",
+    "/api/posts/{id}/comments",
+    "/api/posts/{id}/comments/{comment_id}",
     "/api/search",
     # §8 AI
     "/api/ai/models",
