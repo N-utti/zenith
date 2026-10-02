@@ -1,6 +1,6 @@
 import { useRef, useState, type ReactNode } from 'react'
-import { NavLink, useLocation } from 'react-router'
-import { AtSign, Lock, Pencil, Plus, X } from 'lucide-react'
+import { NavLink, useLocation, useMatch } from 'react-router'
+import { AtSign, ChevronDown, ChevronRight, Lock, Pencil, Plus, X } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { useFocusTrap } from '@/lib/useFocusTrap'
 import { SECONDARY_NAV, TOP_NAV, visibleNav, type NavItem } from '@/app/navigation'
@@ -22,10 +22,65 @@ const ROW = 'flex items-center gap-2 rounded-md px-2.5 py-1.5 text-[13.5px] tran
 const ROW_IDLE = 'text-muted hover:bg-surface-hover hover:text-fg'
 const ROW_ACTIVE = 'bg-accent-soft text-accent font-semibold'
 
-function SectionLabel({ children, action }: { children: ReactNode; action?: ReactNode }) {
+const SECTIONS_KEY = 'zenith.sidebarSectionsCollapsed'
+
+/**
+ * 사용자가 접어 둔 구획. 문서 트리의 폴더 펼침과 같은 까닭으로 브라우저에 남긴다. AppLayout 이
+ * bleed 유무로 두 벌이라 컴포넌트 상태만으로는 화면을 옮길 때마다 다시 펼쳐진다.
+ */
+const collapsedSections = readCollapsedSections()
+
+function readCollapsedSections(): Set<string> {
+  try {
+    const raw: unknown = JSON.parse(localStorage.getItem(SECTIONS_KEY) ?? '[]')
+    return new Set(Array.isArray(raw) ? raw.filter((id) => typeof id === 'string') : [])
+  } catch {
+    return new Set()
+  }
+}
+
+function useSectionCollapsed(id: string) {
+  const [collapsed, setCollapsed] = useState(() => collapsedSections.has(id))
+  const toggle = () => {
+    const next = !collapsed
+    setCollapsed(next)
+    if (next) collapsedSections.add(id)
+    else collapsedSections.delete(id)
+    try {
+      localStorage.setItem(SECTIONS_KEY, JSON.stringify([...collapsedSections]))
+    } catch {
+      // 저장 못 해도 이번 마운트의 접힘은 유지된다.
+    }
+  }
+  return [collapsed, toggle] as const
+}
+
+/** 구획 제목. 제목을 누르면 그 구획이 접힌다. 화살표는 문서 트리의 폴더 줄과 같은 모양이다. */
+function SectionLabel({
+  children,
+  action,
+  collapsed,
+  onToggle,
+}: {
+  children: ReactNode
+  action?: ReactNode
+  collapsed: boolean
+  onToggle: () => void
+}) {
+  const Chevron = collapsed ? ChevronRight : ChevronDown
   return (
-    <div className="text-subtle mt-4 mb-1.5 flex items-center gap-1 px-2.5 text-[11px] font-bold tracking-[0.08em]">
-      <span className="flex-1">{children}</span>
+    // 왼쪽 여백은 화살표가 문서 트리의 폴더 화살표와 같은 세로줄에 서게 맞춘 값이다.
+    <div className="text-subtle mt-4 mb-1.5 flex items-center gap-1 pr-2.5 pl-1 text-[11px] font-bold tracking-[0.08em]">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={!collapsed}
+        // 글자가 작아 줄 높이만으로는 손가락에 빗나간다. 위아래로 6px 씩 넓게 받는다.
+        className="hover:text-fg relative flex min-w-0 flex-1 cursor-pointer items-center gap-1 rounded text-left transition-colors before:absolute before:inset-x-0 before:-inset-y-1.5"
+      >
+        <Chevron className="size-3 shrink-0" />
+        {children}
+      </button>
       {action}
     </div>
   )
@@ -115,32 +170,49 @@ function ChannelRow({ channel, onNavigate }: { channel: ChatChannel; onNavigate?
   )
 }
 
-function ChannelSection({ onNavigate }: { onNavigate?: () => void }) {
-  // 채팅은 MSW가 아니라 개발 서버로 간다. 안 떠 있으면 섹션을 통째로 접는다.
+export function ChannelSection({ onNavigate }: { onNavigate?: () => void }) {
+  // 채팅은 MSW가 아니라 개발 서버로 간다. 안 떠 있으면 구획을 통째로 그리지 않는다.
   // 데스크톱 채팅 화면에는 방 목록이 따로 없다. 이 섹션이 곧 방 목록이라 DM 도 여기 둔다.
   const { data } = useChannels()
   const [creating, setCreating] = useState<'channel' | 'dm' | null>(null)
+  const [channelsCollapsed, toggleChannels] = useSectionCollapsed('channels')
+  const [dmsCollapsed, toggleDms] = useSectionCollapsed('dms')
+  const activeId = useMatch('/chat/:channelId')?.params.channelId
   const channels = (data?.items ?? []).filter((channel) => !channel.is_dm)
   const dms = (data?.items ?? []).filter((channel) => channel.is_dm)
   if (data === undefined) return null
 
+  // 접어도 안 읽은 방과 지금 보고 있는 방은 남긴다. 통째로 숨기면 새 메시지가 온 줄 모른다.
+  const shown = (rooms: ChatChannel[], collapsed: boolean) =>
+    collapsed ? rooms.filter((room) => room.unread > 0 || room.id === activeId) : rooms
+
   return (
     <>
-      <SectionLabel action={<AddButton label="새 채널" onClick={() => setCreating('channel')} />}>
+      <SectionLabel
+        collapsed={channelsCollapsed}
+        onToggle={toggleChannels}
+        action={<AddButton label="새 채널" onClick={() => setCreating('channel')} />}
+      >
         채널
       </SectionLabel>
-      {channels.length === 0 && (
+      {!channelsCollapsed && channels.length === 0 && (
         <p className="text-subtle px-3 py-1 text-xs">아직 채널이 없습니다.</p>
       )}
-      {channels.map((channel) => (
+      {shown(channels, channelsCollapsed).map((channel) => (
         <ChannelRow key={channel.id} channel={channel} onNavigate={onNavigate} />
       ))}
 
-      <SectionLabel action={<AddButton label="새 대화" onClick={() => setCreating('dm')} />}>
+      <SectionLabel
+        collapsed={dmsCollapsed}
+        onToggle={toggleDms}
+        action={<AddButton label="새 대화" onClick={() => setCreating('dm')} />}
+      >
         다이렉트 메시지
       </SectionLabel>
-      {dms.length === 0 && <p className="text-subtle px-3 py-1 text-xs">아직 대화가 없습니다.</p>}
-      {dms.map((channel) => (
+      {!dmsCollapsed && dms.length === 0 && (
+        <p className="text-subtle px-3 py-1 text-xs">아직 대화가 없습니다.</p>
+      )}
+      {shown(dms, dmsCollapsed).map((channel) => (
         <ChannelRow key={channel.id} channel={channel} onNavigate={onNavigate} />
       ))}
 
@@ -163,11 +235,14 @@ function BoardSection({ onNavigate }: { onNavigate?: () => void }) {
   // 게시판 정의와 열람 권한은 서버가 준다. 프론트가 등급을 계산하지 않는다.
   const { data } = useBoards()
   const location = useLocation()
+  const [collapsed, toggle] = useSectionCollapsed('boards')
 
   return (
     <>
-      <SectionLabel>게시판</SectionLabel>
-      {(data?.items ?? []).map((board) => {
+      <SectionLabel collapsed={collapsed} onToggle={toggle}>
+        게시판
+      </SectionLabel>
+      {(collapsed ? [] : (data?.items ?? [])).map((board) => {
         const active = location.pathname.startsWith(`/board/${board.id}`)
 
         return (
@@ -191,6 +266,7 @@ function BoardSection({ onNavigate }: { onNavigate?: () => void }) {
 export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const { role } = useCurrentUser()
   const unreadNotifications = useUnreadNotificationCount()
+  const [docsCollapsed, toggleDocs] = useSectionCollapsed('docs')
 
   return (
     <div className="flex h-full flex-col">
@@ -204,8 +280,10 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
           />
         ))}
 
-        <SectionLabel>워크스페이스</SectionLabel>
-        <DocTree onNavigate={onNavigate} />
+        <SectionLabel collapsed={docsCollapsed} onToggle={toggleDocs}>
+          워크스페이스
+        </SectionLabel>
+        {!docsCollapsed && <DocTree onNavigate={onNavigate} />}
 
         <ChannelSection onNavigate={onNavigate} />
         <BoardSection onNavigate={onNavigate} />
