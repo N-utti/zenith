@@ -21,11 +21,14 @@ export type ChatMessage = Schema<'MessageOut'>
 /**
  * 백엔드 `ChannelOut`. DM 은 보는 사람에 따라 이름이 다르다. `name` 에 상대의 이름이 온다.
  *
- * `is_private` 는 **계약에 아직 없다**(README "백엔드에 요청한 것"). 개발 릴레이만 먼저 준다.
- * 서버가 안 주는 동안에는 비공개 채널을 만들 수 없다(`api.ts` 의 `supportsPrivate`).
+ * `is_private` 는 계약에 들어왔다(백엔드 #236). 명세에서는 늘 오는 값이다.
  * 비공개 채널은 만든 사람과 고른 사람만 멤버고, 멤버가 사람을 더하고 뺀다.
+ *
+ * ponytail: 여기서는 아직 «없을 수도 있는 값» 으로 둔다. 이 칸이 실려 오는지로 서버가 비공개
+ * 채널을 아는지를 가리는 코드(`api.ts` 의 `supportsPrivate`)와 그 테스트가 남아 있어서다.
+ * 그 판정은 이제 늘 참이다. 걷어 낼 때 이 타입도 명세 그대로(`Schema<'ChannelOut'>`)로 돌린다.
  */
-export type ChatChannel = Schema<'ChannelOut'> & { is_private?: boolean }
+export type ChatChannel = Omit<Schema<'ChannelOut'>, 'is_private'> & { is_private?: boolean }
 
 /**
  * 서버가 WebSocket 으로 밀어 주는 이벤트(04 §4.1). 봉투 키는 `ev` 이고 필드는 snake_case 다.
