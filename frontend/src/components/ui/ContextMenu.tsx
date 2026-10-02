@@ -38,50 +38,71 @@ export function ContextMenu({
   }, [at.x, at.y])
 
   useLayoutEffect(() => {
+    const menu = ref.current
     const opener = document.activeElement
-    ref.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus()
+    menu?.querySelector<HTMLElement>('[role="menuitem"]')?.focus()
     return () => {
+      // 초점이 아직 메뉴에 있을 때만 되돌린다. 이미 다른 데(검색 창 등)로 갔으면 뺏지 않는다.
       // 고른 항목이 대화상자를 열었으면 초점은 그쪽이 가져간다(이 뒤에 실행된다).
-      if (opener instanceof HTMLElement && opener.isConnected) opener.focus()
+      if (menu?.contains(document.activeElement) && opener instanceof HTMLElement) opener.focus()
     }
   }, [])
 
   useEffect(() => {
     const menu = ref.current
+    if (!menu) return
     const outside = (target: EventTarget | null) =>
-      !(target instanceof Node && menu?.contains(target))
+      !(target instanceof Node && menu.contains(target))
+    // 메뉴가 뜬 자리 밑에 있던 것(우클릭한 줄). 이것을 품은 영역이 구를 때만 닫는다.
+    const under = document.elementsFromPoint(at.x, at.y).find((el) => !menu.contains(el))
 
     const onPointerDown = (e: PointerEvent) => {
       if (outside(e.target)) onClose()
     }
+    // 초점이 메뉴 밖으로 가면(⌘K 검색 등) 닫는다. 열린 채 남으면 화살표·Enter 를 두 곳이 같이 받는다.
+    // 이벤트의 대상이 아니라 한 박자 뒤의 초점 자리로 판정한다. 개발 모드는 이펙트를 한 번 더 돌려
+    // 보는데, 그 정리 단계에서 초점이 연 자리로 갔다가 곧바로 메뉴로 돌아온다. 그 잠깐은 떠난 것이 아니다.
+    const onFocusIn = () =>
+      queueMicrotask(() => {
+        if (menu.isConnected && outside(document.activeElement)) onClose()
+      })
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' || e.key === 'Tab') return onClose()
+      if (e.key === 'Escape') {
+        // 메뉴만 닫는다. 뒤에 열린 서랍·대화상자까지 같은 Esc 로 닫히지 않게 여기서 멈춘다.
+        e.stopPropagation()
+        return onClose()
+      }
+      if (e.key === 'Tab') return onClose()
       if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return
       e.preventDefault()
-      const items = [...(menu?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [])]
+      const items = [...menu.querySelectorAll<HTMLElement>('[role="menuitem"]')]
       const i = items.findIndex((item) => item === document.activeElement)
       const next =
         e.key === 'ArrowDown' ? (i + 1) % items.length : i <= 0 ? items.length - 1 : i - 1
       items[next]?.focus()
     }
     const onScroll = (e: Event) => {
-      if (outside(e.target)) onClose()
+      // 잡아 둔 자리는 그 줄이 구르면 줄에서 떨어진다. 따라다니게 하는 것보다 닫는 쪽이 싸다.
+      // 상관없는 영역(답변이 흘러나오는 AI 대화, 새 메시지가 온 채팅)이 구르는 것은 무시한다.
+      if (under && e.target instanceof Node && e.target.contains(under)) onClose()
     }
 
     document.addEventListener('pointerdown', onPointerDown)
-    document.addEventListener('keydown', onKeyDown)
-    // 잡아 둔 자리는 화면이 움직이면 가리키던 줄에서 떨어진다. 따라다니게 하는 것보다 닫는 쪽이 싸다.
+    document.addEventListener('focusin', onFocusIn)
+    // 캡처로 듣는다. 다른 Esc 처리기(서랍·대화상자)보다 먼저 받아야 멈출 수 있다.
+    document.addEventListener('keydown', onKeyDown, true)
     document.addEventListener('scroll', onScroll, true)
     window.addEventListener('resize', onClose)
     window.addEventListener('blur', onClose)
     return () => {
       document.removeEventListener('pointerdown', onPointerDown)
-      document.removeEventListener('keydown', onKeyDown)
+      document.removeEventListener('focusin', onFocusIn)
+      document.removeEventListener('keydown', onKeyDown, true)
       document.removeEventListener('scroll', onScroll, true)
       window.removeEventListener('resize', onClose)
       window.removeEventListener('blur', onClose)
     }
-  }, [onClose])
+  }, [onClose, at.x, at.y])
 
   return createPortal(
     <div
@@ -119,7 +140,7 @@ export function ContextMenuItem({
       role="menuitem"
       onClick={onSelect}
       className={cn(
-        'hover:bg-surface-hover focus-visible:bg-surface-hover flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 text-left text-sm transition-colors outline-none',
+        'hover:bg-surface-hover flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 text-left text-sm transition-colors',
         danger ? 'text-danger' : 'text-fg',
       )}
     >

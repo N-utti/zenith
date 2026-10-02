@@ -374,7 +374,8 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
    */
   const move = (item: TreeItem, to: string | null) => {
     const moved = find(item)
-    if (!moved) return
+    // 앞 이동의 응답이 오기 전에는 트리가 아직 옛 모습이다. 그때 또 옮기면 되돌릴 자리를 틀리게 읽는다.
+    if (!moved || moveNode.isPending) return
     const from = 'folder_id' in moved ? moved.folder_id : moved.parent_id
     const dest = data?.folders.find((f) => f.id === to)?.title
 
@@ -418,7 +419,7 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
       const row = e.target.closest<HTMLElement>('[data-drag]')
       const id = row?.dataset.id
       if (!row || !id) return
-      // 앞 이동의 응답이 오기 전에는 줄이 아직 옛 자리에 있다. 그때 또 옮기면 되돌릴 자리를 틀리게 읽는다.
+      // 앞 이동이 끝나기 전에는 끌기도 시작하지 않는다(`move` 의 가드와 같은 이유).
       if (moveNode.isPending) return e.preventDefault()
       setDrag({ kind: row.dataset.drag === 'folder' ? 'folder' : 'doc', id })
       e.dataTransfer.setData(DRAG_TYPE, id)
@@ -527,6 +528,10 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
 
   const menuTarget = menu && find(menu.item)
   const movingTarget = moving && find(moving)
+  // 대상이 트리에서 사라졌으면(다른 사람이 지웠거나 옮겼다) 닫는다. 상태를 남겨 두면 그것이 다시
+  // 나타날 때 메뉴와 창이 옛 자리에 저절로 다시 뜬다.
+  if (data && menu && !menuTarget) setMenu(null)
+  if (data && moving && !movingTarget) setMoving(null)
 
   if (isPending) {
     return (
