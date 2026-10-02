@@ -4,6 +4,7 @@ import {
   addComment,
   addVersion,
   createDoc,
+  createFolder,
   docTree,
   findDoc,
   findVersion,
@@ -13,6 +14,7 @@ import {
   listVersions,
   purgeDoc,
   removeComment,
+  removeFolder,
   trashDoc,
   untrashDoc,
 } from './docsDb'
@@ -165,4 +167,25 @@ it('휴지통 목록은 limit 을 지킨다', () => {
   for (const doc of docs) trashDoc(doc, user)
   expect(listTrash(2)).toHaveLength(2)
   for (const doc of docs) purgeDoc(doc.id)
+})
+
+it('폴더는 비어 있을 때만 지워진다. 휴지통에 든 문서도 그 폴더의 것이다', () => {
+  const folder = createFolder({ title: '지울 폴더' })
+  const child = createFolder({ title: '안쪽 폴더', parent_id: folder.id })
+  const doc = createDoc(user, folder.id, '폴더 안 문서')
+
+  // 하위 폴더와 문서가 있으면 못 지운다.
+  expect(removeFolder(folder)).toBe('not_empty')
+  expect(removeFolder(child)).toBeNull()
+  expect(removeFolder(folder)).toBe('not_empty')
+
+  // 문서를 휴지통에 보내면 트리에서는 비어 보이지만, 되살릴 자리가 이 폴더라 아직 못 지운다.
+  trashDoc(doc, user)
+  expect(docTree().docs.some((d) => d.folder_id === folder.id)).toBe(false)
+  expect(removeFolder(folder)).toBe('has_trashed')
+
+  // 영구 삭제까지 하면 지워진다.
+  purgeDoc(doc.id)
+  expect(removeFolder(folder)).toBeNull()
+  expect(docTree().folders.some((f) => f.id === folder.id)).toBe(false)
 })

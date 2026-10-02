@@ -55,6 +55,7 @@ import {
   findFolder,
   findVersion,
   isDescendantFolder,
+  removeFolder,
   purgeDoc,
   trashDoc,
   untrashDoc,
@@ -1634,6 +1635,31 @@ data: ${JSON.stringify(data)}
         sort: typeof body.sort === 'number' ? body.sort : undefined,
       }),
     )
+  }),
+
+  // 폴더 지우기. 실서버에는 아직 없는 경로다(04 §3 의 폴더는 만들기와 고치기뿐). 프론트가 정한
+  // 가정: 빈 폴더만 지운다. 하위 폴더나 문서가 있으면 409, 휴지통에 그 폴더의 문서가 남아 있어도
+  // 409(되살릴 자리가 없어진다). 없는 폴더는 404, 성공은 204.
+  http.delete('/api/folders/:folderId', ({ params }) => {
+    if (!authenticate()) return unauthorized()
+
+    const folder = findFolder(String(params.folderId))
+    if (!folder) return notFound()
+
+    const blocked = removeFolder(folder)
+    if (blocked) {
+      return HttpResponse.json(
+        {
+          detail:
+            blocked === 'not_empty'
+              ? '안에 문서나 폴더가 있는 폴더는 지울 수 없습니다.'
+              : '휴지통에 이 폴더의 문서가 남아 있어 지울 수 없습니다. 되살려 옮기거나 영구 삭제한 뒤 지워 주세요.',
+          code: 'FOLDER_NOT_EMPTY',
+        },
+        { status: 409 },
+      )
+    }
+    return new HttpResponse(null, { status: 204 })
   }),
 
   // ── 문서 ──────────────────────────────────────────────────
