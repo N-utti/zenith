@@ -102,7 +102,8 @@ export function TableRowMenu({ editor }: { editor: Editor }) {
         options={OPTIONS}
         className="border-line bg-surface z-10 rounded-lg border shadow-sm"
       >
-        <TableMenu editor={editor} inTable label="표 편집" />
+        {/* 포인터만 올려도 열린다. 버튼이 작고 표 바로 옆이라 누르러 가는 길을 한 번 더 줄인다. */}
+        <TableMenu editor={editor} inTable label="표 편집" hover />
       </BubbleMenu>
     </>
   )
