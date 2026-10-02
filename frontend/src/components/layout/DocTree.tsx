@@ -1,22 +1,31 @@
-import { useMemo, useState, type DragEvent } from 'react'
+import { useMemo, useState, type DragEvent, type MouseEvent } from 'react'
 import { Link, NavLink, useLocation, useNavigate, useParams, useSearchParams } from 'react-router'
 import {
   ChevronDown,
   ChevronRight,
   CornerLeftUp,
+  ExternalLink,
   FilePlus2,
   FileText,
   Folder,
+  FolderInput,
   FolderOpen,
   FolderPlus,
+  Link2,
   Pencil,
   Plus,
+  Trash2,
 } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { RetryButton } from '@/components/ui/Card'
+import { ContextMenu, ContextMenuItem } from '@/components/ui/ContextMenu'
 import { useToast } from '@/components/ui/ToastContext'
 import { ApiError } from '@/lib/api'
+import { isDesktopShell } from '@/lib/desktop'
+import { serverOrigin } from '@/lib/serverOrigin'
 import { FolderNameModal } from '@/features/docs/FolderNameModal'
+import { MoveNodeModal } from '@/features/docs/MoveNodeModal'
+import { TrashDocModal } from '@/features/docs/TrashDocModal'
 import {
   useCreateDoc,
   useCreateFolder,
@@ -29,7 +38,7 @@ import {
   buildTree,
   canDrop,
   previewDocs,
-  type DragItem,
+  type TreeItem,
   type TreeNode,
 } from '@/features/docs/tree'
 
@@ -94,37 +103,48 @@ interface RowActions {
   dragId: string | null
   /** 끌고 있는 것이 지금 올라가 있는 놓을 자리. 그 폴더가 스스로를 강조한다. */
   over: string | null
+  /** 우클릭 메뉴가 열려 있는 문서·폴더의 id. 어느 줄의 메뉴인지 보이게 그 줄을 칠해 둔다. */
+  menuId: string | null
   onNavigate?: () => void
   onAddDoc: (folderId: string) => void
   onAddFolder: (parentId: string | null) => void
   onRename: (folderId: string, title: string) => void
 }
 
+/** 줄의 이름 링크. 지금 화면이거나, 올려 뒀거나, 이 줄의 메뉴가 열려 있을 때의 색. */
+const rowLink = (active: boolean, menuOpen: boolean) =>
+  active
+    ? 'bg-accent-soft text-accent font-semibold'
+    : menuOpen
+      ? 'bg-surface-hover text-fg'
+      : 'text-muted hover:bg-surface-hover hover:text-fg'
+
 function DocRow({
   node,
   depth,
-  dragging,
-  onNavigate,
+  actions,
 }: {
   node: TreeNode & { kind: 'doc' }
   depth: number
-  dragging: boolean
-  onNavigate?: () => void
+  actions: RowActions
 }) {
+  const { id } = node.doc
   return (
-    <div className={cn('flex items-center transition-opacity', dragging && 'opacity-40')}>
+    <div
+      // 줄 어디서든 우클릭하면 이 줄의 메뉴가 뜬다(`data-row`). 끄는 것은 이름 링크다.
+      data-row
+      className={cn('flex items-center transition-opacity', actions.dragId === id && 'opacity-40')}
+    >
       <span className="size-5 shrink-0" style={{ marginLeft: depth * 14 }} />
       <NavLink
-        to={`/docs/${node.doc.id}`}
-        onClick={onNavigate}
+        to={`/docs/${id}`}
+        onClick={actions.onNavigate}
         data-drag="doc"
-        data-id={node.doc.id}
+        data-id={id}
         className={({ isActive }) =>
           cn(
             'flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-[13.5px] transition-colors',
-            isActive
-              ? 'bg-accent-soft text-accent font-semibold'
-              : 'text-muted hover:bg-surface-hover hover:text-fg',
+            rowLink(isActive, actions.menuId === id),
           )
         }
       >
@@ -206,7 +226,7 @@ function FolderRow({
         actions.dragId === id && 'opacity-40',
       )}
     >
-      <div className="group/row flex items-center">
+      <div data-row className="group/row flex items-center">
         <button
           type="button"
           onClick={toggle}
@@ -234,9 +254,7 @@ function FolderRow({
           data-id={id}
           className={cn(
             'flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-[13.5px] font-medium transition-colors',
-            current
-              ? 'bg-accent-soft text-accent font-semibold'
-              : 'text-muted hover:bg-surface-hover hover:text-fg',
+            rowLink(current, actions.menuId === id),
           )}
         >
           <Icon className="size-3.5 shrink-0" strokeWidth={2} />
@@ -277,13 +295,7 @@ function FolderRow({
               ),
           )}
           {shownDocs.map((doc) => (
-            <DocRow
-              key={doc.id}
-              node={{ kind: 'doc', doc }}
-              depth={depth + 1}
-              dragging={actions.dragId === doc.id}
-              onNavigate={actions.onNavigate}
-            />
+            <DocRow key={doc.id} node={{ kind: 'doc', doc }} depth={depth + 1} actions={actions} />
           ))}
           {shownDocs.length < docs.length && (
             <div className="flex items-center">
@@ -336,9 +348,23 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
     setNameError(err instanceof ApiError ? err.message : fallback)
 
   /** 끌고 있는 것과, 그것이 올라가 있는 놓을 자리(`data-drop` 값). */
-  const [drag, setDrag] = useState<DragItem | null>(null)
+  const [drag, setDrag] = useState<TreeItem | null>(null)
   const [over, setOver] = useState<string | null>(null)
   const toRoot = !!drag && !!data && canDrop(drag, null, data)
+
+  /** 우클릭 메뉴가 열린 줄과 자리. `href` 는 그 줄 링크의 주소(새 탭으로 열 때 쓴다). */
+  const [menu, setMenu] = useState<{ item: TreeItem; x: number; y: number; href: string } | null>(
+    null,
+  )
+  /** 메뉴에서 고른 뒤 열리는 대화상자. 옮길 폴더 고르기와 휴지통 확인. */
+  const [moving, setMoving] = useState<TreeItem | null>(null)
+  const [trashing, setTrashing] = useState<{ id: string; title: string } | null>(null)
+
+  /** 지금 트리에서 그 문서·폴더. 그사이 지워졌거나 옮겨져 사라졌으면 없다. */
+  const find = (item: TreeItem) =>
+    item.kind === 'doc'
+      ? data?.docs.find((d) => d.id === item.id)
+      : data?.folders.find((f) => f.id === item.id)
 
   /**
    * 옮긴다. 잘못 놓기 쉬운 조작이고 트리는 전원이 같이 보는 것이라 토스트에 되돌리기를 단다.
@@ -346,12 +372,10 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
    * 결과는 `mutate` 의 콜백이 아니라 약속으로 받는다. 트리는 문서를 열고 닫을 때 다시 마운트되는데
    * (위 `expandedIds`) 콜백은 그 뒤로 불리지 않아, 되돌리기가 실패해도 조용해진다.
    */
-  const move = (item: DragItem, to: string | null) => {
-    const moved =
-      item.kind === 'doc'
-        ? data?.docs.find((d) => d.id === item.id)
-        : data?.folders.find((f) => f.id === item.id)
-    if (!moved) return
+  const move = (item: TreeItem, to: string | null) => {
+    const moved = find(item)
+    // 앞 이동의 응답이 오기 전에는 트리가 아직 옛 모습이다. 그때 또 옮기면 되돌릴 자리를 틀리게 읽는다.
+    if (!moved || moveNode.isPending) return
     const from = 'folder_id' in moved ? moved.folder_id : moved.parent_id
     const dest = data?.folders.find((f) => f.id === to)?.title
 
@@ -395,7 +419,7 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
       const row = e.target.closest<HTMLElement>('[data-drag]')
       const id = row?.dataset.id
       if (!row || !id) return
-      // 앞 이동의 응답이 오기 전에는 줄이 아직 옛 자리에 있다. 그때 또 옮기면 되돌릴 자리를 틀리게 읽는다.
+      // 앞 이동이 끝나기 전에는 끌기도 시작하지 않는다(`move` 의 가드와 같은 이유).
       if (moveNode.isPending) return e.preventDefault()
       setDrag({ kind: row.dataset.drag === 'folder' ? 'folder' : 'doc', id })
       e.dataTransfer.setData(DRAG_TYPE, id)
@@ -422,9 +446,37 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
     onDragEnd: endDrag,
   }
 
+  /** 줄 위에서 우클릭(또는 Shift+F10, 메뉴 키). 줄이 아닌 곳에서는 브라우저 메뉴를 그대로 둔다. */
+  const openMenu = (e: MouseEvent) => {
+    if (!(e.target instanceof Element)) return
+    const link = e.target.closest('[data-row]')?.querySelector<HTMLAnchorElement>('a[data-drag]')
+    const id = link?.dataset.id
+    if (!link || !id) return
+    e.preventDefault()
+    // 키보드로 열면 포인터 좌표가 없다. 그 줄 바로 아래에 띄운다.
+    const rect = link.getBoundingClientRect()
+    setMenu({
+      item: { kind: link.dataset.drag === 'folder' ? 'folder' : 'doc', id },
+      x: e.clientX || rect.left,
+      y: e.clientY || rect.bottom,
+      href: link.href,
+    })
+  }
+
+  // http(IP) 로 열면 navigator.clipboard 가 없어 바로 던진다. 그것도 실패 토스트로 받는다.
+  const copyLink = (id: string) =>
+    void Promise.resolve()
+      // 받은 사람의 채팅·댓글에서 문서 제목 칩으로 바뀌는 주소(서버 주소 기준).
+      .then(() => navigator.clipboard.writeText(`${serverOrigin() || location.origin}/docs/${id}`))
+      .then(
+        () => toast.success('문서 링크를 복사했습니다.'),
+        () => toast.error('링크를 복사하지 못했습니다.'),
+      )
+
   const actions: RowActions = {
     dragId: drag?.id ?? null,
     over,
+    menuId: menu?.item.id ?? null,
     onNavigate,
     onAddDoc: (folderId) =>
       createDoc.mutate(
@@ -474,6 +526,13 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
     )
   }
 
+  const menuTarget = menu && find(menu.item)
+  const movingTarget = moving && find(moving)
+  // 대상이 트리에서 사라졌으면(다른 사람이 지웠거나 옮겼다) 닫는다. 상태를 남겨 두면 그것이 다시
+  // 나타날 때 메뉴와 창이 옛 자리에 저절로 다시 뜬다.
+  if (data && menu && !menuTarget) setMenu(null)
+  if (data && moving && !movingTarget) setMoving(null)
+
   if (isPending) {
     return (
       <div className="space-y-1.5 px-2 py-1">
@@ -485,7 +544,7 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
   }
 
   return (
-    <div {...dragHandlers}>
+    <div {...dragHandlers} onContextMenu={openMenu}>
       {isError && !data && (
         <div className="space-y-1 px-3 py-2">
           <p className="text-danger text-xs">문서 트리를 불러오지 못했습니다.</p>
@@ -506,13 +565,7 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
             actions={actions}
           />
         ) : (
-          <DocRow
-            key={node.doc.id}
-            node={node}
-            depth={0}
-            dragging={drag?.id === node.doc.id}
-            onNavigate={onNavigate}
-          />
+          <DocRow key={node.doc.id} node={node} depth={0} actions={actions} />
         ),
       )}
 
@@ -548,6 +601,88 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
           onDirty={() => setNameError(null)}
           onSubmit={submitName}
           onClose={() => setNaming(null)}
+        />
+      )}
+
+      {menu && menuTarget && (
+        <ContextMenu at={menu} label={`${menuTarget.title} 메뉴`} onClose={() => setMenu(null)}>
+          {menu.item.kind === 'folder' ? (
+            <>
+              <ContextMenuItem
+                icon={FilePlus2}
+                label="새 문서"
+                onSelect={() => actions.onAddDoc(menu.item.id)}
+              />
+              <ContextMenuItem
+                icon={FolderPlus}
+                label="새 폴더"
+                onSelect={() => actions.onAddFolder(menu.item.id)}
+              />
+              <ContextMenuItem
+                icon={Pencil}
+                label="이름 변경"
+                onSelect={() => actions.onRename(menu.item.id, menuTarget.title)}
+              />
+              <ContextMenuItem
+                icon={FolderInput}
+                label="다른 폴더로 옮기기"
+                onSelect={() => setMoving(menu.item)}
+              />
+            </>
+          ) : (
+            <>
+              {/* 브라우저 메뉴를 가렸으니 거기 있던 둘을 돌려준다. 데스크탑 셸에는 탭이 없다. */}
+              {!isDesktopShell() && (
+                <ContextMenuItem
+                  icon={ExternalLink}
+                  label="새 탭에서 열기"
+                  onSelect={() => window.open(menu.href, '_blank', 'noopener')}
+                />
+              )}
+              <ContextMenuItem
+                icon={Link2}
+                label="링크 복사"
+                onSelect={() => copyLink(menu.item.id)}
+              />
+              <ContextMenuItem
+                icon={FolderInput}
+                label="다른 폴더로 옮기기"
+                onSelect={() => setMoving(menu.item)}
+              />
+              <hr className="border-line my-1" />
+              <ContextMenuItem
+                icon={Trash2}
+                label="휴지통으로"
+                danger
+                onSelect={() => setTrashing({ id: menu.item.id, title: menuTarget.title })}
+              />
+            </>
+          )}
+        </ContextMenu>
+      )}
+
+      {moving && movingTarget && data && (
+        <MoveNodeModal
+          item={moving}
+          title={movingTarget.title}
+          data={data}
+          onPick={(to) => {
+            setMoving(null)
+            move(moving, to)
+          }}
+          onClose={() => setMoving(null)}
+        />
+      )}
+
+      {trashing && (
+        <TrashDocModal
+          id={trashing.id}
+          title={trashing.title}
+          onClose={() => setTrashing(null)}
+          // 지금 열어 둔 문서를 보냈으면 편집 화면의 휴지통 버튼과 같이 문서 목록으로 나간다.
+          onTrashed={() => {
+            if (trashing.id === docId) void navigate('/docs', { replace: true })
+          }}
         />
       )}
     </div>

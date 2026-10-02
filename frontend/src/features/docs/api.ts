@@ -3,7 +3,7 @@ import { api, ApiError } from '@/lib/api'
 import { queryClient } from '@/lib/queryClient'
 import { homeKeys } from '@/features/home/keys'
 import { meQueryKey } from '@/features/auth/queries'
-import type { DragItem } from './tree'
+import type { TreeItem } from './tree'
 import type {
   DocComment,
   DocDetail,
@@ -60,7 +60,7 @@ export function useRenameFolder() {
 export function useMoveNode() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ item, to }: { item: DragItem; to: string | null }) =>
+    mutationFn: ({ item, to }: { item: TreeItem; to: string | null }) =>
       api<DocSummary | Folder>(item.kind === 'doc' ? `/docs/${item.id}` : `/folders/${item.id}`, {
         method: 'PATCH',
         body: JSON.stringify(item.kind === 'doc' ? { folder_id: to } : { parent_id: to }),

@@ -107,20 +107,20 @@ export function folderRows(tree: TreeNode[], depth = 0): { folder: Folder; depth
   )
 }
 
-/** 사이드바에서 끌어 옮기는 것. */
-export interface DragItem {
+/** 사이드바 트리의 문서·폴더 하나. 끌어 옮기기와 우클릭 메뉴가 대상을 이것으로 가리킨다. */
+export interface TreeItem {
   kind: 'doc' | 'folder'
   id: string
 }
 
 /**
- * 끌고 있는 것을 이 폴더에 놓을 수 있는지. `targetId` 가 null 이면 최상위다.
+ * 이것을 이 폴더로 옮길 수 있는지. `targetId` 가 null 이면 최상위다.
  *
  * 문서는 폴더 안에만 산다. 폴더는 자기 자신이나 자기 아래로 못 간다(서버도 422 로 막는다).
  * 이미 있는 자리는 옮길 것이 없으니 놓을 자리로 치지 않는다.
  */
 export function canDrop(
-  item: DragItem,
+  item: TreeItem,
   targetId: string | null,
   { folders, docs }: DocTreeData,
 ): boolean {
