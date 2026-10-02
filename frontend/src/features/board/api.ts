@@ -1,7 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { homeKeys } from '@/features/home/keys'
-import { MSW_ENABLED } from '@/mocks/accounts'
 import type { Board, BoardPost, BoardPostDetail, PostAttachment, PostComment } from './types'
 
 export function useBoards() {
@@ -30,12 +29,6 @@ export function usePost(postId: string) {
     retry: false,
   })
 }
-
-/**
- * 게시글에 파일을 붙일 수 있는지. 서버에는 아직 그 경로가 없어서(04 §6 의 글은 제목과 본문뿐이다)
- * 목이 켜진 개발 화면에서만 붙이기 버튼이 보인다. 서버가 받게 되면 이 스위치를 걷는다.
- */
-export const POST_ATTACHMENTS_ENABLED = MSW_ENABLED
 
 /** 글에 보내는 값. `attachments` 는 보낼 때 늘 전체 목록이고, 안 보내면 그대로 둔다. */
 export interface PostInput {

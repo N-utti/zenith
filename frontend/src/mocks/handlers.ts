@@ -528,7 +528,7 @@ export const handlers = [
     if (!post) return notFound()
     if (!canRead(user, post.min_role) || !canEdit(user, post)) return forbidden()
 
-    // 첨부는 그 글이 있는 게시판에 올린 파일이어야 한다(실서버에는 아직 없는 칸이다).
+    // 첨부는 그 글이 있는 게시판에 올린 파일이어야 한다.
     const filesError = checkPostAttachments(post.board_id, body.attachments)
     if (filesError) return validationError(filesError)
 
@@ -653,9 +653,10 @@ export const handlers = [
   }),
 
   // ── 게시글 첨부 ─────────────────────────────────────────
-  // 실서버에는 아직 없는 경로다. 채팅 첨부(`/channels/{id}/attachments`)와 같은 모양으로 가정했다.
+  // 백엔드 #306 과 같은 모양이다(채팅 첨부 `/channels/{id}/attachments` 와 같은 규약).
   // 그 게시판을 읽을 수 있는 사람(등급)만 올리고 받는다. 판정은 늘 경로의 게시판으로 한다.
   // 받기는 거기에 더해, 살아 있는 글이 싣고 있는 파일만 내준다(안 붙인 파일은 올린 사람만).
+  // 이 조건은 목에만 있다. 실서버는 아직 뗀 파일도 내준다(이슈 #309).
   http.post('/api/boards/:boardId/attachments', async ({ request, params }) => {
     const user = authenticate()
     if (!user) return unauthorized()
