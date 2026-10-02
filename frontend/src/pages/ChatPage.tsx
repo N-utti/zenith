@@ -150,8 +150,13 @@ export function ChatPage() {
             )}
           </header>
 
-          {/* 채널마다 새로 만든다. 과거를 받는 중이라는 표시와 스크롤 자리가 옆 채널로 새지 않게. */}
-          <MessageList key={channelId} channelId={channelId} mentionNames={mentionNames} />
+          {/* 채널마다 새로 만든다. 과거를 받는 중이라는 표시와 스크롤 자리가 옆 채널로 새지 않게.
+              아래 작성창도 채널 id 로 key 를 건다. 형제끼리 key 가 같으면 React 가 경고한다. */}
+          <MessageList
+            key={`messages-${channelId}`}
+            channelId={channelId}
+            mentionNames={mentionNames}
+          />
 
           <div className="px-4">
             <TypingLine names={typingByChannel[channelId] ?? []} />
