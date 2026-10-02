@@ -102,7 +102,9 @@ export function CommentRow({
       // 않는다. 닫히면 쓰던 글이 줄과 함께 사라진다(`BlockComments` 가 이 표시를 본다).
       tabIndex={-1}
       data-comment-editing={draft !== null || undefined}
-      className="group/comment -mx-2 flex gap-2.5 rounded-lg px-2 py-1"
+      // outline-none: 이 줄은 Tab 으로 닿는 자리가 아니다. Enter 로 저장한 직후 초점을 받으면 줄 전체에
+      // 초점 테가 둘러져 고장처럼 보인다. 안의 버튼은 제 테를 그대로 갖는다.
+      className="group/comment -mx-2 flex gap-2.5 rounded-lg px-2 py-1 outline-none"
     >
       <Avatar name={comment.author.name} hue={hueOf(comment.author.id)} size="sm" />
       <div className="min-w-0 flex-1">
