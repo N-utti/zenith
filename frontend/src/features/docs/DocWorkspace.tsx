@@ -12,8 +12,9 @@ import { cn } from '@/lib/cn'
 import { formatRelative } from '@/lib/datetime'
 import { useDragAutoScroll } from '@/lib/useDragAutoScroll'
 import { UNTITLED_DOC, useSaveVersion, useTouchDoc, useVersionSnapshot } from './api'
+import { BlockComments } from './BlockComments'
 import { anchorBlock, flashBlock } from './blockId'
-import { CommentPanel, type CommentTarget } from './CommentPanel'
+import { CommentPanel } from './CommentPanel'
 import { DocBreadcrumb } from './DocBreadcrumb'
 import { DocWidthMenu } from './DocWidthMenu'
 import { tableBleedRef } from './tableBleed'
@@ -104,7 +105,7 @@ function DocSidebar({
 }: {
   tab: SidebarTab
   onTabChange: (tab: SidebarTab) => void
-  /** 좁은 폭에서 펼쳐져 있는지. 블록 댓글·알림으로 들어올 때 바깥에서 펼친다. */
+  /** 좁은 폭에서 펼쳐져 있는지. 알림으로 들어올 때 바깥에서 펼친다. */
   open: boolean
   onOpenChange: (open: boolean) => void
   /** 좁은 폭에서 접을 때. 본문을 넓게 보려는 것이므로 본문을 가린 미리보기도 같이 닫는다. */
@@ -234,7 +235,7 @@ const HANDLE_TARGETS: NonNullable<DragHandleProps['nested']> = {
 
 /**
  * 문단 왼쪽에 뜨는 손잡이. 끌어서 블록을 옮기고, 누르면 그 블록을 통째로 고른다.
- * 옆의 말풍선은 그 블록에 댓글을 단다(05 SCR-02).
+ * 옆의 말풍선은 그 블록의 댓글 창을 연다(05 SCR-02, BlockComments).
  */
 function BlockDragHandle({
   editor,
@@ -327,7 +328,8 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
       setSideOpen(true)
     }
   }
-  const [commentTarget, setCommentTarget] = useState<CommentTarget | null>(null)
+  /** 본문에서 댓글 창이 열린 블록(BlockComments). */
+  const [openComment, setOpenComment] = useState<string | null>(null)
   /**
    * 스냅샷 요청의 세대. 늦게 온 응답이 지금 화면을 덮어쓰지 않게 막는다.
    *
@@ -426,6 +428,8 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
   const openPreview = (version: DocVersion | null) => {
     if (!version) return closePreview()
 
+    // 미리보기는 편집기를 통째로 가린다. 댓글 창을 열어 둔 채 다녀오면 빈 창이 되살아나 포커스를 가져간다.
+    setOpenComment(null)
     dropPendingPreview()
     const seq = previewSeq.current
     setPreviewError(null)
@@ -454,15 +458,17 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
     })
   }
 
-  /** `pos`(없으면 커서)가 든 최상위 블록에 댓글을 달러 간다. */
+  /** 블록의 댓글 창을 여닫는다(BlockComments). */
+  const openBlockComment = (blockId: string | null) => {
+    // 도는 스냅샷 요청이 뒤늦게 미리보기를 열면 쓰던 창이 본문째 사라진다.
+    if (blockId) dropPendingPreview()
+    setOpenComment(blockId)
+  }
+
+  /** `pos`(없으면 커서)가 든 최상위 블록의 댓글 창을 연다. */
   const startBlockComment = (pos?: number) => {
-    if (!editor) return
-    const target = anchorBlock(editor, pos)
-    if (!target) return
-    dropPendingPreview()
-    setTab('comments')
-    setSideOpen(true)
-    setCommentTarget(target)
+    const blockId = editor && anchorBlock(editor, pos)
+    if (blockId) openBlockComment(blockId)
   }
 
   /**
@@ -593,6 +599,13 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
                         <TableRowMenu editor={editor} />
                       </>
                     )}
+                    <BlockComments
+                      editor={editor}
+                      docId={meta.id}
+                      openId={openComment}
+                      onOpenChange={openBlockComment}
+                      rowMenu={!coarsePointer}
+                    />
                     <EditorContent editor={editor} className="mt-4" />
                     <InlineAiPopover editor={editor} docId={meta.id} />
                   </>
@@ -616,13 +629,7 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
           onCollapse={closePreview}
         >
           {tab === 'comments' ? (
-            <CommentPanel
-              docId={meta.id}
-              editor={editor}
-              target={commentTarget}
-              onClearTarget={() => setCommentTarget(null)}
-              onJump={jumpToBlock}
-            />
+            <CommentPanel docId={meta.id} editor={editor} onJump={jumpToBlock} />
           ) : (
             <>
               {previewError && (
