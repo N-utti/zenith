@@ -1129,6 +1129,58 @@
         }
       }
     },
+    "/api/docs/{id}/comments/{comment_id}": {
+      "delete": {
+        "tags": [
+          "docs"
+        ],
+        "summary": "댓글 삭제 — 쓴 사람만. 그 댓글의 멘션 알림도 같이 지운다 (이슈 #253)",
+        "operationId": "delete_comment_api_docs__id__comments__comment_id__delete",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          },
+          {
+            "name": "comment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Comment Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "403": {
+            "description": "남의 댓글"
+          },
+          "404": {
+            "description": "없는 문서·댓글, 휴지통 문서"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/files": {
       "post": {
         "tags": [
