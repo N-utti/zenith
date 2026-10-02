@@ -65,6 +65,12 @@ function rememberExpanded(id: string, expanded: boolean) {
   }
 }
 
+/**
+ * 트리에서 시작한 끌기라는 표식. 끌던 줄이 도중에 사라지면(트리가 다시 불릴 때) 끝났다는 신호가
+ * 오지 않아 「끌고 있는 것」이 남는데, 그 뒤 밖에서 끌어 온 파일·링크를 그것으로 착각하지 않게 한다.
+ */
+const DRAG_TYPE = 'application/x-zenith-tree'
+
 /** 끌어 놓을 자리(`data-drop`) 중 최상위를 가리키는 값. 폴더는 자기 id 를 쓴다. */
 const ROOT_DROP = ''
 
@@ -368,6 +374,7 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
   /** 포인터 아래의 놓을 자리. 놓을 수 없는 곳이면 null. */
   const zoneAt = (e: DragEvent): string | null => {
     if (!drag || !data || !(e.target instanceof Element)) return null
+    if (!e.dataTransfer.types.includes(DRAG_TYPE)) return null
     const zone = e.target.closest<HTMLElement>('[data-drop]')?.dataset.drop
     return zone !== undefined && canDrop(drag, zone || null, data) ? zone : null
   }
@@ -388,7 +395,10 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
       const row = e.target.closest<HTMLElement>('[data-drag]')
       const id = row?.dataset.id
       if (!row || !id) return
+      // 앞 이동의 응답이 오기 전에는 줄이 아직 옛 자리에 있다. 그때 또 옮기면 되돌릴 자리를 틀리게 읽는다.
+      if (moveNode.isPending) return e.preventDefault()
       setDrag({ kind: row.dataset.drag === 'folder' ? 'folder' : 'doc', id })
+      e.dataTransfer.setData(DRAG_TYPE, id)
       setDragCard(e, row)
     },
     onDragOver: (e: DragEvent) => {

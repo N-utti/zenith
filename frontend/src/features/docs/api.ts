@@ -68,6 +68,8 @@ export function useMoveNode() {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: docKeys.tree })
       void qc.invalidateQueries({ queryKey: homeKeys.home })
+      // 검색 결과는 문서가 든 폴더 이름을 같이 보여 준다.
+      void qc.invalidateQueries({ queryKey: ['search'] })
     },
   })
 }

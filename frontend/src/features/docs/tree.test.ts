@@ -112,6 +112,15 @@ it('canDrop: 이미 있는 자리, 자기 자신과 자기 아래, 문서의 최
   expect(canDrop(wiki, null, data)).toBe(false) // 이미 최상위
   expect(canDrop({ kind: 'folder', id: 'f-2' }, null, data)).toBe(true)
   expect(canDrop({ kind: 'folder', id: 'f-2' }, 'f-1', data)).toBe(false) // 이미 그 부모
+
+  // 이미 고리가 있는 데이터에서도 멈춘다. 끄는 내내 불리므로 안 멈추면 탭이 멎는다.
+  const loop: DocTreeData = { folders: [folder('a', 'b', 'A'), folder('b', 'a', 'B')], docs: [] }
+  expect(
+    canDrop({ kind: 'folder', id: 'f-0' }, 'a', {
+      ...loop,
+      folders: [...loop.folders, folder('f-0', null, '팀')],
+    }),
+  ).toBe(true)
 })
 
 it('previewDocs: 넘치면 최근 수정순으로 자르고, 열린 문서는 남긴다', () => {
