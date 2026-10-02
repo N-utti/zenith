@@ -21,15 +21,16 @@ const people = [
 const auth = { user: people[0], status: 'authenticated' } as unknown as AuthValue
 const toast: ToastApi = { success: vi.fn(), error: vi.fn(), info: vi.fn() }
 
-const channel = (extra: Partial<ChatChannel>): ChatChannel => ({
+// `is_private` 를 일부러 뺀다. 칸을 안 주는 #236 이전 서버의 응답이다. 타입은 필수라 단언한다.
+const old: Omit<ChatChannel, 'is_private'> = {
   id: 'c-1',
   name: '개발',
   is_dm: false,
   members: [],
   unread: 0,
   last_message: null,
-  ...extra,
-})
+}
+const channel = (extra: Partial<ChatChannel>) => ({ ...old, ...extra }) as ChatChannel
 
 let root: Root | undefined
 afterEach(() => {

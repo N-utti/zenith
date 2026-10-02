@@ -428,7 +428,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 문서 이미지 업로드 — multipart `file`(png·jpeg·gif·webp, 10MB, 하루 200장) → MinIO. 04 에 없던 경로 */
+        /** 문서 파일 업로드 — multipart `file`(어떤 형식이든, 10MB, 하루 200개) + `doc_id`(선택) → MinIO. 04 에 없던 경로 */
         post: operations["upload_file_api_files_post"];
         delete?: never;
         options?: never;
@@ -443,8 +443,25 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 문서 이미지 — 로그인한 사람 누구나(문서에 열람 등급 없음). <img src> 가 쿠키로 인증된다 */
+        /** 문서 파일 — 로그인한 사람 누구나(문서에 열람 등급 없음). 그림 넷은 inline(<img src>), 나머지는 attachment */
         get: operations["download_file_api_files__id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 자료실 — 내가 받을 수 있는 채팅 첨부·문서 파일을 올린 지 최근 순으로(최대 200). 04 에 없던 경로 */
+        get: operations["list_archive_api_archive_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -480,9 +497,43 @@ export interface paths {
         /** 내 채널·DM 목록 + unread 카운트 + 마지막 메시지 — 최근 대화순 */
         get: operations["list_channels_api_channels_get"];
         put?: never;
-        /** {name} 공개 채널(활성 사용자 전원 멤버) 또는 {dm_user_id} DM(있으면 그것) 생성 */
+        /** {name} 공개 채널(전원 멤버) · {name, is_private:true, member_ids} 비공개 채널(만든 사람+고른 사람) · {dm_user_id} DM(있으면 그것) */
         post: operations["create_channel_api_channels_post"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/channels/{id}/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 비공개 채널에 사람 더하기 {user_ids} — 멤버면 누구나. 이미 멤버인 사람은 건너뛴다. 공개·DM 은 422 */
+        post: operations["add_members_api_channels__id__members_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/channels/{id}/members/{user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** 비공개 채널에서 사람 빼기 — 자기 자신이면 나가기. 멤버 아닌 사람 404, 공개·DM 은 422 */
+        delete: operations["remove_member_api_channels__id__members__user_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1287,6 +1338,38 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** ArchiveFile */
+        ArchiveFile: {
+            /** Url */
+            url: string;
+            /** Name */
+            name: string;
+            /** Size */
+            size: number;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "chat" | "doc";
+            /**
+             * Source Id
+             * Format: uuid
+             */
+            source_id: string;
+            /** Source Title */
+            source_title: string;
+            uploaded_by: components["schemas"]["Person"];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "all" | "members";
+        };
         /**
          * AttachmentOut
          * @description 업로드 응답이자 messages.attachments[] 항목(03 §2.3 JSONB).
@@ -1358,6 +1441,8 @@ export interface components {
         Body_upload_file_api_files_post: {
             /** File */
             file: string;
+            /** Doc Id */
+            doc_id?: string | null;
         };
         /** ChannelCreateIn */
         ChannelCreateIn: {
@@ -1365,6 +1450,10 @@ export interface components {
             name?: string | null;
             /** Dm User Id */
             dm_user_id?: string | null;
+            /** Is Private */
+            is_private?: boolean | null;
+            /** Member Ids */
+            member_ids?: string[] | null;
         };
         /** ChannelOut */
         ChannelOut: {
@@ -1377,6 +1466,8 @@ export interface components {
             name: string;
             /** Is Dm */
             is_dm: boolean;
+            /** Is Private */
+            is_private: boolean;
             /** Members */
             members: components["schemas"]["Person"][];
             /** Unread */
@@ -1498,6 +1589,8 @@ export interface components {
             name: string;
             /** Size */
             size: number;
+            /** Content Type */
+            content_type: string;
         };
         /** FolderCreateIn */
         FolderCreateIn: {
@@ -1605,6 +1698,11 @@ export interface components {
              */
             created_at: string;
         };
+        /** Items[ArchiveFile] */
+        Items_ArchiveFile_: {
+            /** Items */
+            items: components["schemas"]["ArchiveFile"][];
+        };
         /** Items[BoardOut] */
         Items_BoardOut_: {
             /** Items */
@@ -1671,6 +1769,11 @@ export interface components {
             /** Avatar */
             avatar: string | null;
             team: components["schemas"]["TeamOut"] | null;
+        };
+        /** MembersIn */
+        MembersIn: {
+            /** User Ids */
+            user_ids: string[];
         };
         /**
          * MessageOut
@@ -2021,6 +2124,8 @@ export interface components {
             name: string;
             /** Is Dm */
             is_dm: boolean;
+            /** Is Private */
+            is_private: boolean;
             /** Peer Id */
             peer_id: string | null;
             /** Count */
@@ -3095,7 +3200,38 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "image/*": unknown;
+                    "application/octet-stream": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_archive_api_archive_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Items_ArchiveFile_"];
                 };
             };
             /** @description Validation Error */
@@ -3171,8 +3307,73 @@ export interface operations {
                     "application/json": components["schemas"]["ChannelOut"];
                 };
             };
-            /** @description CONFLICT — 같은 이름의 채널 */
+            /** @description CONFLICT — 같은 이름의 공개 채널(비공개는 중복 허용) */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_members_api_channels__id__members_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MembersIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChannelOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_member_api_channels__id__members__user_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
                 headers: {
                     [name: string]: unknown;
                 };
