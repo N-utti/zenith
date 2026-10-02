@@ -9,7 +9,7 @@ from openpyxl import load_workbook
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import AuditEvent, CrmOrgOwner, User
+from app.models import AuditEvent, CrmImport, CrmOrgOwner, User
 from tests.conftest import PW_HASH, Users, csrf, login
 
 API = "/api/crm"
@@ -851,3 +851,230 @@ async def test_review_followups(
         assert (await boss.delete(url, headers=hx)).status_code == 404
     r = await client.patch(f"{API}/contacts/{c2['id']}", json={"memo": "x"}, headers=h)
     assert r.status_code == 404
+
+
+async def test_contact_and_deal_delete(
+    client: AsyncClient, make_client: Callable[[], AsyncClient], users: Users, app_db
+) -> None:
+    """담당자·안건 지우기(목록에서 뺌): 등록한 사람은 활동이 붙기 전까지, exec 는 언제나. 403 + 감사, 지운 뒤 가시성."""
+    h = await _as(client, "sujin@zenith.co.kr")
+    org = await _org(client, h, "한결연금공단")
+    c = await _contact(client, h, org["id"], "박서준")
+    spare = await _contact(client, h, org["id"], "이하은")
+    assert c["can_delete"] is True
+    deal = await _deal(client, h, org["id"])
+    assert deal["can_delete"] is True
+    quick = await _deal(client, h, org["id"], name="잘못 만든 안건")
+
+    lead = make_client()
+    hl = await _as(lead, "donghyun@zenith.co.kr")
+    seen = (await lead.get(f"{API}/orgs/{org['id']}")).json()["contacts"]
+    assert [x["can_delete"] for x in seen] == [False, False]
+    assert (await lead.get(f"{API}/deals/{deal['id']}")).json()["can_delete"] is False
+    assert (await lead.delete(f"{API}/contacts/{c['id']}", headers=hl)).status_code == 403
+    assert (await lead.delete(f"{API}/deals/{deal['id']}", headers=hl)).status_code == 403
+    denied = await _audits(app_db, "acl.denied")
+    assert sorted(a.detail["reason"] for a in denied) == ["contact_delete", "deal_delete"]
+
+    # 등록한 사람 — 활동이 붙기 전
+    assert (await client.delete(f"{API}/deals/{quick['id']}", headers=h)).status_code == 204
+    [ev] = await _audits(app_db, "crm.deal_deleted")
+    assert (str(ev.target_id), ev.detail) == (quick["id"], {"name": "잘못 만든 안건"})
+    # 활동이 붙으면 등록한 사람도 못 지운다
+    act = await _activity(client, h, org["id"], deal_id=deal["id"], contact_ids=[c["id"]])
+    detail = (await client.get(f"{API}/orgs/{org['id']}")).json()
+    assert {x["name"]: x["can_delete"] for x in detail["contacts"]} == {
+        "박서준": False,
+        "이하은": True,
+    }
+    assert (await client.get(f"{API}/deals/{deal['id']}")).json()["can_delete"] is False
+    assert (await client.delete(f"{API}/contacts/{c['id']}", headers=h)).status_code == 403
+    assert (await client.delete(f"{API}/deals/{deal['id']}", headers=h)).status_code == 403
+    # 활동에 안 붙은 담당자는 등록한 사람이 지운다
+    assert (await client.delete(f"{API}/contacts/{spare['id']}", headers=h)).status_code == 204
+
+    async with make_client() as boss:
+        hx = await _as(boss, "jaeho@zenith.co.kr")
+        assert (await boss.delete(f"{API}/contacts/{c['id']}", headers=hx)).status_code == 204
+        assert (await boss.delete(f"{API}/contacts/{c['id']}", headers=hx)).status_code == 404
+        assert (await boss.delete(f"{API}/deals/{deal['id']}", headers=hx)).status_code == 204
+        assert (await boss.delete(f"{API}/deals/{deal['id']}", headers=hx)).status_code == 404
+        # 목록에서 지운 담당자도 개인정보 삭제는 된다
+        assert (await boss.post(f"{API}/contacts/{c['id']}/erase", headers=hx)).status_code == 200
+        contacts_xlsx = await boss.post(f"{API}/export", params={"entity": "contacts"}, headers=hx)
+        assert load_workbook(io.BytesIO(contacts_xlsx.content)).active.max_row == 1
+    await lead.aclose()
+    events = await _audits(app_db, "crm.contact_deleted")
+    assert sorted(str(e.target_id) for e in events) == sorted([spare["id"], c["id"]])
+    assert all(e.detail is None for e in events)
+
+    # 담당자: 기관 상세·수·수정·새 활동에서 빠지고, 옛 활동 참석자로는 남는다
+    detail = (await client.get(f"{API}/orgs/{org['id']}")).json()
+    assert (detail["contacts"], detail["contact_count"]) == ([], 0)
+    assert (
+        await client.patch(f"{API}/contacts/{spare['id']}", json={"memo": "x"}, headers=h)
+    ).status_code == 404
+    body = {"kind": "call", "occurred_at": _ago(0), "org_id": org["id"], "body": "x"}
+    r = await client.post(
+        f"{API}/activities", json={**body, "contact_ids": [spare["id"]]}, headers=h
+    )
+    assert r.status_code == 422
+    timeline = (await client.get(f"{API}/activities", params={"org_id": org["id"]})).json()["items"]
+    assert [x["id"] for x in timeline[0]["contacts"]] == [c["id"]]
+    # 안건: 목록·상세·수정·타임라인에서 빠지고, 붙어 있던 활동은 기관 타임라인에 안건 표시 없이 남는다
+    assert timeline[0]["id"] == act["id"] and timeline[0]["deal"] is None
+    assert (await client.get(f"{API}/deals")).json()["items"] == []
+    assert (await client.get(f"{API}/deals/{deal['id']}")).status_code == 404
+    r = await client.patch(f"{API}/deals/{deal['id']}", json={"version": 1, "name": "x"}, headers=h)
+    assert r.status_code == 404
+    assert (
+        await client.get(f"{API}/activities", params={"deal_id": deal["id"]})
+    ).status_code == 404
+    r = await client.post(f"{API}/activities", json={**body, "deal_id": deal["id"]}, headers=h)
+    assert r.status_code == 422
+    # 지운 안건에 걸려 있던 활동을 안건 칸 그대로(낡은 화면) 고쳐도 막히지 않는다
+    r = await client.patch(f"{API}/activities/{act['id']}", json={"body": "고침"}, headers=h)
+    assert r.status_code == 200
+    # 지운 진행 중 안건은 기관 삭제를 막지 않는다
+    async with make_client() as boss:
+        hx = await _as(boss, "jaeho@zenith.co.kr")
+        r = await boss.request(
+            "DELETE", f"{API}/orgs/{org['id']}", json={"reason": "정리"}, headers=hx
+        )
+        assert r.status_code == 204
+
+
+async def test_deleted_orgs_and_restore(
+    client: AsyncClient, make_client: Callable[[], AsyncClient], users: Users, app_db
+) -> None:
+    """지운 기관 목록(사유·같은 이름 기관)과 되살리기 — exec 만(403 + 감사), 담당자·안건이 그대로 돌아온다."""
+    h = await _as(client, "sujin@zenith.co.kr")
+    org = await _org(client, h, "(주)미래인프라")
+    await _contact(client, h, org["id"], "한도윤")
+    deal = await _deal(client, h, org["id"])
+    await client.post(
+        f"{API}/deals/{deal['id']}/drop", json={"reason": "x", "version": 1}, headers=h
+    )
+    url = f"{API}/orgs/{org['id']}"
+
+    assert (await client.get(f"{API}/orgs/deleted")).status_code == 403
+    assert (await client.post(f"{url}/restore", headers=h)).status_code == 403
+    denied = await _audits(app_db, "acl.denied")
+    assert [a.detail["reason"] for a in denied] == ["org_deleted_list", "org_restore"]
+
+    async with make_client() as boss:
+        hx = await _as(boss, "jaeho@zenith.co.kr")
+        assert (await boss.get(f"{API}/orgs/deleted")).json()["items"] == []
+        assert (await boss.post(f"{url}/restore", headers=hx)).status_code == 404  # 안 지운 기관
+        r = await boss.request("DELETE", url, json={"reason": " 중복 등록 "}, headers=hx)
+        assert r.status_code == 204
+        twin = await _org(boss, hx, "미래 인프라")
+        [gone] = (await boss.get(f"{API}/orgs/deleted")).json()["items"]
+        assert (gone["id"], gone["name"], gone["org_type"], gone["reason"]) == (
+            org["id"],
+            "(주)미래인프라",
+            "pension",
+            "중복 등록",
+        )
+        assert gone["duplicate"] == {"id": twin["id"], "name": "미래 인프라"}
+        assert gone["deleted_at"]
+
+        r = await boss.post(f"{url}/restore", headers=hx)
+        assert r.status_code == 200, r.text
+        back = r.json()
+        assert ([c["name"] for c in back["contacts"]], back["contact_count"]) == (["한도윤"], 1)
+        assert (await boss.post(f"{url}/restore", headers=hx)).status_code == 404  # 두 번째는 없다
+        assert (await boss.get(f"{API}/orgs/deleted")).json()["items"] == []
+        missing = f"{API}/orgs/00000000-0000-0000-0000-000000000000/restore"
+        assert (await boss.post(missing, headers=hx)).status_code == 404
+    [ev] = await _audits(app_db, "crm.org_restored")
+    assert (str(ev.target_id), ev.detail) == (org["id"], {"name": "(주)미래인프라"})
+    assert (await client.get(url)).status_code == 200
+    assert [d["id"] for d in (await client.get(f"{API}/deals")).json()["items"]] == [deal["id"]]
+    names = [o["name"] for o in (await client.get(f"{API}/orgs")).json()["items"]]
+    assert names == ["(주)미래인프라", "미래 인프라"]
+
+
+async def test_import_undo(
+    client: AsyncClient, make_client: Callable[[], AsyncClient], users: Users, app_db
+) -> None:
+    """가져오기 되돌리기: 가져온 사람만(403 + 감사)·24시간 안(409). 쓰인 기관·담당자는 남기고, 두 번째는 404."""
+    h = await _as(client, "sujin@zenith.co.kr")
+    existing = await _org(client, h, "기존기관")
+    assert (await client.get(f"{API}/imports/last")).json() == {"import": None}
+    csv_body = (
+        CSV_HEADER
+        + "가기관,,가1,,,,\r\n"
+        + "가기관,,가2,,,,\r\n"
+        + "나기관,,나1,,,,\r\n"
+        + "다기관,,,,,,메모만\r\n"
+        + "기존기관,,기1,,,,\r\n"
+    ).encode()
+
+    async def send(dry: str):
+        return await client.post(
+            f"{API}/orgs/import",
+            params={"dry_run": dry},
+            files={"file": ("a.csv", csv_body, "text/csv")},
+            headers=h,
+        )
+
+    await send("true")
+    assert (await client.get(f"{API}/imports/last")).json() == {
+        "import": None
+    }  # 미리보기는 안 남는다
+    await send("false")
+    last = (await client.get(f"{API}/imports/last")).json()["import"]
+    assert (last["new_orgs"], last["new_contacts"]) == (3, 4)
+
+    orgs = {o["name"]: o for o in (await client.get(f"{API}/orgs")).json()["items"]}
+    ga = (await client.get(f"{API}/orgs/{orgs['가기관']['id']}")).json()
+    na = (await client.get(f"{API}/orgs/{orgs['나기관']['id']}")).json()
+    assert ga["contacts"][0]["can_delete"] is True  # 가져온 사람이 등록한 사람이다
+    # 가기관은 쓰이기 시작했다(활동), 나기관의 담당자는 목록에서 지웠다
+    await _activity(client, h, ga["id"], contact_ids=[ga["contacts"][0]["id"]])
+    assert (
+        await client.delete(f"{API}/contacts/{na['contacts'][0]['id']}", headers=h)
+    ).status_code == 204
+
+    undo = f"{API}/imports/{last['id']}/undo"
+    async with make_client() as lead:
+        hl = await _as(lead, "donghyun@zenith.co.kr")
+        assert (await lead.get(f"{API}/imports/last")).json() == {"import": None}  # 내 것만
+        assert (await lead.post(undo, headers=hl)).status_code == 403
+    [denied] = await _audits(app_db, "acl.denied")
+    assert (denied.detail["reason"], str(denied.target_id)) == ("import_undo", last["id"])
+
+    r = await client.post(undo, headers=h)
+    assert r.status_code == 200, r.text
+    # 지운 것: 나기관·다기관, 기1 (나1 은 이미 목록에서 지운 행이라 수에 안 넣는다). 남긴 것: 가기관과 가1·가2
+    assert r.json() == {
+        "removed_orgs": 2,
+        "removed_contacts": 1,
+        "kept_orgs": 1,
+        "kept_contacts": 2,
+    }
+    [ev] = await _audits(app_db, "crm.import_undone")
+    assert (ev.target_id, ev.detail) == (None, r.json())
+    names = [o["name"] for o in (await client.get(f"{API}/orgs")).json()["items"]]
+    assert names == ["가기관", "기존기관"]
+    assert (await client.get(f"{API}/orgs/{existing['id']}")).json()["contacts"] == []
+    assert [c["name"] for c in (await client.get(f"{API}/orgs/{ga['id']}")).json()["contacts"]] == [
+        "가1",
+        "가2",
+    ]
+
+    # 멱등 — 두 번째는 404, 더 지우지 않는다
+    assert (await client.post(undo, headers=h)).status_code == 404
+    assert len((await client.get(f"{API}/orgs")).json()["items"]) == 2
+    assert (await client.get(f"{API}/imports/last")).json() == {"import": None}
+    missing = f"{API}/imports/00000000-0000-0000-0000-000000000000/undo"
+    assert (await client.post(missing, headers=h)).status_code == 404
+
+    # 24시간이 지나면 last 에서 빠지고 되돌리기는 409
+    old = CrmImport(user_id=users.member.id, created_at=datetime.now(UTC) - timedelta(hours=25))
+    app_db.add(old)
+    await app_db.flush()
+    assert (await client.get(f"{API}/imports/last")).json() == {"import": None}
+    r = await client.post(f"{API}/imports/{old.id}/undo", headers=h)
+    assert (r.status_code, r.json()["code"]) == (409, "CONFLICT")

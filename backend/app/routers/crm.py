@@ -25,7 +25,7 @@ from openpyxl import Workbook
 from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 from openpyxl.styles import Font
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StrictInt, StringConstraints
-from sqlalchemy import delete, func, or_, select
+from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import audit
@@ -40,6 +40,7 @@ from app.models import (
     CrmContactMove,
     CrmDeal,
     CrmDealEvent,
+    CrmImport,
     CrmOrg,
     CrmOrgOwner,
     User,
@@ -180,13 +181,43 @@ class ContactOut(BaseModel):
     email: str
     memo: str
     erased: bool
+    can_delete: bool  # 등록한 사람(지우지 않은 활동에 붙기 전)·exec — 요청자마다 서버가 판정
     moves: list[Move]  # 이전 소속, 최근 것부터
 
 
 class OrgDetail(OrgItem):
     memo: str
-    contacts: list[ContactOut]  # erased 포함
+    contacts: list[ContactOut]  # erased 포함, 목록에서 지운 담당자는 뺀다
     created_at: datetime
+
+
+class DeletedOrg(BaseModel):
+    id: uuid.UUID
+    name: str
+    org_type: str
+    deleted_at: datetime
+    reason: str  # 지울 때 적은 사유
+    duplicate: Person | None  # 그사이 정규화 이름이 같은 기관이 생겼으면 — 되살리기는 막지 않는다
+
+
+class LastImport(BaseModel):
+    id: uuid.UUID
+    created_at: datetime
+    new_orgs: int
+    new_contacts: int
+
+
+class LastImportOut(BaseModel):
+    import_: LastImport | None = Field(alias="import")  # 되돌릴 것이 없거나 기한이 지났으면 null
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class ImportUndone(BaseModel):
+    removed_orgs: int
+    removed_contacts: int
+    kept_orgs: int  # 그사이 쓰이기 시작해 남긴 것
+    kept_contacts: int
 
 
 class OrgCreated(BaseModel):
@@ -260,6 +291,7 @@ class DealDetail(DealOut):
     closed_at: datetime | None
     created_at: datetime
     events: list[DealEventOut]  # 최신 위
+    can_delete: bool  # 등록한 사람(지우지 않은 활동이 붙기 전)·exec
 
 
 class DealIn(BaseModel):
@@ -379,7 +411,7 @@ def _uuid_or_none(value: str) -> uuid.UUID | None:
 
 
 async def _deny(
-    db: AsyncSession, request: Request, user: User, target_id: uuid.UUID, why: str
+    db: AsyncSession, request: Request, user: User, target_id: uuid.UUID | None, why: str
 ) -> NoReturn:
     audit.record(
         db,
@@ -417,7 +449,7 @@ async def _check_users(
 # 목록 집계 — 기관마다 따로 세지 않고(N+1) 한 번에 묶어 붙인다
 _CONTACT_COUNT = (
     select(CrmContact.org_id, func.count().label("n"))
-    .where(CrmContact.erased.is_(False))
+    .where(CrmContact.erased.is_(False), CrmContact.deleted_at.is_(None))
     .group_by(CrmContact.org_id)
     .subquery()
 )
@@ -464,9 +496,27 @@ async def _org_items(db: AsyncSession, *where) -> list[tuple[CrmOrg, OrgItem]]:
     ]
 
 
-async def _contacts_out(db: AsyncSession, contacts: list[CrmContact]) -> list[ContactOut]:
+def _in_alive_activity(contact_ids):
+    """지우지 않은 활동의 참석자인 담당자 — 등록한 사람도 이때부터는 못 지운다."""
+    return (
+        select(CrmActivityContact.contact_id)
+        .join(CrmActivity, CrmActivity.id == CrmActivityContact.activity_id)
+        .where(CrmActivityContact.contact_id.in_(contact_ids), CrmActivity.deleted_at.is_(None))
+    )
+
+
+def _can_delete_contact(user: User, contact: CrmContact, used: bool) -> bool:
+    # 등록한 사람은 활동에 붙기 전까지(잘못 넣은 사람을 치우는 길), exec 는 언제나
+    return user.role == "exec" or (contact.created_by == user.id and not used)
+
+
+async def _contacts_out(
+    db: AsyncSession, user: User, contacts: list[CrmContact]
+) -> list[ContactOut]:
     moves: dict[uuid.UUID, list[Move]] = defaultdict(list)
+    used: set[uuid.UUID] = set()
     if contacts:
+        used = set((await db.execute(_in_alive_activity([c.id for c in contacts]))).scalars())
         # 옮겨 오기 전 기관이 지워졌어도 이력은 남긴다 — 이름은 지우기 전 것
         for move, from_name in await db.execute(
             select(CrmContactMove, CrmOrg.name)
@@ -487,13 +537,14 @@ async def _contacts_out(db: AsyncSession, contacts: list[CrmContact]) -> list[Co
             email=c.email,
             memo=c.memo,
             erased=c.erased,
+            can_delete=_can_delete_contact(user, c, c.id in used),
             moves=moves[c.id],
         )
         for c in contacts
     ]
 
 
-async def _org_detail(db: AsyncSession, org_id: uuid.UUID) -> OrgDetail:
+async def _org_detail(db: AsyncSession, user: User, org_id: uuid.UUID) -> OrgDetail:
     rows = await _org_items(db, CrmOrg.id == org_id)
     if not rows:
         _not_found("기관을")
@@ -502,7 +553,7 @@ async def _org_detail(db: AsyncSession, org_id: uuid.UUID) -> OrgDetail:
         (
             await db.execute(
                 select(CrmContact)
-                .where(CrmContact.org_id == org.id)
+                .where(CrmContact.org_id == org.id, CrmContact.deleted_at.is_(None))
                 .order_by(CrmContact.created_at, CrmContact.id)
             )
         )
@@ -512,7 +563,7 @@ async def _org_detail(db: AsyncSession, org_id: uuid.UUID) -> OrgDetail:
     return OrgDetail(
         **item.model_dump(),
         memo=org.memo,
-        contacts=await _contacts_out(db, list(contacts)),
+        contacts=await _contacts_out(db, user, list(contacts)),
         created_at=org.created_at,
     )
 
@@ -556,7 +607,9 @@ async def list_orgs(
     response_model=OrgCreated,
     summary="기관 등록 — 정규화 이름이 같은 기관이 있어도 만들고 duplicates 로 알린다",
 )
-async def create_org(body: OrgIn, db: AsyncSession = Depends(get_db)) -> OrgCreated:
+async def create_org(
+    body: OrgIn, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)
+) -> OrgCreated:
     owners = set(body.owner_ids)
     await _check_users(db, owners, OWNER_INACTIVE)
     norm = normalize_org_name(body.name)
@@ -573,7 +626,7 @@ async def create_org(body: OrgIn, db: AsyncSession = Depends(get_db)) -> OrgCrea
     db.add_all(CrmOrgOwner(org_id=org.id, user_id=uid) for uid in owners)
     await db.commit()
     return OrgCreated(
-        org=await _org_detail(db, org.id),
+        org=await _org_detail(db, user, org.id),
         duplicates=[Person(id=i, name=n) for i, n in duplicates],
     )
 
@@ -596,7 +649,7 @@ async def import_orgs(
     if len(data) > IMPORT_MAX_BYTES:
         _invalid("파일은 1MB 까지 올릴 수 있습니다.")
     preview = dry_run == "true"
-    result = await _import(db, _parse_csv(data), preview)
+    result = await _import(db, user, _parse_csv(data), preview)
     if not preview:
         audit.record(
             db,
@@ -609,14 +662,92 @@ async def import_orgs(
     return result
 
 
+@router.get(
+    "/orgs/deleted",
+    response_model=Page[DeletedOrg],
+    summary="지운 기관 목록 — exec 만, 최근에 지운 것부터. duplicate 는 그사이 생긴 같은 이름의 기관",
+)
+async def list_deleted_orgs(
+    request: Request, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)
+) -> Page[DeletedOrg]:
+    if user.role != "exec":
+        await _deny(db, request, user, None, "org_deleted_list")
+    gone = (
+        await db.execute(
+            select(CrmOrg)
+            .where(CrmOrg.deleted_at.is_not(None))
+            .order_by(CrmOrg.deleted_at.desc(), CrmOrg.id)
+        )
+    ).scalars()
+    twins: dict[str, Person] = {}
+    for oid, name, norm in await db.execute(
+        select(CrmOrg.id, CrmOrg.name, CrmOrg.name_norm)
+        .where(CrmOrg.deleted_at.is_(None))
+        .order_by(CrmOrg.created_at.desc())
+    ):
+        twins[norm] = Person(id=oid, name=name)  # 같은 이름이 여럿이면 가장 먼저 만든 기관
+    return Page(
+        items=[
+            DeletedOrg(
+                id=o.id,
+                name=o.name,
+                org_type=o.org_type,
+                deleted_at=o.deleted_at,
+                reason=o.deleted_reason or "",
+                duplicate=twins.get(o.name_norm),
+            )
+            for o in gone
+        ]
+    )
+
+
+@router.post(
+    "/orgs/{id}/restore",
+    response_model=OrgDetail,
+    summary="지운 기관 되살리기 — exec 만. 담당자·안건·활동이 그대로 돌아온다. 같은 이름 기관이 있어도 막지 않는다",
+)
+async def restore_org(
+    id: uuid.UUID,
+    request: Request,
+    user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_db),
+) -> OrgDetail:
+    if user.role != "exec":
+        await _deny(db, request, user, id, "org_restore")
+    org = (
+        await db.execute(
+            select(CrmOrg).where(CrmOrg.id == id, CrmOrg.deleted_at.is_not(None)).with_for_update()
+        )
+    ).scalar_one_or_none()
+    if org is None:
+        _not_found("지운 기관을")
+    org.deleted_at = None
+    org.deleted_reason = None
+    audit.record(
+        db,
+        "crm.org_restored",
+        request=request,
+        actor_id=user.id,
+        target_id=org.id,
+        detail={"name": org.name},
+    )
+    await db.commit()
+    return await _org_detail(db, user, org.id)
+
+
 @router.get("/orgs/{id}", response_model=OrgDetail, summary="기관 상세 — 지운 기관은 404")
-async def get_org(id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> OrgDetail:
-    return await _org_detail(db, id)
+async def get_org(
+    id: uuid.UUID, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)
+) -> OrgDetail:
+    return await _org_detail(db, user, id)
 
 
 @router.patch("/orgs/{id}", response_model=OrgDetail, summary="기관 수정 — 보낸 칸만, 누구나")
 async def update_org(
-    id: uuid.UUID, body: OrgPatch, db: AsyncSession = Depends(get_db)
+    id: uuid.UUID,
+    body: OrgPatch,
+    user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_db),
 ) -> OrgDetail:
     org = await _alive_org(db, id)
     if org is None:
@@ -644,7 +775,7 @@ async def update_org(
     if body.memo is not None:
         org.memo = body.memo
     await db.commit()
-    return await _org_detail(db, org.id)
+    return await _org_detail(db, user, org.id)
 
 
 @router.delete(
@@ -674,13 +805,20 @@ async def delete_org(
         _invalid(f"사유를 1자 이상 {REASON_MAX}자 이하로 적어 주세요.")
     # 안건 행도 잠근다 — 판정과 삭제 사이에 재개·단계 되돌리기(_lock_deal)가 끼면 지운 기관에 진행 중 안건이 남는다
     statuses = (
-        (await db.execute(select(CrmDeal.status).where(CrmDeal.org_id == org.id).with_for_update()))
+        (
+            await db.execute(
+                select(CrmDeal.status)
+                .where(CrmDeal.org_id == org.id, CrmDeal.deleted_at.is_(None))
+                .with_for_update()
+            )
+        )
         .scalars()
         .all()
     )
     if open_count := statuses.count("open"):
         _conflict(f"진행 중 안건 {open_count}건을 먼저 중단하거나 끝내야 지울 수 있습니다.")
     org.deleted_at = datetime.now(UTC)
+    org.deleted_reason = reason
     audit.record(  # 삭제 창이 「사유는 감사 기록에 남습니다」라고 약속한다
         db,
         "crm.org_deleted",
@@ -697,13 +835,29 @@ async def delete_org(
 
 
 @router.post("/contacts", status_code=201, response_model=ContactOut, summary="담당자 등록")
-async def create_contact(body: ContactIn, db: AsyncSession = Depends(get_db)) -> ContactOut:
+async def create_contact(
+    body: ContactIn, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)
+) -> ContactOut:
     if await _alive_org(db, body.org_id) is None:
         _invalid("기관을 먼저 골라 주세요.")
-    contact = CrmContact(**body.model_dump())
+    contact = CrmContact(**body.model_dump(), created_by=user.id)
     db.add(contact)
     await db.commit()
-    return (await _contacts_out(db, [contact]))[0]
+    return (await _contacts_out(db, user, [contact]))[0]
+
+
+async def _alive_contact(db: AsyncSession, contact_id: uuid.UUID) -> CrmContact:
+    """목록에서 지우지 않았고 기관도 살아 있는 담당자를 잠가 읽는다 — 아니면 404(조회와 같은 기준)."""
+    contact = (
+        await db.execute(
+            select(CrmContact)
+            .where(CrmContact.id == contact_id, CrmContact.deleted_at.is_(None))
+            .with_for_update()
+        )
+    ).scalar_one_or_none()
+    if contact is None or await _alive_org(db, contact.org_id) is None:
+        _not_found("담당자를")
+    return contact
 
 
 @router.patch(
@@ -713,14 +867,12 @@ async def create_contact(body: ContactIn, db: AsyncSession = Depends(get_db)) ->
     summary="담당자 수정 — org_id 가 지금과 다르면 이직(이력을 남긴다). 옛 활동은 옛 기관에 남는다",
 )
 async def update_contact(
-    id: uuid.UUID, body: ContactPatch, db: AsyncSession = Depends(get_db)
+    id: uuid.UUID,
+    body: ContactPatch,
+    user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_db),
 ) -> ContactOut:
-    contact = (
-        await db.execute(select(CrmContact).where(CrmContact.id == id).with_for_update())
-    ).scalar_one_or_none()
-    # 지운 기관의 담당자는 조회(기관 상세)와 같게 404
-    if contact is None or await _alive_org(db, contact.org_id) is None:
-        _not_found("담당자를")
+    contact = await _alive_contact(db, id)
     if contact.erased:
         _conflict("개인정보가 삭제된 담당자는 고칠 수 없습니다.")
     changes = body.model_dump(exclude_unset=True)
@@ -741,7 +893,29 @@ async def update_contact(
     for key, value in changes.items():
         setattr(contact, key, value)
     await db.commit()
-    return (await _contacts_out(db, [contact]))[0]
+    return (await _contacts_out(db, user, [contact]))[0]
+
+
+@router.delete(
+    "/contacts/{id}",
+    status_code=204,
+    summary="담당자 지우기(목록에서 뺌) — 등록한 사람(지우지 않은 활동에 붙기 전)·exec. 활동 참석자 이름은 남는다",
+)
+async def delete_contact(
+    id: uuid.UUID,
+    request: Request,
+    user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    contact = await _alive_contact(db, id)
+    used = (await db.execute(_in_alive_activity([contact.id]).limit(1))).first() is not None
+    if not _can_delete_contact(user, contact, used):
+        await _deny(db, request, user, contact.id, "contact_delete")
+    contact.deleted_at = datetime.now(UTC)
+    # 이름은 남기지 않는다(개인정보 삭제와 같은 이유) — 행에 그대로 있다
+    audit.record(db, "crm.contact_deleted", request=request, actor_id=user.id, target_id=contact.id)
+    await db.commit()
+    return Response(status_code=204)
 
 
 @router.post(
@@ -767,7 +941,7 @@ async def erase_contact(
     # 지운 사람의 이름은 남기지 않는다 — 남기면 개인정보 삭제가 아니다
     audit.record(db, "crm.contact_erased", request=request, actor_id=user.id, target_id=contact.id)
     await db.commit()
-    return (await _contacts_out(db, [contact]))[0]
+    return (await _contacts_out(db, user, [contact]))[0]
 
 
 # ── 안건 ───────────────────────────────────────────────────────────────────
@@ -776,7 +950,7 @@ _DEALS = (
     select(CrmDeal, CrmOrg.name, User)
     .join(CrmOrg, CrmOrg.id == CrmDeal.org_id)
     .outerjoin(User, User.id == CrmDeal.owner_id)
-    .where(CrmOrg.deleted_at.is_(None))
+    .where(CrmOrg.deleted_at.is_(None), CrmDeal.deleted_at.is_(None))
 )
 
 
@@ -797,17 +971,33 @@ def _deal_fields(deal: CrmDeal, org_name: str, owner: User | None) -> dict:
     }
 
 
-async def _deal_detail(db: AsyncSession, deal_id: uuid.UUID) -> DealDetail:
+async def _deal_used(db: AsyncSession, deal_id: uuid.UUID) -> bool:
+    """지우지 않은 활동이 붙은 안건 — 등록한 사람도 이때부터는 못 지운다."""
+    stmt = select(CrmActivity.id).where(
+        CrmActivity.deal_id == deal_id, CrmActivity.deleted_at.is_(None)
+    )
+    return (await db.execute(stmt.limit(1))).first() is not None
+
+
+def _can_delete_deal(user: User, creator_id: uuid.UUID | None, used: bool) -> bool:
+    # 등록한 사람 = 등록 이력(from_stage NULL 인 move)의 주인. exec 는 언제나
+    return user.role == "exec" or (creator_id == user.id and not used)
+
+
+async def _deal_detail(db: AsyncSession, user: User, deal_id: uuid.UUID) -> DealDetail:
     row = (await db.execute(_DEALS.where(CrmDeal.id == deal_id))).first()
     if row is None:
         _not_found("안건을")
     deal, org_name, owner = row
-    events = await db.execute(
-        select(CrmDealEvent, User)
-        .join(User, User.id == CrmDealEvent.actor_id)
-        .where(CrmDealEvent.deal_id == deal.id)
-        .order_by(CrmDealEvent.created_at.desc(), CrmDealEvent.id)
-    )
+    events = (
+        await db.execute(
+            select(CrmDealEvent, User)
+            .join(User, User.id == CrmDealEvent.actor_id)
+            .where(CrmDealEvent.deal_id == deal.id)
+            .order_by(CrmDealEvent.created_at.desc(), CrmDealEvent.id)
+        )
+    ).all()
+    creator = next((e.actor_id for e, _ in reversed(events) if e.from_stage is None), None)
     return DealDetail(
         **_deal_fields(deal, org_name, owner),
         drop_reason=deal.drop_reason,
@@ -825,12 +1015,17 @@ async def _deal_detail(db: AsyncSession, deal_id: uuid.UUID) -> DealDetail:
             )
             for e, actor in events
         ],
+        can_delete=_can_delete_deal(user, creator, await _deal_used(db, deal.id)),
     )
 
 
 async def _lock_deal(db: AsyncSession, deal_id: uuid.UUID) -> CrmDeal:
     deal = (
-        await db.execute(select(CrmDeal).where(CrmDeal.id == deal_id).with_for_update())
+        await db.execute(
+            select(CrmDeal)
+            .where(CrmDeal.id == deal_id, CrmDeal.deleted_at.is_(None))
+            .with_for_update()
+        )
     ).scalar_one_or_none()
     # 잠근 뒤 새 문장으로 기관을 본다 — 기관 삭제가 이 안건을 잠그고 있었다면 그 결과(deleted_at)가 보인다
     if deal is None or await _alive_org(db, deal.org_id) is None:
@@ -894,12 +1089,49 @@ async def create_deal(
     await db.flush()
     db.add(_event(deal, user, now, "move", from_stage=None, to_stage=first))
     await db.commit()
-    return await _deal_detail(db, deal.id)
+    return await _deal_detail(db, user, deal.id)
 
 
 @router.get("/deals/{id}", response_model=DealDetail, summary="안건 상세 — 이력 최신 위")
-async def get_deal(id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> DealDetail:
-    return await _deal_detail(db, id)
+async def get_deal(
+    id: uuid.UUID, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)
+) -> DealDetail:
+    return await _deal_detail(db, user, id)
+
+
+@router.delete(
+    "/deals/{id}",
+    status_code=204,
+    summary="안건 지우기(목록에서 뺌) — 등록한 사람(지우지 않은 활동이 붙기 전)·exec. 이력·활동은 남는다",
+)
+async def delete_deal(
+    id: uuid.UUID,
+    request: Request,
+    user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    deal = await _lock_deal(db, id)
+    creator = (
+        await db.execute(
+            select(CrmDealEvent.actor_id)
+            .where(CrmDealEvent.deal_id == deal.id, CrmDealEvent.from_stage.is_(None))
+            .order_by(CrmDealEvent.created_at)
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if not _can_delete_deal(user, creator, await _deal_used(db, deal.id)):
+        await _deny(db, request, user, deal.id, "deal_delete")
+    deal.deleted_at = datetime.now(UTC)
+    audit.record(  # 지운 뒤에는 찾을 수 없으니 감사 화면이 알아보게 이름을 남긴다
+        db,
+        "crm.deal_deleted",
+        request=request,
+        actor_id=user.id,
+        target_id=deal.id,
+        detail={"name": deal.name},
+    )
+    await db.commit()
+    return Response(status_code=204)
 
 
 @router.patch(
@@ -946,7 +1178,7 @@ async def update_deal(
         setattr(deal, key, value)
     deal.version += 1  # 칸이 안 바뀌어도 올린다
     await db.commit()
-    return await _deal_detail(db, deal.id)
+    return await _deal_detail(db, user, deal.id)
 
 
 @router.post(
@@ -978,7 +1210,7 @@ async def drop_deal(
         _event(deal, user, now, "drop", from_stage=deal.stage, to_stage=deal.stage, reason=reason)
     )
     await db.commit()
-    return await _deal_detail(db, deal.id)
+    return await _deal_detail(db, user, deal.id)
 
 
 @router.post(
@@ -1006,7 +1238,7 @@ async def reopen_deal(
         _event(deal, user, datetime.now(UTC), "reopen", from_stage=deal.stage, to_stage=deal.stage)
     )
     await db.commit()
-    return await _deal_detail(db, deal.id)
+    return await _deal_detail(db, user, deal.id)
 
 
 # ── 활동 ───────────────────────────────────────────────────────────────────
@@ -1014,7 +1246,8 @@ async def reopen_deal(
 _ACTIVITIES = (
     select(CrmActivity, CrmOrg.name, CrmDeal.name, User)
     .join(CrmOrg, CrmOrg.id == CrmActivity.org_id)
-    .outerjoin(CrmDeal, CrmDeal.id == CrmActivity.deal_id)
+    # 지운 안건은 붙이지 않는다 — 활동은 기관 타임라인에 남고 안건 표시만 빠진다
+    .outerjoin(CrmDeal, and_(CrmDeal.id == CrmActivity.deal_id, CrmDeal.deleted_at.is_(None)))
     .join(User, User.id == CrmActivity.author_id)
     .where(CrmActivity.deleted_at.is_(None))
 )
@@ -1049,7 +1282,7 @@ async def _activities_out(db: AsyncSession, user: User, rows) -> list[ActivityOu
             kind=a.kind,
             occurred_at=a.occurred_at,
             org=Person(id=a.org_id, name=org_name),
-            deal=Person(id=a.deal_id, name=deal_name) if a.deal_id else None,
+            deal=Person(id=a.deal_id, name=deal_name) if deal_name is not None else None,
             contacts=contacts[a.id],
             users=people[a.id],
             author=Person.model_validate(author),
@@ -1074,7 +1307,7 @@ def _check_when(at: datetime) -> None:
 async def _check_contacts(db: AsyncSession, org_id: uuid.UUID, ids: set[uuid.UUID]) -> None:
     """외부 참석자는 그 기관 소속 담당자만 — 다른 기관 사람을 섞으면 타임라인이 거짓말을 한다.
 
-    개인정보를 지운 담당자는 새로 넣지 못한다(수정 때 이미 있던 참석자는 호출하는 쪽이 빼고 넘긴다)."""
+    개인정보를 지웠거나 목록에서 지운 담당자는 새로 넣지 못한다(수정 때 이미 있던 참석자는 호출하는 쪽이 빼고 넘긴다)."""
     if not ids:
         return
     n = (
@@ -1085,6 +1318,7 @@ async def _check_contacts(db: AsyncSession, org_id: uuid.UUID, ids: set[uuid.UUI
                 CrmContact.id.in_(ids),
                 CrmContact.org_id == org_id,
                 CrmContact.erased.is_(False),
+                CrmContact.deleted_at.is_(None),
             )
         )
     ).scalar_one()
@@ -1096,7 +1330,7 @@ async def _check_deal(db: AsyncSession, org_id: uuid.UUID, deal_id: uuid.UUID | 
     if deal_id is None:
         return
     deal = await db.get(CrmDeal, deal_id)
-    if deal is None or deal.org_id != org_id:
+    if deal is None or deal.org_id != org_id or deal.deleted_at is not None:
         _invalid("이 기관의 안건이 아닙니다.")
 
 
@@ -1131,7 +1365,7 @@ async def list_activities(
         cond = CrmActivity.org_id == org_id  # 안건에 건 기록도 기관 타임라인에 뜬다
     elif deal_id is not None:
         deal = await db.get(CrmDeal, deal_id)
-        if deal is None or await _alive_org(db, deal.org_id) is None:
+        if deal is None or deal.deleted_at is not None or await _alive_org(db, deal.org_id) is None:
             _not_found("안건을")
         cond = CrmActivity.deal_id == deal_id
     else:
@@ -1221,7 +1455,8 @@ async def update_activity(
         # 그사이 이직한 참석자는 이미 기록에 있던 사람이라 그대로 둔다. 새로 넣는 사람만 본다
         await _check_contacts(db, activity.org_id, contact_ids - current)
     deal_id = (changes["deal_id"] or None) if "deal_id" in changes else activity.deal_id
-    if "deal_id" in changes:
+    # 바뀔 때만 본다 — 그사이 지운 안건에 걸려 있던 기록을 낡은 화면에서 고쳐도 막히지 않게
+    if deal_id != activity.deal_id:
         await _check_deal(db, activity.org_id, deal_id)
     # 검사를 다 지난 뒤에만 고친다
     if contact_ids is not None:
@@ -1291,7 +1526,9 @@ def _row_error(org_name: str, name: str, cells: dict[str, str]) -> str | None:
     return None
 
 
-async def _import(db: AsyncSession, rows: list[list[str]], dry_run: bool) -> ImportResult:
+async def _import(
+    db: AsyncSession, user: User, rows: list[list[str]], dry_run: bool
+) -> ImportResult:
     """한 행이 담당자 한 명, 이름이 비면 기관만. 기관은 정규화 이름으로 기존 기관에 붙인다(중복 기관을 만들지 않는다).
 
     같은 기관에 같은 이름의 담당자가 있으면 건너뛴다(갱신 안 함). 실패 행은 사유와 함께 돌려주고 나머지는 반영한다.
@@ -1324,7 +1561,11 @@ async def _import(db: AsyncSession, rows: list[list[str]], dry_run: bool) -> Imp
         for norm, name in await db.execute(
             select(CrmOrg.name_norm, CrmContact.name)
             .join(CrmOrg, CrmOrg.id == CrmContact.org_id)
-            .where(CrmOrg.deleted_at.is_(None), CrmContact.erased.is_(False))
+            .where(
+                CrmOrg.deleted_at.is_(None),
+                CrmContact.erased.is_(False),
+                CrmContact.deleted_at.is_(None),
+            )
         )
     }
 
@@ -1384,11 +1625,160 @@ async def _import(db: AsyncSession, rows: list[list[str]], dry_run: bool) -> Imp
                     )
                 )
             result.new_contacts += 1
+    if new_orgs or new_contacts:  # 되돌리기의 근거 — 만든 것이 없으면 남기지 않는다
+        batch = CrmImport(id=uuid.uuid4(), user_id=user.id, created_at=datetime.now(UTC))
+        db.add(batch)
+        await db.flush()
+        for row_ in (*new_orgs, *new_contacts):
+            row_.import_id = batch.id
+        for contact in new_contacts:
+            contact.created_by = user.id
     # 관계(relationship)를 안 걸어 두어 작업 단위가 INSERT 순서를 모른다 — 기관을 먼저 넣는다(외래키)
     db.add_all(new_orgs)
     await db.flush()
     db.add_all(new_contacts)
     return result
+
+
+# ── 가져오기 되돌리기 ───────────────────────────────────────────────────────
+# 프론트(#315)가 정한 계약. 가져온 사람만, 24시간 안에. 그 가져오기로 만든 기관·담당자 중 아직 안 쓰인 것을 행째 지운다.
+
+IMPORT_UNDO = timedelta(hours=24)  # 가져온 뒤 손으로 고친 칸까지 같이 지워지므로 길게 두지 않는다
+
+
+@router.get(
+    "/imports/last",
+    response_model=LastImportOut,
+    summary="내가 한 마지막 가져오기 — 되돌릴 것이 없거나 24시간이 지났으면 {import: null}",
+)
+async def last_import(
+    user: User = Depends(current_user), db: AsyncSession = Depends(get_db)
+) -> LastImportOut:
+    batch = (
+        await db.execute(
+            select(CrmImport)
+            .where(CrmImport.user_id == user.id, CrmImport.undone_at.is_(None))
+            .order_by(CrmImport.created_at.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if batch is None or datetime.now(UTC) - batch.created_at >= IMPORT_UNDO:
+        return LastImportOut(import_=None)
+    orgs = select(func.count()).select_from(CrmOrg).where(CrmOrg.import_id == batch.id)
+    contacts = select(func.count()).select_from(CrmContact).where(CrmContact.import_id == batch.id)
+    return LastImportOut(
+        import_=LastImport(
+            id=batch.id,
+            created_at=batch.created_at,
+            new_orgs=(await db.execute(orgs)).scalar_one(),
+            new_contacts=(await db.execute(contacts)).scalar_one(),
+        )
+    )
+
+
+async def _ids(db: AsyncSession, stmt) -> set[uuid.UUID]:
+    return set((await db.execute(stmt)).scalars())
+
+
+@router.post(
+    "/imports/{id}/undo",
+    response_model=ImportUndone,
+    responses={409: {"description": "가져온 지 24시간이 지났다"}},
+    summary="가져오기 되돌리기 — 가져온 사람만, 24시간 안에. 그사이 쓰이기 시작한 기관·담당자는 남긴다(kept_*)",
+)
+async def undo_import(
+    id: uuid.UUID,
+    request: Request,
+    user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_db),
+) -> ImportUndone:
+    """쓰이기 시작한 것: 기관 — 안건·활동·이직 이력이 있거나 다른 담당자가 있다(지운 안건·활동·담당자도 센다,
+    아래 ponytail). 그 기관과 거기 가져온 담당자는 통째로 남긴다. 담당자 — 그 기관이 남거나, 개인정보를 지웠거나,
+    이직했거나, 활동 참석자다. 목록에서 지운 행도 같은 판정으로 치우되 수에는 넣지 않는다(화면에 없던 것).
+
+    ponytail: 지운 안건·활동·담당자가 가리키는 행은 외래키 때문에 행째 지울 수 없어 「쓰인 것」으로 남긴다(목은 지운다).
+    판정과 DELETE 사이에 누가 그 담당자를 활동에 붙이면 외래키 위반 409 — 다시 누르면 남긴 쪽으로 판정된다.
+    """
+    batch = (
+        await db.execute(
+            select(CrmImport)
+            .where(CrmImport.id == id, CrmImport.undone_at.is_(None))
+            .with_for_update()
+        )
+    ).scalar_one_or_none()
+    if batch is None:  # 되돌린 것도 404 — 두 번 눌러도 더 지우지 않는다
+        _not_found("가져오기를")
+    if batch.user_id != user.id:
+        await _deny(db, request, user, batch.id, "import_undo")
+    now = datetime.now(UTC)
+    if now - batch.created_at >= IMPORT_UNDO:
+        _conflict("가져온 지 24시간이 지나 되돌릴 수 없습니다.")
+
+    orgs = list((await db.execute(select(CrmOrg).where(CrmOrg.import_id == batch.id))).scalars())
+    contacts = list(
+        (await db.execute(select(CrmContact).where(CrmContact.import_id == batch.id))).scalars()
+    )
+    org_ids = [o.id for o in orgs]
+    mine = [c.id for c in contacts]
+    busy: set[uuid.UUID] = set()
+    if org_ids:
+        busy |= await _ids(db, select(CrmDeal.org_id).where(CrmDeal.org_id.in_(org_ids)))
+        busy |= await _ids(db, select(CrmActivity.org_id).where(CrmActivity.org_id.in_(org_ids)))
+        busy |= await _ids(
+            db,
+            select(CrmContactMove.from_org_id).where(CrmContactMove.from_org_id.in_(org_ids)),
+        )
+        busy |= await _ids(
+            db, select(CrmContactMove.to_org_id).where(CrmContactMove.to_org_id.in_(org_ids))
+        )
+        busy |= await _ids(
+            db,
+            select(CrmContact.org_id).where(
+                CrmContact.org_id.in_(org_ids), CrmContact.id.not_in(mine)
+            ),
+        )
+    used: set[uuid.UUID] = set()
+    if mine:
+        used |= await _ids(
+            db, select(CrmContactMove.contact_id).where(CrmContactMove.contact_id.in_(mine))
+        )
+        used |= await _ids(
+            db,
+            select(CrmActivityContact.contact_id).where(CrmActivityContact.contact_id.in_(mine)),
+        )
+
+    done = ImportUndone(removed_orgs=0, removed_contacts=0, kept_orgs=0, kept_contacts=0)
+    kept_orgs = set(busy)
+    removed_contacts = []
+    for c in contacts:
+        keep = c.org_id in busy or c.erased or c.id in used
+        if keep:
+            kept_orgs.add(c.org_id)  # 남긴 담당자가 있는 기관도 남긴다
+        else:
+            removed_contacts.append(c.id)
+        if c.deleted_at is None:
+            if keep:
+                done.kept_contacts += 1
+            else:
+                done.removed_contacts += 1
+    removed_orgs = [o.id for o in orgs if o.id not in kept_orgs]
+    for o in orgs:
+        if o.deleted_at is None:
+            if o.id in kept_orgs:
+                done.kept_orgs += 1
+            else:
+                done.removed_orgs += 1
+    if removed_contacts:
+        await db.execute(delete(CrmContact).where(CrmContact.id.in_(removed_contacts)))
+    if removed_orgs:
+        await db.execute(delete(CrmOrgOwner).where(CrmOrgOwner.org_id.in_(removed_orgs)))
+        await db.execute(delete(CrmOrg).where(CrmOrg.id.in_(removed_orgs)))
+    batch.undone_at = now
+    audit.record(
+        db, "crm.import_undone", request=request, actor_id=user.id, detail=done.model_dump()
+    )
+    await db.commit()
+    return done
 
 
 # ── 내보내기(xlsx) ──────────────────────────────────────────────────────────
@@ -1458,7 +1848,11 @@ async def export(
             await db.execute(
                 select(CrmContact, CrmOrg.name, CrmOrg.name_norm)
                 .join(CrmOrg, CrmOrg.id == CrmContact.org_id)
-                .where(CrmOrg.deleted_at.is_(None), CrmContact.erased.is_(False))
+                .where(
+                    CrmOrg.deleted_at.is_(None),
+                    CrmContact.erased.is_(False),
+                    CrmContact.deleted_at.is_(None),
+                )
             )
         ).all()
         found.sort(key=lambda r: (r[2], r[0].name, r[0].id))

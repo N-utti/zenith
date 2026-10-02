@@ -439,6 +439,21 @@ class CrmOrg(Base):
     memo: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
     created_at: Mapped[datetime] = created_at_col()
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # 임원 삭제
+    deleted_reason: Mapped[str | None] = mapped_column(Text)  # 지울 때 적은 사유(지운 기관 목록)
+    # 이 기관을 만든 CSV 가져오기 — 되돌리기가 지울 대상(README 32 추가)
+    import_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("crm_imports.id"))
+
+
+class CrmImport(Base):
+    """반영된 CSV 가져오기 한 번. 되돌리기(24시간 안, 가져온 사람만)의 근거 — 만든 행은 `import_id` 로 가리킨다."""
+
+    __tablename__ = "crm_imports"
+    __table_args__ = (Index("idx_crm_imports_user", "user_id", sql_text("created_at DESC")),)
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = created_at_col()
+    undone_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class CrmOrgOwner(Base):
@@ -464,6 +479,11 @@ class CrmContact(Base):
     # 개인정보 삭제 — 위 칸을 "" 로 비우고 행은 남긴다(활동 참석자·이직 이력 유지)
     erased: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=sql_text("false"))
     created_at: Mapped[datetime] = created_at_col()
+    # 등록한 사람 — 활동에 붙기 전까지 지울 수 있다. 이 칸이 생기기 전 행은 NULL(임원만 지운다)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
+    # 목록에서 뺀 시각. 행은 남아 활동 참석자 이름으로 보인다(개인정보 비우기는 erased)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    import_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("crm_imports.id"))
 
 
 class CrmContactMove(Base):
@@ -504,6 +524,8 @@ class CrmDeal(Base):
     version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")  # 낙관적 잠금
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = created_at_col()
+    # 지운 안건 — 보드·목록·내보내기에서 빠지고 상세는 404. 이력·활동 연결은 남는다
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class CrmDealEvent(Base):
