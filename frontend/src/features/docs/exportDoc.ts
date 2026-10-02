@@ -5,10 +5,18 @@ import { uploadedFilePath } from '@/lib/links'
 import { httpUrl, serverOrigin } from '@/lib/serverOrigin'
 import { buildDocx } from './docx'
 import { exportFileStem, imageSources, type ExportImage } from './exportContent'
+import { buildHwpx } from './hwpx'
 
-export type ExportFormat = 'docx' | 'pdf'
+export type ExportFormat = 'docx' | 'hwpx' | 'pdf'
 
-const DOCX_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+/** 파일로 만드는 형식. PDF 는 파일을 만들지 않고 인쇄 창으로 간다. */
+const FILES = {
+  docx: {
+    build: buildDocx,
+    type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  },
+  hwpx: { build: buildHwpx, type: 'application/hwp+zip' },
+}
 
 /** 파일 머리의 서명으로 형식을 본다. 이름의 확장자는 믿지 않는다. */
 function sniff(bytes: Uint8Array): ExportImage['ext'] | null {
@@ -22,9 +30,9 @@ function sniff(bytes: Uint8Array): ExportImage['ext'] | null {
 /**
  * 서버에서 사진을 받아 크기를 잰다. png·gif 는 받은 그대로 싣고, 나머지는 다시 그려 싣는다.
  *
- * - webp 는 워드가 못 읽는다. PNG 로 바꾼다(투명한 바탕이 살아야 해서 JPEG 이 아니다).
+ * - webp 는 워드·한글이 못 읽는다. PNG 로 바꾼다(투명한 바탕이 살아야 해서 JPEG 이 아니다).
  * - JPEG 은 세워 찍은 폰 사진이 «눕혀 저장하고 돌려 보라» 는 표시(EXIF)만 달고 온다. 브라우저는
- *   그 표시대로 세워 그리지만 워드는 따르지 않아, 그대로 실으면 사진이 눕고 비율까지 뒤바뀐다.
+ *   그 표시대로 세워 그리지만 워드·한글은 따르지 않아, 그대로 실으면 사진이 눕고 비율까지 뒤바뀐다.
  *   세워 그린 결과를 JPEG 으로 다시 담는다.
  */
 async function loadImage(path: string): Promise<ExportImage> {
@@ -148,7 +156,8 @@ export async function exportDoc(
   const doc = editor.getJSON()
   const sources = imageSources(doc)
   const images = await loadImages(sources)
-  const bytes = buildDocx({ title, doc, images, origin: serverOrigin() || location.origin })
-  downloadBytes(`${exportFileStem(title)}.docx`, bytes, DOCX_TYPE)
+  const { build, type } = FILES[format]
+  const bytes = build({ title, doc, images, origin: serverOrigin() || location.origin })
+  downloadBytes(`${exportFileStem(title)}.${format}`, bytes, type)
   return { missingImages: sources.length - images.size }
 }

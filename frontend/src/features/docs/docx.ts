@@ -316,7 +316,7 @@ export function buildDocx({ title, doc, images, origin }: ExportSource): Uint8Ar
       case 'imageBlock':
         return picture(node, ctx)
       default:
-        // 모르는 블록은 버리지 않고 안의 것을 꺼내 쓴다.
+        // 모르는 블록은 버리지 않고 안의 블록을 꺼내 쓴다.
         return blocks(node.content, ctx)
     }
   }
