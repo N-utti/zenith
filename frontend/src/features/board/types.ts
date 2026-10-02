@@ -41,7 +41,21 @@ export type BoardPost = Omit<Schema<'PostOut'>, 'min_role'> & {
   pinned?: boolean
 }
 
-export type BoardPostDetail = BoardPost & Pick<Schema<'PostDetail'>, 'body'>
+/**
+ * 게시글 첨부. 채팅 첨부(`AttachmentOut`)와 같은 모양이다.
+ *
+ * 서버에는 아직 없다(프론트가 먼저 만들었다, `api.ts` 의 `POST_ATTACHMENTS_ENABLED`). 올리기는
+ * `POST /boards/{id}/attachments`, 내려받기는 응답의 `url`. 채팅 첨부가 채널 경로 밑에 있어
+ * 받을 때마다 멤버십을 다시 재듯, 게시판 경로 밑에 두어야 서버가 게시판 등급으로 판정할 수 있다.
+ * 공용 `/files` 는 로그인이면 누구나 읽어서 등급 게시판에는 쓸 수 없다.
+ */
+export type PostAttachment = Schema<'AttachmentOut'>
+
+export type BoardPostDetail = BoardPost &
+  Pick<Schema<'PostDetail'>, 'body'> & {
+    /** 붙인 파일. 실서버는 아직 이 칸을 주지 않는다(없으면 없는 것으로 그린다). */
+    attachments?: PostAttachment[]
+  }
 
 /**
  * 게시글 댓글. 서버에는 아직 없다(프론트가 먼저 만들었다, `api.ts` 의 `POST_COMMENTS_ENABLED`).
