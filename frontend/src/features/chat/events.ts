@@ -26,6 +26,43 @@ export function appendMessage<P extends { items: ChatMessage[] }>(
 }
 
 /**
+ * `msg_edit` 로 받은 메시지를 제자리에 갈아 끼운다. 목록에 없는 메시지면(아직 안 받은 과거)
+ * 그대로 둔다. 그 쪽을 받을 때 서버가 고친 뒤의 것을 준다.
+ */
+export function replaceMessage<P extends { items: ChatMessage[] }>(
+  page: P | undefined,
+  message: ChatMessage,
+): P | undefined {
+  if (!page || !page.items.some((item) => item.id === message.id)) return page
+  return { ...page, items: page.items.map((item) => (item.id === message.id ? message : item)) }
+}
+
+/** `msg_del` 로 받은 id 를 목록에서 뺀다. 없는 id 면 같은 객체를 돌려준다(다시 그리지 않게). */
+export function removeMessage<P extends { items: ChatMessage[] }>(
+  page: P | undefined,
+  messageId: string,
+): P | undefined {
+  if (!page || !page.items.some((item) => item.id === messageId)) return page
+  return { ...page, items: page.items.filter((item) => item.id !== messageId) }
+}
+
+/**
+ * 고쳐진 메시지가 그 채널의 「마지막 메시지」였으면 미리보기 글도 바꾼다. 시각은 그대로라
+ * 순서는 안 바뀐다.
+ */
+export function withEditedLast(
+  list: { items: ChatChannel[] } | undefined,
+  message: ChatMessage,
+): { items: ChatChannel[] } | undefined {
+  if (!list || !list.items.some((item) => item.last_message?.id === message.id)) return list
+  return {
+    items: list.items.map((item) =>
+      item.last_message?.id === message.id ? { ...item, last_message: message } : item,
+    ),
+  }
+}
+
+/**
  * 더 과거 한 쪽을 목록 앞에 붙인다. 커서는 새로 받은 쪽의 것으로 바꾼다(그보다 더 과거를 가리킨다).
  *
  * `cursor` 는 그 쪽을 청할 때 쓴 커서다. 목록의 지금 커서와 다르면 버린다. 받는 사이에 목록이

@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, expect, test, vi } from 'vitest'
+import { ToastContext, type ToastApi } from '@/components/ui/ToastContext'
 import { AuthContext, type AuthValue } from '@/features/auth/AuthContext'
 import { chatKeys } from '@/features/chat/api'
 import { ChatSocketContext } from '@/features/chat/ChatSocketContext'
@@ -43,13 +44,18 @@ const socket = {
   typingByChannel: {},
   notifyTyping: () => {},
   sendRead: () => {},
+  editMessage: () => true,
+  deleteMessage: () => true,
 } as unknown as ChatSocket
+const toast: ToastApi = { success: vi.fn(), error: vi.fn(), info: vi.fn() }
 
 function message(channelId: string, n: number): ChatMessage {
   return {
     id: `${channelId}-${n}`,
     channel_id: channelId,
-    author: { id: 'u1', name: '정성운' },
+    // 둘째 줄은 내 메시지다. 내 줄에는 고치기·지우기 함수가 넘어가는데, 그 함수가 그릴 때마다
+    // 새로 만들어지면 내 줄만 매번 다시 그려진다. 아래 횟수 단언이 그것도 같이 잡는다.
+    author: n === 2 ? { id: 'me', name: '나' } : { id: 'u1', name: '정성운' },
     body: `${channelId}-${n}`,
     doc_ref: null,
     attachments: null,
@@ -89,18 +95,22 @@ function open() {
           AuthContext,
           { value: auth },
           createElement(
-            ChatSocketContext,
-            { value: socket },
+            ToastContext,
+            { value: toast },
             createElement(
-              MemoryRouter,
-              { initialEntries: ['/chat/c'] },
+              ChatSocketContext,
+              { value: socket },
               createElement(
-                Routes,
-                null,
-                createElement(Route, {
-                  path: '/chat/:channelId',
-                  element: createElement(ChatPage),
-                }),
+                MemoryRouter,
+                { initialEntries: ['/chat/c'] },
+                createElement(
+                  Routes,
+                  null,
+                  createElement(Route, {
+                    path: '/chat/:channelId',
+                    element: createElement(ChatPage),
+                  }),
+                ),
               ),
             ),
           ),
