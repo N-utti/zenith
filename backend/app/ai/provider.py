@@ -5,6 +5,7 @@ ARCHITECTURE §6은 Ollama(사내 Mac mini)였으나 2026-09-04 결정으로 Cla
 병행하려면 같은 프로토콜을 구현한 클래스를 하나 더 두고 `get_provider`에서 고르면 된다.
 """
 
+import logging
 from collections.abc import AsyncIterator
 from functools import lru_cache
 from typing import Protocol
@@ -12,6 +13,8 @@ from typing import Protocol
 import anthropic
 
 from app.config import settings
+
+log = logging.getLogger("zenith.ai")
 
 ChatMessage = dict[str, str]  # {"role": "user" | "assistant", "content": str}
 
@@ -26,7 +29,9 @@ class LLMError(Exception):
 class LLMProvider(Protocol):
     def models(self) -> list[dict[str, object]]: ...
 
-    def stream(self, *, system: str, messages: list[ChatMessage]) -> AsyncIterator[str]: ...
+    def stream(
+        self, *, system: str, messages: list[ChatMessage], max_tokens: int | None = None
+    ) -> AsyncIterator[str]: ...
 
 
 class ClaudeProvider:
@@ -46,11 +51,13 @@ class ClaudeProvider:
             self._client = anthropic.AsyncAnthropic(api_key=self._api_key)
         return self._client
 
-    async def stream(self, *, system: str, messages: list[ChatMessage]) -> AsyncIterator[str]:
+    async def stream(
+        self, *, system: str, messages: list[ChatMessage], max_tokens: int | None = None
+    ) -> AsyncIterator[str]:
         try:
             async with self._client_or_create().beta.messages.stream(
                 model=self.model,
-                max_tokens=self.max_tokens,
+                max_tokens=max_tokens or self.max_tokens,
                 system=system,
                 messages=messages,  # type: ignore[arg-type]
                 # 안전 분류기가 거부하면 서버가 대체 모델로 같은 요청을 재실행한다 (Opus 5 권장 설정).
@@ -69,7 +76,9 @@ class ClaudeProvider:
         except anthropic.APIConnectionError as e:
             raise LLMError("AI_UNREACHABLE", "AI 서비스에 연결할 수 없습니다.") from e
         except anthropic.AnthropicError as e:
-            raise LLMError("AI_CONFIG", f"AI 설정 오류: {e}") from e
+            # SDK 문구에 설정 내용이 섞일 수 있어 응답에는 고정 문구만, 원문은 로그에만.
+            log.exception("AI 설정 오류")
+            raise LLMError("AI_CONFIG", "AI 설정 오류입니다.") from e
         if final.stop_reason == "refusal":
             raise LLMError("AI_REFUSED", "AI가 이 요청에는 답하지 않습니다.")
 
