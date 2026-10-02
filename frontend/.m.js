@@ -1,1 +1,0 @@
-(() => { const rows = [...document.querySelectorAll('[id^="m-"]')]; window.__r = rows.map(r => r.id + ':' + (r.querySelector('p.text-muted')?.textContent ?? '(본문 없음)').slice(0, 30) + (r.querySelector('button[title="고치기"]') ? '[내것]' : '')).join(' | ') })()
