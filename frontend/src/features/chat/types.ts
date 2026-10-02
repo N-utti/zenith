@@ -16,19 +16,13 @@ export type ChatAttachment = Schema<'AttachmentOut'>
  * 백엔드 `MessageOut`. 소켓이 밀어 주는 메시지도 같은 모양이다.
  * `doc_ref` 는 문서 id뿐이라(`MessageList.tsx` 의 `DocCard`), 제목·수정 정보는 그 문서를 따로 조회해 채운다.
  */
-export type ChatMessage = Schema<'MessageOut'> & {
-  /**
-   * 고친 시각. 고친 적이 없으면 `null`. 서버 `MessageOut` 에는 아직 없는 칸이라(고치기·지우기는
-   * 프론트가 먼저 만들었다, `MessageList.tsx` 의 `MESSAGE_EDIT_ENABLED`) 실서버에서는 오지 않는다.
-   */
-  edited_at?: string | null
-}
+export type ChatMessage = Schema<'MessageOut'>
 
 /**
  * 백엔드 `MessagePage`. 메시지 한 쪽(오래된 순). `next_cursor` 는 더 과거가 있을 때만 오고, 다음
  * 요청의 `?cursor=` 로 그대로 돌려준다. 뜻은 서버만 안다(화면은 읽지 않는다).
  */
-export type MessagePage = Omit<Schema<'MessagePage'>, 'items'> & { items: ChatMessage[] }
+export type MessagePage = Schema<'MessagePage'>
 
 /**
  * 백엔드 `ChannelOut`. DM 은 보는 사람에 따라 이름이 다르다. `name` 에 상대의 이름이 온다.
@@ -48,7 +42,7 @@ export type ChatEvent =
   | { ev: 'msg'; channel_id: string; message: ChatMessage }
   /**
    * 메시지가 고쳐졌거나 지워졌다. 채널 멤버 전원에게 온다(고친 사람 포함). 고치기는 고친 뒤의
-   * 메시지 전체가, 지우기는 id 만 온다. 04 §4.1 에 없는 이벤트다(프론트가 정한 가정).
+   * 메시지 전체가, 지우기는 id 만 온다(백엔드 #284. 04 §4.1 에는 아직 없다).
    */
   | { ev: 'msg_edit'; channel_id: string; message: ChatMessage }
   | { ev: 'msg_del'; channel_id: string; message_id: string }
