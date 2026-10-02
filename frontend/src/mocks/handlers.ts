@@ -139,6 +139,8 @@ import {
   updateOrg,
   exportRows,
   importContacts,
+  lastImport,
+  undoImport,
 } from './crmDb'
 import { decodeText, parseCsv } from './csv'
 
@@ -2174,6 +2176,21 @@ data: ${JSON.stringify(data)}
         contacts: result.new_contacts,
       })
     }
+    return approvalResponse(result)
+  }),
+  // 가져오기 되돌리기. 15 §9 에 없는 경로다(프론트가 정한 가정). 가져온 사람만, 가져온 지 하루
+  // 안에. 내가 한 마지막 가져오기만 보이고, 되돌리면 그때 만든 기관·담당자 중 아직 쓰이지 않은
+  // 것을 지운다.
+  http.get(
+    '/api/crm/imports/last',
+    authed((user) => HttpResponse.json({ import: lastImport(user) })),
+  ),
+  http.post('/api/crm/imports/:id/undo', async ({ params }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    await delay(300)
+    const result = undoImport(user, String(params.id))
+    if (!('error' in result)) crmAudit('crm.import_undone', user, null, { ...result })
     return approvalResponse(result)
   }),
   // 지운 기관 목록과 되살리기. 15 §9 에 없는 경로다(프론트가 정한 가정). 임원만.

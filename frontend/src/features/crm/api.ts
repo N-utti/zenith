@@ -15,6 +15,8 @@ import type {
   DealStatus,
   DeletedOrg,
   ImportResult,
+  ImportUndone,
+  LastImport,
   OrgCreated,
   OrgDetail,
   OrgInput,
@@ -22,8 +24,9 @@ import type {
 } from './types'
 
 /**
- * 서버에 아직 없는 CRM 기능을 보일지: 지운 기관 되살리기. 백엔드의 CRM(#311)은 이 기능을 만들기 전의
- * 목을 옮긴 것이라 그 경로가 없다. 목이 켜진 개발 화면에서만 보인다. 서버가 받게 되면 걷는다.
+ * 서버에 아직 없는 CRM 기능을 보일지: 지운 기관 되살리기, 가져오기 되돌리기. 백엔드의 CRM(#311)은
+ * 이 기능들을 만들기 전의 목을 옮긴 것이라 그 경로가 없다. 목이 켜진 개발 화면에서만 보인다.
+ * 서버가 받게 되면 걷는다(이슈 #314).
  * 안건·담당자 지우기는 서버가 `can_delete` 를 주지 않아 버튼이 저절로 안 보인다.
  */
 export const CRM_EXTRAS_ENABLED = MSW_ENABLED
@@ -343,5 +346,29 @@ export function useImportContacts() {
       return api<ImportResult>(`/crm/orgs/import?dry_run=${dryRun}`, { method: 'POST', body })
     },
     onSuccess: (_, { dryRun }) => (dryRun ? undefined : refetch()),
+  })
+}
+
+/** 내가 한 마지막 가져오기. 가져오기 창을 열 때만 받는다. 없거나 기한이 지났으면 `null`. */
+export function useLastImport(enabled: boolean) {
+  return useQuery({
+    queryKey: [...crmKey, 'last-import'],
+    queryFn: () => api<{ import: LastImport | null }>('/crm/imports/last'),
+    // 서버에 없는 경로다. 스위치가 꺼져 있으면 부르지 않는다(안내 줄도 안 뜬다).
+    enabled: CRM_EXTRAS_ENABLED && enabled,
+  })
+}
+
+/**
+ * 가져오기 되돌리기. 그 가져오기로 만든 기관·담당자를 지운다. 잘못된 파일을 올렸을 때 수백 줄을
+ * 하나씩 지우지 않게 하는 길이다. 가져온 사람만, 기한 안에 된다. 그사이 쓰이기 시작한 것은 서버가
+ * 남긴다(`ImportUndone`).
+ */
+export function useUndoImport() {
+  const refetch = useRefetchCrm()
+  return useMutation({
+    mutationFn: (id: string) => api<ImportUndone>(`/crm/imports/${id}/undo`, { method: 'POST' }),
+    // 실패해도 다시 읽는다. 이미 되돌린 가져오기면(404) 창의 안내가 낡은 것이다.
+    onSettled: refetch,
   })
 }

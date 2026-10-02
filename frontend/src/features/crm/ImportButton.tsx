@@ -7,7 +7,8 @@ import { Spinner } from '@/components/ui/Spinner'
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/Table'
 import { useToast } from '@/components/ui/ToastContext'
 import { ApiError } from '@/lib/api'
-import { useImportContacts } from './api'
+import { formatDateTime, formatRelative } from '@/lib/datetime'
+import { useImportContacts, useLastImport, useUndoImport } from './api'
 import {
   IMPORT_MAX_ROWS,
   ORG_TYPE_LABEL,
@@ -39,6 +40,8 @@ export function ImportButton() {
   const [open, setOpen] = useState(false)
   const [file, setFile] = useState<File | null>(null)
   const [preview, setPreview] = useState<ImportResult | null>(null)
+  const last = useLastImport(open)
+  const undo = useUndoImport()
 
   // 반영 중에는 닫지 못하게 한다. 닫으면 서버에는 들어가는데 결과 알림이 사라진다.
   const applying = importing.isPending && preview !== null
@@ -76,6 +79,28 @@ export function ImportButton() {
         onError: (err) => toast.error(errorText(err)),
       },
     )
+  }
+
+  const undoLast = () => {
+    const target = last.data?.import
+    if (!target) return
+    // 언제 것인지를 같이 적는다. 방금 올린 것인 줄 알고 어제 것을 되돌리지 않게.
+    if (
+      !confirm(
+        `마지막 가져오기(${formatRelative(target.created_at)})로 만든 기관 ${target.new_orgs}곳·담당자 ${target.new_contacts}명을 지웁니다. 가져온 뒤 손으로 고친 내용도 같이 사라집니다. 그사이 쓰이기 시작한 것(안건·활동 기록이 생긴 기관과 그 담당자)은 남깁니다.`,
+      )
+    )
+      return
+    undo.mutate(target.id, {
+      onSuccess: (done) => {
+        const kept = done.kept_orgs + done.kept_contacts
+        toast.success(
+          `기관 ${done.removed_orgs}곳·담당자 ${done.removed_contacts}명을 되돌렸습니다.` +
+            (kept ? ` 그사이 쓰이기 시작한 ${kept}건은 남겼습니다.` : ''),
+        )
+      },
+      onError: (err) => toast.error(err instanceof ApiError ? err.message : '되돌리지 못했습니다.'),
+    })
   }
 
   const count = (status: ImportRow['status']) =>
@@ -146,10 +171,38 @@ export function ImportButton() {
             <p>
               엑셀에서 「CSV」 로 저장하면 됩니다. 한 번에 {IMPORT_MAX_ROWS.toLocaleString()}행까지.
             </p>
-            <Button disabled={importing.isPending} onClick={() => input.current?.click()}>
+            <Button
+              disabled={importing.isPending || undo.isPending}
+              onClick={() => input.current?.click()}
+            >
               {importing.isPending ? <Spinner /> : <Upload className="size-4" />}
               파일 고르기
             </Button>
+            {/* 잘못된 파일을 올렸을 때의 길. 내가 한 마지막 가져오기만, 가져온 지 하루 안에만 보인다. */}
+            {last.data?.import && (
+              <div className="border-line bg-sunken flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2">
+                <span>
+                  마지막 가져오기:{' '}
+                  <time
+                    dateTime={last.data.import.created_at}
+                    title={formatDateTime(last.data.import.created_at)}
+                  >
+                    {formatRelative(last.data.import.created_at)}
+                  </time>{' '}
+                  · 기관 {last.data.import.new_orgs}곳, 담당자 {last.data.import.new_contacts}명
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="ml-auto"
+                  disabled={undo.isPending || importing.isPending}
+                  onClick={undoLast}
+                >
+                  {undo.isPending && <Spinner />}
+                  되돌리기
+                </Button>
+              </div>
+            )}
           </div>
         ) : (
           <div className="space-y-3">

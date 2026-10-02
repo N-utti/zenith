@@ -28,8 +28,11 @@ import {
   type OrgType,
   type Person,
   IMPORT_MAX_ROWS,
+  IMPORT_UNDO_HOURS,
   type ImportResult,
   type ImportRow,
+  type ImportUndone,
+  type LastImport,
 } from '@/features/crm/types'
 import { EMAIL_PATTERN } from '@/features/admin/types'
 import { toISODate } from '@/lib/datetime'
@@ -1296,6 +1299,8 @@ export function importContacts(
   )
 
   const result: ImportResult = { rows: [], new_orgs: 0, new_contacts: 0 }
+  // 이 가져오기로 만든 것. 되돌릴 때 이것만 지운다.
+  const made = { org_ids: [] as string[], contact_ids: [] as string[] }
   body.forEach(({ cells, line }) => {
     const get = (key: keyof typeof IMPORT_HEADERS) =>
       (idx[key] < 0 ? '' : (cells[idx[key]] ?? '')).trim()
@@ -1314,7 +1319,13 @@ export function importContacts(
     const typeLabel = get('type')
     const orgType = typeLabel ? TYPE_BY_LABEL.get(typeLabel) : 'etc'
     if (!orgType) return reject(`유형 「${typeLabel}」 을 알 수 없습니다.`)
-    const orgBad = checkOrgInput({ name: orgName, org_type: orgType })
+    // 기관만 있는 행의 메모는 새 기관의 메모가 된다. 여기서 같이 본다. 안 보면 반영이 중간에 던져
+    // 앞 행들은 만들어지고 되돌릴 기록은 안 남는다.
+    const orgBad = checkOrgInput({
+      name: orgName,
+      org_type: orgType,
+      memo: name ? '' : get('memo'),
+    })
     if (orgBad) return reject(orgBad.error)
     const contact = {
       name,
@@ -1353,6 +1364,7 @@ export function importContacts(
             ).org.id,
         name: orgName,
       }
+      if (org.id) made.org_ids.push(org.id)
       known.set(norm, org)
       result.new_orgs++
       notes.push('새 기관')
@@ -1368,12 +1380,118 @@ export function importContacts(
         return
       }
       seen.add(key)
-      if (!dryRun) ok(createContact(user, { org_id: org.id!, ...contact }))
+      if (!dryRun) {
+        made.contact_ids.push(ok(createContact(user, { org_id: org.id!, ...contact })).id)
+      }
       result.new_contacts++
     }
     row.note = notes.join(' · ')
   })
+  if (made.org_ids.length + made.contact_ids.length > 0) {
+    imports.push({
+      id: nextId('imp'),
+      user_id: user.id,
+      created_at: new Date().toISOString(),
+      ...made,
+    })
+  }
   return result
+}
+
+// ── 가져오기 되돌리기 ──────────────────────────────────────────────
+// 15 §9 에 없는 경로다. 프론트가 정한 가정이다.
+
+/** 반영된 가져오기와 그때 만든 것. 되돌리면 빠진다. */
+const imports: {
+  id: string
+  user_id: string
+  created_at: string
+  org_ids: string[]
+  contact_ids: string[]
+}[] = []
+
+const undoable = (batch: { created_at: string }) =>
+  Date.now() - new Date(batch.created_at).getTime() < IMPORT_UNDO_HOURS * 3_600_000
+
+/** 내가 한 마지막 가져오기. 없거나 되돌릴 기한이 지났으면 `null`. */
+export function lastImport(user: User): LastImport | null {
+  const batch = imports.filter((b) => b.user_id === user.id).at(-1)
+  return batch && undoable(batch)
+    ? {
+        id: batch.id,
+        created_at: batch.created_at,
+        new_orgs: batch.org_ids.length,
+        new_contacts: batch.contact_ids.length,
+      }
+    : null
+}
+
+/**
+ * 가져오기 되돌리기. 가져온 사람만, 기한 안에. 그 가져오기로 만든 담당자와 기관을 행째 지운다(잘못
+ * 올린 파일의 수백 줄을 지운 기관 목록에 쌓지 않는다).
+ *
+ * 그사이 쓰이기 시작한 것은 남긴다.
+ * - 가져온 기관에 안건·활동 기록·이직 이력이 생겼거나 누가 담당자를 더 넣었으면 동료가 쓰기 시작한
+ *   기관이다. 기관과 거기 가져온 담당자를 통째로 남긴다. 연락처만 지우면 다시 입력해야 한다.
+ * - 그 밖의 담당자(기존 기관에 붙인 사람 포함)는 활동 기록에 붙었거나 이직했거나 개인정보를 지운
+ *   사람만 남긴다.
+ * 목록에서 지운 행도 같은 판정을 거친다. 안 쓰였으면 같이 치운다. 건너뛰면 담당자 없는 빈 기관이
+ * 남는다. 지운 안건과 지운 활동 기록은 쓰인 것으로 치지 않는다(되살릴 길이 없는 기록이다).
+ * ponytail: 가져온 뒤 손으로 고친 칸(전화번호, 메모)은 알 수 없어 같이 지워진다. 그래서 기한을 둔다.
+ */
+export function undoImport(user: User, id: string): ImportUndone | Failure {
+  const index = imports.findIndex((b) => b.id === id)
+  const batch = imports[index]
+  if (!batch) return notFound('가져오기를')
+  if (batch.user_id !== user.id) return forbidden()
+  if (!undoable(batch)) {
+    return fail(409, 'CONFLICT', `가져온 지 ${IMPORT_UNDO_HOURS}시간이 지나 되돌릴 수 없습니다.`)
+  }
+
+  const mine = new Set(batch.contact_ids)
+  const records = aliveActivities()
+  const moved = (contactId: string) => contactMoves.some((m) => m.contact_id === contactId)
+  // 동료가 쓰기 시작한 기관.
+  const busy = new Set(
+    batch.org_ids.filter(
+      (orgId) =>
+        aliveDeals().some((d) => d.org_id === orgId) ||
+        records.some((a) => a.org_id === orgId) ||
+        contactMoves.some((m) => m.from_org_id === orgId || m.to_org_id === orgId) ||
+        contacts.some((c) => c.org_id === orgId && !mine.has(c.id) && !c.deleted_at),
+    ),
+  )
+
+  // 목록에서 이미 지운 행은 수에 넣지 않는다. 화면에 없던 것이다.
+  const done: ImportUndone = {
+    removed_orgs: 0,
+    removed_contacts: 0,
+    kept_orgs: 0,
+    kept_contacts: 0,
+  }
+  for (const contactId of batch.contact_ids) {
+    const at = contacts.findIndex((c) => c.id === contactId)
+    const row = contacts[at]
+    if (!row) continue
+    const used =
+      busy.has(row.org_id) ||
+      row.erased ||
+      moved(contactId) ||
+      records.some((a) => a.contact_ids.includes(contactId))
+    if (!used) contacts.splice(at, 1)
+    if (!row.deleted_at) done[used ? 'kept_contacts' : 'removed_contacts']++
+  }
+  for (const orgId of batch.org_ids) {
+    const at = orgs.findIndex((o) => o.id === orgId)
+    const row = orgs[at]
+    if (!row) continue
+    // 위에서 남긴 담당자가 있으면 기관도 남긴다.
+    const used = busy.has(orgId) || contacts.some((c) => c.org_id === orgId)
+    if (!used) orgs.splice(at, 1)
+    if (!row.deleted_at) done[used ? 'kept_orgs' : 'removed_orgs']++
+  }
+  imports.splice(index, 1)
+  return done
 }
 
 /** 앞에서 검증을 끝낸 뒤에 부른다. 여기서 실패하면 목의 버그다. */
