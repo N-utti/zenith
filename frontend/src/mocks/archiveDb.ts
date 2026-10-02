@@ -39,19 +39,23 @@ export function chatFiles(
  * 문서에 올린 파일. 문서에는 열람 등급이 없어 전원이 본다.
  *
  * 결재 첨부(`a-`)는 싣지 않는다. 결재 문서의 열람 판정을 따로 타는 파일이라 여기서 주소를
- * 내주면 그 판정을 건너뛴다. 올린 기록(시각·문서)이 없는 예전 파일도 뺀다.
+ * 내주면 그 판정을 건너뛴다. 올린 기록(시각·문서·사람)이 없는 예전 파일도 뺀다.
  *
  * `titleOf` 는 **살아 있는 문서**의 제목만 준다. 휴지통에 들었거나 영구 삭제된 문서의 파일은
  * 싣지 않는다. 지운 문서의 파일이 이름과 함께 전원에게 나열되면 안 된다.
  *
- * 본문에서 칩만 지운 파일은 목이 가려내지 못한다(본문은 Y.Doc 에 있다). 실제 서버가 정할 자리다.
+ * 본문에서 칩만 지운 파일도 싣는다. 실서버도 올린 적 있는 파일을 전부 싣는다(본문은 Y.Doc 에
+ * 있어 어느 쪽도 지금 붙어 있는지 모른다).
  */
 export function docFiles(
   stored: StoredFile[],
   titleOf: (docId: string) => string | undefined,
 ): ArchiveFile[] {
   return stored.flatMap((file) => {
-    if (!file.id.startsWith('f-') || !file.created_at || !file.doc_id) return []
+    // 올린 기록 셋(시각·문서·사람)은 같이 저장된다. 하나라도 없으면 기록이 없는 예전 파일이다.
+    if (!file.id.startsWith('f-') || !file.created_at || !file.doc_id || !file.uploaded_by) {
+      return []
+    }
     const title = titleOf(file.doc_id)
     if (title === undefined) return []
     return [
@@ -62,7 +66,7 @@ export function docFiles(
         source: 'doc' as const,
         source_id: file.doc_id,
         source_title: title,
-        uploaded_by: file.uploaded_by ?? null,
+        uploaded_by: file.uploaded_by,
         created_at: file.created_at,
         scope: 'all' as const,
       },
