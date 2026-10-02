@@ -1,5 +1,6 @@
 """04-API §5 채팅 REST — FR-CHT-01·03 · TC-CHT-02(배지 일치) · TC-AUTH-04(남의 채널)."""
 
+import json
 import uuid
 from datetime import UTC, datetime, timedelta
 
@@ -382,29 +383,30 @@ async def test_private_channel_members(
     await login(client, "donghyun@zenith.co.kr")
     assert cid not in {c["id"] for c in (await client.get("/api/channels")).json()["items"]}
 
+    # `at` 은 트랜잭션 시각이라 테스트 안에서는 전부 같다 — 순서가 아니라 집합으로 본다
     changes = (
         (
             await app_db.execute(
-                select(AuditEvent)
-                .where(AuditEvent.kind == "channels.members_changed")
-                .order_by(AuditEvent.at)
+                select(AuditEvent).where(AuditEvent.kind == "channels.members_changed")
             )
         )
         .scalars()
         .all()
     )
-    assert [c.detail for c in changes] == [
-        {"created": True, "added": sorted(str(u.id) for u in (users.member, users.lead))},
-        {"added": [str(users.exec.id)]},
-        {"removed": [str(users.lead.id)]},
-        {"removed": [str(users.exec.id)]},
-    ]
-    assert [c.actor_id for c in changes] == [
-        users.member.id,
-        users.lead.id,
-        users.exec.id,
-        users.exec.id,
-    ]
+    assert sorted(
+        (str(c.actor_id), json.dumps(c.detail, sort_keys=True)) for c in changes
+    ) == sorted(
+        (str(actor), json.dumps(detail, sort_keys=True))
+        for actor, detail in (
+            (
+                users.member.id,
+                {"created": True, "added": sorted(str(u.id) for u in (users.member, users.lead))},
+            ),
+            (users.lead.id, {"added": [str(users.exec.id)]}),
+            (users.exec.id, {"removed": [str(users.lead.id)]}),
+            (users.exec.id, {"removed": [str(users.exec.id)]}),
+        )
+    )
 
 
 async def test_member_change_locks_before_membership_check(
