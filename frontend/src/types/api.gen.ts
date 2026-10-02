@@ -428,7 +428,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 문서 이미지 업로드 — multipart `file`(png·jpeg·gif·webp, 10MB, 하루 200장) → MinIO. 04 에 없던 경로 */
+        /** 문서 파일 업로드 — multipart `file`(어떤 형식이든, 10MB, 하루 200개) + `doc_id`(선택) → MinIO. 04 에 없던 경로 */
         post: operations["upload_file_api_files_post"];
         delete?: never;
         options?: never;
@@ -443,7 +443,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 문서 이미지 — 로그인한 사람 누구나(문서에 열람 등급 없음). <img src> 가 쿠키로 인증된다 */
+        /** 문서 파일 — 로그인한 사람 누구나(문서에 열람 등급 없음). 그림 넷은 inline(<img src>), 나머지는 attachment */
         get: operations["download_file_api_files__id__get"];
         put?: never;
         post?: never;
@@ -1392,6 +1392,8 @@ export interface components {
         Body_upload_file_api_files_post: {
             /** File */
             file: string;
+            /** Doc Id */
+            doc_id?: string | null;
         };
         /** ChannelCreateIn */
         ChannelCreateIn: {
@@ -1538,6 +1540,8 @@ export interface components {
             name: string;
             /** Size */
             size: number;
+            /** Content Type */
+            content_type: string;
         };
         /** FolderCreateIn */
         FolderCreateIn: {
@@ -3142,7 +3146,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "image/*": unknown;
+                    "application/octet-stream": unknown;
                 };
             };
             /** @description Validation Error */
