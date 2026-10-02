@@ -1,7 +1,7 @@
 import { Extension, type Editor } from '@tiptap/core'
 import { isChangeOrigin } from '@tiptap/extension-collaboration'
 import type { Node as PmNode } from '@tiptap/pm/model'
-import { NodeSelection, Plugin, TextSelection } from '@tiptap/pm/state'
+import { Plugin, type EditorState } from '@tiptap/pm/state'
 
 /** 댓글이 달릴 수 있는 블록. 편집기가 실제로 쓰는 것만. 달 때는 최상위에만 단다. */
 const BLOCK_TYPES = [
@@ -94,7 +94,7 @@ function topBlockAt(doc: PmNode, pos: number): { node: PmNode; pos: number } | n
 }
 
 /** 그 id 를 가진 블록의 위치. 목록 안으로 옮겨진 블록도 찾는다. */
-function findBlock(doc: PmNode, blockId: string): { node: PmNode; pos: number } | null {
+export function findBlock(doc: PmNode, blockId: string): { node: PmNode; pos: number } | null {
   let found: { node: PmNode; pos: number } | null = null
   doc.descendants((node, pos) => {
     if (found) return false
@@ -103,8 +103,8 @@ function findBlock(doc: PmNode, blockId: string): { node: PmNode; pos: number } 
   return found
 }
 
-/** 칩·인용에 보이는 블록 앞부분. 글자가 없는 블록(사진·구분선)은 종류로 말한다. 파일 칩은 파일 이름으로 읽는다. */
-export function blockPreview(node: PmNode): string {
+/** 댓글 목록의 인용에 보이는 블록 앞부분. 글자가 없는 블록(사진·구분선)은 종류로 말한다. 파일 칩은 파일 이름으로 읽는다. */
+function blockPreview(node: PmNode): string {
   const text = node
     .textBetween(0, node.content.size, ' ', (leaf) => (leaf.attrs.name as string) ?? '')
     .trim()
@@ -118,44 +118,24 @@ export function blockPreview(node: PmNode): string {
  * `pos`(없으면 지금 선택)가 든 최상위 블록에 댓글 닻을 준다. 이미 있으면 그대로 쓴다.
  *
  * 되돌리기(Ctrl+Z)에 들지 않게 한다. 되돌리기로 id 가 빠지면 이미 단 댓글이 "지워진 블록"이 된다.
- * 손잡이처럼 `pos` 로 고른 경우 커서도 그 블록으로 옮긴다. 보낼 때 닻을 다시 찾는 근거다(`resolveAnchor`).
+ *
+ * 두 사람이 같은 블록에 거의 동시에 첫 닻을 주면 각자 준 id 중 하나만 Y.Doc 에 남는다. 진 쪽은
+ * 제 닻이 사라져 댓글 창이 닫힌다(BlockComments). 다시 열면 이긴 닻을 받는다.
  */
-export function anchorBlock(
-  editor: Editor,
-  pos?: number,
-): { blockId: string; preview: string } | null {
+export function anchorBlock(editor: Editor, pos?: number): string | null {
   const block = topBlockAt(editor.state.doc, pos ?? editor.state.selection.from)
   if (!block || !BLOCK_TYPES.includes(block.node.type.name)) return null
 
   let blockId = block.node.attrs.blockId as string | null
-  const tr = editor.state.tr
   if (!blockId) {
     blockId = crypto.randomUUID()
-    tr.setNodeAttribute(block.pos, 'blockId', blockId).setMeta('addToHistory', false)
-  }
-  if (pos !== undefined)
-    // 사진처럼 속이 없는 블록은 pos + 1 이 이미 그 뒤라 커서가 다음 블록으로 간다.
-    tr.setSelection(
-      block.node.isAtom
-        ? NodeSelection.create(tr.doc, block.pos)
-        : TextSelection.near(tr.doc.resolve(block.pos + 1)),
+    editor.view.dispatch(
+      editor.state.tr
+        .setNodeAttribute(block.pos, 'blockId', blockId)
+        .setMeta('addToHistory', false),
     )
-  if (tr.docChanged || tr.selectionSet) editor.view.dispatch(tr)
-  return { blockId, preview: blockPreview(block.node) }
-}
-
-/**
- * 보내기 직전에 닻을 다시 읽는다. 두 사람이 같은 블록에 거의 동시에 첫 댓글을 달면 각자 준 id 중
- * 하나만 Y.Doc 에 남는다. 내 id 가 사라졌으면 커서가 든 블록(Yjs 가 원격 편집 뒤에도 커서를 그
- * 블록에 붙들어 둔다)에 이미 있는 id(이긴 쪽)를 쓴다. 새로 주지는 않는다. 그 사이 블록이 지워졌거나
- * 커서가 다른 곳으로 갔으면 엉뚱한 이웃 블록에 붙기 때문이다. 그때는 내 id 그대로 보내
- * "지워진 블록"으로 보이게 둔다.
- * ponytail: 경합 창을 줄일 뿐 없애지는 못한다. 없애려면 서버가 id 를 발급해야 한다.
- */
-export function resolveAnchor(editor: Editor, blockId: string): string | null {
-  if (findBlock(editor.state.doc, blockId)) return blockId
-  const block = topBlockAt(editor.state.doc, editor.state.selection.from)
-  return (block?.node.attrs.blockId as string | null | undefined) ?? blockId
+  }
+  return blockId
 }
 
 /**
@@ -170,6 +150,20 @@ export function anchoredBlocks(doc: PmNode): Record<string, string> {
     if (id) found[id] = blockPreview(node)
   })
   return found
+}
+
+/**
+ * 커서가 표의 첫 행에 있으면 그 표의 닻. 그 자리에는 행 옆 표 버튼(TableRowMenu)이 떠서
+ * 표의 댓글 말풍선(BlockComments)과 겹친다.
+ */
+export function firstRowTableAnchor(state: EditorState): string | null {
+  const { $from } = state.selection
+  for (let depth = $from.depth; depth > 0; depth--) {
+    const node = $from.node(depth)
+    if (node.type.name !== 'table') continue
+    return $from.index(depth) === 0 ? ((node.attrs.blockId as string | null) ?? null) : null
+  }
+  return null
 }
 
 /** 잠깐 밝힌다(`--animate-flash` 와 같은 2초). 색은 시맨틱 토큰에서 읽어 라이트·다크를 따른다. */
