@@ -1,10 +1,10 @@
 # 제니스 리버스 프록시 · TLS · 정적 파일 (ARCHITECTURE §7). compose 가 이 파일을 /etc/caddy/Caddyfile 로 마운트한다.
 # 사이트 주소는 ZENITH_SITE (기본 localhost). 바꾸면 `docker compose restart caddy`.
 {$ZENITH_SITE:localhost} {
-	# ZENITH_TLS 가 비면 `internal`(Caddy 자체 CA, 루트는 caddy_data 의 caddy/pki/authorities/local/root.crt).
-	# 공개 도메인(app.zenithasset.co.kr)이면 ACME 계정 메일을 넣는다 — Caddy 가 Let's Encrypt 인증서를 받고 갱신한다
-	# (80·443 이 밖에서 닿아야 한다, 2026-10-02 이슈 #255). 사내 CA 인증서를 쓰려면 `/certs/cert.pem /certs/key.pem`.
-	tls {$ZENITH_TLS:internal}
+	# Caddy 자체 CA 로 서명한다. 루트 인증서는 볼륨 caddy_data 의 caddy/pki/authorities/local/root.crt
+	# (`docker compose cp caddy:/data/caddy/pki/authorities/local/root.crt .`) — 사내 PC·앱의 신뢰 저장소에 배포한다.
+	# 이미 사내 CA 가 있으면 인증서·키를 마운트하고 이 줄을 `tls /certs/cert.pem /certs/key.pem` 으로 바꾼다(infra/README "TLS").
+	tls internal
 	encode zstd gzip
 
 	header {
