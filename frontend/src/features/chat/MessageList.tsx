@@ -170,12 +170,16 @@ export function MessageList({
   const lastMine = last?.author.id === me
   const settledChannel = useRef<string | null>(null)
   const seenLast = useRef<string | undefined>(undefined)
+  const seenCount = useRef(0)
   useEffect(() => {
     const scroller = scrollerRef.current
     if (!scroller) return
 
-    const sentByMe = lastMine && lastId !== seenLast.current
+    // 건수가 늘었을 때만 「내가 방금 보냈다」로 본다. 내 마지막 메시지가 지워져 그 앞의 내
+    // 메시지가 마지막이 된 것도 id 가 바뀌지만, 그때 끌어내리면 위를 읽던 자리를 뺏는다.
+    const sentByMe = lastMine && lastId !== seenLast.current && count > seenCount.current
     seenLast.current = lastId
+    seenCount.current = count
     const distanceFromBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight
     if (settledChannel.current !== channelId || sentByMe || distanceFromBottom < 200) {
       settledChannel.current = channelId
@@ -366,15 +370,24 @@ const MessageRow = memo(function MessageRow({
 }) {
   /** 고치는 중인 글. 고치는 중이 아니면 `null`. */
   const [draft, setDraft] = useState<string | null>(null)
+  const row = useRef<HTMLDivElement>(null)
 
+  /** 고치는 칸을 닫는다. 칸이 사라지면 초점이 body 로 떨어지므로 이 줄로 돌려놓는다(버튼도 다시 뜬다). */
+  const close = () => {
+    setDraft(null)
+    row.current?.focus({ preventScroll: true })
+  }
+
+  // ponytail: 고치는 사이 다른 탭에서 이 메시지가 지워지면 쓰던 글은 줄과 함께 사라지고,
+  // 고쳐졌으면 나중에 저장한 쪽이 남는다. 알리지 않는다.
   const save = () => {
     if (draft === null || !onEdit) return
     const next = draft.trim()
-    if (next === message.body) return setDraft(null)
+    if (next === message.body) return close()
     // 글을 다 지우면 저장하지 않는다(첨부만 남는 경우는 된다). 메시지를 없애려면 지우기를 쓴다.
     if (!next && !message.attachments?.length) return
     // 화면은 돌아오는 `msg_edit` 로 바뀐다. 못 보냈으면 고치던 글을 그대로 둔다.
-    if (onEdit(message.id, next)) setDraft(null)
+    if (onEdit(message.id, next)) close()
   }
 
   return (
@@ -387,7 +400,7 @@ const MessageRow = memo(function MessageRow({
         </div>
       )}
 
-      <div id={`m-${message.id}`} tabIndex={-1} className={cnRow(compact, flash)}>
+      <div ref={row} id={`m-${message.id}`} tabIndex={-1} className={cnRow(compact, flash)}>
         {/*
           고치기·지우기. 줄 오른쪽 위에 떠서 줄 높이를 바꾸지 않는다. 줄에 올리거나 줄 안에 초점이
           있을 때만 보이고(줄은 누르면 초점을 받는다. 손가락 기기는 메시지를 한 번 누르면 뜬다),
@@ -443,20 +456,22 @@ const MessageRow = memo(function MessageRow({
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
                 maxLength={MAX_BODY_CHARS}
-                rows={Math.min(8, draft.split('\n').length)}
+                // 줄바꿈 없이 길게 쓴 글도 한 줄에 갇히지 않게 글자 수로도 어림한다.
+                rows={Math.min(8, Math.max(draft.split('\n').length, Math.ceil(draft.length / 50)))}
                 aria-label="메시지 고치기"
                 className="resize-none"
                 submitOnEnter
                 onSubmitEnter={save}
                 onKeyDown={(e) => {
-                  if (e.key === 'Escape') setDraft(null)
+                  // 한글을 조합하는 중의 Esc 는 조합만 취소한다. 쓰던 글까지 버리지 않는다.
+                  if (e.key === 'Escape' && !e.nativeEvent.isComposing) close()
                 }}
               />
               <div className="mt-1.5 flex items-center gap-2">
                 <Button size="sm" onClick={save}>
                   저장
                 </Button>
-                <Button size="sm" variant="secondary" onClick={() => setDraft(null)}>
+                <Button size="sm" variant="secondary" onClick={close}>
                   취소
                 </Button>
                 <span className="text-subtle text-xs">Enter 저장 · Esc 취소</span>
