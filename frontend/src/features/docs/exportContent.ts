@@ -2,7 +2,7 @@ import type { JSONContent } from '@tiptap/core'
 import { cleanName } from '@/lib/format'
 import { displayWidth } from '@/lib/xlsx'
 
-/** 파일 안에 넣을 사진 한 장. 워드가 읽는 형식(png·jpeg·gif)으로 맞춰 둔 것이다. */
+/** 파일 안에 넣을 사진 한 장. 워드·한글이 읽는 형식(png·jpeg·gif)으로 맞춰 둔 것이다. */
 export interface ExportImage {
   bytes: Uint8Array
   ext: 'png' | 'jpeg' | 'gif'
@@ -143,7 +143,8 @@ export function layoutTable(table: JSONContent): { rows: PlacedCell[][]; columns
       const colwidth: unknown = cell.attrs?.colwidth
       for (let i = 0; i < colspan; i += 1) {
         const width = Array.isArray(colwidth) ? Number(colwidth[i]) : 0
-        if (width > 0 && Number.isFinite(width)) widths[col + i] ??= width
+        // 터무니없는 너비(0.001, 1e308)는 다른 열을 0 으로 눌러 버린다. 쓸 만한 범위로 가둔다.
+        if (width > 0) widths[col + i] ??= Math.min(4000, Math.max(25, width))
       }
       // 여러 열에 걸친 칸의 글은 어느 열의 것인지 알 수 없어 세지 않는다.
       if (colspan === 1) texts[col] = Math.max(texts[col] ?? 0, longestLine(cell))
@@ -171,12 +172,16 @@ export function layoutTable(table: JSONContent): { rows: PlacedCell[][]; columns
  */
 export function columnWidths(columns: TableColumn[], total: number): number[] {
   const open = columns.filter((column) => column.width === null)
-  const fixed = sum(columns.map((column) => column.width ?? 0))
+  // 한 열이 폭을 다 가져가지 않게, 적힌 너비도 전체 폭까지만 인정한다.
+  const known = (column: TableColumn) => Math.min(column.width ?? 0, total)
+  const fixed = sum(columns.map(known))
   // 적힌 너비만으로 이미 폭을 넘으면 남는 게 없다. 그때도 안 적힌 열이 사라지지 않게 최소 몫을 준다.
   const rest = Math.max(total - fixed, (total * open.length) / (columns.length * 4))
   const weight = (column: TableColumn) => Math.sqrt(Math.max(column.text, 4))
   const weights = sum(open.map(weight))
-  const widths = columns.map((column) => column.width ?? (rest * weight(column)) / weights)
+  const widths = columns.map((column) =>
+    column.width === null ? (rest * weight(column)) / weights : known(column),
+  )
   const scale = total / sum(widths)
   return widths.map((width) => width * scale)
 }
