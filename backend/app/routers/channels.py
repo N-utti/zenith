@@ -7,6 +7,7 @@ DM 은 하나만 둔다. **비공개 채널**(2026-10-02, 이슈 #221)은 만든
 """
 
 import re
+import unicodedata
 import uuid
 from datetime import UTC, datetime
 from typing import Annotated
@@ -14,7 +15,15 @@ from urllib.parse import quote, unquote
 
 from fastapi import APIRouter, Depends, Query, Request, UploadFile
 from fastapi.responses import Response
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, StringConstraints, model_validator
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictBool,
+    StringConstraints,
+    model_validator,
+)
 from sqlalchemy import func, select, tuple_, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -29,7 +38,23 @@ from app.paging import decode_cursor, encode_cursor
 
 router = APIRouter(tags=["chat"], dependencies=[Depends(current_user)])
 
-NonBlank = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
+
+def _clean_name(value: str) -> str:
+    """이름을 NFKC 로 정규화하고 제어·서식 문자를 거절한다(이슈 #283).
+
+    `str.strip()` 은 앞뒤 공백만 벗겨서 `"공지\u200b"`(제로폭 공백)·전각 문자·RTL 제어문자가 눈으로는 같은
+    이름으로 통과해 공개 채널 이름 유일성(`uq_channels_public_name`)을 피해 갔고, `"\x00"` 은 Postgres 가 거절해 500 이었다."""
+    value = unicodedata.normalize("NFKC", value).strip()
+    if not value or any(unicodedata.category(c) in ("Cc", "Cf") for c in value):
+        raise ValueError("이름에 쓸 수 없는 문자가 있습니다.")
+    return value
+
+
+NonBlank = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, min_length=1, max_length=100),
+    AfterValidator(_clean_name),
+]
 
 # ── 첨부 (FR-CHT-04) ──────────────────────────────────────────────────────
 MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024  # FR-CHT-04 · TC-CHT-04

@@ -120,6 +120,18 @@ async def test_create_public_channel_and_dm(client: AsyncClient, users: Users, a
         "/api/channels", json={"name": "x", "dm_user_id": str(users.lead.id)}, headers=csrf(client)
     )
     assert r.status_code == 422
+    # 이슈 #283: 제로폭·제어문자는 422, 전각은 NFKC 로 같은 이름이 돼 409 — 눈으로 같은 이름으로 유일성을 못 피한다
+    for bad in ("공지\u200b", "\u200b", "공\x00지", "공지\u202e"):
+        r = await client.post("/api/channels", json={"name": bad}, headers=csrf(client))
+        assert (r.status_code, r.json()["code"]) == (422, "VALIDATION"), bad
+    assert (
+        await client.post("/api/channels", json={"name": "공지"}, headers=csrf(client))
+    ).status_code == 201
+    r = await client.post("/api/channels", json={"name": "ＡＢ"}, headers=csrf(client))
+    assert r.status_code == 201 and r.json()["name"] == "AB"
+    assert (
+        await client.post("/api/channels", json={"name": " ＡＢ "}, headers=csrf(client))
+    ).status_code == 409
 
     r = await client.post(
         "/api/channels", json={"dm_user_id": str(users.lead.id)}, headers=csrf(client)
