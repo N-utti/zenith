@@ -60,6 +60,54 @@ export function useCollabTitle(doc: Y.Doc, fallback: string) {
 }
 
 /**
+ * 본문 폭 단계. 좁은 것부터. 첫 항목이 기본값이다.
+ *
+ * 꽉 차게는 옆 여백을 넓힌다(md:px-14 = 56px). 앞의 두 단계는 가운데 정렬로 남는 여백이 본문 밖에
+ * 뜨는 것들의 자리가 되는데, 꽉 차게에서는 기본 여백(24px)뿐이라 왼쪽 블록 손잡이(52px)가 사이드바
+ * 위로 나가고, 행 옆 표 버튼(46px + 틈)이 표의 마지막 칸과 맨 오른쪽 세로선을 덮는다.
+ */
+export const DOC_WIDTHS = [
+  { value: 'normal', label: '보통', hint: '글 읽기 좋은 폭', className: 'max-w-3xl' },
+  { value: 'wide', label: '넓게', hint: '표·사진이 많을 때', className: 'max-w-5xl' },
+  { value: 'full', label: '꽉 차게', hint: '화면 폭 전부', className: 'max-w-none md:px-14' },
+] as const
+
+export type DocWidth = (typeof DOC_WIDTHS)[number]
+
+/**
+ * 폭을 바꾼 변경의 출처 표시. 문서 화면은 내 변경이 멎으면 «수정한 사람·시각» 을 갱신하고 버전을
+ * 남기는데(DocWorkspace), 폭만 바꾼 것은 거기서 뺀다. 내용은 그대로인데 수정자가 바뀌고, 앞 버전과
+ * 내용이 같은 버전이 하나 생긴다(버전은 폭을 싣지 않는다).
+ */
+export const WIDTH_ORIGIN = 'doc-width'
+
+/**
+ * 본문 폭도 제목처럼 Y.Doc 안에 둔다. 문서마다 정하고, 같이 보는 사람에게도 같은 폭으로 보인다.
+ *
+ * 사람마다 따로 두지 않는 이유는 표다. 표의 열 너비는 픽셀로 문서에 남는데, 본문 폭이 사람마다
+ * 다르면 한 사람에게는 본문에 꼭 맞는 표가 다른 사람에게는 가로로 구른다.
+ * 모르는 값(다음 버전이 더한 단계)이 들어 있으면 기본 폭으로 그린다.
+ */
+export function useCollabWidth(doc: Y.Doc) {
+  const meta = doc.getMap<string>('meta')
+
+  const stored = useSyncExternalStore(
+    (onChange) => {
+      meta.observe(onChange)
+      return () => meta.unobserve(onChange)
+    },
+    () => meta.get('width'),
+    () => undefined,
+  )
+
+  return {
+    width: DOC_WIDTHS.find(({ value }) => value === stored) ?? DOC_WIDTHS[0],
+    setWidth: (next: DocWidth['value']) =>
+      doc.transact(() => meta.set('width', next), WIDTH_ORIGIN),
+  }
+}
+
+/**
  * 릴레이 연결 상태.
  *
  * 화면에 드러내는 게 중요하다. 릴레이가 죽어 있으면 편집은 되는데 남에게

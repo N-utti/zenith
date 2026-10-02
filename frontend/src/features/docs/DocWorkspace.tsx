@@ -25,6 +25,7 @@ import {
 import { anchorBlock, flashBlock } from './blockId'
 import { CommentPanel, type CommentTarget } from './CommentPanel'
 import { DocBreadcrumb } from './DocBreadcrumb'
+import { DocWidthMenu } from './DocWidthMenu'
 import { EditorBubbleMenu } from './EditorBubbleMenu'
 import { ExportMenu } from './ExportMenu'
 import { InlineAiPopover } from './InlineAiPopover'
@@ -33,7 +34,14 @@ import { EditorToolbar } from './EditorToolbar'
 import { TableRowMenu } from './TableRowMenu'
 import { VersionPanel } from './VersionPanel'
 import { VersionPreview } from './VersionPreview'
-import { hueToColor, useCollabStatus, useCollabTitle, usePresence } from './collabState'
+import {
+  WIDTH_ORIGIN,
+  hueToColor,
+  useCollabStatus,
+  useCollabTitle,
+  useCollabWidth,
+  usePresence,
+} from './collabState'
 import { readSnapshot, takeSnapshot, type RestoredContent } from './versioning'
 import { useCollabSession, type CollabSession } from './useCollabSession'
 import { useFileUpload } from './useFileUpload'
@@ -303,6 +311,7 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
   const user = useCurrentUser()
   const { doc, provider } = session
   const { title, setTitle } = useCollabTitle(doc, meta.title)
+  const { width } = useCollabWidth(doc)
   const { mutate: touchDoc } = useTouchDoc(meta.id)
   const { mutate: saveVersion, isPending: savingVersion } = useSaveVersion(meta.id)
   const versionSnapshot = useVersionSnapshot(meta.id)
@@ -420,7 +429,8 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
 
     const onUpdate = (_update: Uint8Array, origin: unknown) => {
       // 다른 탭·다른 사람에게서 온 변경은 그쪽에서 이미 반영한다.
-      if (origin === provider) return
+      // 본문 폭만 바꾼 것은 편집이 아니다(collabState 의 WIDTH_ORIGIN).
+      if (origin === provider || origin === WIDTH_ORIGIN) return
 
       window.clearTimeout(metaTimer)
       metaTimer = window.setTimeout(() => {
@@ -531,6 +541,10 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
         <DocBreadcrumb docId={meta.id} title={title} />
         <div className="ml-auto flex shrink-0 items-center gap-1">
           <PresenceBar session={session} />
+          {/* 좁은 화면에서는 본문이 이미 화면 폭을 다 쓴다. 고를 것이 없어 숨긴다. */}
+          <div className="max-md:hidden">
+            <DocWidthMenu doc={doc} />
+          </div>
           {editor && <ExportMenu editor={editor} title={title || UNTITLED_DOC} />}
           <button
             type="button"
@@ -576,6 +590,7 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
           <VersionPreview
             version={preview.version}
             content={preview.content}
+            widthClass={width.className}
             onRestore={restore}
             onClose={closePreview}
             restoring={savingVersion}
@@ -610,7 +625,7 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
             )}
 
             <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
-              <div className="mx-auto max-w-3xl px-6 py-8">
+              <div className={cn('mx-auto px-6 py-8', width.className)}>
                 <p className="text-subtle mb-1 text-xs">
                   <Avatar
                     name={meta.updated_by?.name ?? '?'}
