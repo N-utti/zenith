@@ -1,4 +1,10 @@
-import type { Board, BoardPost, BoardPostDetail, PostComment } from '@/features/board/types'
+import type {
+  Board,
+  BoardPost,
+  BoardPostDetail,
+  PostAttachment,
+  PostComment,
+} from '@/features/board/types'
 import type { HomePost } from '@/features/home/types'
 import { ROLE_RANK, type Role, type User } from '@/types'
 
@@ -172,10 +178,12 @@ export function canEdit(user: User, post: StoredPost): boolean {
 
 export function updatePost(
   post: StoredPost,
-  input: { title?: string; body?: string },
+  input: { title?: string; body?: string; attachments?: PostAttachment[] },
 ): BoardPostDetail {
   if (input.title !== undefined) post.title = input.title
   if (input.body !== undefined) post.body = input.body
+  // 보낼 때는 늘 전체 목록이다. 빈 목록은 전부 뗀다는 뜻이고, 안 보내면 그대로 둔다.
+  if (input.attachments !== undefined) post.attachments = input.attachments
   return toDetail(post)
 }
 
@@ -189,7 +197,7 @@ export function deletePost(id: string): void {
 export function createPost(
   user: User,
   boardId: string,
-  input: { title: string; body: string },
+  input: { title: string; body: string; attachments?: PostAttachment[] },
 ): BoardPostDetail {
   const board = BOARD_DEFS.find((b) => b.id === boardId)
   if (!board) throw new Error('board not found')
@@ -203,6 +211,7 @@ export function createPost(
     created_at: new Date().toISOString(),
     pinned: false,
     body: input.body,
+    attachments: input.attachments ?? [],
   }
   POSTS.unshift(post)
   return toDetail(post)
@@ -210,7 +219,78 @@ export function createPost(
 
 /** 상세에 나가는 모양. 목록 한 줄에 본문을 더한다. */
 export function toDetail(post: StoredPost): BoardPostDetail {
-  return { ...toListShape(post), body: post.body }
+  return { ...toListShape(post), body: post.body, attachments: post.attachments ?? [] }
+}
+
+// ── 게시글 첨부 ──────────────────────────────────────────
+// 서버에는 아직 없다. 채팅 첨부처럼 먼저 게시판 경로 밑에 올리고, 받은 값을 글에 실어 저장한다.
+// 받기는 그 게시판의 살아 있는 글이 싣고 있는 파일만 내준다. 글에서 떼거나 글을 지우면 받을 수
+// 없다(잘못 붙인 파일을 거둘 길이 그것뿐이다). 아직 글에 안 붙인 파일은 올린 사람만 받는다.
+// ponytail: 뗀 파일의 오브젝트 자체는 저장소에 남는다. 정리는 서버가 정할 일이다(이슈 #299).
+
+/** 글 하나에 붙일 수 있는 파일 수. 채팅·결재 첨부와 같다. */
+const POST_ATTACHMENTS_MAX = 10
+
+/** 이 게시판에 올린 첨부의 경로 앞부분. 첨부 url 은 늘 `앞부분 + 파일 id + / + 이름` 이다. */
+export const postAttachmentPrefix = (boardId: string) => `/api/boards/${boardId}/attachments/`
+
+/**
+ * 파일 id → 올린 게시판과 올린 사람. 경로 모양만 보면 임원 게시판에 올린 파일 id 를 전체 공지 경로에
+ * 끼워 넣어 등급 밖에서 받을 수 있다. 실서버는 저장 키에 게시판 id 를 넣어 같은 것을 막아야 한다.
+ */
+const uploads = new Map<string, { boardId: string; userId: string }>()
+
+export function recordPostAttachment(boardId: string, fileId: string, userId: string) {
+  uploads.set(fileId, { boardId, userId })
+}
+
+/**
+ * 이 게시판에 올린 파일의 url 이면 `{파일 id, 이름}`, 아니면 `null`.
+ *
+ * 경로는 정확히 두 조각(파일 id, 이름)이어야 한다. 뒤에 `/../..` 를 더 붙인 url 이 통과하면 글의
+ * 칩이 보이는 이름과 다른 주소를 가리키게 된다.
+ */
+function ownedFile(boardId: string, url: unknown): { id: string; name: string } | null {
+  const prefix = postAttachmentPrefix(boardId)
+  // 서버가 내준 주소에는 `?`·`#`·역슬래시가 없다(이름은 퍼센트 인코딩돼 있다).
+  if (typeof url !== 'string' || !url.startsWith(prefix) || /[?#\\]/.test(url)) return null
+  const [id, encoded, ...rest] = url.slice(prefix.length).split('/')
+  if (!id || !encoded || rest.length > 0 || uploads.get(id)?.boardId !== boardId) return null
+  try {
+    const name = decodeURIComponent(encoded)
+    return name === '.' || name === '..' ? null : { id, name }
+  } catch {
+    return null
+  }
+}
+
+/** 글에 실려 온 첨부 목록의 검증. 문제가 없으면 `null`, 있으면 이유(422 의 문구). */
+export function checkPostAttachments(boardId: string, files: unknown): string | null {
+  // 안 보낸 것은 "그대로 둔다" 이다. `null` 은 지움이 아니라 잘못된 값이다.
+  if (files === undefined) return null
+  if (!Array.isArray(files)) return '첨부 목록이 올바르지 않습니다.'
+  if (files.length > POST_ATTACHMENTS_MAX) return `첨부는 ${POST_ATTACHMENTS_MAX}개까지입니다.`
+  const items = files as ({ url?: unknown; name?: unknown; size?: unknown } | null)[]
+  // 이름은 url 의 이름과 같아야 한다. 다르면 칩에 보이는 이름과 받는 파일이 달라진다.
+  const ok = items.every(
+    (f) => typeof f?.size === 'number' && f.size >= 0 && ownedFile(boardId, f.url)?.name === f.name,
+  )
+  return ok ? null : '이 게시판에 올린 파일만 붙일 수 있습니다.'
+}
+
+/**
+ * 이 주소의 파일을 받을 수 있는가. 게시판 등급은 부르는 쪽(핸들러)이 먼저 본다.
+ * 살아 있는 글이 싣고 있으면 그 게시판을 읽는 누구나, 아니면 올린 사람만이다.
+ */
+export function canDownloadPostAttachment(user: User, boardId: string, url: string): boolean {
+  const file = ownedFile(boardId, url)
+  if (!file) return false
+  if (uploads.get(file.id)?.userId === user.id) return true
+  return POSTS.some(
+    (post) =>
+      post.board_id === boardId &&
+      post.attachments?.some((f) => ownedFile(boardId, f.url)?.id === file.id),
+  )
 }
 
 // ── 게시글 댓글 ──────────────────────────────────────────

@@ -11,6 +11,7 @@ import { useToast } from '@/components/ui/ToastContext'
 import { ApiError } from '@/lib/api'
 import { formatRelative } from '@/lib/datetime'
 import { POST_COMMENTS_ENABLED, useBoards, useDeletePost, usePost } from '@/features/board/api'
+import { AttachmentList } from '@/features/approvals/AttachmentList'
 import { PostComments } from '@/features/board/PostComments'
 import { PostComposer } from '@/features/board/PostComposer'
 import { useCurrentUser } from '@/features/auth/AuthContext'
@@ -133,6 +134,12 @@ export function BoardPostPage() {
 
         <div className="border-line mt-5 border-t pt-5">
           <p className="text-fg text-[15px] leading-7 whitespace-pre-wrap">{post.body}</p>
+          {/* 서버가 준 대로 그린다. 받을 때 서버가 게시판 등급으로 다시 판정한다. */}
+          {post.attachments && post.attachments.length > 0 && (
+            <div className="mt-5">
+              <AttachmentList files={post.attachments} />
+            </div>
+          )}
         </div>
       </Card>
 

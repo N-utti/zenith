@@ -2,13 +2,17 @@ import { expect, it } from 'vitest'
 import { MOCK_USERS } from './db'
 import {
   addPostComment,
+  canDownloadPostAttachment,
   canEdit,
+  checkPostAttachments,
   createPost,
   deletePost,
   editPostComment,
   findPost,
   listPostComments,
   listPosts,
+  postAttachmentPrefix,
+  recordPostAttachment,
   removePostComment,
   updatePost,
 } from './boardDb'
@@ -78,4 +82,60 @@ it('댓글은 쓴 사람만 고치고, 지우기는 쓴 사람과 임원이 한�
   addPostComment(post.id, other, '글과 같이 사라질 댓글')
   deletePost(post.id)
   expect(listPostComments(post.id)).toEqual([])
+})
+
+it('첨부는 그 게시판에 올린 파일만 붙는다. 안 보내면 그대로 두고 빈 목록은 전부 뗀다', () => {
+  recordPostAttachment('all', 'a-1', member.id)
+  recordPostAttachment('exec', 'a-2', exec.id)
+  const mine = { url: `${postAttachmentPrefix('all')}a-1/a.pdf`, name: 'a.pdf', size: 10 }
+
+  expect(checkPostAttachments('all', undefined)).toBeNull()
+  expect(checkPostAttachments('all', [mine])).toBeNull()
+  // 임원 게시판에 올린 파일 id 를 전체 공지 경로에 끼워 넣거나, 그 url 을 그대로 붙이면 막힌다.
+  // 뒤에 경로를 더 붙여 다른 곳을 가리키게 한 url 도 막힌다.
+  for (const url of [
+    `${postAttachmentPrefix('all')}a-2/a.pdf`,
+    `${postAttachmentPrefix('exec')}a-2/a.pdf`,
+    `${mine.url}/../../../exec/attachments/a-2/a.pdf`,
+    `${mine.url}?x=1#y`,
+    '/api/files/f-1',
+  ]) {
+    expect(checkPostAttachments('all', [{ ...mine, url }])).not.toBeNull()
+  }
+  // 칩에 보일 이름을 url 의 이름과 다르게 보내면 막힌다.
+  expect(checkPostAttachments('all', [{ ...mine, name: '공지.pdf' }])).not.toBeNull()
+  expect(checkPostAttachments('all', null)).not.toBeNull()
+  expect(checkPostAttachments('all', [null])).not.toBeNull()
+  expect(checkPostAttachments('all', Array(11).fill(mine))).not.toBeNull()
+
+  const post = createPost(member, 'all', { title: '첨부 글', body: '본문', attachments: [mine] })
+  expect(post.attachments).toEqual([mine])
+  const stored = findPost(post.id)!
+  expect(updatePost(stored, { title: '제목만 고침' }).attachments).toEqual([mine])
+  expect(updatePost(stored, { attachments: [] }).attachments).toEqual([])
+  deletePost(post.id)
+})
+
+it('첨부는 살아 있는 글이 싣고 있을 때만 받는다. 안 붙인 파일은 올린 사람만 받는다', () => {
+  recordPostAttachment('all', 'a-3', member.id)
+  const url = `${postAttachmentPrefix('all')}a-3/b.pdf`
+  const file = { url, name: 'b.pdf', size: 10 }
+
+  // 올리기만 한 파일.
+  expect(canDownloadPostAttachment(member, 'all', url)).toBe(true)
+  expect(canDownloadPostAttachment(other, 'all', url)).toBe(false)
+
+  const post = createPost(member, 'all', { title: '받을 글', body: '본문', attachments: [file] })
+  expect(canDownloadPostAttachment(other, 'all', url)).toBe(true)
+  // 다른 게시판 경로에 같은 파일 id 를 끼워 넣으면 못 받는다.
+  expect(canDownloadPostAttachment(exec, 'exec', url.replace('/all/', '/exec/'))).toBe(false)
+
+  // 글에서 떼면 남은 못 받는다. 다시 붙였다가 글을 지워도 같다.
+  const stored = findPost(post.id)!
+  updatePost(stored, { attachments: [] })
+  expect(canDownloadPostAttachment(other, 'all', url)).toBe(false)
+  updatePost(stored, { attachments: [file] })
+  expect(canDownloadPostAttachment(other, 'all', url)).toBe(true)
+  deletePost(post.id)
+  expect(canDownloadPostAttachment(other, 'all', url)).toBe(false)
 })

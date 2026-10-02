@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { homeKeys } from '@/features/home/keys'
 import { MSW_ENABLED } from '@/mocks/accounts'
-import type { Board, BoardPost, BoardPostDetail, PostComment } from './types'
+import type { Board, BoardPost, BoardPostDetail, PostAttachment, PostComment } from './types'
 
 export function useBoards() {
   return useQuery({
@@ -31,10 +31,35 @@ export function usePost(postId: string) {
   })
 }
 
+/**
+ * 게시글에 파일을 붙일 수 있는지. 서버에는 아직 그 경로가 없어서(04 §6 의 글은 제목과 본문뿐이다)
+ * 목이 켜진 개발 화면에서만 붙이기 버튼이 보인다. 서버가 받게 되면 이 스위치를 걷는다.
+ */
+export const POST_ATTACHMENTS_ENABLED = MSW_ENABLED
+
+/** 글에 보내는 값. `attachments` 는 보낼 때 늘 전체 목록이고, 안 보내면 그대로 둔다. */
+export interface PostInput {
+  title: string
+  body: string
+  attachments?: PostAttachment[]
+}
+
+/**
+ * 파일 한 개를 그 게시판에 올린다. 받은 값을 글의 `attachments` 에 실어 저장해야 붙는다.
+ *
+ * 훅이 아니라 함수다. 여러 개를 차례로 올릴 때 `useMutation` 의 `mutate` 를 반복해 부르면
+ * 앞선 호출의 콜백이 떨어진다(채팅 `uploadAttachment` 와 같은 이유).
+ */
+export function uploadPostAttachment(boardId: string, file: File): Promise<PostAttachment> {
+  const form = new FormData()
+  form.append('file', file)
+  return api<PostAttachment>(`/boards/${boardId}/attachments`, { method: 'POST', body: form })
+}
+
 export function useCreatePost(boardId: string) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (input: { title: string; body: string }) =>
+    mutationFn: (input: PostInput) =>
       api<BoardPostDetail>(`/boards/${boardId}/posts`, {
         method: 'POST',
         body: JSON.stringify(input),
@@ -56,7 +81,7 @@ function invalidateLists(qc: ReturnType<typeof useQueryClient>, boardId: string)
 export function useUpdatePost(boardId: string, postId: string) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (input: { title: string; body: string }) =>
+    mutationFn: (input: PostInput) =>
       api<BoardPostDetail>(`/posts/${postId}`, {
         method: 'PATCH',
         body: JSON.stringify(input),

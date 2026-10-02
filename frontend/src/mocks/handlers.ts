@@ -1,6 +1,7 @@
 import { bypass, delay, http, HttpResponse, passthrough } from 'msw'
 import { PASSWORD_MIN, type User } from '@/types'
 import { BODY_MAX, POST_COMMENT_MAX, TITLE_MAX } from '@/features/board/types'
+import type { PostAttachment } from '@/features/board/types'
 import { ARCHIVE_LIMIT, type ArchiveFile } from '@/features/archive/types'
 import type { ChatChannel, ChatMessage } from '@/features/chat/types'
 import { chatFiles, docFiles, newestFirst } from './archiveDb'
@@ -26,8 +27,10 @@ import { AI_MODELS, answer, DOC_ACTIONS, docActionDraft } from './aiDb'
 import {
   BOARD_DEFS,
   addPostComment,
+  canDownloadPostAttachment,
   canEdit,
   canRead,
+  checkPostAttachments,
   createPost,
   deletePost,
   editPostComment,
@@ -36,6 +39,8 @@ import {
   listBoards,
   listPostComments,
   listPosts,
+  postAttachmentPrefix,
+  recordPostAttachment,
   removePostComment,
   toDetail,
   updatePost,
@@ -512,7 +517,7 @@ export const handlers = [
     const user = authenticate()
     if (!user) return unauthorized()
 
-    const body = await readJson<{ title?: unknown; body?: unknown }>(request)
+    const body = await readJson<{ title?: unknown; body?: unknown; attachments?: unknown }>(request)
     if (!body) return validationError('본문이 JSON 이 아닙니다.')
     const shapeError = checkPostFields(body)
     if (shapeError) return shapeError
@@ -520,6 +525,10 @@ export const handlers = [
     const post = findPost(String(params.postId))
     if (!post) return notFound()
     if (!canRead(user, post.min_role) || !canEdit(user, post)) return forbidden()
+
+    // 첨부는 그 글이 있는 게시판에 올린 파일이어야 한다(실서버에는 아직 없는 칸이다).
+    const filesError = checkPostAttachments(post.board_id, body.attachments)
+    if (filesError) return validationError(filesError)
 
     // 보내지 않은 값은 그대로 둔다. null 은 "지움" 이 아니라 422 다.
     for (const key of ['title', 'body'] as const) {
@@ -530,6 +539,7 @@ export const handlers = [
       updatePost(post, {
         title: typeof body.title === 'string' ? body.title.trim() : undefined,
         body: typeof body.body === 'string' ? body.body.trim() : undefined,
+        attachments: body.attachments as PostAttachment[] | undefined,
       }),
     )
   }),
@@ -618,18 +628,77 @@ export const handlers = [
       return forbidden()
     }
 
-    const parsed = await readJson<{ title?: unknown; body?: unknown }>(request)
+    const parsed = await readJson<{ title?: unknown; body?: unknown; attachments?: unknown }>(
+      request,
+    )
     if (!parsed) return validationError('본문이 JSON 이 아닙니다.')
     if (typeof parsed.title !== 'string' || typeof parsed.body !== 'string') {
       return validationError('제목과 내용을 입력해 주세요.')
     }
     const shapeError = checkPostFields(parsed)
     if (shapeError) return shapeError
+    const filesError = checkPostAttachments(boardId, parsed.attachments)
+    if (filesError) return validationError(filesError)
 
     return HttpResponse.json(
-      createPost(user, boardId, { title: parsed.title.trim(), body: parsed.body.trim() }),
+      createPost(user, boardId, {
+        title: parsed.title.trim(),
+        body: parsed.body.trim(),
+        attachments: parsed.attachments as PostAttachment[] | undefined,
+      }),
       { status: 201 },
     )
+  }),
+
+  // ── 게시글 첨부 ─────────────────────────────────────────
+  // 실서버에는 아직 없는 경로다. 채팅 첨부(`/channels/{id}/attachments`)와 같은 모양으로 가정했다.
+  // 그 게시판을 읽을 수 있는 사람(등급)만 올리고 받는다. 판정은 늘 경로의 게시판으로 한다.
+  // 받기는 거기에 더해, 살아 있는 글이 싣고 있는 파일만 내준다(안 붙인 파일은 올린 사람만).
+  http.post('/api/boards/:boardId/attachments', async ({ request, params }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    const board = BOARD_DEFS.find((b) => b.id === String(params.boardId))
+    if (!board) return notFound()
+    if (!canRead(user, board.min_role)) return forbidden()
+
+    const file = (await request.formData()).get('file')
+    if (!(file instanceof File) || file.size === 0 || file.size > MAX_UPLOAD_BYTES) {
+      return validationError('비어 있지 않은 10MB 이하 파일만 올릴 수 있습니다.')
+    }
+    // 앞머리 `a` 는 공용 `/api/files` 가 내주지 않는다. 등급 판정을 건너뛸 길이 없다.
+    const stored = await saveFile(file, 'a')
+    recordPostAttachment(board.id, stored.id, user.id)
+    return HttpResponse.json(
+      {
+        url: `${postAttachmentPrefix(board.id)}${stored.id}/${encodeURIComponent(stored.name)}`,
+        name: stored.name,
+        size: stored.size,
+        content_type: stored.type || null,
+      },
+      { status: 201 },
+    )
+  }),
+  http.get('/api/boards/:boardId/attachments/:fileId/:name', async ({ request, params }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    const board = BOARD_DEFS.find((b) => b.id === String(params.boardId))
+    if (!board) return notFound()
+    if (!canRead(user, board.min_role)) return forbidden()
+    // 다른 게시판(이나 결재 문서)에 올린 파일 id 를 이 경로에 끼워 넣은 요청, 글에서 뗀 파일과
+    // 지운 글의 파일을 막는다. 등급 판정(403)이 먼저라 등급 밖에서는 파일이 있는지도 알 수 없다.
+    if (!canDownloadPostAttachment(user, board.id, new URL(request.url).pathname)) {
+      return notFound('파일을 찾을 수 없습니다.')
+    }
+    const stored = await readFile(String(params.fileId))
+    if (!stored) return notFound('파일을 찾을 수 없습니다.')
+    // 실행될 수 있는 형식(html·svg)이 같은 오리진에서 열리지 않게 늘 내려받기로 준다.
+    return new HttpResponse(stored.blob, {
+      headers: {
+        'Content-Type': stored.type || 'application/octet-stream',
+        'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(stored.name)}`,
+        'X-Content-Type-Options': 'nosniff',
+      },
+    })
   }),
 
   // ── 사람 목록 ─────────────────────────────────────────────
