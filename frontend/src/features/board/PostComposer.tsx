@@ -10,7 +10,7 @@ import { useToast } from '@/components/ui/ToastContext'
 import { AttachmentList } from '@/features/approvals/AttachmentList'
 import { MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES } from '@/features/chat/api'
 import { ApiError } from '@/lib/api'
-import { POST_ATTACHMENTS_ENABLED, uploadPostAttachment, useCreatePost, useUpdatePost } from './api'
+import { uploadPostAttachment, useCreatePost, useUpdatePost } from './api'
 import { BOARD_BADGE, BODY_MAX, TITLE_MAX } from './types'
 import type { Board, BoardPostDetail, PostAttachment } from './types'
 
@@ -89,7 +89,7 @@ export function PostComposer({
       }
       current = null
       // 첨부는 건드렸을 때만 보낸다(안 보내면 서버가 그대로 둔다). 늘 보내면 오래 열어 둔 수정 창이
-      // 그사이 다른 사람이 뗀 파일을 다시 붙인다. 붙이기가 꺼져 있으면 건드릴 길이 없어 안 나간다.
+      // 그사이 다른 사람이 뗀 파일을 다시 붙인다.
       const before = post?.attachments ?? []
       const touched =
         uploaded.length !== before.length || uploaded.some((file, i) => file !== before[i])
@@ -165,54 +165,52 @@ export function PostComposer({
           )}
         </Field>
 
-        {POST_ATTACHMENTS_ENABLED && (
-          <Field
-            label="첨부"
-            hint={`파일당 10MB, ${MAX_ATTACHMENTS}개까지. 이 게시판을 볼 수 있는 사람만 받습니다.`}
-            error={fileError}
-          >
-            {(slot) => (
-              <div role="group" aria-label="첨부" className="space-y-2">
-                <AttachmentList
-                  files={[...attached, ...pending]}
-                  onRemove={
-                    saving
-                      ? undefined
-                      : (index) =>
-                          index < attached.length
-                            ? setAttached(attached.filter((_, i) => i !== index))
-                            : setPending((prev) =>
-                                prev.filter((_, i) => i !== index - attached.length),
-                              )
-                  }
-                />
-                <input
-                  ref={picker}
-                  type="file"
-                  multiple
-                  hidden
-                  onChange={(e) => {
-                    pick(e.target.files)
-                    // 같은 파일을 다시 고를 수 있게 비운다.
-                    e.target.value = ''
-                  }}
-                />
-                {/* `id` 는 넘기지 않는다. 라벨이 붙으면 버튼 이름이 "첨부" 로 덮여 보이는 글자와 갈린다. */}
-                <Button
-                  aria-describedby={slot['aria-describedby']}
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  disabled={saving}
-                  onClick={() => picker.current?.click()}
-                >
-                  <Paperclip className="size-3.5" />
-                  파일 붙이기
-                </Button>
-              </div>
-            )}
-          </Field>
-        )}
+        <Field
+          label="첨부"
+          hint={`파일당 10MB, ${MAX_ATTACHMENTS}개까지. 이 게시판을 볼 수 있는 사람만 받습니다.`}
+          error={fileError}
+        >
+          {(slot) => (
+            <div role="group" aria-label="첨부" className="space-y-2">
+              <AttachmentList
+                files={[...attached, ...pending]}
+                onRemove={
+                  saving
+                    ? undefined
+                    : (index) =>
+                        index < attached.length
+                          ? setAttached(attached.filter((_, i) => i !== index))
+                          : setPending((prev) =>
+                              prev.filter((_, i) => i !== index - attached.length),
+                            )
+                }
+              />
+              <input
+                ref={picker}
+                type="file"
+                multiple
+                hidden
+                onChange={(e) => {
+                  pick(e.target.files)
+                  // 같은 파일을 다시 고를 수 있게 비운다.
+                  e.target.value = ''
+                }}
+              />
+              {/* `id` 는 넘기지 않는다. 라벨이 붙으면 버튼 이름이 "첨부" 로 덮여 보이는 글자와 갈린다. */}
+              <Button
+                aria-describedby={slot['aria-describedby']}
+                type="button"
+                variant="secondary"
+                size="sm"
+                disabled={saving}
+                onClick={() => picker.current?.click()}
+              >
+                <Paperclip className="size-3.5" />
+                파일 붙이기
+              </Button>
+            </div>
+          )}
+        </Field>
       </div>
     </Modal>
   )

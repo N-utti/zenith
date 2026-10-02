@@ -749,6 +749,40 @@ export interface paths {
         patch: operations["update_post_api_posts__id__patch"];
         trace?: never;
     };
+    "/api/boards/{id}/attachments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 게시글 첨부 업로드 multipart `file` — 게시판을 읽을 수 있는 등급만. 10MB 초과·빈 파일 422. 응답을 글의 attachments[] 에 그대로 싣는다 */
+        post: operations["upload_board_attachment_api_boards__id__attachments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/boards/{id}/attachments/{file_id}/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 게시글 첨부 내려받기 — 게시판을 읽을 수 있는 등급만. 이미지 넷은 inline, 나머지는 attachment */
+        get: operations["download_board_attachment_api_boards__id__attachments__file_id___name__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/posts/{id}/comments": {
         parameters: {
             query?: never;
@@ -1578,6 +1612,11 @@ export interface components {
             /** File */
             file: string;
         };
+        /** Body_upload_board_attachment_api_boards__id__attachments_post */
+        Body_upload_board_attachment_api_boards__id__attachments_post: {
+            /** File */
+            file: string;
+        };
         /** Body_upload_file_api_files_post */
         Body_upload_file_api_files_post: {
             /** File */
@@ -2153,6 +2192,8 @@ export interface components {
             title: string;
             /** Body */
             body: string;
+            /** Attachments */
+            attachments?: components["schemas"]["AttachmentOut"][] | null;
         };
         /** PostDetail */
         PostDetail: {
@@ -2182,6 +2223,8 @@ export interface components {
             created_at: string;
             /** Body */
             body: string;
+            /** Attachments */
+            attachments: components["schemas"]["AttachmentOut"][];
         };
         /** PostOut */
         PostOut: {
@@ -2223,6 +2266,8 @@ export interface components {
             title?: string | null;
             /** Body */
             body?: string | null;
+            /** Attachments */
+            attachments?: components["schemas"]["AttachmentOut"][] | null;
         };
         /** Preferences */
         Preferences: {
@@ -4221,6 +4266,74 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PostDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_board_attachment_api_boards__id__attachments_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_board_attachment_api_boards__id__attachments_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttachmentOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_board_attachment_api_boards__id__attachments__file_id___name__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                file_id: string;
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": unknown;
                 };
             };
             /** @description Validation Error */

@@ -20,7 +20,10 @@ export const BOARD_DEFS: Omit<Board, 'allowed'>[] = [
 ]
 
 /** 게시판 이름과 마스킹 여부는 내보낼 때 붙인다. */
-export type StoredPost = Omit<BoardPostDetail, 'board_name' | 'masked'>
+export type StoredPost = Omit<BoardPostDetail, 'board_name' | 'masked' | 'attachments'> & {
+  /** 시드 글에는 없다. 없으면 빈 목록으로 나간다. */
+  attachments?: PostAttachment[]
+}
 
 /**
  * 목에 없는 계정으로 올라간 글의 글쓴이. 실제 서버라면 전부 `users` 행을 가리키지만,
@@ -223,10 +226,11 @@ export function toDetail(post: StoredPost): BoardPostDetail {
 }
 
 // ── 게시글 첨부 ──────────────────────────────────────────
-// 서버에는 아직 없다. 채팅 첨부처럼 먼저 게시판 경로 밑에 올리고, 받은 값을 글에 실어 저장한다.
+// 채팅 첨부처럼 먼저 게시판 경로 밑에 올리고, 받은 값을 글에 실어 저장한다(백엔드 #306).
 // 받기는 그 게시판의 살아 있는 글이 싣고 있는 파일만 내준다. 글에서 떼거나 글을 지우면 받을 수
 // 없다(잘못 붙인 파일을 거둘 길이 그것뿐이다). 아직 글에 안 붙인 파일은 올린 사람만 받는다.
-// ponytail: 뗀 파일의 오브젝트 자체는 저장소에 남는다. 정리는 서버가 정할 일이다(이슈 #299).
+// **여기는 목이 실서버보다 엄격하다.** 실서버는 저장 키만 봐서 뗀 파일도 계속 내준다(이슈 #309).
+// 실서버는 그림 넷(png·jpeg·gif·webp)을 inline 으로 주고 목은 늘 내려받기로 준다.
 
 /** 글 하나에 붙일 수 있는 파일 수. 채팅·결재 첨부와 같다. */
 const POST_ATTACHMENTS_MAX = 10
