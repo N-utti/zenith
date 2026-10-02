@@ -35,6 +35,7 @@ import { TableRowMenu } from './TableRowMenu'
 import { VersionPanel } from './VersionPanel'
 import { VersionPreview } from './VersionPreview'
 import {
+  WIDTH_ORIGIN,
   hueToColor,
   useCollabStatus,
   useCollabTitle,
@@ -428,7 +429,8 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
 
     const onUpdate = (_update: Uint8Array, origin: unknown) => {
       // 다른 탭·다른 사람에게서 온 변경은 그쪽에서 이미 반영한다.
-      if (origin === provider) return
+      // 본문 폭만 바꾼 것은 편집이 아니다(collabState 의 WIDTH_ORIGIN).
+      if (origin === provider || origin === WIDTH_ORIGIN) return
 
       window.clearTimeout(metaTimer)
       metaTimer = window.setTimeout(() => {
