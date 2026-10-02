@@ -33,6 +33,7 @@ from app.models import (
     Folder,
     Message,
     Notification,
+    StoredFile,
     User,
     Workspace,
 )
@@ -418,11 +419,13 @@ async def delete_doc(
 
 
 async def _purge(db: AsyncSession, doc: Document) -> None:
-    """버전·댓글·색인까지 지우고 채팅 문서 카드는 참조만 푼다. 감사 기록·commit 은 호출한 쪽이.
+    """버전·댓글·색인까지 지우고 채팅 문서 카드·파일 기록부는 참조만 푼다. 감사 기록·commit 은 호출한 쪽이.
     documents 를 참조하는 테이블이 늘면 여기와 test_hard_delete_cascades 를 같이 고친다."""
     for model in (DocVersion, DocComment, DocChunk):
         await db.execute(delete(model).where(model.doc_id == doc.id))
     await db.execute(update(Message).where(Message.doc_ref == doc.id).values(doc_ref=None))
+    # 파일(README 16(h))은 오브젝트가 남으니 행도 남기고 출처만 푼다 — 자료실(#226)에서 빠진다
+    await db.execute(update(StoredFile).where(StoredFile.doc_id == doc.id).values(doc_id=None))
     await db.delete(doc)
     await yjs.close_room(doc.id)  # 접속 중인 편집자는 4404 로 끊는다
 
