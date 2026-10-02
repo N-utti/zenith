@@ -14,13 +14,14 @@ import asyncio
 import uuid
 from datetime import UTC, datetime
 from typing import Annotated, NoReturn
+from urllib.parse import quote, unquote
 
-from fastapi import APIRouter, Depends, Query, Request, Response
-from pydantic import BaseModel, ConfigDict, StringConstraints
+from fastapi import APIRouter, Depends, Query, Request, Response, UploadFile
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 from sqlalchemy import func, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app import audit
+from app import audit, storage
 from app.db import get_db
 from app.deps import current_user
 from app.errors import ApiError
@@ -28,6 +29,13 @@ from app.models import ROLE_RANK, Board, Notification, Post, PostComment, User
 from app.paging import decode_cursor, encode_cursor
 from app.prefs import wants
 from app.realtime import chat
+from app.routers.channels import (
+    INLINE_TYPES,
+    MAX_ATTACHMENT_BYTES,
+    MAX_ATTACHMENTS,
+    AttachmentOut,
+    _normalize_content_type,
+)
 
 router = APIRouter(tags=["boards"], dependencies=[Depends(current_user)])
 
@@ -63,16 +71,22 @@ class PostOut(BaseModel):
 
 class PostDetail(PostOut):
     body: str
+    attachments: list[AttachmentOut]  # 없으면 [] (#299)
+
+
+Attachments = Annotated[list[AttachmentOut], Field(max_length=MAX_ATTACHMENTS)]
 
 
 class PostCreateIn(BaseModel):
     title: Title
     body: Body
+    attachments: Attachments | None = None  # POST /boards/{id}/attachments 의 응답 그대로
 
 
 class PostPatchIn(BaseModel):
     title: Title | None = None
     body: Body | None = None
+    attachments: Attachments | None = None  # 보낼 때는 전체 목록, 안 보내면 그대로, [] 는 전부 뗌
 
 
 class Items[T](BaseModel):
@@ -152,7 +166,45 @@ async def _deny(
 
 
 def _post_detail(post: Post, board: Board, author: User | None) -> PostDetail:
-    return PostDetail(**_post_out(post, board, author, True).model_dump(), body=post.body)
+    return PostDetail(
+        **_post_out(post, board, author, True).model_dump(),
+        body=post.body,
+        attachments=post.attachments or [],
+    )
+
+
+# ── 첨부 (이슈 #299, README 34) — 채팅 첨부(channels.py)와 같은 규약, 등급은 게시판으로 판정 ──
+
+
+def _att_key(board_id: uuid.UUID, file_id: uuid.UUID, name: str) -> str:
+    return f"boards/{board_id}/{file_id}/{name}"
+
+
+def _att_url(board_id: uuid.UUID, file_id: uuid.UUID, name: str) -> str:
+    return f"/api/boards/{board_id}/attachments/{file_id}/{quote(name, safe='')}"
+
+
+def _parse_att_url(url: str, board_id: uuid.UUID) -> str | None:
+    """이 게시판의 업로드 URL 이면 파일명, 아니면 None — 임원 게시판 파일 id 를 공지 글에 끼워 등급 밖에서 받는 길을 막는다."""
+    prefix = f"/api/boards/{board_id}/attachments/"
+    if not url.startswith(prefix):
+        return None
+    rest = url[len(prefix) :].split("/")
+    if len(rest) != 2 or not rest[1]:
+        return None
+    try:
+        uuid.UUID(rest[0])
+    except ValueError:
+        return None
+    return unquote(rest[1])
+
+
+def _checked_attachments(board: Board, items: list[AttachmentOut] | None) -> list[dict] | None:
+    if items is None:
+        return None
+    if any(_parse_att_url(a.url, board.id) != a.name for a in items):
+        raise ApiError(422, "VALIDATION", "이 게시판에 올린 첨부가 아닙니다.")
+    return [a.model_dump() for a in items]
 
 
 async def _get_board(db: AsyncSession, board_id: uuid.UUID) -> Board:
@@ -242,7 +294,12 @@ async def create_post(
         await _deny(db, request, user, board, "write")
     now = datetime.now(UTC)  # 커서·알림 시각을 앱 시각으로 (03 §2.7)
     post = Post(
-        board_id=board.id, title=body.title, body=body.body, author_id=user.id, created_at=now
+        board_id=board.id,
+        title=body.title,
+        body=body.body,
+        author_id=user.id,
+        attachments=_checked_attachments(board, body.attachments),
+        created_at=now,
     )
     db.add(post)
     await db.flush()
@@ -313,10 +370,79 @@ async def update_post(
     for key, value in changes.items():
         if value is None:  # me.py 의 todo PATCH 와 같은 계약 — null 은 "지움" 이 아니라 422
             raise ApiError(422, "VALIDATION", f"{key} 는 null 일 수 없습니다.")
+        if key == "attachments":
+            value = _checked_attachments(board, body.attachments)  # [] 는 전부 뗀다
         setattr(post, key, value)
     if changes:
         await db.commit()
     return _post_detail(post, board, author)
+
+
+@router.post(
+    "/boards/{id}/attachments",
+    status_code=201,
+    response_model=AttachmentOut,
+    summary="게시글 첨부 업로드 multipart `file` — 게시판을 읽을 수 있는 등급만. 10MB 초과·빈 파일 422. 응답을 글의 attachments[] 에 그대로 싣는다",
+)
+async def upload_board_attachment(
+    id: uuid.UUID,
+    file: UploadFile,
+    request: Request,
+    user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_db),
+) -> AttachmentOut:
+    board = await _get_board(db, id)
+    if not _allowed(user, board):
+        await _deny(db, request, user, board, "attach")
+    # ponytail: 채팅 첨부와 같은 천장 — 쿼터·글에 안 실린 오브젝트 정리 없음(15명 사내)
+    data = await file.read(MAX_ATTACHMENT_BYTES + 1)
+    if len(data) > MAX_ATTACHMENT_BYTES:
+        raise ApiError(422, "VALIDATION", "10MB 이하 파일만 올릴 수 있습니다.")
+    if not data:
+        raise ApiError(422, "VALIDATION", "빈 파일입니다.")
+    name = storage.safe_name(file.filename)
+    file_id = uuid.uuid4()
+    content_type = _normalize_content_type(file.content_type)
+    await storage.put(_att_key(board.id, file_id, name), data, content_type)
+    return AttachmentOut(
+        url=_att_url(board.id, file_id, name), name=name, size=len(data), content_type=content_type
+    )
+
+
+@router.get(
+    "/boards/{id}/attachments/{file_id}/{name}",
+    summary="게시글 첨부 내려받기 — 게시판을 읽을 수 있는 등급만. 이미지 넷은 inline, 나머지는 attachment",
+    response_class=Response,
+    responses={200: {"content": {"application/octet-stream": {}}}},
+)
+async def download_board_attachment(
+    id: uuid.UUID,
+    file_id: uuid.UUID,
+    name: str,
+    request: Request,
+    user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    board = await _get_board(db, id)
+    if not _allowed(user, board):
+        await _deny(db, request, user, board, "attach")
+    found = await storage.get(
+        _att_key(board.id, file_id, name)
+    )  # 키에 게시판 id — 다른 게시판 경로로는 404
+    if found is None:
+        raise ApiError(404, "NOT_FOUND", "없는 첨부입니다.")
+    data, content_type = found
+    disposition = "inline" if content_type in INLINE_TYPES else "attachment"
+    return Response(  # 헤더는 채팅 첨부와 같다(channels.download_attachment)
+        data,
+        media_type=content_type,
+        headers={
+            "Content-Disposition": f"{disposition}; filename*=UTF-8''{quote(name, safe='')}",
+            "X-Content-Type-Options": "nosniff",
+            "Content-Security-Policy": "default-src 'none'; sandbox",
+            "Cache-Control": "private, max-age=86400",
+        },
+    )
 
 
 @router.delete("/posts/{id}", status_code=204, summary="글 삭제 — 글쓴이 또는 exec")
