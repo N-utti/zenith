@@ -192,6 +192,7 @@ class DocComment(Base):
     author_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
     body: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = created_at_col()
+    edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # 고친 적 없으면 NULL (#274)
 
 
 class StoredFile(Base):
