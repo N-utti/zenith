@@ -289,3 +289,29 @@ export interface ImportResult {
   new_orgs: number
   new_contacts: number
 }
+
+/** 가져오기를 되돌릴 수 있는 시간. 가져온 뒤 손으로 고친 것까지 같이 지워지므로 길게 두지 않는다. */
+export const IMPORT_UNDO_HOURS = 24
+
+/**
+ * 내가 한 마지막 가져오기. 되돌릴 것이 없거나 기한(`IMPORT_UNDO_HOURS`)이 지났으면 서버가 `null` 을
+ * 준다.
+ */
+export interface LastImport {
+  id: string
+  created_at: string
+  new_orgs: number
+  new_contacts: number
+}
+
+/**
+ * 가져오기 되돌리기의 결과. 그 가져오기로 만든 기관·담당자를 지운다. 그사이 쓰이기 시작한 것은
+ * 남긴다(`kept_*`): 안건·활동 기록이 생겼거나 누가 담당자를 더 넣은 기관과 거기 가져온 담당자,
+ * 활동 기록에 붙었거나 이직했거나 개인정보를 지운 담당자.
+ */
+export interface ImportUndone {
+  removed_orgs: number
+  removed_contacts: number
+  kept_orgs: number
+  kept_contacts: number
+}

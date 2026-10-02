@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import { IMPORT_UNDO_HOURS } from '@/features/crm/types'
 import { findAccount, patchAccount } from './adminDb'
 import { MOCK_USERS } from './db'
 import {
@@ -18,9 +19,11 @@ import {
   listDeletedOrgs,
   reopenDeal,
   restoreOrg,
+  undoImport,
   updateDeal,
   getOrg,
   importContacts,
+  lastImport,
   listActivities,
   listOrgs,
   normalizeOrgName,
@@ -720,5 +723,168 @@ describe('지운 기관 되살리기 (15 §9 에 없는 경로. 임원만)', () 
       name: '쌍둥이운용 주식회사',
     })
     expect(ok(restoreOrg(exec, first.org.id)).name).toBe('(주)쌍둥이운용')
+  })
+})
+
+describe('가져오기 되돌리기 (15 §9 에 없는 경로. 가져온 사람만, 하루 안에)', () => {
+  const activityOn = (orgId: string, contactIds: string[]) =>
+    ok(
+      createActivity(fund, {
+        kind: 'memo',
+        occurred_at: new Date().toISOString(),
+        org_id: orgId,
+        deal_id: null,
+        contact_ids: contactIds,
+        user_ids: [],
+        body: '벌써 연락함',
+      }),
+    )
+  const orgNamed = (name: string) => listOrgs({ q: name })[0]!
+
+  it('바로 되돌리면 그때 만든 기관과 담당자가 사라진다. 미리보기는 기록을 남기지 않는다', () => {
+    const rows = [
+      ['기관', '이름'],
+      ['되돌릴 기관', '가'],
+      ['되돌릴 기관', '나'],
+      ['한결연금공단', '다'],
+    ]
+    ok(importContacts(fund, rows, true))
+    expect(lastImport(fund)).toBeNull()
+
+    const before = ok(getOrg(fund, 'org-1')).contact_count
+    ok(importContacts(fund, rows, false))
+    const last = lastImport(fund)!
+    expect(last).toMatchObject({ new_orgs: 1, new_contacts: 3 })
+    // 남의 가져오기는 보이지 않고 되돌릴 수도 없다. 임원도 그렇다.
+    expect(lastImport(infra)?.id).not.toBe(last.id)
+    expect(undoImport(infra, last.id)).toMatchObject({ status: 403 })
+    expect(undoImport(exec, last.id)).toMatchObject({ status: 403 })
+
+    expect(ok(undoImport(fund, last.id))).toEqual({
+      removed_orgs: 1,
+      removed_contacts: 3,
+      kept_orgs: 0,
+      kept_contacts: 0,
+    })
+    expect(listOrgs({ q: '되돌릴 기관' })).toEqual([])
+    expect(ok(getOrg(fund, 'org-1')).contact_count).toBe(before)
+    expect(lastImport(fund)).toBeNull()
+    expect(undoImport(fund, last.id)).toMatchObject({ status: 404 })
+  })
+
+  it('활동 기록이 생긴 기관은 담당자째 남긴다. 기존 기관에 붙인 담당자는 쓰인 사람만 남는다', () => {
+    ok(
+      importContacts(
+        fund,
+        [
+          ['기관', '이름'],
+          ['쓰기 시작한 기관', '가'],
+          ['쓰기 시작한 기관', '나'],
+          ['한결연금공단', '라'],
+        ],
+        false,
+      ),
+    )
+    const org = orgNamed('쓰기 시작한 기관')
+    const used = ok(getOrg(fund, org.id)).contacts.find((c) => c.name === '가')!
+    activityOn(org.id, [used.id])
+    expect(ok(undoImport(fund, lastImport(fund)!.id))).toEqual({
+      removed_orgs: 0,
+      removed_contacts: 1,
+      kept_orgs: 1,
+      kept_contacts: 2,
+    })
+    expect(ok(getOrg(fund, org.id)).contacts.map((c) => c.name)).toEqual(['가', '나'])
+    expect(ok(getOrg(fund, 'org-1')).contacts.some((c) => c.name === '라')).toBe(false)
+  })
+
+  it('안건만 생긴 기관도 담당자째 남긴다', () => {
+    ok(
+      importContacts(
+        fund,
+        [
+          ['기관', '이름'],
+          ['안건 생긴 기관', '마'],
+        ],
+        false,
+      ),
+    )
+    const org = orgNamed('안건 생긴 기관')
+    ok(
+      createDeal(infra, {
+        kind: 'investment',
+        name: '동료가 만든 안건',
+        org_id: org.id,
+        owner_id: null,
+        amount_krw: null,
+        target_date: null,
+        next_action: '',
+        next_action_due: null,
+      }),
+    )
+    expect(ok(undoImport(fund, lastImport(fund)!.id))).toMatchObject({
+      removed_contacts: 0,
+      kept_orgs: 1,
+      kept_contacts: 1,
+    })
+    expect(ok(getOrg(fund, org.id)).contacts.map((c) => c.name)).toEqual(['마'])
+  })
+
+  it('목록에서 지운 담당자 때문에 빈 기관이 남지 않는다', () => {
+    ok(
+      importContacts(
+        fund,
+        [
+          ['기관', '이름'],
+          ['빈 껍데기 기관', '바'],
+          ['빈 껍데기 기관', '사'],
+        ],
+        false,
+      ),
+    )
+    const org = orgNamed('빈 껍데기 기관')
+    const gone = ok(getOrg(fund, org.id)).contacts.find((c) => c.name === '바')!
+    expect(deleteContact(fund, gone.id)).toBeNull()
+    // 이미 지운 사람은 수에 넣지 않는다.
+    expect(ok(undoImport(fund, lastImport(fund)!.id))).toEqual({
+      removed_orgs: 1,
+      removed_contacts: 1,
+      kept_orgs: 0,
+      kept_contacts: 0,
+    })
+    expect(listOrgs({ q: '빈 껍데기 기관' })).toEqual([])
+  })
+
+  it('기관만 있는 행의 긴 메모는 미리보기에서 걸린다. 반영이 중간에 던지지 않는다', () => {
+    const rows = [
+      ['기관', '이름', '메모'],
+      ['메모 멀쩡한 기관', '', '짧은 메모'],
+      ['메모 긴 기관', '', 'x'.repeat(2001)],
+    ]
+    expect(ok(importContacts(fund, rows, true)).rows.map((r) => r.status)).toEqual(['ok', 'error'])
+    expect(ok(importContacts(fund, rows, false))).toMatchObject({ new_orgs: 1 })
+    expect(ok(undoImport(fund, lastImport(fund)!.id))).toMatchObject({ removed_orgs: 1 })
+  })
+
+  it('하루가 지나면 되돌릴 수 없다', () => {
+    ok(
+      importContacts(
+        fund,
+        [
+          ['기관', '이름'],
+          ['어제 가져온 기관', '아'],
+        ],
+        false,
+      ),
+    )
+    const last = lastImport(fund)!
+    vi.useFakeTimers({ now: Date.now() + (IMPORT_UNDO_HOURS + 1) * 3_600_000 })
+    try {
+      expect(lastImport(fund)).toBeNull()
+      expect(undoImport(fund, last.id)).toMatchObject({ status: 409 })
+    } finally {
+      vi.useRealTimers()
+    }
+    expect(listOrgs({ q: '어제 가져온 기관' })).toHaveLength(1)
   })
 })
