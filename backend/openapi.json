@@ -2781,19 +2781,31 @@
         "tags": [
           "ai"
         ],
-        "summary": "{message_id, value: 1|-1}",
-        "operationId": "stub_api_ai_feedback_post",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
+        "summary": "{message_id, value: 1|-1} 답변 평가 → 204",
+        "operationId": "feedback_api_ai_feedback_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeedbackIn"
               }
             }
           },
-          "501": {
-            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
           }
         }
       }
@@ -2803,19 +2815,38 @@
         "tags": [
           "ai"
         ],
-        "summary": "{doc_id, block_id?, action: summarize|continue|polish|translate|table} 인라인 AI",
-        "operationId": "stub_api_ai_doc_action_post",
+        "summary": "{doc_id, block_id?, action} → {draft} 문서 안 인라인 AI (근거 = 그 문서 본문)",
+        "operationId": "doc_action_api_ai_doc_action_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DocActionIn"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/DocActionOut"
+                }
               }
             }
           },
-          "501": {
-            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
           }
         }
       }
@@ -2825,19 +2856,38 @@
         "tags": [
           "ai"
         ],
-        "summary": "{template: minutes|weekly|notice, context?} → {blocks[]}",
-        "operationId": "stub_api_ai_template_post",
+        "summary": "{template: minutes|weekly|notice, context?} → {blocks[]} (한 칸 = 마크다운 한 덩이)",
+        "operationId": "template_api_ai_template_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TemplateIn"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/TemplateOut"
+                }
               }
             }
           },
-          "501": {
-            "description": "미구현 스텁 — {detail, code: NOT_IMPLEMENTED}"
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
           }
         }
       }
@@ -8611,6 +8661,56 @@
         ],
         "title": "DelegationOut"
       },
+      "DocActionIn": {
+        "properties": {
+          "doc_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Doc Id"
+          },
+          "block_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Block Id"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "summarize",
+              "continue",
+              "polish",
+              "translate",
+              "table"
+            ],
+            "title": "Action"
+          }
+        },
+        "type": "object",
+        "required": [
+          "doc_id",
+          "action"
+        ],
+        "title": "DocActionIn"
+      },
+      "DocActionOut": {
+        "properties": {
+          "draft": {
+            "type": "string",
+            "title": "Draft"
+          }
+        },
+        "type": "object",
+        "required": [
+          "draft"
+        ],
+        "title": "DocActionOut"
+      },
       "DocCreateIn": {
         "properties": {
           "folder_id": {
@@ -8950,6 +9050,30 @@
         ],
         "title": "Extra",
         "description": "서식 칸의 값 — 서버는 뜻을 모르고 받은 그대로 돌려준다(프론트 templates.ts)."
+      },
+      "FeedbackIn": {
+        "properties": {
+          "message_id": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Message Id"
+          },
+          "value": {
+            "type": "integer",
+            "enum": [
+              1,
+              -1
+            ],
+            "title": "Value"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message_id",
+          "value"
+        ],
+        "title": "FeedbackIn"
       },
       "FileOut": {
         "properties": {
@@ -11816,6 +11940,52 @@
           "name"
         ],
         "title": "TeamOut"
+      },
+      "TemplateIn": {
+        "properties": {
+          "template": {
+            "type": "string",
+            "enum": [
+              "minutes",
+              "weekly",
+              "notice"
+            ],
+            "title": "Template"
+          },
+          "context": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "template"
+        ],
+        "title": "TemplateIn"
+      },
+      "TemplateOut": {
+        "properties": {
+          "blocks": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Blocks"
+          }
+        },
+        "type": "object",
+        "required": [
+          "blocks"
+        ],
+        "title": "TemplateOut"
       },
       "TodoCreateIn": {
         "properties": {

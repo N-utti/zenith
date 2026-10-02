@@ -9,7 +9,10 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.exc import IntegrityError
 
+from app.deps import current_user
 from app.main import create_app
+
+from .conftest import make_user
 
 CONTRACT_PATHS = {
     # §1 인증 · §4.2 프록시 인증 확인 · §9 관리
@@ -174,8 +177,10 @@ async def test_metrics_is_prometheus_text(app: FastAPI, client: AsyncClient) -> 
     assert 'status="500"' in (await client.get("/api/metrics")).text
 
 
-async def test_stub_returns_501_with_error_shape(client: AsyncClient, member) -> None:
-    r = await client.post("/api/ai/feedback")
+async def test_stub_returns_501_with_error_shape(app: FastAPI, client: AsyncClient) -> None:
+    # 남은 스텁은 관리자 경로뿐이다 — exec 로 바꿔 끼워야 403 이 아니라 스텁까지 닿는다.
+    app.dependency_overrides[current_user] = lambda: make_user("exec")
+    r = await client.get("/api/admin/leave-policy")
     assert r.status_code == 501
     assert r.json() == {"detail": "아직 구현되지 않은 엔드포인트입니다.", "code": "NOT_IMPLEMENTED"}
 
