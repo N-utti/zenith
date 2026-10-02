@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest'
-import { ancestorsOf, buildTree, folderRows, foldersTo, previewDocs } from './tree'
+import { ancestorsOf, buildTree, canDrop, folderRows, foldersTo, previewDocs } from './tree'
 import type { DocSummary, DocTreeData, Folder } from './types'
 
 const folder = (id: string, parent_id: string | null, title: string, sort = 0): Folder => ({
@@ -96,6 +96,31 @@ it('folderRows: 폴더만 트리 순서대로 펴고 깊이를 단다', () => {
     ['f-2', 1],
   ])
   expect(folderRows(buildTree({ folders: [], docs: [] }))).toEqual([])
+})
+
+it('canDrop: 이미 있는 자리, 자기 자신과 자기 아래, 문서의 최상위는 놓을 자리가 아니다', () => {
+  const d1 = { kind: 'doc', id: 'd-1' } as const
+  expect(canDrop(d1, 'f-0', data)).toBe(true)
+  expect(canDrop(d1, 'f-2', data)).toBe(false) // 이미 그 폴더
+  expect(canDrop(d1, null, data)).toBe(false) // 문서는 폴더 안에만
+  expect(canDrop({ kind: 'doc', id: 'd-없음' }, 'f-0', data)).toBe(false)
+
+  const wiki = { kind: 'folder', id: 'f-1' } as const
+  expect(canDrop(wiki, 'f-0', data)).toBe(true)
+  expect(canDrop(wiki, 'f-1', data)).toBe(false) // 자기 자신
+  expect(canDrop(wiki, 'f-2', data)).toBe(false) // 자기 아래
+  expect(canDrop(wiki, null, data)).toBe(false) // 이미 최상위
+  expect(canDrop({ kind: 'folder', id: 'f-2' }, null, data)).toBe(true)
+  expect(canDrop({ kind: 'folder', id: 'f-2' }, 'f-1', data)).toBe(false) // 이미 그 부모
+
+  // 이미 고리가 있는 데이터에서도 멈춘다. 끄는 내내 불리므로 안 멈추면 탭이 멎는다.
+  const loop: DocTreeData = { folders: [folder('a', 'b', 'A'), folder('b', 'a', 'B')], docs: [] }
+  expect(
+    canDrop({ kind: 'folder', id: 'f-0' }, 'a', {
+      ...loop,
+      folders: [...loop.folders, folder('f-0', null, '팀')],
+    }),
+  ).toBe(true)
 })
 
 it('previewDocs: 넘치면 최근 수정순으로 자르고, 열린 문서는 남긴다', () => {
