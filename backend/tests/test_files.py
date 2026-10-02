@@ -1,14 +1,18 @@
-"""문서 이미지 업로드(README "설계와 어긋나는 것" 16) — 프론트 useImageUpload.ts 계약: POST /files → {id, url, name, size}.
+"""문서 파일 업로드(README "설계와 어긋나는 것" 16) — 프론트 useFileUpload.ts 계약: POST /files → {id, url, name, size, content_type}.
 
 실제 MinIO 위에서 돈다 — 붙을 수 없으면 skip(conftest.minio_bucket).
 """
 
+import uuid
 from datetime import UTC, datetime, timedelta
+from urllib.parse import quote
 
 from httpx import AsyncClient
+from sqlalchemy import select
 
 from app import audit
-from app.routers.files import DAILY_UPLOADS, MAX_IMAGE_BYTES
+from app.models import StoredFile
+from app.routers.files import DAILY_UPLOADS, MAX_FILE_BYTES
 
 from .conftest import Users, csrf, login
 
@@ -16,9 +20,9 @@ PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
 WEBP = b"RIFF\x10\x00\x00\x00WEBPVP8 " + b"\x00" * 16
 
 
-async def _upload(client: AsyncClient, name: str, data: bytes, content_type: str):
+async def _upload(client: AsyncClient, name: str, data: bytes, content_type: str, **form):
     return await client.post(
-        "/api/files", files={"file": (name, data, content_type)}, headers=csrf(client)
+        "/api/files", files={"file": (name, data, content_type)}, data=form, headers=csrf(client)
     )
 
 
@@ -35,13 +39,22 @@ async def test_upload_then_img_src_download(
     r = await _upload(client, "../사진.png", PNG, "image/png")
     assert r.status_code == 201, r.text
     body = r.json()
-    assert set(body) == {"id", "url", "name", "size"}
-    assert (body["url"], body["name"], body["size"]) == (
+    assert set(body) == {"id", "url", "name", "size", "content_type"}
+    assert (body["url"], body["name"], body["size"], body["content_type"]) == (
         f"/api/files/{body['id']}",
         "_사진.png",  # 경로 문자는 _, 앞뒤 점은 벗긴다(storage.safe_name)
         len(PNG),
+        "image/png",
     )
     assert await audit.count_since(app_db, "files.uploaded", since, actor=str(users.member.id)) == 1
+    row = await app_db.get(StoredFile, body["id"])  # 기록부 — 자료실(#226)이 읽는다
+    assert (row.name, row.size, row.content_type, row.uploader_id, row.doc_id) == (
+        "_사진.png",
+        len(PNG),
+        "image/png",
+        users.member.id,
+        None,
+    )
 
     r = await client.get(body["url"])  # 브라우저 <img src> — 쿠키만 붙는다
     assert r.status_code == 200 and r.content == PNG
@@ -62,26 +75,83 @@ async def test_upload_then_img_src_download(
     assert (await client.get("/api/files/00000000-0000-0000-0000-000000000000")).status_code == 404
 
 
-async def test_upload_rejects_non_images_and_oversize(
+async def test_non_image_files_download_as_attachment(
+    client: AsyncClient, users: Users, app_db, minio_bucket
+) -> None:
+    """그림이 아닌 파일(#224): 받되 inline 으로는 절대 내주지 않는다. 형식은 우긴 헤더가 아니라 octet-stream."""
+    await login(client, "sujin@zenith.co.kr")
+    # 헤더는 image/png 라고 우기지만 바이트는 HTML — 매직 바이트에 안 걸리니 octet-stream + attachment
+    r = await _upload(client, "x.png", b"<html><script>alert(1)</script>", "image/png")
+    assert r.status_code == 201, r.text
+    assert r.json()["content_type"] == "application/octet-stream"
+    r = await client.get(r.json()["url"])
+    assert r.status_code == 200 and r.content.startswith(b"<html>")
+    assert r.headers["content-type"] == "application/octet-stream"
+    assert r.headers["content-disposition"] == "attachment; filename*=UTF-8''x.png"
+    assert r.headers["x-content-type-options"] == "nosniff"
+    assert r.headers["content-security-policy"] == "default-src 'none'; sandbox"
+    # svg·pdf·매직 근접 실패(RIFF 이지만 WEBP 가 아님, GIF8 로 끝남) 도 전부 attachment, 한글 이름은 filename*
+    for name, data, claimed in (
+        ("도형.svg", b"<svg xmlns='http://www.w3.org/2000/svg'/>", "image/svg+xml"),
+        ("보고서.pdf", b"%PDF-1.7 ...", "application/pdf"),
+        ("a.wav", b"RIFF\x10\x00\x00\x00WAVEfmt ", "image/webp"),
+        ("a.gif", b"GIF8", "image/gif"),
+    ):
+        r = await _upload(client, name, data, claimed)
+        assert r.status_code == 201, (name, r.text)
+        assert r.json()["content_type"] == "application/octet-stream"
+        d = await client.get(r.json()["url"])
+        assert d.headers["content-type"] == "application/octet-stream"
+        assert d.headers["content-disposition"] == (
+            f"attachment; filename*=UTF-8''{quote(name, safe='')}"
+        )
+    assert (
+        await audit.count_since(
+            app_db,
+            "files.uploaded",
+            datetime.now(UTC) - timedelta(minutes=1),
+            actor=str(users.member.id),
+        )
+        == 5
+    )
+
+
+async def test_doc_id_is_recorded(client: AsyncClient, users: Users, app_db, minio_bucket) -> None:
+    """프론트가 폼에 보내는 doc_id 는 기록부에 남는다. 없는 문서면 422."""
+    from app.models import Document, Folder, Workspace
+
+    ws = Workspace(name="제니스")
+    app_db.add(ws)
+    await app_db.flush()
+    folder = Folder(ws_id=ws.id, parent_id=None, title="루트")
+    app_db.add(folder)
+    await app_db.flush()
+    doc = Document(folder_id=folder.id, title="실사 메모", updated_by=users.member.id)
+    app_db.add(doc)
+    await app_db.flush()
+    await login(client, "sujin@zenith.co.kr")
+    r = await _upload(client, "보고서.pdf", b"%PDF-1.7", "application/pdf", doc_id=str(doc.id))
+    assert r.status_code == 201, r.text
+    assert (await app_db.get(StoredFile, r.json()["id"])).doc_id == doc.id
+    r = await _upload(client, "a.pdf", b"%PDF", "application/pdf", doc_id=str(uuid.uuid4()))
+    assert (r.status_code, r.json()["detail"]) == (422, "없는 문서입니다.")
+    doc.deleted_at = datetime.now(UTC)  # 휴지통 문서도 같은 답
+    await app_db.flush()
+    r = await _upload(client, "a.pdf", b"%PDF", "application/pdf", doc_id=str(doc.id))
+    assert (r.status_code, r.json()["detail"]) == (422, "없는 문서입니다.")
+    r = await _upload(client, "a.pdf", b"%PDF", "application/pdf", doc_id="not-a-uuid")
+    assert r.status_code == 422
+    assert len((await app_db.execute(select(StoredFile))).scalars().all()) == 1  # 거절은 행도 없다
+
+
+async def test_upload_rejects_empty_and_oversize(
     client: AsyncClient, users: Users, app_db, minio_bucket
 ) -> None:
     await login(client, "sujin@zenith.co.kr")
-    since = datetime.now(UTC) - timedelta(minutes=1)
-    # 헤더는 image/png 라고 우기지만 바이트는 HTML — 판정은 매직 바이트, 시도는 감사에 남는다
-    r = await _upload(client, "x.png", b"<html><script>alert(1)</script>", "image/png")
-    assert (r.status_code, r.json()["code"]) == (422, "VALIDATION")
-    assert await audit.count_since(app_db, "files.rejected", since, claimed="image/png") == 1
-    svg = b"<svg xmlns='http://www.w3.org/2000/svg'/>"
-    assert (await _upload(client, "a.svg", svg, "image/svg+xml")).status_code == 422
-    # 매직 근접 실패 — RIFF 이지만 WEBP 가 아님, GIF8 로 끝남
-    assert (
-        await _upload(client, "a.wav", b"RIFF\x10\x00\x00\x00WAVEfmt ", "image/webp")
-    ).status_code == 422
-    assert (await _upload(client, "a.gif", b"GIF8", "image/gif")).status_code == 422
     r = await _upload(client, "empty.png", b"", "image/png")
     assert (r.status_code, r.json()["detail"]) == (422, "빈 파일입니다.")
     # 10MB 정확히는 되고, 1바이트 넘으면 422
-    exact = PNG + b"\x00" * (MAX_IMAGE_BYTES - len(PNG))
+    exact = PNG + b"\x00" * (MAX_FILE_BYTES - len(PNG))
     assert (await _upload(client, "exact.png", exact, "image/png")).status_code == 201
     assert (await _upload(client, "big.png", exact + b"\x00", "image/png")).status_code == 422
     # webp 는 RIFF….WEBP — content type 은 헤더가 아니라 바이트에서
@@ -106,3 +176,18 @@ async def test_daily_upload_cap(client: AsyncClient, users: Users, app_db, minio
     # 다른 사람은 무관
     await login(client, "donghyun@zenith.co.kr")
     assert (await _upload(client, "a.png", PNG, "image/png")).status_code == 201
+
+
+async def test_legacy_image_without_registry_row_is_inline(
+    client: AsyncClient, users: Users, app_db, minio_bucket
+) -> None:
+    """2026-10-02 이전에 올린 그림은 `files` 행이 없다 — MinIO 메타데이터로 전과 같이 inline."""
+    from app import storage
+
+    legacy = uuid.uuid4()
+    await storage.put(f"files/{legacy}", PNG, "image/png")
+    await login(client, "sujin@zenith.co.kr")
+    r = await client.get(f"/api/files/{legacy}")
+    assert r.status_code == 200 and r.content == PNG
+    assert (r.headers["content-type"], r.headers["content-disposition"]) == ("image/png", "inline")
+    assert r.headers["x-content-type-options"] == "nosniff"
