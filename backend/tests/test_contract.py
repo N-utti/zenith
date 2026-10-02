@@ -83,6 +83,12 @@ CONTRACT_PATHS = {
     "/api/attendance/close",
     "/api/attendance/reopen",
     "/api/admin/holidays",
+    # §10 확장 (README "설계와 어긋나는 것" 36 — 프론트 목이 정한 경로)
+    "/api/attendance/{store}/{id}/cancel",
+    "/api/attendance/closings",
+    "/api/attendance/closings/{month}",
+    "/api/leaves/balances",
+    "/api/admin/holidays/{date}",
     "/api/admin/attendance/calendar/rebuild",
     "/api/admin/leave-policy",
     # 13 §9 결재
@@ -98,6 +104,9 @@ CONTRACT_PATHS = {
     "/api/approvals/{id}",
     "/api/approvals/delegations",
     "/api/approvals/delegations/{id}",
+    # 13 확장 (README 35 — #281 임시저장 지우기는 drafts/{id} DELETE, 첨부는 문서 경로 밑)
+    "/api/approvals/{id}/attachments",
+    "/api/approvals/{id}/attachments/{file_id}/{name}",
     "/api/admin/approval-policy",
     # CRM (04 밖 — backend/README "설계와 어긋나는 것" 32)
     "/api/crm/orgs",
@@ -166,7 +175,7 @@ async def test_metrics_is_prometheus_text(app: FastAPI, client: AsyncClient) -> 
 
 
 async def test_stub_returns_501_with_error_shape(client: AsyncClient, member) -> None:
-    r = await client.get("/api/attendance/me")
+    r = await client.post("/api/ai/feedback")
     assert r.status_code == 501
     assert r.json() == {"detail": "아직 구현되지 않은 엔드포인트입니다.", "code": "NOT_IMPLEMENTED"}
 

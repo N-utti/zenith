@@ -1,13 +1,13 @@
-"""exec 전용 관리 — 04-API §9 계정·감사(실구현) · §10.4 근태 · 13 §9.3 결재 정책(스텁).
+"""exec 전용 관리 — 04-API §9 계정·감사 · §10.4 근태(휴일·달력 재생성) · 13 §9.3 결재 정책(스텁).
 
 FR-AUTH-03: 셀프 가입이 없다. 계정은 여기서만 만들고 비활성화한다.
 """
 
 import uuid
 from datetime import UTC, date, datetime
-from typing import Annotated
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Query, Request, Response
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 from sqlalchemy import select, tuple_, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,9 +17,10 @@ from app.config import settings
 from app.db import get_db
 from app.deps import require_role
 from app.errors import ApiError
-from app.models import AuditEvent, AuthSession, Role, Team, User
+from app.models import AuditEvent, AuthSession, Holiday, Role, Team, User
 from app.paging import decode_cursor, encode_cursor
-from app.routers import channels
+from app.routers import attendance, channels
+from app.routers.attendance import Items
 from app.security import hash_password_async
 from app.stubs import register_stubs
 
@@ -332,12 +333,192 @@ async def list_audit(
     )
 
 
+# ── 공휴일·회사 휴일 (10 §6 · §9.6) — 근무 달력의 유일한 입력 ─────────────────────
+# 근무 달력은 표가 없다: 근무일 = 주말·holidays 를 뺀 날, 읽을 때 센다(attendance.py). 그래서 휴일을 넣고 빼면
+# 달력이 바로 따라온다(10 §6.2 재생성). 마감된 달의 날짜는 넣고 빼지 못한다 — 이름만 고칠 수 있다(#286).
+# ponytail: 임시공휴일 지정 때 그날 승인된 연차를 자동 취소·반환하는 §6.2 두 번째 행은 없다(목에도 없다).
+
+
+class HolidayOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    date: date
+    name: str
+    kind: Literal["public", "company"]
+
+
+class HolidayIn(BaseModel):
+    date: date
+    name: Name
+    kind: Literal["public", "company"]
+
+
+class HolidayPatchIn(BaseModel):
+    name: Name
+
+
+class RebuildIn(BaseModel):
+    year: int = Field(ge=2000, le=2100)
+
+
+class RebuildOut(BaseModel):
+    year: int
+    workdays: int
+
+
+def _holiday_month_closed() -> ApiError:
+    # 이 화면을 보는 사람이 임원 본인이다 — 신청 쪽 문구("임원이 해제해야")를 쓰면 자기에게 부탁하는 말이 된다
+    return ApiError(
+        409, "MONTH_CLOSED", "마감된 달의 휴일은 바꿀 수 없습니다. 먼저 마감을 해제하세요."
+    )
+
+
+async def _company_holiday(
+    db: AsyncSession, request: Request, actor: User, day: date, lock: bool = False
+) -> Holiday:
+    """회사 휴일만 손댈 수 있다. 법정 공휴일은 원천이 서버라 403(+감사), 없는 날짜 404."""
+    row = await db.get(Holiday, day, with_for_update=lock, populate_existing=lock)
+    if row is None:
+        raise ApiError(404, "NOT_FOUND", "등록되지 않은 휴일입니다.")
+    if row.kind == "public":
+        audit.record(
+            db,
+            "acl.denied",
+            request=request,
+            actor_id=actor.id,
+            detail={"path": request.url.path, "reason": "public_holiday"},
+        )
+        await db.commit()
+        raise ApiError(403, "FORBIDDEN", "법정 공휴일은 여기서 고칠 수 없습니다.")
+    return row
+
+
+@router.get(
+    "/admin/holidays",
+    response_model=Items[HolidayOut],
+    summary="?year= 공휴일·회사 휴일 목록(날짜순)",
+)
+async def list_holidays(
+    year: int = Query(ge=2000, le=2100), db: AsyncSession = Depends(get_db)
+) -> Items[HolidayOut]:
+    rows = await db.scalars(
+        select(Holiday)
+        .where(Holiday.date >= date(year, 1, 1), Holiday.date <= date(year, 12, 31))
+        .order_by(Holiday.date)
+    )
+    return Items(items=[HolidayOut.model_validate(r) for r in rows])
+
+
+@router.post(
+    "/admin/holidays",
+    status_code=201,
+    response_model=HolidayOut,
+    summary="휴일 등록 → 근무 달력이 바로 따라온다(10 §6.2). 이미 있으면 409 HOLIDAY_EXISTS, 마감된 달 409 MONTH_CLOSED",
+)
+async def create_holiday(
+    body: HolidayIn,
+    request: Request,
+    actor: User = Depends(require_exec),
+    db: AsyncSession = Depends(get_db),
+) -> Holiday:
+    if await db.get(Holiday, body.date) is not None:
+        raise ApiError(409, "HOLIDAY_EXISTS", "이미 휴일로 등록된 날짜입니다.")
+    if await attendance.closed_between(db, body.date, body.date):
+        raise _holiday_month_closed()
+    row = Holiday(date=body.date, name=body.name, kind=body.kind)
+    db.add(row)
+    audit.record(
+        db,
+        "admin.holiday_created",
+        request=request,
+        actor_id=actor.id,
+        detail={"date": body.date.isoformat(), "name": body.name, "kind": body.kind},
+    )
+    await db.commit()
+    return row
+
+
+@router.patch(
+    "/admin/holidays/{date}",
+    response_model=HolidayOut,
+    summary="회사 휴일 이름 고치기(#286) — 날짜는 못 바꾼다. 법정 공휴일 403, 없는 날짜 404. 마감된 달도 된다",
+)
+async def rename_holiday(
+    date: date,
+    body: HolidayPatchIn,
+    request: Request,
+    actor: User = Depends(require_exec),
+    db: AsyncSession = Depends(get_db),
+) -> Holiday:
+    row = await _company_holiday(db, request, actor, date, lock=True)
+    before = row.name
+    if body.name == before:
+        return row  # 무변경 저장은 감사에 안 남긴다(팀 이름과 같다)
+    row.name = body.name
+    audit.record(
+        db,
+        "admin.holiday_updated",
+        request=request,
+        actor_id=actor.id,
+        detail={"date": date.isoformat(), "from": before, "to": body.name},
+    )
+    await db.commit()
+    return row
+
+
+@router.delete(
+    "/admin/holidays/{date}",
+    status_code=204,
+    summary="회사 휴일 지우기 — 법정 공휴일 403, 없는 날짜 404, 마감된 달 409 MONTH_CLOSED",
+)
+async def delete_holiday(
+    date: date,
+    request: Request,
+    actor: User = Depends(require_exec),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    row = await _company_holiday(db, request, actor, date, lock=True)
+    if await attendance.closed_between(db, date, date):
+        raise _holiday_month_closed()
+    await db.delete(row)
+    audit.record(
+        db,
+        "admin.holiday_deleted",
+        request=request,
+        actor_id=actor.id,
+        detail={"date": date.isoformat(), "name": row.name},
+    )
+    await db.commit()
+    return Response(status_code=204)
+
+
+@router.post(
+    "/admin/attendance/calendar/rebuild",
+    response_model=RebuildOut,
+    summary="{year} 근무 달력 재생성 → {year, workdays}. 달력은 읽을 때 세므로 그 해 근무일 수를 다시 세어 돌려준다",
+)
+async def rebuild_calendar(
+    body: RebuildIn,
+    request: Request,
+    actor: User = Depends(require_exec),
+    db: AsyncSession = Depends(get_db),
+) -> RebuildOut:
+    start, end = date(body.year, 1, 1), date(body.year, 12, 31)
+    count = len(attendance.workdays(start, end, await attendance.holidays_in(db, start, end)))
+    audit.record(
+        db,
+        "admin.calendar_rebuilt",
+        request=request,
+        actor_id=actor.id,
+        detail={"year": body.year, "workdays": count},
+    )
+    await db.commit()
+    return RebuildOut(year=body.year, workdays=count)
+
+
 register_stubs(
     router,
     [
-        ("GET", "/admin/holidays", "공휴일·회사 휴일 목록"),
-        ("POST", "/admin/holidays", "휴일 등록 → 근무 달력 재생성 (10-근태 §6.2)"),
-        ("POST", "/admin/attendance/calendar/rebuild", "{year} 근무 달력 재생성"),
         ("GET", "/admin/leave-policy", "연차 부여 기준 (입사일 / 회계연도)"),
         ("PATCH", "/admin/leave-policy", "연차 부여 기준 변경"),
         ("GET", "/admin/approval-policy", "결재 양식·전결 기준 (13 §9.3)"),

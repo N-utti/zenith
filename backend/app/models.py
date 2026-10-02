@@ -1,7 +1,7 @@
 """03-ERD·DB 설계서 §1 핵심 테이블 + §2.6 teams.
 
-- 근태(§3)·전자결재(13 §4) 테이블은 넣지 않았다. 13 §7.2가 근태 신청 4개 테이블의 status/approver_id
-  컬럼 제거를 요구하는데 10번 v0.4 재작성(13 A9)과 로드맵(13 A2)이 미결이라, 두 문서가 합쳐진 뒤 추가한다.
+- 근태(§3)·전자결재(13 §4) 표는 맨 아래 — 13 §7.2 대로 근태 신청 4표에 status/approver_id 가 없고 결재 문서가
+  상태를 든다(README "설계와 어긋나는 것" 35·36).
 - 인덱스는 03 §2.4 그대로.
 """
 
@@ -16,6 +16,7 @@ from sqlalchemy import (
     Computed,
     Date,
     DateTime,
+    Float,
     ForeignKey,
     Index,
     Integer,
@@ -544,3 +545,162 @@ class CrmActivityUser(Base):
         ForeignKey("crm_activities.id"), primary_key=True
     )
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), primary_key=True)
+
+
+# ── 전자결재 (13 §4 — README 35) ─────────────────────────────────────────────
+
+
+class ApprovalDocument(Base):
+    """결재 문서. 엔진은 누가·언제·어떤 순서로만 들고, 무엇을 결재하는지는 `subject`(JSONB)가 든다(13 §1.2).
+
+    근태 신청 4종은 신청 행이 `approval_id` 로 이 문서를 가리키고, 신청 상태는 이 문서의 `status` 에서 읽는다(13 §7.2).
+    """
+
+    __tablename__ = "approval_documents"
+    __table_args__ = (Index("idx_apv_docs_drafter", "drafter_id", "status"),)
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    type_code: Mapped[str] = mapped_column(Text, nullable=False)  # general|leave|arrangement|…
+    drafter_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    # draft|pending|approved|rejected|canceled|closed (13 §6.1, closed = 임원 강제 종결)
+    status: Mapped[str] = mapped_column(Text, nullable=False, server_default="draft")
+    # {body, amount, related, attachments?, extra?} — 프론트 GeneralSubject 그대로
+    subject: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    amount: Mapped[int | None] = mapped_column(BigInteger)  # 원. 전결 판정용(#158 A4 — 아직 안 씀)
+    submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = created_at_col()
+
+
+class ApprovalStep(Base):
+    """결재선 한 줄(13 §4.2). 참조자는 `role=reference, status=skipped` — 대기 사슬에 들지 않는다."""
+
+    __tablename__ = "approval_steps"
+    __table_args__ = (
+        Index("uq_apv_steps_doc_no", "doc_id", "step_no", unique=True),
+        Index("idx_apv_steps_approver", "approver_id"),
+    )
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    doc_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("approval_documents.id"), nullable=False)
+    step_no: Mapped[int] = mapped_column(Integer, nullable=False)
+    approver_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    # 원 결재자가 아닌 사람이 처리했을 때만 — 대결(위임)·강제 종결
+    acted_by_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
+    role: Mapped[str] = mapped_column(Text, nullable=False)  # approve|reference
+    # waiting|approved|rejected|delegated_done|skipped (13 §6.2)
+    status: Mapped[str] = mapped_column(Text, nullable=False)
+    comment: Mapped[str | None] = mapped_column(Text)
+    acted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # 낙관 잠금(13 §4.2.5) — 승인·반려 요청이 되돌려 보낸 값과 같아야 한다
+    version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
+
+
+class ApprovalDelegation(Base):
+    """결재 위임(13 §4.2.3) — 기간 동안 `delegate` 가 `owner` 차례를 대신 처리한다. `type_code` NULL = 모든 유형."""
+
+    __tablename__ = "approval_delegations"
+    __table_args__ = (Index("idx_apv_delegations_owner", "owner_id", "start_date"),)
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    owner_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    delegate_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    start_date: Mapped[date] = mapped_column(Date, nullable=False)
+    end_date: Mapped[date] = mapped_column(Date, nullable=False)
+    type_code: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = created_at_col()
+
+
+# ── 근태 (10 §4.1 — README 36) ───────────────────────────────────────────────
+# 신청 4표는 상태 칸이 없다(13 §7.2) — `approval_id` 의 문서 상태가 곧 신청 상태다.
+
+
+class LeaveRequest(Base):
+    __tablename__ = "leave_requests"
+    __table_args__ = (Index("idx_leave_requests_user", "user_id", "start_date"),)
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    type_code: Mapped[str] = mapped_column(Text, nullable=False)
+    start_date: Mapped[date] = mapped_column(Date, nullable=False)
+    end_date: Mapped[date] = mapped_column(Date, nullable=False)
+    days: Mapped[float] = mapped_column(Float, nullable=False)  # 신청 때 산출한 차감 일수(0.5 단위)
+    reason: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
+    approval_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("approval_documents.id"), nullable=False, unique=True
+    )
+    created_at: Mapped[datetime] = created_at_col()
+
+
+class WorkArrangement(Base):
+    """재택·외근·출장 사전 등록."""
+
+    __tablename__ = "work_arrangements"
+    __table_args__ = (Index("idx_work_arrangements_user", "user_id", "start_date"),)
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    kind: Mapped[str] = mapped_column(Text, nullable=False)  # remote|field|trip
+    start_date: Mapped[date] = mapped_column(Date, nullable=False)
+    end_date: Mapped[date] = mapped_column(Date, nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    approval_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("approval_documents.id"), nullable=False, unique=True
+    )
+    created_at: Mapped[datetime] = created_at_col()
+
+
+class OvertimeRequest(Base):
+    __tablename__ = "overtime_requests"
+    __table_args__ = (Index("idx_overtime_requests_user", "user_id", "work_date"),)
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    work_date: Mapped[date] = mapped_column(Date, nullable=False)
+    start_time: Mapped[str] = mapped_column(
+        Text, nullable=False
+    )  # "HH:MM" — events.time 과 같은 이유
+    end_time: Mapped[str] = mapped_column(Text, nullable=False)
+    minutes: Mapped[int] = mapped_column(Integer, nullable=False)  # 서버 산출(10 §5.3)
+    night_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    approval_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("approval_documents.id"), nullable=False, unique=True
+    )
+    created_at: Mapped[datetime] = created_at_col()
+
+
+class AttCorrection(Base):
+    __tablename__ = "att_corrections"
+    __table_args__ = (Index("idx_att_corrections_user", "user_id", "work_date"),)
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    work_date: Mapped[date] = mapped_column(Date, nullable=False)
+    after: Mapped[dict] = mapped_column(JSONB, nullable=False)  # {status?, note?}
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    approval_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("approval_documents.id"), nullable=False, unique=True
+    )
+    created_at: Mapped[datetime] = created_at_col()
+
+
+class Holiday(Base):
+    """공휴일·회사 휴일(10 §6.1) — 근무 달력의 유일한 입력. 근무일은 주말과 이 표를 빼고 그때그때 센다."""
+
+    __tablename__ = "holidays"
+
+    date: Mapped[date] = mapped_column(Date, primary_key=True)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    kind: Mapped[str] = mapped_column(Text, nullable=False)  # public|company
+
+
+class AttClosing(Base):
+    """월 마감(10 §5.5). 행이 있으면 마감된 달, 해제는 행을 지운다. 이력은 감사 로그(attendance.closed·reopened)."""
+
+    __tablename__ = "att_closings"
+
+    month: Mapped[str] = mapped_column(Text, primary_key=True)  # "YYYY-MM"
+    closed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    closed_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)

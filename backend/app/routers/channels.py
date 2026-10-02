@@ -755,7 +755,11 @@ async def download_attachment(
     found = await storage.get(attachment_key(id, file_id, name))
     if found is None:
         raise ApiError(404, "NOT_FOUND", "없는 첨부입니다.")
-    data, content_type = found
+    return attachment_response(*found, name)
+
+
+def attachment_response(data: bytes, content_type: str, name: str) -> Response:
+    """첨부 내려받기 응답 — 채팅 첨부와 결재 첨부(approvals.py)가 같은 헤더로 내려간다."""
     disposition = "inline" if content_type in INLINE_TYPES else "attachment"
     return Response(
         data,
