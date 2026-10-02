@@ -661,8 +661,8 @@ export const handlers = [
     return new HttpResponse(null, { status: 204 })
   }),
 
-  // 알림 지우기. 실서버에는 아직 없는 경로다(04 §2 에 없음). 읽음 처리와 같은 모양으로 가정했다:
-  // `ids` 1개 이상 200개 이하, 204, 남의 것이나 없는 id 는 조용히 건너뛴다.
+  // 알림 지우기(백엔드 #276). 읽음 처리와 같은 모양이다: `ids` 1개 이상 200개 이하, 204,
+  // 남의 것이나 없는 id 는 조용히 건너뛴다.
   http.post('/api/me/notifications/delete', async ({ request }) => {
     if (!authenticate()) return unauthorized()
 
@@ -1914,7 +1914,8 @@ data: ${JSON.stringify(data)}
     })
   }),
 
-  // 실서버에는 아직 없는 경로다(이슈 #253). 모양은 프론트가 정한 가정이다.
+  // 댓글 지우기(백엔드 #273). 쓴 사람만 204, 남의 것은 403, 없는 댓글과 휴지통 문서는 404.
+  // 서버는 그 댓글에서 나간 멘션 알림도 같이 지운다. 목은 댓글이 알림을 만들지 않아 지울 것이 없다.
   http.delete('/api/docs/:docId/comments/:commentId', ({ params }) => {
     const user = authenticate()
     if (!user) return unauthorized()
