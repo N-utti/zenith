@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useParams } from 'react-router'
+import { Link, useNavigate, useParams } from 'react-router'
 import { Plus } from 'lucide-react'
 import { BackLink } from '@/components/ui/BackLink'
 import { Button } from '@/components/ui/Button'
@@ -14,7 +14,14 @@ import { Textarea } from '@/components/ui/Textarea'
 import { useToast } from '@/components/ui/ToastContext'
 import { useCurrentUser } from '@/features/auth/AuthContext'
 import { ActivityCard } from '@/features/crm/ActivityCard'
-import { useDeal, useDropDeal, useOrg, useReopenDeal, useUpdateDeal } from '@/features/crm/api'
+import {
+  useDeal,
+  useDeleteDeal,
+  useDropDeal,
+  useOrg,
+  useReopenDeal,
+  useUpdateDeal,
+} from '@/features/crm/api'
 import { ActivityFormModal, DealFormModal } from '@/features/crm/CrmForms'
 import { DealStatusBadge, NextAction } from '@/features/crm/DealBits'
 import {
@@ -54,18 +61,20 @@ export function CrmDealPage() {
   const org = useOrg(deal.data?.org.id ?? '')
   const move = useUpdateDeal()
   const reopen = useReopenDeal()
+  const remove = useDeleteDeal()
+  const navigate = useNavigate()
   const [dialog, setDialog] = useState<Dialog | null>(null)
   const close = () => setDialog(null)
 
   if (deal.isPending) return <SkeletonRows rows={4} />
   // 다시 불러오기가 실패해도 받은 데이터가 있으면 그대로 그린다(적던 활동 기록 보존).
-  if (!deal.data) {
+  // 404 는 예외다. 그사이 지운 안건을 캐시로 계속 그리면 없는 안건의 버튼이 살아 있다.
+  const gone = deal.error instanceof ApiError && deal.error.status === 404
+  if (!deal.data || gone) {
     return (
       <div className="py-16 text-center">
         <p className="text-muted text-sm">
-          {deal.error instanceof ApiError && deal.error.status === 404
-            ? '없거나 삭제된 기관의 안건입니다.'
-            : '안건을 불러오지 못했습니다.'}
+          {gone ? '없거나 삭제된 안건입니다.' : '안건을 불러오지 못했습니다.'}
         </p>
         <Link to="/crm" className="text-accent mt-4 inline-block text-sm hover:underline">
           안건 보드로
@@ -101,15 +110,43 @@ export function CrmDealPage() {
     )
   }
 
+  const board = d.kind === 'fundraising' ? '/crm' : `/crm?kind=${d.kind}`
+  // 잘못 만든 안건을 치우는 길이다. 진행하다 접는 안건은 중단한다(사유가 남는다).
+  const removeDeal = () => {
+    // 활동 기록이 붙은 안건은 임원만 지운다. 그 안내는 임원에게만 뜻이 있다.
+    const records = me.role === 'exec' ? ' 붙어 있던 활동 기록은 기관에 남습니다.' : ''
+    if (!confirm(`${d.name} 안건을 지웁니다. 보드와 목록에서 빠지고 되돌릴 수 없습니다.${records}`))
+      return
+    remove.mutate(d.id, {
+      onSuccess: () => {
+        toast.success('안건을 지웠습니다.')
+        void navigate(board, { replace: true })
+      },
+      onError: (err) => toast.error(errorText(err, '안건을 지우지 못했습니다.')),
+    })
+  }
+
   return (
     <>
-      <BackLink to={d.kind === 'fundraising' ? '/crm' : `/crm?kind=${d.kind}`}>안건 보드</BackLink>
+      <BackLink to={board}>안건 보드</BackLink>
       <PageHeader
         title={d.name}
         description={`${DEAL_KIND_LABEL[d.kind]} · ${d.org.name}`}
         actions={
           <>
             <DealStatusBadge status={d.status} />
+            {/* 등록한 사람(활동 기록이 붙기 전)과 임원에게만 온다. 서버가 판정한 값이다. */}
+            {d.can_delete && (
+              <Button
+                variant="ghost"
+                size="sm"
+                // 성공한 뒤에도 보드로 넘어가기 전까지 잠가 둔다. 한 번 더 눌리면 404 토스트가 뜬다.
+                disabled={remove.isPending || remove.isSuccess}
+                onClick={removeDeal}
+              >
+                삭제
+              </Button>
+            )}
             {open && (
               <Button variant="ghost" size="sm" onClick={() => setDialog({ kind: 'drop' })}>
                 중단

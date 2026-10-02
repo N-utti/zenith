@@ -7,6 +7,8 @@ import {
   createDeal,
   createOrg,
   deleteActivity,
+  deleteContact,
+  deleteDeal,
   deleteOrg,
   dropDeal,
   eraseContact,
@@ -45,29 +47,38 @@ describe('CRM 목 저장소 (15 CRM 모듈 설계서 §4·§9)', () => {
 
   it('이름이 겹치는 기관도 등록은 되고, 겹친 기관을 알려 준다', () => {
     const made = ok(
-      createOrg({ name: '미래인프라자산운용 주식회사', org_type: 'am', memo: '', owner_ids: [] }),
+      createOrg(infra, {
+        name: '미래인프라자산운용 주식회사',
+        org_type: 'am',
+        memo: '',
+        owner_ids: [],
+      }),
     )
     expect(made.duplicates.map((d) => d.id)).toContain('org-4')
-    expect(getOrg(made.org.id)).toMatchObject({ name: '미래인프라자산운용 주식회사' })
+    expect(getOrg(infra, made.org.id)).toMatchObject({ name: '미래인프라자산운용 주식회사' })
   })
 
   it('이름·유형이 비었거나 비활성 계정을 창구로 두면 422', () => {
-    expect(createOrg({ name: ' ', org_type: 'am', memo: '', owner_ids: [] })).toMatchObject({
+    expect(createOrg(infra, { name: ' ', org_type: 'am', memo: '', owner_ids: [] })).toMatchObject({
       status: 422,
     })
     expect(
-      createOrg({ name: '새 기관', org_type: 'am', memo: '', owner_ids: ['u-없음'] }),
+      createOrg(infra, { name: '새 기관', org_type: 'am', memo: '', owner_ids: ['u-없음'] }),
     ).toMatchObject({ status: 422 })
   })
 
   it('퇴사한 창구가 남아 있어도 다른 칸은 고쳐지고, 퇴사자를 새로 앉히지는 못한다', () => {
-    const made = ok(createOrg({ name: '창구 퇴사', org_type: 'etc', memo: '', owner_ids: ['u-7'] }))
+    const made = ok(
+      createOrg(infra, { name: '창구 퇴사', org_type: 'etc', memo: '', owner_ids: ['u-7'] }),
+    )
     const leaver = findAccount('u-7')!
     patchAccount(leaver, { active: false })
     try {
       // 폼은 창구 목록을 통째로 다시 보낸다.
-      expect(ok(updateOrg(made.org.id, { memo: '메모', owner_ids: ['u-7'] })).memo).toBe('메모')
-      expect(updateOrg('org-5', { owner_ids: ['u-7'] })).toMatchObject({ status: 422 })
+      expect(ok(updateOrg(infra, made.org.id, { memo: '메모', owner_ids: ['u-7'] })).memo).toBe(
+        '메모',
+      )
+      expect(updateOrg(infra, 'org-5', { owner_ids: ['u-7'] })).toMatchObject({ status: 422 })
     } finally {
       patchAccount(leaver, { active: true })
     }
@@ -96,7 +107,9 @@ describe('CRM 목 저장소 (15 CRM 모듈 설계서 §4·§9)', () => {
   it('앞으로의 일시는 기록하지 못한다. 마지막 연락일이 앞당겨져 위 필터를 속인다', () => {
     const at = (ms: number) => new Date(Date.now() + ms).toISOString()
     // 시드 기관을 쓰면 다른 테스트의 「연락 없음」 판정이 흔들린다. 자기 기관을 만든다.
-    const made = ok(createOrg({ name: '미래 기록 기관', org_type: 'etc', memo: '', owner_ids: [] }))
+    const made = ok(
+      createOrg(infra, { name: '미래 기록 기관', org_type: 'etc', memo: '', owner_ids: [] }),
+    )
     const input = {
       kind: 'call' as const,
       org_id: made.org.id,
@@ -165,17 +178,19 @@ describe('CRM 목 저장소 (15 CRM 모듈 설계서 §4·§9)', () => {
   })
 
   it('기관 삭제는 임원만, 사유가 있어야 한다', () => {
-    const made = ok(createOrg({ name: '지울 기관', org_type: 'etc', memo: '', owner_ids: [] }))
+    const made = ok(
+      createOrg(infra, { name: '지울 기관', org_type: 'etc', memo: '', owner_ids: [] }),
+    )
     expect(deleteOrg(infra, made.org.id, '정리')).toMatchObject({ status: 403 })
     expect(deleteOrg(exec, made.org.id, '  ')).toMatchObject({ status: 400 })
     expect(deleteOrg(exec, made.org.id, '중복 등록')).toBeNull()
-    expect(getOrg(made.org.id)).toMatchObject({ status: 404 })
+    expect(getOrg(infra, made.org.id)).toMatchObject({ status: 404 })
     expect(listOrgs({}).some((o) => o.id === made.org.id)).toBe(false)
   })
 
   it('개인정보 삭제는 임원만. 연락처는 비우고 활동 기록의 참석자 자리는 남긴다', () => {
     const contact = ok(
-      createContact({
+      createContact(infra, {
         org_id: 'org-2',
         name: '지울사람',
         title: '과장',
@@ -204,13 +219,13 @@ describe('CRM 목 저장소 (15 CRM 모듈 설계서 §4·§9)', () => {
     expect(after?.contacts).toEqual([{ id: contact.id, name: '' }])
     // 행은 남지만 담당자 수에는 넣지 않는다(내보내기와 같은 기준).
     const count = () => listOrgs({}).find((o) => o.id === 'org-2')!.contact_count
-    const before = ok(getOrg('org-2')).contacts.length
+    const before = ok(getOrg(infra, 'org-2')).contacts.length
     expect(count()).toBe(before - 1)
   })
 
   it('담당자 기관을 바꾸면 이직 이력이 남고, 옛 활동 기록은 이전 기관에 그대로 있다', () => {
     const contact = ok(
-      createContact({
+      createContact(infra, {
         org_id: 'org-1',
         name: '옮길사람',
         title: '',
@@ -231,14 +246,14 @@ describe('CRM 목 저장소 (15 CRM 모듈 설계서 §4·§9)', () => {
       }),
     )
 
-    expect(updateContact(contact.id, { org_id: 'org-없음' })).toMatchObject({ status: 422 })
-    const moved = ok(updateContact(contact.id, { org_id: 'org-2' }))
+    expect(updateContact(infra, contact.id, { org_id: 'org-없음' })).toMatchObject({ status: 422 })
+    const moved = ok(updateContact(infra, contact.id, { org_id: 'org-2' }))
     expect(moved.org_id).toBe('org-2')
     expect(moved.moves).toEqual([
       { from: { id: 'org-1', name: '한결연금공단' }, moved_at: expect.any(String) },
     ])
-    expect(ok(getOrg('org-1')).contacts.some((c) => c.id === contact.id)).toBe(false)
-    expect(ok(getOrg('org-2')).contacts.some((c) => c.id === contact.id)).toBe(true)
+    expect(ok(getOrg(infra, 'org-1')).contacts.some((c) => c.id === contact.id)).toBe(false)
+    expect(ok(getOrg(infra, 'org-2')).contacts.some((c) => c.id === contact.id)).toBe(true)
 
     // 기록은 한결연금공단 타임라인에 남고, 이미 참석자였던 사람이라 그대로 두고 고칠 수 있다.
     const timeline = ok(listActivities(infra, { orgId: 'org-1' }))
@@ -253,9 +268,11 @@ describe('CRM 목 저장소 (15 CRM 모듈 설계서 §4·§9)', () => {
   })
 
   it('내보내기는 지운 기관·개인정보를 지운 담당자를 빼고, 금액은 숫자로 낸다 (FR-CRM-32)', () => {
-    const gone = ok(createOrg({ name: '지워질 기관', org_type: 'etc', memo: '', owner_ids: [] }))
+    const gone = ok(
+      createOrg(infra, { name: '지워질 기관', org_type: 'etc', memo: '', owner_ids: [] }),
+    )
     const erased = ok(
-      createContact({
+      createContact(infra, {
         org_id: 'org-3',
         name: '지울사람2',
         title: '',
@@ -289,7 +306,7 @@ describe('CRM 목 저장소 (15 CRM 모듈 설계서 §4·§9)', () => {
 
   it('잘못된 이메일은 422', () => {
     expect(
-      createContact({
+      createContact(infra, {
         org_id: 'org-1',
         name: '홍길동',
         title: '',
@@ -429,7 +446,9 @@ describe('CRM 목 저장소 (15 CRM 모듈 설계서 §4·§9)', () => {
     })
 
     it('진행 중 안건이 있는 기관은 409, 안건이 끝나면 지워지고 안건·타임라인도 같이 숨는다', () => {
-      const made = ok(createOrg({ name: '곧 지울 기관', org_type: 'etc', memo: '', owner_ids: [] }))
+      const made = ok(
+        createOrg(infra, { name: '곧 지울 기관', org_type: 'etc', memo: '', owner_ids: [] }),
+      )
       const deal = ok(
         createDeal(fund, {
           kind: 'fundraising',
@@ -443,15 +462,17 @@ describe('CRM 목 저장소 (15 CRM 모듈 설계서 §4·§9)', () => {
         }),
       )
       expect(deleteOrg(exec, made.org.id, '정리')).toMatchObject({ status: 409 })
-      expect(getDeal(deal.id)).toMatchObject({ status: 'open' })
+      expect(getDeal(infra, deal.id)).toMatchObject({ status: 'open' })
       ok(dropDeal(fund, deal.id, { reason: '정리', version: 1 }))
       expect(deleteOrg(exec, made.org.id, '정리')).toBeNull()
-      expect(getDeal(deal.id)).toMatchObject({ status: 404 })
+      expect(getDeal(infra, deal.id)).toMatchObject({ status: 404 })
       expect(listDeals({}).some((d) => d.id === deal.id)).toBe(false)
       expect(listActivities(fund, { dealId: deal.id })).toMatchObject({ status: 404 })
 
       // 성사로 끝난 안건만 남은 기관도 지워진다. 막는 것은 진행 중 안건뿐이다.
-      const other = ok(createOrg({ name: '성사 기관', org_type: 'etc', memo: '', owner_ids: [] }))
+      const other = ok(
+        createOrg(infra, { name: '성사 기관', org_type: 'etc', memo: '', owner_ids: [] }),
+      )
       const done = ok(
         createDeal(fund, {
           kind: 'investment',
@@ -470,10 +491,10 @@ describe('CRM 목 저장소 (15 CRM 모듈 설계서 §4·§9)', () => {
   })
   it('CSV 가져오기: 미리보기는 아무것도 만들지 않고, 반영은 오류 행만 빼고 만든다 (FR-CRM-05)', () => {
     const existing = ok(
-      createOrg({ name: '(주)가져오기자산운용', org_type: 'am', memo: '', owner_ids: [] }),
+      createOrg(infra, { name: '(주)가져오기자산운용', org_type: 'am', memo: '', owner_ids: [] }),
     )
     ok(
-      createContact({
+      createContact(infra, {
         org_id: existing.org.id,
         name: '기존인',
         title: '',
@@ -495,7 +516,7 @@ describe('CRM 목 저장소 (15 CRM 모듈 설계서 §4·§9)', () => {
       ['가져오기자산운용', '', '', ''], // 기관만 있는 행인데 기관이 이미 있다
     ]
     const before = listOrgs({}).length
-    const preview = ok(importContacts(rows, true))
+    const preview = ok(importContacts(infra, rows, true))
     expect(listOrgs({}).length).toBe(before)
     expect(preview.rows.map((r) => [r.line, r.status])).toEqual([
       [2, 'skip'],
@@ -510,15 +531,115 @@ describe('CRM 목 저장소 (15 CRM 모듈 설계서 §4·§9)', () => {
     expect(preview.rows[1].note).toContain('(주)가져오기자산운용')
     expect(preview).toMatchObject({ new_orgs: 1, new_contacts: 2 })
 
-    const done = ok(importContacts(rows, false))
+    const done = ok(importContacts(infra, rows, false))
     expect(done).toMatchObject({ new_orgs: 1, new_contacts: 2 })
     expect(listOrgs({}).length).toBe(before + 1)
-    expect(getOrg(existing.org.id)).toMatchObject({ contact_count: 2 })
+    expect(getOrg(infra, existing.org.id)).toMatchObject({ contact_count: 2 })
     const created = listOrgs({ q: '새가져오기공제회' })
     expect(created).toMatchObject([{ org_type: 'mutual_aid', contact_count: 1 }])
   })
 
   it('CSV 가져오기: 기관 칸이 없는 파일은 통째로 거절한다', () => {
-    expect(importContacts([['이름'], ['누구']], true)).toMatchObject({ status: 422 })
+    expect(importContacts(infra, [['이름'], ['누구']], true)).toMatchObject({ status: 422 })
+  })
+})
+
+describe('CRM 지우기 (15 §9 에 없는 경로. 등록한 사람은 활동 기록이 붙기 전까지, 임원은 언제나)', () => {
+  const record = (extra: { deal_id?: string | null; contact_ids?: string[] }) =>
+    ok(
+      createActivity(fund, {
+        kind: 'memo',
+        occurred_at: new Date().toISOString(),
+        org_id: 'org-4',
+        deal_id: null,
+        contact_ids: [],
+        user_ids: [],
+        body: '기록',
+        ...extra,
+      }),
+    )
+
+  it('안건: 지우면 보드에서 빠지고, 붙어 있던 활동 기록은 기관에 남는다', () => {
+    const made = () =>
+      ok(
+        createDeal(fund, {
+          kind: 'investment',
+          name: '지울 안건',
+          org_id: 'org-4',
+          owner_id: null,
+          amount_krw: null,
+          target_date: null,
+          next_action: '',
+          next_action_due: null,
+        }),
+      )
+    const fresh = made()
+    expect(fresh.can_delete).toBe(true)
+    // 남은 못 지운다.
+    expect(ok(getDeal(infra, fresh.id)).can_delete).toBe(false)
+    expect(deleteDeal(infra, fresh.id)).toMatchObject({ status: 403 })
+    expect(deleteDeal(fund, fresh.id)).toBeNull()
+    expect(getDeal(fund, fresh.id)).toMatchObject({ status: 404 })
+    expect(listDeals({ orgId: 'org-4' }).some((d) => d.id === fresh.id)).toBe(false)
+    expect(deleteDeal(fund, fresh.id)).toMatchObject({ status: 404 })
+
+    // 활동 기록이 붙으면 등록한 사람도 못 지운다. 임원은 지운다.
+    const used = made()
+    const activity = record({ deal_id: used.id })
+    expect(ok(getDeal(fund, used.id)).can_delete).toBe(false)
+    expect(deleteDeal(fund, used.id)).toMatchObject({ status: 403 })
+    expect(ok(getDeal(exec, used.id)).can_delete).toBe(true)
+    expect(deleteDeal(exec, used.id)).toBeNull()
+    const left = ok(listActivities(fund, { orgId: 'org-4' })).find((a) => a.id === activity.id)
+    expect(left).toMatchObject({ deal: null })
+    // 낡은 화면이 지운 안건의 id 를 그대로 다시 보내도 고칠 수 있다(안건을 바꾸는 것이 아니다).
+    expect(
+      ok(updateActivity(fund, activity.id, { body: '고친 기록', deal_id: used.id })).body,
+    ).toBe('고친 기록')
+    expect(ok(exportRows('deals')).rows.some((row) => row[1] === '지울 안건')).toBe(false)
+  })
+
+  it('담당자: 지우면 목록과 수에서 빠지고, 활동 기록의 참석자 이름은 남는다', () => {
+    const made = (name: string) =>
+      ok(createContact(fund, { org_id: 'org-4', name, title: '', phone: '', email: '', memo: '' }))
+    const fresh = made('잘못 넣은 사람')
+    expect(fresh.can_delete).toBe(true)
+    expect(deleteContact(infra, fresh.id)).toMatchObject({ status: 403 })
+    expect(deleteContact(fund, fresh.id)).toBeNull()
+    expect(ok(getOrg(fund, 'org-4')).contacts.some((c) => c.id === fresh.id)).toBe(false)
+    expect(deleteContact(fund, fresh.id)).toMatchObject({ status: 404 })
+    expect(updateContact(fund, fresh.id, { title: '부장' })).toMatchObject({ status: 404 })
+
+    const used = made('기록에 붙은 사람')
+    const activity = record({ contact_ids: [used.id] })
+    expect(deleteContact(fund, used.id)).toMatchObject({ status: 403 })
+    const before = ok(getOrg(fund, 'org-4')).contact_count
+    expect(deleteContact(exec, used.id)).toBeNull()
+    expect(ok(getOrg(fund, 'org-4')).contact_count).toBe(before - 1)
+    const left = ok(listActivities(fund, { orgId: 'org-4' })).find((a) => a.id === activity.id)
+    expect(left?.contacts).toEqual([{ id: used.id, name: '기록에 붙은 사람' }])
+
+    // 시드 담당자는 등록한 사람이 없다. 임원만 지운다.
+    const seeded = ok(getOrg(fund, 'org-1')).contacts
+    expect(seeded.length).toBeGreaterThan(0)
+    expect(seeded.every((c) => !c.can_delete)).toBe(true)
+    expect(ok(getOrg(exec, 'org-1')).contacts.every((c) => c.can_delete)).toBe(true)
+
+    // 지운 담당자는 새 활동 기록에 붙일 수 없다. 개인정보 삭제는 지운 뒤에도 된다(이름이 기록에
+    // 남아 있어서다).
+    expect(
+      createActivity(fund, {
+        kind: 'memo',
+        occurred_at: new Date().toISOString(),
+        org_id: 'org-4',
+        deal_id: null,
+        contact_ids: [used.id],
+        user_ids: [],
+        body: '지운 사람을 다시 붙임',
+      }),
+    ).toMatchObject({ status: 422 })
+    expect(ok(eraseContact(exec, used.id))).toMatchObject({ name: '', erased: true })
+    const erased = ok(listActivities(fund, { orgId: 'org-4' })).find((a) => a.id === activity.id)
+    expect(erased?.contacts).toEqual([{ id: used.id, name: '' }])
   })
 })
