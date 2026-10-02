@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
+import { MSW_ENABLED } from '@/mocks/accounts'
 import { prependOlder } from './events'
 import type { ChatAttachment, ChatChannel, MessagePage } from './types'
 
@@ -129,6 +130,49 @@ export function useRemoveMember(channelId: string) {
     mutationFn: (userId: string) =>
       api<void>(`/channels/${channelId}/members/${userId}`, { method: 'DELETE' }),
     onSettled: () => qc.invalidateQueries({ queryKey: chatKeys.channels }),
+  })
+}
+
+/**
+ * 채널 이름 바꾸기와 DM 숨기기를 보일지. 둘 다 실서버에 아직 없는 경로라(04 §4 에 없음) 개발
+ * 릴레이가 받는 동안, 곧 목이 켜진 개발 화면에서만 보인다. 서버가 받게 되면 이 스위치를 걷는다.
+ */
+export const CHANNEL_MENU_ENABLED = MSW_ENABLED
+
+/** 백엔드 `ChannelCreateIn.name` 의 제약(`NonBlank`, 100자). 이름을 바꿀 때도 같다고 가정한다. */
+export const CHANNEL_NAME_MAX = 100
+
+/**
+ * 채널 이름을 바꾼다. 멤버면 누구나 한다(채널에 주인이 없다). DM 은 이름이 없어 안 된다.
+ * 이름 규칙은 만들 때와 같다(1~100자, 공개 채널끼리 겹치면 409).
+ *
+ * 응답을 목록 캐시에 넣지 않고 다시 받는다. 다른 멤버의 화면은 소켓 `channels` 이벤트로 바뀐다.
+ */
+export function useRenameChannel(channelId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (name: string) =>
+      api<ChatChannel>(`/channels/${channelId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ name }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: chatKeys.channels }),
+  })
+}
+
+/**
+ * DM 방을 내 목록에서 숨긴다. 방과 대화는 그대로다. 상대의 목록에도 그대로 있다.
+ * 그 방에 새 메시지가 오거나 같은 사람과 대화를 다시 열면 내 목록에 돌아온다.
+ */
+export function useHideDm() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (channelId: string) => api<void>(`/channels/${channelId}/hide`, { method: 'POST' }),
+    // 다시 받기를 기다리지 않는다(약속을 돌려주지 않는다). 기다리면 부른 쪽이 화면을 옮기기 전에
+    // 방이 목록에서 먼저 빠져, 보던 자리에 「채널을 선택하세요」가 스친다.
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: chatKeys.channels })
+    },
   })
 }
 

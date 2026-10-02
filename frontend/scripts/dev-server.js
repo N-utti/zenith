@@ -27,7 +27,7 @@ const server = createServer((req, res) => {
   // vite 프록시를 거치므로 오리진은 항상 같다. 개발 편의로만 열어 둔다.
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS')
   if (req.method === 'OPTIONS') {
     res.writeHead(204)
     return res.end()

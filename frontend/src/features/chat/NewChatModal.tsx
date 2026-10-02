@@ -11,12 +11,17 @@ import { useToast } from '@/components/ui/ToastContext'
 import { useCurrentUser } from '@/features/auth/AuthContext'
 import { ApiError } from '@/lib/api'
 import { hueOf } from '@/lib/avatar'
-import { supportsPrivate, useChannels, useCreateChannel, type ChannelCreateInput } from './api'
+import {
+  CHANNEL_NAME_MAX,
+  supportsPrivate,
+  useChannels,
+  useCreateChannel,
+  type ChannelCreateInput,
+} from './api'
 import { useColleagues } from '@/features/people/colleagues'
 import { PersonChips } from '@/features/people/PersonChip'
 
-/** 백엔드 `ChannelCreateIn.name` 의 제약(`NonBlank`, 100자). */
-const NAME_MAX = 100
+const NAME_MAX = CHANNEL_NAME_MAX
 
 /**
  * 채널을 만들거나 DM 을 연다.
