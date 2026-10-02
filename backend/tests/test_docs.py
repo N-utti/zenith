@@ -466,6 +466,50 @@ async def test_comments_and_mentions(client: AsyncClient, users: Users, app_db) 
     ).status_code == 404
 
 
+async def test_delete_folder_only_when_empty(client: AsyncClient, users: Users, app_db) -> None:
+    """이슈 #271: 하위 폴더·살아 있는 문서·휴지통 문서가 하나라도 있으면 409 FOLDER_NOT_EMPTY. 비면 204 + 감사."""
+    root = await _root(app_db)
+    await login(client, "sujin@zenith.co.kr")
+    h = csrf(client)
+    r = await client.post(
+        "/api/folders", json={"title": "부모", "parent_id": str(root.id)}, headers=h
+    )
+    parent = r.json()
+    r = await client.post(
+        "/api/folders", json={"title": "자식", "parent_id": parent["id"]}, headers=h
+    )
+    child = r.json()
+    doc = await _doc(client, child["id"])
+
+    r = await client.delete(f"/api/folders/{parent['id']}", headers=h)
+    assert (r.status_code, r.json()["code"]) == (409, "FOLDER_NOT_EMPTY")
+    assert "하위 폴더" in r.json()["detail"]
+    r = await client.delete(f"/api/folders/{child['id']}", headers=h)
+    assert (r.status_code, r.json()["code"]) == (409, "FOLDER_NOT_EMPTY")
+    assert "문서가 있어" in r.json()["detail"]
+    assert (await client.delete(f"/api/docs/{doc['id']}", headers=h)).status_code == 204  # 휴지통
+    r = await client.delete(f"/api/folders/{child['id']}", headers=h)
+    assert r.status_code == 409 and "휴지통" in r.json()["detail"]
+    await login(client, "jaeho@zenith.co.kr")
+    assert (
+        await client.delete(f"/api/docs/{doc['id']}", params={"hard": 1}, headers=csrf(client))
+    ).status_code == 204
+    await login(client, "sujin@zenith.co.kr")
+    h = csrf(client)
+    r = await client.delete(f"/api/folders/{child['id']}", headers=h)
+    assert (r.status_code, r.content) == (204, b"")
+    assert (await client.delete(f"/api/folders/{parent['id']}", headers=h)).status_code == 204
+    assert [f["id"] for f in (await client.get("/api/tree")).json()["folders"]] == [str(root.id)]
+    assert (await client.delete(f"/api/folders/{parent['id']}", headers=h)).status_code == 404
+    gone = (
+        (await app_db.execute(select(AuditEvent).where(AuditEvent.kind == "docs.folder_deleted")))
+        .scalars()
+        .all()
+    )
+    assert sorted(e.detail["title"] for e in gone) == ["부모", "자식"]
+    assert all(e.actor_id == users.member.id for e in gone)
+
+
 async def test_delete_comment_author_only(client: AsyncClient, users: Users, app_db) -> None:
     """이슈 #253: 쓴 사람만 지운다(남의 것 403 + acl.denied). 멘션 알림도 같이 사라지고, 휴지통 문서는 404."""
     root = await _root(app_db)

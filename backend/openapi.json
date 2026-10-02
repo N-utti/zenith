@@ -698,6 +698,43 @@
             }
           }
         }
+      },
+      "delete": {
+        "tags": [
+          "docs"
+        ],
+        "summary": "빈 폴더 삭제 — 하위 폴더·살아 있는 문서·휴지통 문서가 하나라도 있으면 409",
+        "operationId": "delete_folder_api_folders__id__delete",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "409": {
+            "description": "FOLDER_NOT_EMPTY — 하위 폴더·문서(휴지통 포함)가 있다 (이슈 #271)"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/docs": {

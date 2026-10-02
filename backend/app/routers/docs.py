@@ -334,6 +334,55 @@ async def update_folder(
     return folder
 
 
+@router.delete(
+    "/folders/{id}",
+    status_code=204,
+    responses={
+        409: {"description": "FOLDER_NOT_EMPTY — 하위 폴더·문서(휴지통 포함)가 있다 (이슈 #271)"}
+    },
+    summary="빈 폴더 삭제 — 하위 폴더·살아 있는 문서·휴지통 문서가 하나라도 있으면 409",
+)
+async def delete_folder(
+    id: uuid.UUID,
+    request: Request,
+    user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    folder = await db.get(Folder, id)
+    if folder is None:
+        raise ApiError(404, "NOT_FOUND", "없는 폴더입니다.")
+    # 문서는 폴더 안에만 있을 수 있어(DocCreateIn.folder_id 필수) 휴지통 문서가 남은 폴더를 지우면 되살릴 자리가
+    # 없다 — 휴지통 문서도 막는다. 트리에 안 보여 화면이 미리 못 막는 경우라 문구를 따로 둔다.
+    if (await db.execute(select(Folder.id).where(Folder.parent_id == id).limit(1))).first():
+        raise ApiError(409, "FOLDER_NOT_EMPTY", "하위 폴더가 있어 지울 수 없습니다.")
+    trashed = (
+        await db.execute(select(Document.deleted_at).where(Document.folder_id == id).limit(1))
+    ).first()
+    if trashed is not None:
+        if trashed[0] is None:
+            raise ApiError(409, "FOLDER_NOT_EMPTY", "문서가 있어 지울 수 없습니다.")
+        raise ApiError(
+            409,
+            "FOLDER_NOT_EMPTY",
+            "휴지통에 이 폴더의 문서가 남아 있어 지울 수 없습니다. 되살려 옮기거나 영구 삭제한 뒤 지워 주세요.",
+        )
+    # ponytail: 확인과 삭제 사이에 누가 이 폴더에 문서를 만들면 외래키 위반 → 409(IntegrityError 핸들러). 잠금 없음.
+    audit.record(
+        db,
+        "docs.folder_deleted",
+        request=request,
+        actor_id=user.id,
+        target_id=folder.id,
+        detail={
+            "title": folder.title,
+            "parent_id": str(folder.parent_id) if folder.parent_id else None,
+        },
+    )
+    await db.delete(folder)
+    await db.commit()
+    return Response(status_code=204)
+
+
 # ── 문서 ────────────────────────────────────────────────────────────
 
 
