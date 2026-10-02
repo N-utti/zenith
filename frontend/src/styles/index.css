@@ -232,6 +232,21 @@
   .zenith-editor table {
     @apply border-line w-full border-collapse border text-sm;
   }
+  /* 본문에 바로 놓인 표는 본문보다 넓어지면 오른쪽 여백으로 뻗는다(노션처럼). 문서 영역 끝에 닿을
+     때까지는 스크롤이 없고, 그보다 넓어지면 그때부터 표만 구른다. 감싼 상자가 표 폭을 따라 늘어나되
+     (fit-content) 본문 폭보다 좁아지지 않고(min-width) 뻗을 수 있는 만큼까지만(max-width) 늘어난다.
+     --table-bleed 와 --table-col 은 tableBleed.ts 가 본문 상자에 내려 준다. 없으면 본문 폭 안에서 구른다.
+     목록·인용 안의 표는 빼 둔다. 거기서는 본문 폭이 아니라 그 블록의 폭이 기준이다. */
+  .zenith-editor > .tableWrapper {
+    width: fit-content;
+    min-width: 100%;
+    max-width: calc(100% + var(--table-bleed, 0px));
+  }
+  /* 너비 없는 열이 남은 표는 본문 폭을 채운다. 감싼 상자가 표를 따라 늘어나는 상자라 100% 로 주면
+     서로를 기준으로 삼게 된다. 그래서 잰 값(px)으로 준다. 열을 다 굳힌 표는 제 너비(인라인)를 쓴다. */
+  .zenith-editor > .tableWrapper > table {
+    width: var(--table-col, 100%);
+  }
   .zenith-editor th,
   .zenith-editor td {
     @apply border-line relative min-w-16 border px-3 py-1.5 text-left align-top;

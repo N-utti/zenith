@@ -4,6 +4,7 @@ import { History, RotateCcw, X } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { cn } from '@/lib/cn'
 import { formatDay, formatTime } from '@/lib/datetime'
+import { tableBleedRef } from './tableBleed'
 import type { RestoredContent } from './versioning'
 import type { DocVersion } from './types'
 
@@ -59,7 +60,7 @@ export function VersionPreview({
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className={cn('mx-auto px-6 py-8', widthClass)}>
+        <div ref={tableBleedRef} className={cn('mx-auto px-6 py-8', widthClass)}>
           <h1 className="text-fg py-2 text-3xl font-bold tracking-tight">
             {content.title ?? '제목 없는 문서'}
           </h1>

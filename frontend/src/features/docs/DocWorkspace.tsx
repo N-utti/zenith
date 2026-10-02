@@ -26,6 +26,7 @@ import { anchorBlock, flashBlock } from './blockId'
 import { CommentPanel, type CommentTarget } from './CommentPanel'
 import { DocBreadcrumb } from './DocBreadcrumb'
 import { DocWidthMenu } from './DocWidthMenu'
+import { tableBleedRef } from './tableBleed'
 import { EditorBubbleMenu } from './EditorBubbleMenu'
 import { ExportMenu } from './ExportMenu'
 import { InlineAiPopover } from './InlineAiPopover'
@@ -625,7 +626,7 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
             )}
 
             <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
-              <div className={cn('mx-auto px-6 py-8', width.className)}>
+              <div ref={tableBleedRef} className={cn('mx-auto px-6 py-8', width.className)}>
                 <p className="text-subtle mb-1 text-xs">
                   <Avatar
                     name={meta.updated_by?.name ?? '?'}
