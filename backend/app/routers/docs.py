@@ -374,7 +374,8 @@ async def update_doc(
 @router.delete(
     "/docs/{id}",
     status_code=204,
-    summary="휴지통 이동(30일) / ?hard=1 은 exec 만 — 버전·댓글·색인까지 지운다",
+    summary="휴지통 이동(30일) / ?hard=1 은 exec 만, 휴지통에 든 문서만 — 버전·댓글·색인까지 지운다",
+    responses={409: {"description": "NOT_TRASHED — hard=1 인데 휴지통에 없는 문서(이슈 #278)"}},
 )
 async def delete_doc(
     id: uuid.UUID,
@@ -405,6 +406,9 @@ async def delete_doc(
         await db.commit()
         # 등급 이름은 화면 표기대로 — 프론트가 서버 문구를 그대로 띄운다(exec = "임원")
         raise ApiError(403, "FORBIDDEN", "영구 삭제는 임원만 할 수 있습니다.")
+    if doc.deleted_at is None:
+        # 휴지통 화면이 확인 창을 띄운 사이 누가 되돌렸으면 방금 살린 문서가 사라진다(#278) — 서버가 막는다
+        raise ApiError(409, "NOT_TRASHED", "휴지통에 있는 문서만 영구 삭제할 수 있습니다.")
     await _purge(db, doc)
     audit.record(
         db,
