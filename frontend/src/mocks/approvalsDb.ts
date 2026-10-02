@@ -401,6 +401,19 @@ export function updateDraft(user: User, id: string, input: DraftInput): Approval
   return expose(doc, user)
 }
 
+/**
+ * 임시저장을 지운다. 내 것, 아직 상신하지 않은 것만. 상신한 문서는 이력이라 지우지 않는다
+ * (회수·반려로 끝낸 것도 남는다). 서버에는 아직 없는 경로다(`handlers.ts` 의 주석).
+ */
+export function deleteDraft(user: User, id: string): Failure | null {
+  const index = docs.findIndex((d) => d.id === id)
+  const doc = docs[index]
+  if (!doc || doc.drafter_id !== user.id) return fail('문서를 찾을 수 없습니다.', 404, 'NOT_FOUND')
+  if (doc.status !== 'draft') return fail('상신한 문서는 지울 수 없습니다.', 409, 'NOT_DRAFT')
+  docs.splice(index, 1)
+  return null
+}
+
 /** 첨부를 올릴 수 있는 문서인가. 내 임시저장만이다. 상신한 문서는 내용과 같이 첨부도 굳는다. */
 export function checkAttachTarget(user: User, id: string): Failure | null {
   const doc = docs.find((d) => d.id === id)

@@ -103,6 +103,7 @@ import {
   listApprovals,
   submitApproval,
   updateDraft,
+  deleteDraft,
 } from './approvalsDb'
 import {
   createActivity,
@@ -760,6 +761,16 @@ export const handlers = [
     const input = (await request.json()) as Parameters<typeof updateDraft>[2]
     await delay(300)
     return approvalResponse(updateDraft(user, String(params.id), input))
+  }),
+  // 임시저장 지우기. 실서버에는 아직 없는 경로다(13 §9.3 에 없음, 프론트가 정한 가정):
+  // 내 임시저장만 204, 남의 것이나 없는 것은 404, 상신한 문서는 409 `NOT_DRAFT`.
+  http.delete('/api/approvals/drafts/:id', async ({ params }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    await delay(300)
+    const failure = deleteDraft(user, String(params.id))
+    if (failure) return approvalResponse(failure)
+    return new HttpResponse(null, { status: 204 })
   }),
   http.get(
     '/api/approvals/:id',

@@ -1,12 +1,13 @@
 import { Link, useNavigate, useSearchParams } from 'react-router'
-import { Plus } from 'lucide-react'
+import { Plus, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { SkeletonRows } from '@/components/ui/Skeleton'
 import { Table, TableEmpty, TBody, TD, TH, THead, TR } from '@/components/ui/Table'
 import { Tabs } from '@/components/ui/Tabs'
-import { useApprovals } from '@/features/approvals/api'
+import { useToast } from '@/components/ui/ToastContext'
+import { DRAFT_DELETE_ENABLED, useApprovals, useDeleteDraft } from '@/features/approvals/api'
 import {
   APPROVAL_TYPE_LABEL,
   BOX_LABEL,
@@ -14,6 +15,7 @@ import {
   statusTone,
   type ApprovalBox,
 } from '@/features/approvals/types'
+import { ApiError } from '@/lib/api'
 import { formatDateTime, formatRelative } from '@/lib/datetime'
 
 const BOXES: ApprovalBox[] = ['inbox', 'sent', 'reference', 'draft']
@@ -27,6 +29,11 @@ export function ApprovalsPage() {
   const inbox = useApprovals('inbox')
   const list = useApprovals(box)
   const items = list.data?.items ?? []
+  const removeDraft = useDeleteDraft()
+  const toast = useToast()
+  // 임시저장 탭에만 지우기 칸이 붙는다. 다른 탭의 문서는 이력이라 지우지 않는다.
+  const deletable = DRAFT_DELETE_ENABLED && box === 'draft'
+  const columns = deletable ? 6 : 5
 
   return (
     <>
@@ -74,12 +81,15 @@ export function ApprovalsPage() {
                   <TH>{box === 'inbox' ? '기안자' : '처리 중'}</TH>
                   <TH>상태</TH>
                   <TH>{box === 'draft' ? '작성' : '상신'}</TH>
+                  {deletable && <TH className="w-12 text-right">작업</TH>}
                 </tr>
               </THead>
               <TBody>
-                {list.isError && <TableEmpty colSpan={5}>결재함을 불러오지 못했습니다.</TableEmpty>}
+                {list.isError && (
+                  <TableEmpty colSpan={columns}>결재함을 불러오지 못했습니다.</TableEmpty>
+                )}
                 {list.data && items.length === 0 && (
-                  <TableEmpty colSpan={5}>
+                  <TableEmpty colSpan={columns}>
                     {box === 'inbox' ? '처리할 결재가 없습니다.' : '문서가 없습니다.'}
                   </TableEmpty>
                 )}
@@ -112,6 +122,31 @@ export function ApprovalsPage() {
                           {formatRelative(at)}
                         </time>
                       </TD>
+                      {deletable && (
+                        <TD className="text-right">
+                          <button
+                            type="button"
+                            aria-label={`${item.title} 임시저장 지우기`}
+                            title="임시저장 지우기"
+                            disabled={removeDraft.isPending}
+                            onClick={() => {
+                              if (!confirm('이 임시저장을 지울까요? 되돌릴 수 없습니다.')) return
+                              removeDraft.mutate(item.id, {
+                                onSuccess: () => toast.success('임시저장을 지웠습니다.'),
+                                onError: (err) =>
+                                  toast.error(
+                                    err instanceof ApiError
+                                      ? err.message
+                                      : '임시저장을 지우지 못했습니다.',
+                                  ),
+                              })
+                            }}
+                            className="text-subtle hover:text-danger grid size-7 cursor-pointer place-items-center rounded disabled:cursor-default disabled:opacity-55"
+                          >
+                            <Trash2 className="size-3.5" />
+                          </button>
+                        </TD>
+                      )}
                     </TR>
                   )
                 })}
