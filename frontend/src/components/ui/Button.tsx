@@ -30,7 +30,7 @@ export function Button({ variant = 'primary', size = 'md', className, ...props }
   return (
     <button
       className={cn(
-        // whitespace-nowrap: 좁은 화면에서 라벨이 접히면 버튼이 «새 계 / 정» 처럼 쪼개지고
+        // whitespace-nowrap: 좁은 화면에서 라벨이 접히면 버튼이 "새 계 / 정" 처럼 쪼개지고
         // 높이 고정(h-8·h-10) 탓에 글자가 버튼 밖으로 삐져나온다. 버튼 라벨은 접지 않는다.
         'inline-flex cursor-pointer items-center justify-center rounded-lg font-medium whitespace-nowrap transition-colors',
         'disabled:pointer-events-none disabled:opacity-50',

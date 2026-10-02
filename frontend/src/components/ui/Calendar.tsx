@@ -105,7 +105,7 @@ export function MonthHeader({
 }) {
   return (
     // flex-wrap: 범례가 붙는 화면(홈)에서 375px 에 한 줄로 다 못 들어간다. 안 접으면
-    // 제목이 «2026년 9 / 월» 로 쪼개진다. 접히면 범례만 다음 줄로 내려간다.
+    // 제목이 "2026년 9 / 월" 로 쪼개진다. 접히면 범례만 다음 줄로 내려간다.
     <div className="mb-3 flex flex-wrap items-center gap-2">
       {onMonthChange && (
         <div className="flex items-center gap-0.5">

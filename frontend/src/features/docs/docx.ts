@@ -74,7 +74,7 @@ interface ParaOptions {
  * 라이브러리 없이 손으로 쓴다. 본문은 편집기의 JSON 을 그대로 훑는다.
  *
  * `w:pPr`·`w:rPr`·`w:tcPr` 안의 요소는 규격이 정한 순서대로 써야 한다. 어긋나면 워드가 파일을
- * «손상됨» 으로 거부한다. 요소를 더할 때 순서를 지킨다.
+ * "손상됨" 으로 거부한다. 요소를 더할 때 순서를 지킨다.
  *
  * ponytail: 머리글·바닥글·쪽 번호·목차는 없다. 필요해지면 그때 docx 라이브러리로 간다.
  */
@@ -378,7 +378,7 @@ export function buildDocx({ title, doc, images, origin }: ExportSource): Uint8Ar
         `</Relationships>`,
     ),
     // 본문 11pt·줄 간격 1.15(맑은 고딕은 글꼴 자체의 줄 높이가 커서 이 정도가 편집기와 비슷하다), 문단 사이 8pt.
-    // autoSpace 를 끈다: 켜 두면 워드가 한글과 숫자·영문 사이를 벌려 «9월» 이 «9 월» 로 보인다.
+    // autoSpace 를 끈다: 켜 두면 워드가 한글과 숫자·영문 사이를 벌려 "9월" 이 "9 월" 로 보인다.
     // 제목 이름은 워드가 아는 것(heading 1)이라 탐색 창에 잡힌다.
     'word/styles.xml': strToU8(
       `${XML}<w:styles xmlns:w="${W}"><w:docDefaults>` +

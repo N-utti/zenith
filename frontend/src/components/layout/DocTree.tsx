@@ -381,7 +381,7 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
 
     void moveNode.mutateAsync({ item, to }).then(
       () =>
-        toast.success(`«${moved.title}» 를 ${dest ? `«${dest}» 폴더로` : '최상위로'} 옮겼습니다.`, {
+        toast.success(`${dest ? `${dest} 폴더로` : '최상위로'} 옮겼습니다: ${moved.title}`, {
           durationMs: 10_000,
           action: {
             label: '되돌리기',

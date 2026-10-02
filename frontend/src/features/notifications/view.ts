@@ -43,7 +43,7 @@ function mentionView(p: NotificationPayload): NotificationView | null {
       actorName,
       // 어느 문서인지 요약에 넣는다. 누르기 전에 알 수 있어야 한다.
       summary: p.doc_title
-        ? `${actorName}님이 «${p.doc_title}»에서 회원님을 불렀습니다`
+        ? `${actorName}님이 ${p.doc_title} 문서에서 회원님을 불렀습니다`
         : `${actorName}님이 문서에서 회원님을 불렀습니다`,
       detail: p.preview ?? null,
       // 댓글 id 가 있으면 문서가 댓글을 펼치고 그 댓글(과 닻 블록)로 간다(CommentPanel).
@@ -65,7 +65,7 @@ function mentionView(p: NotificationPayload): NotificationView | null {
        */
       summary:
         p.channel_name && p.channel_name !== actorName
-          ? `${actorName}님이 «${p.channel_name}»에서 회원님을 불렀습니다`
+          ? `${actorName}님이 ${p.channel_name} 채널에서 회원님을 불렀습니다`
           : `${actorName}님이 채팅에서 회원님을 불렀습니다`,
       detail: p.preview ?? null,
       // 메시지 id 가 있으면 그 줄로 내려가 밝힌다(`MessageList` 의 `?m=`). 채널만 열면 불린

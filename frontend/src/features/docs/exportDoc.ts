@@ -31,7 +31,7 @@ function sniff(bytes: Uint8Array): ExportImage['ext'] | null {
  * 서버에서 사진을 받아 크기를 잰다. png·gif 는 받은 그대로 싣고, 나머지는 다시 그려 싣는다.
  *
  * - webp 는 워드·한글이 못 읽는다. PNG 로 바꾼다(투명한 바탕이 살아야 해서 JPEG 이 아니다).
- * - JPEG 은 세워 찍은 폰 사진이 «눕혀 저장하고 돌려 보라» 는 표시(EXIF)만 달고 온다. 브라우저는
+ * - JPEG 은 세워 찍은 폰 사진이 "눕혀 저장하고 돌려 보라" 는 표시(EXIF)만 달고 온다. 브라우저는
  *   그 표시대로 세워 그리지만 워드·한글은 따르지 않아, 그대로 실으면 사진이 눕고 비율까지 뒤바뀐다.
  *   세워 그린 결과를 JPEG 으로 다시 담는다.
  */
@@ -84,7 +84,7 @@ async function loadImages(sources: string[]): Promise<Map<string, ExportImage>> 
 let endPrint = () => {}
 
 /**
- * 브라우저의 인쇄 창을 연다. 거기서 «PDF로 저장» 을 고르면 PDF 가 된다.
+ * 브라우저의 인쇄 창을 연다. 거기서 "PDF로 저장" 을 고르면 PDF 가 된다.
  * 돌려주는 값은 그려지지 않은 사진 수다.
  *
  * PDF 를 직접 만들려면 한글 글꼴을 파일에 심는 라이브러리가 필요하다. 브라우저가 이미 화면 그대로
