@@ -40,7 +40,7 @@ class Items[T](BaseModel):
 )
 async def list_people(db: AsyncSession = Depends(get_db)) -> Items[PersonOut]:
     # 전사 공개가 성립하는 전제: 공개 채널에 전원이 들어가 `GET /channels` 의 members[] 가 이미 같은
-    # 명단을 준다(channels.join_public_channels). 채널을 초대제로 바꾸거나 비공개 채널을 들이면 이
+    # 명단을 준다(channels.join_public_channels — 비공개 채널(README 12)은 건너뛰지만 공개 채널엔 여전히 전원). 초대제로 바꾸면 이
     # 경로도 같이 좁혀야 한다 — 안 그러면 좁힌 멤버십이 여기로 그대로 샌다.
     # 비활성도 준다: 감춰도 `/channels` members[] 와의 차집합으로 드러나므로 숨기는 대신 명시한다.
     # 세 칸만 — 로그인하면 누구나 부르는 경로라 비밀번호 해시까지 메모리로 끌어올 이유가 없다.

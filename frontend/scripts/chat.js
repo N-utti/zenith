@@ -10,8 +10,8 @@
  *
  *   GET  /channels                    사용자별 목록 (안읽음·마지막 메시지 포함)
  *   GET  /channels/:id/messages       최근 메시지
- *   POST /channels/:id/members        비공개 채널에 사람 더하기 (실서버에 아직 없다)
- *   DELETE /channels/:id/members/:uid 비공개 채널에서 사람 빼기·나가기 (실서버에 아직 없다)
+ *   POST /channels/:id/members        비공개 채널에 사람 더하기
+ *   DELETE /channels/:id/members/:uid 비공개 채널에서 사람 빼기·나가기
  *   WS   /ws                          보내는 op: sub · msg · read · typing
  *                                     받는 ev: msg · unread · typing · error · channels
  *
@@ -42,7 +42,6 @@ const FORBIDDEN = { detail: '권한이 부족합니다.', code: 'FORBIDDEN' }
 
 /**
  * `memberIds` 는 릴레이 안에서만 쓴다. 밖으로는 `members`(이름까지)로 펼쳐 나간다.
- * `is_private` 는 실서버에 아직 없다(README "백엔드에 요청한 것"). 릴레이가 먼저 준다.
  * @type {{id:string, is_dm:boolean, is_private?:boolean, name:string, memberIds:string[]}[]}
  */
 const CHANNELS = [
@@ -158,7 +157,7 @@ function channelName(channel, viewerId) {
 }
 
 /**
- * 생성 응답. 백엔드는 이미 있던 DM 을 돌려줄 때도 안읽음 0 · 마지막 메시지 null 로 준다.
+ * 생성·멤버 더하기 응답. 백엔드는 이미 있던 DM 을 돌려줄 때도 안읽음 0 · 마지막 메시지 null 로 준다.
  * 릴레이가 진짜 값을 주면, 응답을 목록 캐시에 꽂는 순간 안읽음 배지가 지워지는 차이가 생긴다.
  */
 function createdView(channel, viewerId) {
@@ -477,7 +476,8 @@ export async function handleChatRequest(req, res, url) {
 
   /**
    * 채널 또는 DM 생성. 공개 채널과 DM 은 백엔드 `create_channel` 과 같은 규칙이다.
-   * 비공개 채널(`is_private` + `member_ids`)은 백엔드에 아직 없어 릴레이가 규칙을 먼저 정했다.
+   * 비공개 채널(`is_private` + `member_ids`)도 같다(#236). 다만 릴레이는 모르는 칸을 무시하고
+   * 서버는 422 로 거절한다. 릴레이에서 통과한 본문이 실서버에서도 통과한다고 믿지 않는다.
    *
    * 공개 채널은 만들 때 **전원**을 멤버로 넣는다(15명 사내, 초대·탈퇴 없음). 백엔드는 비활성
    * 계정도 넣는다. 복직하면 그 사이 생긴 채널도 보여야 하기 때문이다.
@@ -652,7 +652,7 @@ export async function handleChatRequest(req, res, url) {
   }
 
   /**
-   * 비공개 채널의 멤버를 더하고 뺀다. 실서버에 아직 없는 경로라 규칙을 릴레이가 먼저 정했다.
+   * 비공개 채널의 멤버를 더하고 뺀다. 실서버(#236)가 아래 규칙대로 구현했다.
    *
    * 멤버면 누구나 더하고 뺄 수 있다(채널에 주인이 없다). 자기 자신을 빼는 것이 나가기다.
    * 공개 채널은 전원이고 DM 은 두 사람으로 고정이라 둘 다 422.
@@ -662,7 +662,7 @@ export async function handleChatRequest(req, res, url) {
   const membersMatch = path.match(/^\/channels\/([^/]+)\/members(?:\/([^/]+))?$/)
   if (membersMatch) {
     // 본문을 권한 확인보다 먼저 읽는다. 확인한 뒤에 기다리면, 그 사이 빠진 사람의 요청이
-    // 옛 명단 위에 반영돼 그 사람이 되살아난다. 실서버는 한 트랜잭션 안에서 해야 한다.
+    // 옛 명단 위에 반영돼 그 사람이 되살아난다. 실서버는 채널별 잠금으로 막는다.
     const body = req.method === 'POST' ? await readBody(req) : undefined
     if (!isUser(viewerId)) {
       return json(res, 401, { detail: '알 수 없는 사용자입니다.', code: 'AUTH_REQUIRED' })
@@ -685,7 +685,7 @@ export async function handleChatRequest(req, res, url) {
       // 이미 멤버인 사람은 건너뛴다(같은 요청을 두 번 보내도 결과가 같다).
       channel.memberIds = [...new Set([...before, ...ids])]
       publishTo(channel.memberIds, { ev: 'channels' })
-      return json(res, 200, channelView(channel, viewerId))
+      return json(res, 200, createdView(channel, viewerId))
     }
 
     if (req.method === 'DELETE' && membersMatch[2] !== undefined) {
@@ -694,7 +694,8 @@ export async function handleChatRequest(req, res, url) {
         return json(res, 404, { detail: '이 채널의 멤버가 아닙니다.', code: 'NOT_FOUND' })
       }
       channel.memberIds = before.filter((id) => id !== target)
-      // 마지막 사람이 나가면 아무에게도 안 보이는 채널이 된다. 릴레이는 지운다.
+      // 마지막 사람이 나가면 아무에게도 안 보이는 채널이 된다. 릴레이는 지운다. 실서버는 지우지
+      // 않고 멤버 0 으로 남긴다(메시지·첨부 보존). 목록에서 사라지는 것은 같다.
       if (channel.memberIds.length === 0) CHANNELS.splice(CHANNELS.indexOf(channel), 1)
       publishTo(before, { ev: 'channels' })
       res.writeHead(204)
