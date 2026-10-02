@@ -1,7 +1,20 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
+import { isInTable, selectedRect } from '@tiptap/pm/tables'
 import type { Editor } from '@tiptap/react'
-import { Check, ChevronDown, Link2, Link2Off } from 'lucide-react'
+import {
+  ArrowDown,
+  ArrowLeft,
+  ArrowRight,
+  ArrowUp,
+  Check,
+  ChevronDown,
+  Link2,
+  Link2Off,
+  Table,
+  Trash2,
+  X,
+} from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { BLOCK_BY_KEY, EDITOR_BLOCKS } from './editorBlocks'
@@ -234,23 +247,32 @@ export function MenuItem({
   label,
   hint,
   active,
+  disabled,
   onClick,
 }: {
   icon?: LucideIcon
   label: string
   hint?: string
   active?: boolean
+  disabled?: boolean
   onClick: () => void
 }) {
   return (
     <button
       type="button"
       role="menuitem"
+      // disabled 속성으로 끄지 않는다. 꺼진 버튼은 mousedown 을 받지 못해, 누르면 편집기가 포커스를
+      // 잃고 그 바람에 메뉴가 닫힌다. 눌리긴 하되 아무 일도 하지 않게 둔다.
+      aria-disabled={disabled}
       onMouseDown={(e) => e.preventDefault()}
-      onClick={onClick}
+      onClick={disabled ? undefined : onClick}
       className={cn(
         'flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 text-left text-sm transition-colors',
-        active ? 'bg-accent-soft text-accent' : 'text-fg hover:bg-surface-hover',
+        disabled
+          ? 'text-fg cursor-default opacity-40'
+          : active
+            ? 'bg-accent-soft text-accent'
+            : 'text-fg hover:bg-surface-hover',
       )}
     >
       {Icon && <Icon className="size-4 shrink-0 opacity-70" />}
@@ -318,6 +340,89 @@ export function AlignMenu({ editor, align }: { editor: Editor; align: string }) 
           />
         ))
       }
+    </ToolMenu>
+  )
+}
+
+/* ── 표 ─────────────────────────────────────────────────────── */
+
+/** 커서가 든 행·열을 기준으로 더하고 지운다. 묶음 사이에 구분선이 들어간다. */
+const TABLE_ACTIONS = [
+  [
+    { icon: ArrowUp, label: '위에 행 추가', command: 'addRowBefore' },
+    { icon: ArrowDown, label: '아래에 행 추가', command: 'addRowAfter' },
+    { icon: X, label: '행 지우기', command: 'deleteRow' },
+  ],
+  [
+    { icon: ArrowLeft, label: '왼쪽에 열 추가', command: 'addColumnBefore' },
+    { icon: ArrowRight, label: '오른쪽에 열 추가', command: 'addColumnAfter' },
+    { icon: X, label: '열 지우기', command: 'deleteColumn' },
+  ],
+  [{ icon: Trash2, label: '표 지우기', command: 'deleteTable' }],
+] as const
+
+type TableCommand = (typeof TABLE_ACTIONS)[number][number]['command']
+
+/**
+ * 지금 못 지우는 것. 마지막 남은 행·열은 표 확장이 지우기를 말없이 무시하는데(표가 비면 안 된다),
+ * `can()` 은 그 경우에도 된다고 답해서 직접 본다. 그때는 「표 지우기」 를 쓴다.
+ */
+function lastOfTable(editor: Editor): Partial<Record<TableCommand, boolean>> {
+  if (!isInTable(editor.state)) return {}
+  const { top, bottom, left, right, map } = selectedRect(editor.state)
+  return {
+    deleteRow: top === 0 && bottom === map.height,
+    deleteColumn: left === 0 && right === map.width,
+  }
+}
+
+/**
+ * 표 넣기와 행·열 편집. 표 밖에서는 넣기만, 표 안에서는 행·열을 더하고 지운다.
+ * 열 너비는 여기가 아니라 표의 세로선을 끌어 바꾼다(editorExtensions 의 resizable).
+ */
+export function TableMenu({ editor, inTable }: { editor: Editor; inTable: boolean }) {
+  return (
+    <ToolMenu
+      label="표"
+      className="w-48"
+      trigger={<Table className={cn('size-4', inTable && 'text-accent')} />}
+    >
+      {(close) => {
+        if (!inTable) {
+          return (
+            <MenuItem
+              icon={Table}
+              label="표 넣기"
+              hint="3x3"
+              onClick={() => {
+                BLOCK_BY_KEY.table.run(editor)
+                close()
+              }}
+            />
+          )
+        }
+        const last = lastOfTable(editor)
+        return TABLE_ACTIONS.map((group, index) => (
+          <div
+            key={index}
+            role="group"
+            className={cn(index > 0 && 'border-line mt-1 border-t pt-1')}
+          >
+            {group.map(({ icon, label, command }) => (
+              <MenuItem
+                key={command}
+                icon={icon}
+                label={label}
+                disabled={last[command]}
+                onClick={() => {
+                  editor.chain().focus()[command]().run()
+                  close()
+                }}
+              />
+            ))}
+          </div>
+        ))
+      }}
     </ToolMenu>
   )
 }

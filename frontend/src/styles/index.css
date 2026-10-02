@@ -244,6 +244,15 @@
     content: '';
     @apply bg-accent/10 pointer-events-none absolute inset-0;
   }
+  /* 열 너비 끌기. 포인터가 세로선 가까이 오면 표 확장이 그 칸 안에 이 막대를 그리고, 편집기에
+     resize-cursor 를 붙인다. 누르는 것은 막대가 아니라 칸이라 막대는 포인터를 받지 않는다.
+     칸 밖으로는 1px 만 내민다. 2px 부터는 끝 열에서 tableWrapper 를 넘쳐 가로 스크롤바가 깜빡인다. */
+  .zenith-editor .column-resize-handle {
+    @apply bg-accent pointer-events-none absolute top-0 -right-px bottom-0 z-10 w-[3px];
+  }
+  .zenith-editor.resize-cursor {
+    @apply cursor-col-resize;
+  }
 
   .zenith-editor hr {
     @apply border-line my-8 border-t;
