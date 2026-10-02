@@ -2333,6 +2333,12 @@
               }
             }
           },
+          "403": {
+            "description": "글을 못 보는 등급"
+          },
+          "404": {
+            "description": "없는 글"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -2383,6 +2389,12 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "글을 못 보는 등급"
+          },
+          "404": {
+            "description": "없는 글"
           },
           "422": {
             "description": "Validation Error",

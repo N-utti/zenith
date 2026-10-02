@@ -259,14 +259,51 @@ async def test_post_comments(client: AsyncClient, users: Users, app_db) -> None:
     )
     assert r.status_code == 404
 
-    # 지우기: 남의 것은 403, 임원은 남의 것도 지운다(감사에 author_id)
+    # 지우기: 남의 것은 403(감사에 comment_id), 없는 것 404, 쓴 사람은 자기 것을 지운다
     r = await client.delete(f"/api/posts/{notice}/comments/{second['id']}", headers=h)
     assert r.status_code == 403
+    last = (
+        (await app_db.execute(select(AuditEvent).where(AuditEvent.kind == "acl.denied")))
+        .scalars()
+        .all()
+    )[-1]
+    assert (last.detail["reason"], last.detail["comment_id"]) == ("comment_delete", second["id"])
+    assert (
+        await client.delete(f"/api/posts/{notice}/comments/{uuid.uuid4()}", headers=h)
+    ).status_code == 404
+    third = (
+        await client.post(f"/api/posts/{notice}/comments", json={"body": "셋째"}, headers=h)
+    ).json()
+    assert (
+        await client.delete(f"/api/posts/{notice}/comments/{third['id']}", headers=h)
+    ).status_code == 204
+    # 등급 밖 글의 댓글은 쓴 사람이라도(강등) 고치기·지우기 전부 403 — 등급 판정이 소유 판정보다 먼저
+    await login(client, "jaeho@zenith.co.kr")
+    sc = (
+        await client.post(
+            f"/api/posts/{secret}/comments", json={"body": "임원 댓글"}, headers=csrf(client)
+        )
+    ).json()
+    await login(client, "sujin@zenith.co.kr")
+    h = csrf(client)
+    r = await client.patch(
+        f"/api/posts/{secret}/comments/{sc['id']}", json={"body": "x"}, headers=h
+    )
+    assert r.status_code == 403
+    assert (
+        await client.delete(f"/api/posts/{secret}/comments/{sc['id']}", headers=h)
+    ).status_code == 403
+    # 임원은 남의 것도 지운다(감사에 author_id)
     await login(client, "jaeho@zenith.co.kr")
     r = await client.delete(f"/api/posts/{notice}/comments/{second['id']}", headers=csrf(client))
     assert (r.status_code, r.content) == (204, b"")
     gone = (
-        await app_db.execute(select(AuditEvent).where(AuditEvent.kind == "boards.comment_deleted"))
+        await app_db.execute(
+            select(AuditEvent).where(
+                AuditEvent.kind == "boards.comment_deleted",
+                AuditEvent.detail["comment_id"].astext == second["id"],
+            )
+        )
     ).scalar_one()
     assert (gone.actor_id, gone.detail["author_id"], gone.detail["preview"]) == (
         users.exec.id,
@@ -276,10 +313,14 @@ async def test_post_comments(client: AsyncClient, users: Users, app_db) -> None:
     assert [
         c["id"] for c in (await client.get(f"/api/posts/{notice}/comments")).json()["items"]
     ] == [mine["id"]]
-    # 글을 지우면 댓글도 같이
+    # 글을 지우면 댓글도 같이 — 몇 개가 사라졌는지는 감사에
     assert (await client.delete(f"/api/posts/{notice}", headers=csrf(client))).status_code == 204
     rows = (await app_db.execute(select(PostComment).where(PostComment.post_id == notice))).all()
     assert rows == []
+    deleted = (
+        await app_db.execute(select(AuditEvent).where(AuditEvent.kind == "boards.post_deleted"))
+    ).scalar_one()
+    assert deleted.detail["comment_count"] == 1
 
 
 async def test_review_edges(client: AsyncClient, users: Users, app_db) -> None:

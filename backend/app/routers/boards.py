@@ -17,7 +17,7 @@ from typing import Annotated, NoReturn
 
 from fastapi import APIRouter, Depends, Query, Request, Response
 from pydantic import BaseModel, ConfigDict, StringConstraints
-from sqlalchemy import select, tuple_
+from sqlalchemy import func, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import audit
@@ -129,6 +129,7 @@ async def _deny(
     board: Board,
     why: str,
     post: Post | None = None,
+    **extra: str,
 ) -> NoReturn:
     """403 + 감사. target_id 는 항상 게시판 — 글은 지워질 수 있어 detail 에 post_id 로 따로 남긴다."""
     audit.record(
@@ -143,6 +144,7 @@ async def _deny(
             "min_role": board.min_role,
             "role": user.role,
             "post_id": str(post.id) if post else None,
+            **extra,
         },
     )
     await db.commit()
@@ -329,6 +331,10 @@ async def delete_post(
         await _deny(db, request, user, board, "read", post)
     if not _can_edit(user, post):
         await _deny(db, request, user, board, "delete", post)
+    # 댓글은 DB 가 같이 지운다(CASCADE) — 몇 개가 사라졌는지는 여기에만 남는다(#292)
+    comments = await db.scalar(
+        select(func.count()).select_from(PostComment).where(PostComment.post_id == post.id)
+    )
     await db.delete(post)
     audit.record(  # docs.hard_deleted 와 같은 이유 — 누가 언제 무엇을 지웠는지는 남긴다
         db,
@@ -336,7 +342,7 @@ async def delete_post(
         request=request,
         actor_id=user.id,
         target_id=board.id,
-        detail={"post_id": str(post.id), "title": post.title},
+        detail={"post_id": str(post.id), "title": post.title, "comment_count": comments},
     )
     await db.commit()
     return Response(status_code=204)
@@ -377,6 +383,7 @@ async def _post_comment(
 @router.get(
     "/posts/{id}/comments",
     response_model=Items[PostCommentOut],
+    responses={403: {"description": "글을 못 보는 등급"}, 404: {"description": "없는 글"}},
     summary="댓글 목록 (오래된 순) — 글을 못 보는 사람은 403 + 감사",
 )
 async def list_post_comments(
@@ -391,6 +398,7 @@ async def list_post_comments(
         .join(User, User.id == PostComment.author_id)
         .where(PostComment.post_id == post.id)
         .order_by(PostComment.created_at, PostComment.id)
+        .limit(500)  # ponytail: 상한만 — 글 하나에 500개를 넘으면 커서
     )
     return Items(items=[_comment_out(c, a) for c, a in rows])
 
@@ -399,6 +407,7 @@ async def list_post_comments(
     "/posts/{id}/comments",
     status_code=201,
     response_model=PostCommentOut,
+    responses={403: {"description": "글을 못 보는 등급"}, 404: {"description": "없는 글"}},
     summary="댓글 등록 {body} — 글을 읽을 수 있는 사람. @이름은 해석하지 않는다(등급 밖으로 새지 않게)",
 )
 async def create_post_comment(
@@ -438,7 +447,7 @@ async def edit_post_comment(
     post, board = await _readable_post(db, request, user, id)
     comment = await _post_comment(db, post, comment_id, lock=True)
     if comment.author_id != user.id:
-        await _deny(db, request, user, board, "comment_edit", post)
+        await _deny(db, request, user, board, "comment_edit", post, comment_id=str(comment.id))
     if body.body == comment.body:
         return _comment_out(comment, user)
     audit.record(  # 이전 본문은 행에 안 남는다 — 문서 댓글(docs.comment_edited)과 같은 기준
@@ -478,7 +487,7 @@ async def delete_post_comment(
     post, board = await _readable_post(db, request, user, id)
     comment = await _post_comment(db, post, comment_id, lock=True)
     if comment.author_id != user.id and user.role != "exec":
-        await _deny(db, request, user, board, "comment_delete", post)
+        await _deny(db, request, user, board, "comment_delete", post, comment_id=str(comment.id))
     audit.record(
         db,
         "boards.comment_deleted",
