@@ -20,6 +20,7 @@ from app.models import (
     Folder,
     Message,
     Notification,
+    StoredFile,
     User,
     Workspace,
 )
@@ -247,7 +248,16 @@ async def test_hard_delete_cascades(client: AsyncClient, users: Users, app_db) -
     app_db.add(ch)
     await app_db.flush()
     msg = Message(channel_id=ch.id, author_id=users.exec.id, body="문서 카드", doc_ref=doc["id"])
-    app_db.add_all([msg, DocChunk(doc_id=doc["id"], chunk_no=0, chunk_text="t", acl_role="member")])
+    f = StoredFile(
+        name="a.pdf",
+        size=1,
+        content_type="application/octet-stream",
+        uploader_id=users.exec.id,
+        doc_id=doc["id"],
+    )
+    app_db.add_all(
+        [msg, f, DocChunk(doc_id=doc["id"], chunk_no=0, chunk_text="t", acl_role="member")]
+    )
     await app_db.flush()
 
     r = await client.delete(f"/api/docs/{doc['id']}", params={"hard": 1}, headers=csrf(client))
@@ -257,6 +267,8 @@ async def test_hard_delete_cascades(client: AsyncClient, users: Users, app_db) -
         assert rows == [], model.__tablename__
     await app_db.refresh(msg)
     assert (msg.doc_ref, msg.body) == (None, "문서 카드")
+    await app_db.refresh(f)
+    assert (f.doc_id, f.name) == (None, "a.pdf")  # 파일 기록부는 출처만 풀린다(FK 에 막히지 않는다)
 
 
 async def test_empty_patch_is_a_noop(client: AsyncClient, users: Users, app_db) -> None:

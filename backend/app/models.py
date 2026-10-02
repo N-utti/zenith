@@ -194,11 +194,34 @@ class DocComment(Base):
     created_at: Mapped[datetime] = created_at_col()
 
 
+class StoredFile(Base):
+    """`POST /files` 로 올린 파일의 기록부(03 에 없는 표, 2026-10-02 — README 16 · 이슈 #224·#226).
+
+    오브젝트는 MinIO `files/{id}` 에 있고 여기는 이름·크기·형식·올린 사람·어느 문서인지만. 내려받기 이름의 출처이자
+    자료실(#226) 목록의 근거. 표가 생기기 전에 올린 그림은 행이 없다(내려받기는 MinIO 메타데이터로 된다)."""
+
+    __tablename__ = "files"
+    __table_args__ = (Index("idx_files_doc", "doc_id"),)
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    size: Mapped[int] = mapped_column(Integer, nullable=False)
+    content_type: Mapped[str] = mapped_column(Text, nullable=False)  # 서버가 앞 바이트로 판정한 값
+    uploader_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    # 어느 문서에서 올렸나(프론트가 폼으로 보낸다). 없으면 출처 모름 — 자료실에 안 실린다
+    doc_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("documents.id"))
+    created_at: Mapped[datetime] = created_at_col()
+
+
 class Channel(Base):
     __tablename__ = "channels"
-    __table_args__ = (  # 공개 채널 이름 유일 — 사전 검사와 commit 사이 경합은 이게 막는다(409)
+    __table_args__ = (  # 공개 채널 이름 유일 — 사전 검사와 commit 사이 경합은 이게 막는다(409).
+        # 비공개 채널은 빼야 한다 — 같은 이름으로 409 가 나면 안 보이는 채널이 있다는 사실이 샌다(README 12).
         Index(
-            "uq_channels_public_name", "name", unique=True, postgresql_where=sql_text("NOT is_dm")
+            "uq_channels_public_name",
+            "name",
+            unique=True,
+            postgresql_where=sql_text("NOT is_dm AND NOT is_private"),
         ),
     )
 
@@ -206,6 +229,10 @@ class Channel(Base):
     ws_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("workspaces.id"), nullable=False)
     name: Mapped[str] = mapped_column(Text, nullable=False)
     is_dm: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=sql_text("false"))
+    # 고른 사람만 멤버(03 에 없는 칸, 2026-10-02). 공개 채널(전원)·DM(두 사람)과 달리 멤버를 더하고 뺀다.
+    is_private: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=sql_text("false")
+    )
 
 
 class ChannelMember(Base):

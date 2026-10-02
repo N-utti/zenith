@@ -43,7 +43,8 @@ async def main() -> None:
         for name, min_role in BOARDS:
             await get_or_create(db, Board, defaults={"min_role": min_role}, name=name)
         for name in CHANNELS:
-            await get_or_create(db, Channel, ws_id=ws.id, name=name)
+            # 공개 채널만 — 같은 이름의 비공개 채널(README 12)을 시드 채널로 오인하지 않게
+            await get_or_create(db, Channel, ws_id=ws.id, name=name, is_dm=False, is_private=False)
         # 문서는 폴더 안에만 산다(03 documents.folder_id NOT NULL). 루트 폴더 하나로 시작한다.
         await get_or_create(db, Folder, ws_id=ws.id, parent_id=None, title=ROOT_FOLDER)
         team = await get_or_create(db, Team, name="개발팀")
