@@ -28,7 +28,8 @@ db·redis·minio 의 호스트 포트는 **127.0.0.1 에만** 묶인다 — 다�
 ### TLS · 사이트 이름
 
 - `ZENITH_SITE`(기본 `localhost`)가 인증서의 이름이다. 사내 DNS 이름이나 IP 로 바꾸고 `docker compose restart caddy`. 브라우저 주소창과 같아야 한다 — api 의 CSRF 가 `Origin` 과 `X-Forwarded-Host` 를 대조한다.
-- 인증서는 Caddy 자체 CA(`tls internal`)가 서명한다. 루트 인증서를 뽑아 사내 PC·앱의 신뢰 저장소에 넣는다(MDM). 이미 사내 CA 가 있으면 `caddy/Caddyfile` 의 `tls` 줄에 인증서·키 경로를 적는다.
+- 인증서는 `ZENITH_TLS`(기본 `internal`)가 정한다. 비우면 Caddy 자체 CA 가 서명한다 — 루트 인증서를 뽑아 사내 PC·앱의 신뢰 저장소에 넣는다(MDM). **공개 도메인이면 ACME 계정 메일을 넣는다**(`ZENITH_TLS=admin@example.com`, 2026-10-02 이슈 #255 `app.zenithasset.co.kr`) — Caddy 가 Let's Encrypt 인증서를 받고 갱신한다. 80·443 이 밖에서 닿아야 하고(공유기 포트포워딩), 닿기 전에 caddy 를 띄우면 검증 실패가 쌓여 Let's Encrypt 제한(시간당 5회)에 걸리니 포트가 열린 뒤 `docker compose start caddy`. 이미 사내 CA 가 있으면 `caddy/Caddyfile` 의 `tls` 줄에 인증서·키 경로를 적는다.
+- 같은 db 컨테이너 안의 다른 DB·버킷을 쓰려면 `ZENITH_DB_NAME`·`ZENITH_MINIO_BUCKET`(기본 `zenith`) — 이 PC 의 파일럿은 실테스트 DB `zenith_live`·버킷 `zenith-live` 를 그대로 쓴다. 변수는 전부 compose 옆 `.env`(미커밋)에.
 
 ```sh
 docker compose cp caddy:/data/caddy/pki/authorities/local/root.crt ./zenith-root.crt
