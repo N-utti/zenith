@@ -19,6 +19,7 @@ import type { LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { BLOCK_BY_KEY, EDITOR_BLOCKS } from './editorBlocks'
 import { ALIGNMENTS, HIGHLIGHT_COLORS, TEXT_COLORS } from './editorFormats'
+import { TableSizePicker } from './TableSizePicker'
 
 /* ── 공통 버튼 ──────────────────────────────────────────────── */
 
@@ -377,25 +378,32 @@ function lastOfTable(editor: Editor): Partial<Record<TableCommand, boolean>> {
 }
 
 /**
- * 표 넣기와 행·열 편집. 표 밖에서는 넣기만, 표 안에서는 행·열을 더하고 지운다.
- * 열 너비는 여기가 아니라 표의 세로선을 끌어 바꾼다(editorExtensions 의 resizable).
+ * 표 넣기와 행·열 편집. 표 밖에서는 크기를 골라 넣고, 표 안에서는 행·열을 더하고 지운다.
+ * 열 너비는 여기가 아니라 표의 세로선을 끌어 바꾼다(tableExtensions 의 resizable).
+ * 서식 툴바와, 커서가 든 행 옆에 뜨는 버튼(TableRowMenu)이 같이 쓴다.
  */
-export function TableMenu({ editor, inTable }: { editor: Editor; inTable: boolean }) {
+export function TableMenu({
+  editor,
+  inTable,
+  label = '표',
+}: {
+  editor: Editor
+  inTable: boolean
+  label?: string
+}) {
   return (
     <ToolMenu
-      label="표"
+      label={label}
       className="w-48"
       trigger={<Table className={cn('size-4', inTable && 'text-accent')} />}
     >
       {(close) => {
         if (!inTable) {
           return (
-            <MenuItem
-              icon={Table}
-              label="표 넣기"
-              hint="3x3"
-              onClick={() => {
-                BLOCK_BY_KEY.table.run(editor)
+            <TableSizePicker
+              onPick={(rows, cols) => {
+                // 첫 행은 머리 행이다. 슬래시 메뉴가 넣는 표와 같다.
+                editor.chain().focus().insertTable({ rows, cols, withHeaderRow: true }).run()
                 close()
               }}
             />
