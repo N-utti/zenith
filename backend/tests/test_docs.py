@@ -186,6 +186,11 @@ async def test_trash_untrash_and_hard_delete(client: AsyncClient, users: Users, 
     assert (await client.get(f"/api/docs/{doc['id']}")).status_code == 200
 
     await login(client, "jaeho@zenith.co.kr")
+    # 살아 있는 문서는 임원이라도 409 — 휴지통에 든 것만(#278)
+    r = await client.delete(f"/api/docs/{doc['id']}", params={"hard": 1}, headers=csrf(client))
+    assert (r.status_code, r.json()["code"]) == (409, "NOT_TRASHED")
+    assert (await client.get(f"/api/docs/{doc['id']}")).status_code == 200
+    assert (await client.delete(f"/api/docs/{doc['id']}", headers=csrf(client))).status_code == 204
     r = await client.delete(f"/api/docs/{doc['id']}", params={"hard": 1}, headers=csrf(client))
     assert r.status_code == 204
     assert (await client.get(f"/api/docs/{doc['id']}")).status_code == 404
@@ -260,6 +265,7 @@ async def test_hard_delete_cascades(client: AsyncClient, users: Users, app_db) -
     )
     await app_db.flush()
 
+    assert (await client.delete(f"/api/docs/{doc['id']}", headers=csrf(client))).status_code == 204
     r = await client.delete(f"/api/docs/{doc['id']}", params={"hard": 1}, headers=csrf(client))
     assert r.status_code == 204
     for model in (DocVersion, DocComment, DocChunk):

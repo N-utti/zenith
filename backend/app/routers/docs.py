@@ -189,12 +189,22 @@ def _doc_out(doc: Document, editor: User | None) -> DocOut:
 
 
 async def _get_doc(
-    db: AsyncSession, doc_id: uuid.UUID, *, trashed_ok: bool = False, body: bool = False
+    db: AsyncSession,
+    doc_id: uuid.UUID,
+    *,
+    trashed_ok: bool = False,
+    body: bool = False,
+    lock: bool = False,
 ) -> Document:
     # 본문(Y.Doc)을 쓰는 곳은 상세 하나다. 나머지(수정·삭제·버전·댓글)는 있는지와 휴지통 여부만 본다.
     # populate_existing: 같은 세션이 목록에서 본문 없이 읽어 둔 행이 있어도 다시 읽는다(테스트는 세션을 공유한다).
+    # lock: 휴지통 여부를 보고 바로 결정하는 곳(영구 삭제·되돌리기)은 행을 잠가 둘이 겹치지 않게 한다(#278).
     doc = await db.get(
-        Document, doc_id, options=() if body else DOC_LIST_OPTS, populate_existing=body
+        Document,
+        doc_id,
+        options=() if body else DOC_LIST_OPTS,
+        populate_existing=body or lock,
+        with_for_update=lock,
     )
     if doc is None or (doc.deleted_at is not None and not trashed_ok):
         raise ApiError(404, "NOT_FOUND", "없는 문서입니다.")
@@ -374,7 +384,8 @@ async def update_doc(
 @router.delete(
     "/docs/{id}",
     status_code=204,
-    summary="휴지통 이동(30일) / ?hard=1 은 exec 만 — 버전·댓글·색인까지 지운다",
+    summary="휴지통 이동(30일) / ?hard=1 은 exec 만, 휴지통에 든 문서만 — 버전·댓글·색인까지 지운다",
+    responses={409: {"description": "NOT_TRASHED — hard=1 인데 휴지통에 없는 문서(이슈 #278)"}},
 )
 async def delete_doc(
     id: uuid.UUID,
@@ -383,7 +394,7 @@ async def delete_doc(
     user: User = Depends(current_user),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
-    doc = await _get_doc(db, id, trashed_ok=True)
+    doc = await _get_doc(db, id, trashed_ok=True, lock=hard)
     if not hard:
         if doc.deleted_at is None:
             doc.deleted_at = _now()
@@ -405,6 +416,10 @@ async def delete_doc(
         await db.commit()
         # 등급 이름은 화면 표기대로 — 프론트가 서버 문구를 그대로 띄운다(exec = "임원")
         raise ApiError(403, "FORBIDDEN", "영구 삭제는 임원만 할 수 있습니다.")
+    if doc.deleted_at is None:
+        # 휴지통 화면이 확인 창을 띄운 사이 누가 되돌렸으면 방금 살린 문서가 사라진다(#278) — 서버가 막는다.
+        # 행을 잠그고 봤으므로 이 판정과 _purge 사이에 되돌리기가 끼지 못한다(되돌리기도 같은 잠금을 기다린다)
+        raise ApiError(409, "NOT_TRASHED", "휴지통에 있는 문서만 영구 삭제할 수 있습니다.")
     await _purge(db, doc)
     audit.record(
         db,
@@ -473,7 +488,7 @@ async def purge_loop() -> None:
 async def untrash_doc(
     id: uuid.UUID, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)
 ) -> DocOut:
-    doc = await _get_doc(db, id, trashed_ok=True)
+    doc = await _get_doc(db, id, trashed_ok=True, lock=True)
     doc.deleted_at = None
     doc.updated_by = user.id
     doc.updated_at = _now()
@@ -668,7 +683,10 @@ async def create_comment(
 @router.delete(
     "/docs/{id}/comments/{comment_id}",
     status_code=204,
-    responses={403: {"description": "남의 댓글"}, 404: {"description": "없는 문서·댓글, 휴지통 문서"}},
+    responses={
+        403: {"description": "남의 댓글"},
+        404: {"description": "없는 문서·댓글, 휴지통 문서"},
+    },
     summary="댓글 삭제 — 쓴 사람만. 그 댓글의 멘션 알림도 같이 지운다 (이슈 #253)",
 )
 async def delete_comment(

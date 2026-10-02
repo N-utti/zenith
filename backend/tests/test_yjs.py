@@ -1,6 +1,7 @@
 """04-API §4.2 /yjs — FR-DOC-02·03 · TC-DOC-02·04 · TC-SEC-03. 클라이언트는 pycrdt 로 y-websocket 프로토콜을 흉내 낸다."""
 
 import asyncio
+import uuid
 from datetime import timedelta
 
 import pytest
@@ -308,6 +309,7 @@ async def test_title_projection_does_not_undo_tree_rename(
 
 
 async def test_hard_delete_closes_open_sockets(app: FastAPI, users: Users, app_db) -> None:
+    """살아 있는 문서의 ?hard=1 은 409 로 거절되고 방은 그대로(#278). 휴지통에 보내면 방이 걷히고 그 뒤 영구 삭제."""
     async with ws_client(app) as client:
         await login(client, "jaeho@zenith.co.kr")
         doc_id = await _doc_id(client, app_db)
@@ -315,10 +317,15 @@ async def test_hard_delete_closes_open_sockets(app: FastAPI, users: Users, app_d
             a = Peer(ws)
             await a.connect()
             r = await client.delete(f"/api/docs/{doc_id}", params={"hard": 1}, headers=csrf(client))
+            assert (r.status_code, r.json()["code"]) == (409, "NOT_TRASHED")
+            assert uuid.UUID(doc_id) in ROOMS  # 거절됐으니 편집 방도 그대로
+            r = await client.delete(f"/api/docs/{doc_id}", headers=csrf(client))
             assert r.status_code == 204
             with pytest.raises(Exception):  # noqa: B017
                 await asyncio.wait_for(ws.receive_bytes(), timeout=1)
         assert ROOMS == {}
+        r = await client.delete(f"/api/docs/{doc_id}", params={"hard": 1}, headers=csrf(client))
+        assert r.status_code == 204
 
 
 async def test_trashing_closes_open_room(app: FastAPI, users: Users, app_db) -> None:
