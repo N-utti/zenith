@@ -514,7 +514,9 @@ export async function handleChatRequest(req, res, url) {
 
   if (path === '/channels' && req.method === 'GET') {
     if (!isUser(viewerId)) return json(res, 401, { detail: '알 수 없는 사용자입니다.' })
-    const items = CHANNELS.filter((c) => c.memberIds.includes(viewerId) && !isHidden(viewerId, c.id))
+    const items = CHANNELS.filter(
+      (c) => c.memberIds.includes(viewerId) && !isHidden(viewerId, c.id),
+    )
       .map((c) => channelView(c, viewerId))
       // 최근 대화가 위로. 대화가 없는 채널은 아래로 밀리고, 그 안에서는 이름순(백엔드와 같다).
       .sort((a, b) => {
