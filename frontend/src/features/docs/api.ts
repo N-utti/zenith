@@ -120,6 +120,28 @@ export function useTouchDoc(docId: string) {
 }
 
 /**
+ * 문서를 열지 않고 이름을 바꾼다(사이드바). 제목의 원천인 Y.Doc 을 먼저 고치고
+ * (`setCollabTitle`), 그 뒤에 목록·검색이 볼 서버 사본을 맞춘다. 순서가 반대면 앞이 실패했을 때
+ * 서버 사본만 새 이름이 된다.
+ */
+export function useRenameDoc() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ id, title }: { id: string; title: string }) => {
+      // 편집기 묶음(yjs)은 문서 화면을 열 때에야 받는다. 사이드바가 그걸 앞당기지 않게 여기서 받는다.
+      const { setCollabTitle } = await import('./useCollabSession')
+      await setCollabTitle(id, title)
+      return api<DocSummary>(`/docs/${id}`, { method: 'PATCH', body: JSON.stringify({ title }) })
+    },
+    onSuccess: (doc) => {
+      qc.setQueryData(docKeys.detail(doc.id), doc)
+      void qc.invalidateQueries({ queryKey: docKeys.tree })
+      void qc.invalidateQueries({ queryKey: homeKeys.home })
+    },
+  })
+}
+
+/**
  * 문서가 사라지거나 돌아오면 같이 흔들리는 **목록들**. 상세·댓글·버전은 건드리지 않는다.
  *
  * `['documents']` 로 한 번에 지우면 접두 일치라 모든 문서의 상세·댓글·버전까지 딸려 간다.

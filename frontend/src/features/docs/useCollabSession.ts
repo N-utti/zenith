@@ -100,3 +100,46 @@ export function useCollabSession(docId: string): CollabSession | null {
 
   return session
 }
+
+/** 제목만 바꾸려고 연 연결이 서버 상태를 받아 오기까지 기다리는 한도. */
+const TITLE_SYNC_WAIT_MS = 5000
+/** 바꾼 제목이 소켓으로 나가기를 기다렸다가 닫는다. 바로 닫으면 보내기 전에 끊길 수 있다. */
+const TITLE_FLUSH_MS = 300
+
+/**
+ * 문서를 열지 않고 제목만 바꾼다(사이드바의 이름 변경).
+ *
+ * 제목의 원천은 Y.Doc 이다(`collabState` 의 `useCollabTitle`). 서버 사본(`PATCH /docs/{id}`)만
+ * 고치면 문서를 열 때 Y.Doc 의 옛 제목이 다시 보이고, 다음 편집이 그 옛 제목을 서버에 도로
+ * 덮어쓴다. 그래서 릴레이에 잠깐 붙어 서버 상태를 받은 **뒤에** 제목을 쓴다. 받기 전에 쓰면
+ * 그사이 다른 사람이 고친 제목과 순서 없이 겨뤄 어느 쪽이 남을지 모른다.
+ *
+ * 본문은 건드리지 않는다. 브라우저 사본(IndexedDB)도 안 연다. 다음에 열 때 릴레이에서 받는다.
+ * 릴레이에 못 붙으면 거절한다. 그때 서버 사본만 고치면 위의 어긋남이 생긴다.
+ */
+export function setCollabTitle(docId: string, title: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const doc = new Y.Doc({ gc: false })
+    const provider = new WebsocketProvider(relayUrl(), docId, doc)
+    let done = false
+    const finish = (error?: Error) => {
+      if (done) return
+      done = true
+      window.clearTimeout(timeout)
+      provider.destroy()
+      doc.destroy()
+      if (error) reject(error)
+      else resolve()
+    }
+    const timeout = window.setTimeout(
+      () => finish(new Error('문서 서버에 연결하지 못해 이름을 바꾸지 못했습니다.')),
+      TITLE_SYNC_WAIT_MS,
+    )
+    provider.on('sync', (synced: boolean) => {
+      if (!synced || done) return
+      window.clearTimeout(timeout)
+      doc.getMap<string>('meta').set('title', title)
+      window.setTimeout(() => finish(), TITLE_FLUSH_MS)
+    })
+  })
+}
