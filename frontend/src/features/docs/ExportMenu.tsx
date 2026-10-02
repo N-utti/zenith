@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { Editor } from '@tiptap/react'
-import { Download, FileText, Printer } from 'lucide-react'
+import { Download, FileText, FileType, Printer } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { Spinner } from '@/components/ui/Spinner'
 import { useToast } from '@/components/ui/ToastContext'
@@ -9,6 +9,7 @@ import { exportDoc, type ExportFormat } from './exportDoc'
 
 const FORMATS: { key: ExportFormat; label: string; hint: string; icon: LucideIcon }[] = [
   { key: 'docx', label: 'Word 문서', hint: '.docx', icon: FileText },
+  { key: 'hwpx', label: '한글 문서', hint: '.hwpx', icon: FileType },
   { key: 'pdf', label: 'PDF', hint: '인쇄 창에서 저장', icon: Printer },
 ]
 

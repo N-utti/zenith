@@ -30,6 +30,7 @@ import { ExportMenu } from './ExportMenu'
 import { InlineAiPopover } from './InlineAiPopover'
 import { buildDocExtensions } from './editorExtensions'
 import { EditorToolbar } from './EditorToolbar'
+import { TableRowMenu } from './TableRowMenu'
 import { VersionPanel } from './VersionPanel'
 import { VersionPreview } from './VersionPreview'
 import { hueToColor, useCollabStatus, useCollabTitle, usePresence } from './collabState'
@@ -631,8 +632,12 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
                 {editor ? (
                   <>
                     <EditorBubbleMenu editor={editor} />
+                    {/* 둘 다 포인터로 쓰는 것이다. 손가락 기기에서는 서식 툴바의 표 메뉴가 같은 일을 한다. */}
                     {!coarsePointer && (
-                      <BlockDragHandle editor={editor} onComment={startBlockComment} />
+                      <>
+                        <BlockDragHandle editor={editor} onComment={startBlockComment} />
+                        <TableRowMenu editor={editor} />
+                      </>
                     )}
                     <EditorContent editor={editor} className="mt-4" />
                     <InlineAiPopover editor={editor} docId={meta.id} />
