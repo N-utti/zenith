@@ -330,13 +330,39 @@ async def test_events_crud(client: AsyncClient, users: Users, app_db) -> None:
         {"date": "2026-10-05", "title": "x" * 201},
         {"date": "2026-10-05", "title": "x", "time": "25:00"},
         {"date": "2026-10-05", "title": "x", "time": "9:30"},
+        {"date": "2026-10-05", "title": "x", "time": "１０:００"},  # 전각 숫자
         {"date": "2026-10-05", "title": "x", "extra": 1},
     ):
-        assert (await client.post(url, json=bad, headers=h)).status_code == 422, bad
+        r = await client.post(url, json=bad, headers=h)
+        assert (r.status_code, r.json()["code"]) == (422, "VALIDATION"), bad
+    # 같은 날짜·같은 시각이면 만든 순
+    dup = (
+        await client.post(
+            url, json={"date": "2026-10-05", "title": "둘째", "time": "09:30"}, headers=h
+        )
+    ).json()
 
     r = await client.get(url, params={"from": "2026-10-01", "to": "2026-10-10"})
     assert r.status_code == 200
-    assert [e["id"] for e in r.json()["items"]] == [early["id"], meeting["id"], allday["id"]]
+    ids = [e["id"] for e in r.json()["items"]]
+    # 테스트는 한 트랜잭션이라 created_at 이 같아 09:30 둘의 순서는 id 로 갈린다 — 앞 두 자리인 것만 본다
+    assert (set(ids[:2]), ids[2:]) == ({early["id"], dup["id"]}, [meeting["id"], allday["id"]])
+    assert (await client.delete(f"{url}/{dup['id']}", headers=h)).status_code == 204
+    assert (
+        len(
+            (await client.get(url, params={"from": "2026-10-05", "to": "2026-10-05"})).json()[
+                "items"
+            ]
+        )
+        == 3
+    )
+    assert (
+        await client.get(url, params={"from": "2026-01-01", "to": "2027-01-01"})
+    ).status_code == 200  # 366일
+    assert (
+        await client.get(url, params={"from": "2026-01-01", "to": "2027-01-02"})
+    ).status_code == 422  # 367일
+    assert (await client.get(url, params={"from": "abc", "to": "2026-10-10"})).status_code == 422
     assert later["id"] in [
         e["id"]
         for e in (await client.get(url, params={"from": "2026-10-01", "to": "2026-10-31"})).json()[

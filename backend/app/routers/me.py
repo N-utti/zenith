@@ -109,7 +109,8 @@ class TodoCreateIn(BaseModel):
 
 
 EventTitle = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
-EventTime = Annotated[str, StringConstraints(pattern=r"^([01]\d|2[0-3]):[0-5]\d$")]  # "HH:MM"
+# "HH:MM" — \d 는 pydantic(Rust regex)에서 유니코드 숫자도 받으므로 [0-9] 로
+EventTime = Annotated[str, StringConstraints(pattern=r"^([01][0-9]|2[0-3]):[0-5][0-9]$")]
 
 
 class EventOut(BaseModel):
@@ -374,12 +375,14 @@ async def list_events(
     user: User = Depends(current_user),
     db: AsyncSession = Depends(get_db),
 ) -> Items[EventOut]:
-    if to < from_ or to - from_ > timedelta(days=366):
+    if to < from_ or to - from_ > timedelta(days=365):  # 양끝 포함 366일(윤년 한 해)까지
         raise ApiError(422, "VALIDATION", "기간은 from ≤ to, 366일 이내여야 합니다.")
+    # ponytail: 상한만 둔다 — 개인 일정이 한 해 2000개를 넘으면 그때 커서(할 일과 같은 천장)
     rows = await db.execute(
         select(Event)
         .where(Event.user_id == user.id, Event.date >= from_, Event.date <= to)
         .order_by(Event.date, Event.time.nulls_last(), Event.created_at, Event.id)
+        .limit(2000)
     )
     return Items(items=[EventOut.model_validate(e) for e in rows.scalars()])
 
