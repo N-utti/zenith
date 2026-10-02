@@ -19,6 +19,12 @@ export type ChatAttachment = Schema<'AttachmentOut'>
 export type ChatMessage = Schema<'MessageOut'>
 
 /**
+ * 백엔드 `MessagePage`. 메시지 한 쪽(오래된 순). `next_cursor` 는 더 과거가 있을 때만 오고, 다음
+ * 요청의 `?cursor=` 로 그대로 돌려준다. 뜻은 서버만 안다(화면은 읽지 않는다).
+ */
+export type MessagePage = Schema<'MessagePage'>
+
+/**
  * 백엔드 `ChannelOut`. DM 은 보는 사람에 따라 이름이 다르다. `name` 에 상대의 이름이 온다.
  *
  * 비공개 채널(`is_private`)은 만든 사람과 고른 사람만 멤버고, 멤버가 사람을 더하고 뺀다.

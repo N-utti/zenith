@@ -1,4 +1,4 @@
-import type { ChatChannel, ChatMessage } from './types'
+import type { ChatChannel, ChatMessage, MessagePage } from './types'
 
 /**
  * 소켓 이벤트를 캐시에 반영하는 순수 변환들. 훅에서 떼어 둔 이유는 테스트 때문이다.
@@ -15,13 +15,36 @@ import type { ChatChannel, ChatMessage } from './types'
  * 탭이 여러 개면 같은 이벤트를 중복으로 받는다. id 로 한 번 걸러야 같은 메시지가 두 줄이 된다.
  * 목록을 아직 안 받은 채널이면(`undefined`) 아무것도 하지 않는다. 열 때 GET 으로 받는다.
  */
-export function appendMessage(
-  page: { items: ChatMessage[] } | undefined,
+export function appendMessage<P extends { items: ChatMessage[] }>(
+  page: P | undefined,
   message: ChatMessage,
-): { items: ChatMessage[] } | undefined {
+): P | undefined {
   if (!page) return page
   if (page.items.some((item) => item.id === message.id)) return page
-  return { items: [...page.items, message] }
+  // 나머지 칸(`next_cursor`)은 그대로 둔다. 버리면 새 메시지가 하나 온 뒤로 더 과거를 못 부른다.
+  return { ...page, items: [...page.items, message] }
+}
+
+/**
+ * 더 과거 한 쪽을 목록 앞에 붙인다. 커서는 새로 받은 쪽의 것으로 바꾼다(그보다 더 과거를 가리킨다).
+ *
+ * `cursor` 는 그 쪽을 청할 때 쓴 커서다. 목록의 지금 커서와 다르면 버린다. 받는 사이에 목록이
+ * 다시 받아져(창 복귀, 소켓 재연결) 최근 한 쪽으로 돌아갔다는 뜻인데, 그대로 붙이면 두 쪽
+ * 사이가 빈 채로 커서만 더 과거로 넘어가 그 구간을 다시 받을 길이 없어진다.
+ *
+ * 이미 있는 id 는 뺀다. 목록이 사라졌으면(`undefined`, 그사이 채널을 나갔다) 붙일 곳이 없다.
+ */
+export function prependOlder(
+  page: MessagePage | undefined,
+  older: MessagePage,
+  cursor: string,
+): MessagePage | undefined {
+  if (!page || page.next_cursor !== cursor) return page
+  const known = new Set(page.items.map((item) => item.id))
+  return {
+    items: [...older.items.filter((item) => !known.has(item.id)), ...page.items],
+    next_cursor: older.next_cursor,
+  }
 }
 
 /**
