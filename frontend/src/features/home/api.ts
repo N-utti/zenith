@@ -97,6 +97,29 @@ export function useToggleTask() {
   })
 }
 
+/** 할 일의 글자를 고친다. 체크와 같은 규약: 즉시 반영하고 실패하면 그 줄의 글자만 되돌린다. */
+export function useEditTask() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, text }: { id: string; text: string }) =>
+      api<TodayTask>(`/me/todos/${id}`, { method: 'PATCH', body: JSON.stringify({ text }) }),
+    onMutate: async ({ id, text }) => {
+      await qc.cancelQueries({ queryKey: todosKey })
+      const before = qc.getQueryData<HomeData>(todosKey)?.todos.find((t) => t.id === id)?.text
+      patchTodos(qc, (todos) => todos.map((t) => (t.id === id ? { ...t, text } : t)))
+      return { before }
+    },
+    onError: (_error, { id }, context) => {
+      const before = context?.before
+      if (before === undefined) return
+      patchTodos(qc, (todos) => todos.map((t) => (t.id === id ? { ...t, text: before } : t)))
+    },
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: todosKey })
+    },
+  })
+}
+
 export function useAddTask() {
   const qc = useQueryClient()
   return useMutation({
