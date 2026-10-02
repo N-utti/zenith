@@ -4,6 +4,7 @@
 - `crm_orgs.deleted_reason`(지운 기관 목록) · `crm_orgs.import_id`.
 - `crm_contacts.created_by`·`deleted_at`·`import_id` — 기존 행의 created_by 는 NULL(임원만 지운다).
 - `crm_deals.deleted_at`.
+- `crm_contact_moves.moved_by` — 옮긴 사람(담당자 지우기 판정). 기존 행은 NULL.
 
 Revision ID: b5c8e1f3a7d2
 Revises: b7c8d9e0f1a2
@@ -55,10 +56,15 @@ def upgrade() -> None:
         "crm_contacts", sa.Column("import_id", UUID, sa.ForeignKey("crm_imports.id"), nullable=True)
     )
     op.add_column("crm_deals", sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True))
+    op.add_column(
+        "crm_contact_moves", sa.Column("moved_by", UUID, sa.ForeignKey("users.id"), nullable=True)
+    )
 
 
 def downgrade() -> None:
-    # 지운 표시·가져오기 기록이 사라진다 — 실행 전에 사람 확인(루트 CLAUDE.md §안전 가드레일)
+    # 지운 표시·가져오기 기록이 사라진다 — 실행 전에 사람 확인(루트 CLAUDE.md §안전 가드레일).
+    # 특히 deleted_at 이 없어지면 목록에서 지운 담당자·안건이 목록·export 에 다시 나타난다(개인정보 재노출).
+    op.drop_column("crm_contact_moves", "moved_by")
     op.drop_column("crm_deals", "deleted_at")
     op.drop_column("crm_contacts", "import_id")
     op.drop_column("crm_contacts", "deleted_at")

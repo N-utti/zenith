@@ -497,6 +497,8 @@ class CrmContactMove(Base):
     from_org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("crm_orgs.id"), nullable=False)
     to_org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("crm_orgs.id"), nullable=False)
     moved_at: Mapped[datetime] = created_at_col()
+    # 옮긴 사람 — 등록한 사람의 담당자 지우기 판정(남이 옮겼으면 쓰인 것). 이 칸 전의 행은 NULL(남의 것으로 본다)
+    moved_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
 
 
 class CrmDeal(Base):
