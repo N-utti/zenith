@@ -125,6 +125,10 @@ CONTRACT_PATHS = {
     "/api/crm/activities",
     "/api/crm/activities/{id}",
     "/api/crm/export",
+    "/api/crm/orgs/deleted",
+    "/api/crm/orgs/{id}/restore",
+    "/api/crm/imports/last",
+    "/api/crm/imports/{id}/undo",
 }
 
 # 폐기된 경로 — 10-근태 v0.3 P3(출퇴근 기록), 13 §7.1(근태 승인 → 결재 엔진)

@@ -4825,6 +4825,70 @@
         }
       }
     },
+    "/api/crm/orgs/deleted": {
+      "get": {
+        "tags": [
+          "crm"
+        ],
+        "summary": "지운 기관 목록 — exec 만, 최근에 지운 것부터. duplicate 는 그사이 생긴 같은 이름의 기관",
+        "operationId": "list_deleted_orgs_api_crm_orgs_deleted_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_DeletedOrg_"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/crm/orgs/{id}/restore": {
+      "post": {
+        "tags": [
+          "crm"
+        ],
+        "summary": "지운 기관 되살리기 — exec 만. 담당자·안건·활동이 그대로 돌아온다. 같은 이름 기관이 있어도 막지 않는다",
+        "operationId": "restore_org_api_crm_orgs__id__restore_post",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrgDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/crm/orgs/{id}": {
       "get": {
         "tags": [
@@ -5068,6 +5132,40 @@
             }
           }
         }
+      },
+      "delete": {
+        "tags": [
+          "crm"
+        ],
+        "summary": "담당자 지우기(목록에서 뺌) — 등록한 사람(지우지 않은 활동에 붙기 전)·exec. 활동 참석자 이름은 남는다",
+        "operationId": "delete_contact_api_crm_contacts__id__delete",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/crm/contacts/{id}/erase": {
@@ -5244,6 +5342,40 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "crm"
+        ],
+        "summary": "안건 지우기(목록에서 뺌) — 등록한 사람(지우지 않은 활동이 붙기 전)·exec. 이력·활동은 남는다",
+        "operationId": "delete_deal_api_crm_deals__id__delete",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
           },
           "422": {
             "description": "Validation Error",
@@ -5603,6 +5735,74 @@
         "responses": {
           "204": {
             "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/crm/imports/last": {
+      "get": {
+        "tags": [
+          "crm"
+        ],
+        "summary": "내가 한 마지막 가져오기 — 되돌릴 것이 없거나 24시간이 지났으면 {import: null}",
+        "operationId": "last_import_api_crm_imports_last_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LastImportOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/crm/imports/{id}/undo": {
+      "post": {
+        "tags": [
+          "crm"
+        ],
+        "summary": "가져오기 되돌리기 — 가져온 사람만, 24시간 안에. 그사이 쓰이기 시작한 기관·담당자는 남긴다(kept_*)",
+        "description": "쓰이기 시작한 것: 기관 — 안건·활동·이직 이력이 있거나 다른 담당자가 있다(지운 안건·활동·담당자도 센다,\n아래 ponytail). 그 기관과 거기 가져온 담당자는 통째로 남긴다. 담당자 — 그 기관이 남거나, 개인정보를 지웠거나,\n이직했거나, 활동 참석자다. 목록에서 지운 행도 같은 판정으로 치우되 수에는 넣지 않는다(화면에 없던 것).\n\nponytail: 지운 안건·활동·담당자가 가리키는 행은 외래키 때문에 행째 지울 수 없어 「쓰인 것」으로 남긴다(목은 지운다).\n판정과 DELETE 사이에 누가 그 담당자를 활동에 붙이면 외래키 위반 409 — 다시 누르면 남긴 쪽으로 판정된다.",
+        "operationId": "undo_import_api_crm_imports__id__undo_post",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportUndone"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "가져온 지 24시간이 지났다"
           },
           "422": {
             "description": "Validation Error",
@@ -7797,6 +7997,10 @@
             "type": "boolean",
             "title": "Erased"
           },
+          "can_delete": {
+            "type": "boolean",
+            "title": "Can Delete"
+          },
           "moves": {
             "items": {
               "$ref": "#/components/schemas/Move"
@@ -7815,6 +8019,7 @@
           "email",
           "memo",
           "erased",
+          "can_delete",
           "moves"
         ],
         "title": "ContactOut"
@@ -8202,6 +8407,10 @@
             },
             "type": "array",
             "title": "Events"
+          },
+          "can_delete": {
+            "type": "boolean",
+            "title": "Can Delete"
           }
         },
         "type": "object",
@@ -8221,7 +8430,8 @@
           "drop_reason",
           "closed_at",
           "created_at",
-          "events"
+          "events",
+          "can_delete"
         ],
         "title": "DealDetail"
       },
@@ -8660,6 +8870,52 @@
           "created_at"
         ],
         "title": "DelegationOut"
+      },
+      "DeletedOrg": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "org_type": {
+            "type": "string",
+            "title": "Org Type"
+          },
+          "deleted_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Deleted At"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "duplicate": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Person"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "org_type",
+          "deleted_at",
+          "reason",
+          "duplicate"
+        ],
+        "title": "DeletedOrg"
       },
       "DocActionIn": {
         "properties": {
@@ -9585,6 +9841,34 @@
         ],
         "title": "ImportRow"
       },
+      "ImportUndone": {
+        "properties": {
+          "removed_orgs": {
+            "type": "integer",
+            "title": "Removed Orgs"
+          },
+          "removed_contacts": {
+            "type": "integer",
+            "title": "Removed Contacts"
+          },
+          "kept_orgs": {
+            "type": "integer",
+            "title": "Kept Orgs"
+          },
+          "kept_contacts": {
+            "type": "integer",
+            "title": "Kept Contacts"
+          }
+        },
+        "type": "object",
+        "required": [
+          "removed_orgs",
+          "removed_contacts",
+          "kept_orgs",
+          "kept_contacts"
+        ],
+        "title": "ImportUndone"
+      },
       "Items_ApprovalTypeOut_": {
         "properties": {
           "items": {
@@ -9936,6 +10220,55 @@
           "items"
         ],
         "title": "Items[VersionMeta]"
+      },
+      "LastImport": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "new_orgs": {
+            "type": "integer",
+            "title": "New Orgs"
+          },
+          "new_contacts": {
+            "type": "integer",
+            "title": "New Contacts"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "created_at",
+          "new_orgs",
+          "new_contacts"
+        ],
+        "title": "LastImport"
+      },
+      "LastImportOut": {
+        "properties": {
+          "import": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LastImport"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "import"
+        ],
+        "title": "LastImportOut"
       },
       "LeaveBalanceOut": {
         "properties": {
@@ -11105,6 +11438,33 @@
           "items"
         ],
         "title": "Page[DealOut]"
+      },
+      "Page_DeletedOrg_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DeletedOrg"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "Page[DeletedOrg]"
       },
       "Page_OrgItem_": {
         "properties": {
