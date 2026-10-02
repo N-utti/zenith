@@ -89,8 +89,13 @@ export function ApprovalsPage() {
                     <TR key={item.id}>
                       <TD className="whitespace-nowrap">{APPROVAL_TYPE_LABEL[item.type_code]}</TD>
                       <TD>
+                        {/* 임시저장은 읽을 것이 아니라 이어 쓸 것이다. 상세를 거치지 않고 바로 작성 화면을 연다. */}
                         <Link
-                          to={`/approvals/${item.id}`}
+                          to={
+                            box === 'draft'
+                              ? `/approvals/new?draft=${item.id}`
+                              : `/approvals/${item.id}`
+                          }
                           className="text-fg hover:text-accent font-medium hover:underline"
                         >
                           {item.title}

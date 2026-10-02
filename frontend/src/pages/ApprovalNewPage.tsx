@@ -247,7 +247,8 @@ export function ApprovalNewPage() {
 
   return (
     <>
-      <BackLink to="/approvals">결재함</BackLink>
+      {/* 임시저장함에서 바로 열린다. 돌아갈 곳도 받은 결재가 아니라 그 탭이다. */}
+      <BackLink to={draftId ? '/approvals?box=draft' : '/approvals'}>결재함</BackLink>
       <PageHeader
         title={trip ? '출장비 결의서' : '새 기안'}
         description={
