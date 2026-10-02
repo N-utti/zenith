@@ -1209,6 +1209,51 @@
         }
       }
     },
+    "/api/archive": {
+      "get": {
+        "tags": [
+          "archive"
+        ],
+        "summary": "자료실 — 내가 받을 수 있는 채팅 첨부·문서 파일을 올린 지 최근 순으로(최대 200). 04 에 없던 경로",
+        "operationId": "list_archive_api_archive_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 200,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Items_ArchiveFile_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/people": {
       "get": {
         "tags": [
@@ -3178,6 +3223,68 @@
   },
   "components": {
     "schemas": {
+      "ArchiveFile": {
+        "properties": {
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "size": {
+            "type": "integer",
+            "title": "Size"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "chat",
+              "doc"
+            ],
+            "title": "Source"
+          },
+          "source_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Source Id"
+          },
+          "source_title": {
+            "type": "string",
+            "title": "Source Title"
+          },
+          "uploaded_by": {
+            "$ref": "#/components/schemas/Person"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "all",
+              "members"
+            ],
+            "title": "Scope"
+          }
+        },
+        "type": "object",
+        "required": [
+          "url",
+          "name",
+          "size",
+          "source",
+          "source_id",
+          "source_title",
+          "uploaded_by",
+          "created_at",
+          "scope"
+        ],
+        "title": "ArchiveFile"
+      },
       "AttachmentOut": {
         "properties": {
           "url": {
@@ -4110,6 +4217,22 @@
           "created_at"
         ],
         "title": "HomePost"
+      },
+      "Items_ArchiveFile_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ArchiveFile"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "Items[ArchiveFile]"
       },
       "Items_BoardOut_": {
         "properties": {
