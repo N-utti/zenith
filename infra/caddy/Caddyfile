@@ -35,8 +35,10 @@
 		# WebSocket(/api/ws · /api/yjs) 업그레이드는 reverse_proxy 가 알아서 한다. Host 는 바꾸지 않는다.
 		# api 의 CSRF·WS Origin 대조가 X-Forwarded-Proto/Host 를 믿는다(backend/app/deps.py _own_origin) — caddy 2.7+ 는
 		# 미신뢰 피어가 보낸 X-Forwarded-* 를 버리지만, 버전·trusted_proxies 설정과 무관하게 caddy 가 본 Host 로 못박는다.
+		# `{host}` 는 포트를 뗀다 — 5180 같은 비표준 포트 사이트에서는 브라우저 Origin(host:port)과 어긋나 CSRF 403.
+		# hostport 는 Host 헤더 그대로(표준 포트면 포트 없음)라 두 사이트 모두 맞는다.
 		reverse_proxy api:8000 {
-			header_up X-Forwarded-Host {host}
+			header_up X-Forwarded-Host {http.request.hostport}
 		}
 	}
 
