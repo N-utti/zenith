@@ -1,30 +1,42 @@
 import { hueOf } from '@/lib/avatar'
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { useEditorState, type Editor } from '@tiptap/react'
-import { Quote, Trash2 } from 'lucide-react'
+import { Pencil, Quote, Trash2 } from 'lucide-react'
 import { useSearchParams } from 'react-router'
 import { Avatar } from '@/components/ui/Avatar'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
 import { useToast } from '@/components/ui/ToastContext'
 import { ApiError } from '@/lib/api'
+import { cn } from '@/lib/cn'
 import { formatRelative } from '@/lib/datetime'
 import { useCurrentUser } from '@/features/auth/AuthContext'
 import { MentionTextarea } from '@/features/people/MentionTextarea'
 import { useMentionNames } from '@/features/people/colleagues'
 import { MentionText } from '@/features/people/MentionText'
 import { MSW_ENABLED } from '@/mocks/accounts'
-import { useAddComment, useComments, useDeleteComment } from './api'
+import { useAddComment, useComments, useDeleteComment, useEditComment } from './api'
 import { anchoredBlocks, flashElement } from './blockId'
 import { COMMENT_BODY_MAX, type DocComment } from './types'
 
 // ponytail: 서버에 댓글을 지우는 경로가 아직 없다(이슈 #253). 목이 흉내 낼 때만 버튼을 낸다.
 // 운영 빌드와 실서버에 붙인 개발 서버에서는 안 보인다. 서버에 경로가 생기면 이 스위치를 걷는다.
 const COMMENT_DELETE_ENABLED = MSW_ENABLED
+// 댓글 고치기도 같다. 서버에 그 경로가 아직 없어 목이 켜진 개발 화면에서만 보인다.
+const COMMENT_EDIT_ENABLED = MSW_ENABLED
+
+/*
+ * 내 댓글 줄의 작은 버튼(고치기·지우기). 줄 위에 올리거나 Tab 으로 닿을 때만 보이고, 호버가 없는
+ * 기기에서는 늘 보인다. 숨어 있을 때는 눌리지도 않는다(할 일 카드의 버튼과 같은 규약).
+ * -my-1: 이름 줄(16px)보다 큰 버튼이 줄 높이를 키우지 않게 한다.
+ */
+const ROW_ACTION =
+  'text-subtle pointer-events-none -my-1 grid size-6 shrink-0 cursor-pointer place-items-center rounded opacity-0 transition-opacity group-focus-within/comment:pointer-events-auto group-focus-within/comment:opacity-100 group-hover/comment:pointer-events-auto group-hover/comment:opacity-100 pointer-coarse:pointer-events-auto pointer-coarse:opacity-100'
 
 /**
  * 댓글 한 줄. 옆 패널과 블록 옆 창(BlockComments)이 같이 쓴다. `children` 은 이름과 본문 사이(인용).
- * 내가 쓴 댓글에는 지우는 버튼이 붙는다. `onDelete` 는 지우기를 시작한 직후에 불린다.
+ * 내가 쓴 댓글에는 고치는 버튼과 지우는 버튼이 붙는다. 고치기는 그 줄에서 글 칸이 열린다.
+ * `onDelete` 는 지우기를 시작한 직후에 불린다.
  */
 export function CommentRow({
   docId,
@@ -43,9 +55,33 @@ export function CommentRow({
 }) {
   const user = useCurrentUser()
   const remove = useDeleteComment(docId)
+  const edit = useEditComment(docId)
   const toast = useToast()
-  // 화면 편의일 뿐이다. 남의 댓글을 지우는 요청의 실제 차단은 서버의 403 이다.
-  const canDelete = COMMENT_DELETE_ENABLED && comment.author.id === user.id
+  // 화면 편의일 뿐이다. 남의 댓글을 고치거나 지우는 요청의 실제 차단은 서버의 403 이다.
+  const mine = comment.author.id === user.id
+  const canDelete = COMMENT_DELETE_ENABLED && mine
+  const canEdit = COMMENT_EDIT_ENABLED && mine
+  /** 고치는 중인 글. 고치는 중이 아니면 `null`. */
+  const [draft, setDraft] = useState<string | null>(null)
+  const [editError, setEditError] = useState<string | null>(null)
+
+  const save = () => {
+    if (draft === null || edit.isPending) return
+    const next = draft.trim()
+    // 비우면 저장하지 않는다. 댓글을 없애려면 지우기를 쓴다.
+    if (!next) return
+    if (next === comment.body) return setDraft(null)
+    setEditError(null)
+    edit.mutate(
+      { id: comment.id, body: next },
+      {
+        onSuccess: () => setDraft(null),
+        // 고치던 글 바로 아래에 낸다. 토스트로 내면 무엇이 안 됐는지와 고칠 곳이 떨어진다.
+        onError: (err) =>
+          setEditError(err instanceof ApiError ? err.message : '댓글을 고치지 못했습니다.'),
+      },
+    )
+  }
 
   return (
     <div id={id} className="group/comment -mx-2 flex gap-2.5 rounded-lg px-2 py-1">
@@ -56,8 +92,23 @@ export function CommentRow({
             {comment.author.name}
             <span className="text-subtle ml-1.5 font-normal">
               {formatRelative(comment.created_at)}
+              {comment.edited_at && ' · 수정됨'}
             </span>
           </p>
+          {canEdit && draft === null && (
+            <button
+              type="button"
+              aria-label={`${formatRelative(comment.created_at)} 댓글 고치기`}
+              title="댓글 고치기"
+              onClick={() => {
+                setEditError(null)
+                setDraft(comment.body)
+              }}
+              className={cn(ROW_ACTION, 'hover:text-fg')}
+            >
+              <Pencil className="size-3.5" />
+            </button>
+          )}
           {canDelete && (
             <button
               type="button"
@@ -73,19 +124,63 @@ export function CommentRow({
                 })
                 onDelete?.()
               }}
-              // 줄 위에 올리거나 Tab 으로 닿을 때만 보인다. 호버가 없는 기기에서는 늘 보인다.
-              // 숨어 있을 때는 눌리지도 않는다(할 일 카드의 지우기 버튼과 같은 규약).
-              // -my-1: 이름 줄(16px)보다 큰 버튼이 줄 높이를 키우지 않게 한다.
-              className="text-subtle hover:text-danger pointer-events-none -my-1 grid size-6 shrink-0 cursor-pointer place-items-center rounded opacity-0 transition-opacity group-focus-within/comment:pointer-events-auto group-focus-within/comment:opacity-100 group-hover/comment:pointer-events-auto group-hover/comment:opacity-100 pointer-coarse:pointer-events-auto pointer-coarse:opacity-100"
+              className={cn(ROW_ACTION, 'hover:text-danger')}
             >
               <Trash2 className="size-3.5" />
             </button>
           )}
         </div>
         {children}
-        <p className="text-muted mt-0.5 text-sm break-words whitespace-pre-wrap">
-          <MentionText body={comment.body} names={names} />
-        </p>
+        {draft !== null ? (
+          <div className="mt-1">
+            {/* 등록 칸과 같은 입력이다. `@` 를 치면 사람 목록이 뜨고 Enter 로 저장한다. */}
+            <MentionTextarea
+              autoFocus
+              value={draft}
+              onValueChange={(next) => {
+                setDraft(next)
+                setEditError(null)
+              }}
+              submitOnEnter
+              onSubmitEnter={save}
+              onKeyDown={(e) => {
+                // 한글을 조합하는 중의 Esc 는 조합만 취소한다. 쓰던 글까지 버리지 않는다.
+                if (e.key === 'Escape' && !e.nativeEvent.isComposing) {
+                  // 블록 옆 창은 Esc 로 창째 닫힌다. 고치기만 그만두고 창은 둔다.
+                  e.stopPropagation()
+                  setDraft(null)
+                }
+              }}
+              rows={Math.min(6, Math.max(draft.split('\n').length, Math.ceil(draft.length / 30)))}
+              maxLength={COMMENT_BODY_MAX}
+              aria-label="댓글 고치기"
+              aria-invalid={editError ? true : undefined}
+              className="w-full resize-none"
+            />
+            {editError && (
+              <p role="alert" className="text-danger mt-1 text-xs">
+                {editError}
+              </p>
+            )}
+            <div className="mt-1.5 flex items-center gap-2">
+              <Button size="sm" onClick={save} disabled={!draft.trim() || edit.isPending}>
+                {edit.isPending ? <Spinner className="border-t-on-accent" /> : '저장'}
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => setDraft(null)}
+                disabled={edit.isPending}
+              >
+                취소
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <p className="text-muted mt-0.5 text-sm break-words whitespace-pre-wrap">
+            <MentionText body={comment.body} names={names} />
+          </p>
+        )}
       </div>
     </div>
   )

@@ -5,6 +5,7 @@ import {
   addVersion,
   createDoc,
   docTree,
+  editComment,
   findDoc,
   findVersion,
   listComments,
@@ -165,4 +166,21 @@ it('휴지통 목록은 limit 을 지킨다', () => {
   for (const doc of docs) trashDoc(doc, user)
   expect(listTrash(2)).toHaveLength(2)
   for (const doc of docs) purgeDoc(doc.id)
+})
+
+it('댓글은 쓴 사람만 고친다. 글이 그대로면 고친 것으로 치지 않는다', () => {
+  const doc = createDoc(user, 'f-1', '댓글 고치기 시험')
+  const other = MOCK_USERS.find((u) => u.id !== user.id)!
+  const comment = addComment(doc.id, user, '처음 쓴 글', 'b-1')
+
+  expect(editComment(doc.id, other, comment.id, '남이 고친 글')).toBe('forbidden')
+  expect(editComment(doc.id, user, 'c-없는-댓글', '글')).toBe('not_found')
+
+  // 그대로 저장하면 「수정됨」이 붙지 않는다.
+  expect(editComment(doc.id, user, comment.id, '처음 쓴 글')).toMatchObject({ body: '처음 쓴 글' })
+  expect(listComments(doc.id)[0].edited_at ?? null).toBeNull()
+
+  const edited = editComment(doc.id, user, comment.id, '고친 글')
+  expect(edited).toMatchObject({ id: comment.id, body: '고친 글', block_id: 'b-1' })
+  expect(listComments(doc.id)[0].edited_at).toEqual(expect.any(String))
 })

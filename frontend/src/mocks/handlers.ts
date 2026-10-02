@@ -51,6 +51,7 @@ import {
   createDoc,
   createFolder,
   docTree,
+  editComment,
   findFolder,
   findVersion,
   isDescendantFolder,
@@ -1872,6 +1873,26 @@ data: ${JSON.stringify(data)}
     return HttpResponse.json(addComment(String(params.docId), user, body, blockId), {
       status: 201,
     })
+  }),
+
+  // 댓글 고치기. 실서버에는 아직 없는 경로다. 모양은 프론트가 정한 가정이다: `{body}` 를 받아
+  // 고친 뒤의 `CommentOut`(+ `edited_at`)을 돌려준다. 쓴 사람이 아니면 403, 없는 댓글과 휴지통
+  // 문서는 404, 글 규칙은 등록과 같다.
+  http.patch('/api/docs/:docId/comments/:commentId', async ({ request, params }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    const docId = String(params.docId)
+    if (!aliveDoc(docId)) return notFound()
+
+    const body = await readJson<{ body?: unknown }>(request)
+    const text = typeof body?.body === 'string' ? body.body.trim() : ''
+    if (!text || text.length > 10_000) {
+      return validationError('댓글은 1자 이상 10000자 이하여야 합니다.')
+    }
+    const result = editComment(docId, user, String(params.commentId), text)
+    if (result === 'not_found') return notFound('댓글을 찾을 수 없습니다.')
+    if (result === 'forbidden') return forbidden()
+    return HttpResponse.json(result)
   }),
 
   // 실서버에는 아직 없는 경로다(이슈 #253). 모양은 프론트가 정한 가정이다.

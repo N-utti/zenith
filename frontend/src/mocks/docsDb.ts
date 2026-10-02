@@ -476,6 +476,27 @@ export function addComment(
 }
 
 /**
+ * 댓글의 글을 고친다. 쓴 사람만 고칠 수 있다. 어느 블록의 댓글인지는 바뀌지 않는다.
+ * 글이 그대로면 고친 것으로 치지 않는다(「수정됨」을 붙이지 않는다).
+ * 서버에는 아직 없는 경로다(`handlers.ts` 의 주석).
+ */
+export function editComment(
+  docId: string,
+  user: User,
+  commentId: string,
+  body: string,
+): DocComment | 'not_found' | 'forbidden' {
+  const comment = comments[docId]?.find((c) => c.id === commentId)
+  if (!comment) return 'not_found'
+  if (comment.author.id !== user.id) return 'forbidden'
+  if (comment.body !== body) {
+    comment.body = body
+    comment.edited_at = new Date().toISOString()
+  }
+  return comment
+}
+
+/**
  * 댓글을 지운다. 쓴 사람만 지울 수 있다(이슈 #253 의 가정).
  * 화면은 버튼을 감출 뿐이고 여기가 판정한다.
  */
