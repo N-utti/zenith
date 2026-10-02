@@ -20,10 +20,9 @@ import { useAddComment, useComments, useDeleteComment, useEditComment } from './
 import { anchoredBlocks, flashElement } from './blockId'
 import { COMMENT_BODY_MAX, type DocComment } from './types'
 
-// ponytail: 서버에 댓글을 지우는 경로가 아직 없다(이슈 #253). 목이 흉내 낼 때만 버튼을 낸다.
+// ponytail: 서버에 댓글을 고치는 경로가 아직 없다(이슈 #274). 목이 흉내 낼 때만 버튼을 낸다.
 // 운영 빌드와 실서버에 붙인 개발 서버에서는 안 보인다. 서버에 경로가 생기면 이 스위치를 걷는다.
-const COMMENT_DELETE_ENABLED = MSW_ENABLED
-// 댓글 고치기도 같다. 서버에 그 경로가 아직 없어 목이 켜진 개발 화면에서만 보인다.
+// 지우기는 서버가 받는다(백엔드 #273).
 const COMMENT_EDIT_ENABLED = MSW_ENABLED
 
 /*
@@ -58,9 +57,10 @@ export function CommentRow({
   const remove = useDeleteComment(docId)
   const edit = useEditComment(docId)
   const toast = useToast()
-  // 화면 편의일 뿐이다. 남의 댓글을 고치거나 지우는 요청의 실제 차단은 서버의 403 이다.
+  // 쓴 사람만 고치고 지운다(임원도 남의 댓글은 못 지운다, 백엔드 #273). 화면 편의일 뿐이고 실제
+  // 차단은 서버의 403 이다.
   const mine = comment.author.id === user.id
-  const canDelete = COMMENT_DELETE_ENABLED && mine
+  const canDelete = mine
   const canEdit = COMMENT_EDIT_ENABLED && mine
   /** 고치는 중인 글. 고치는 중이 아니면 `null`. */
   const [draft, setDraft] = useState<string | null>(null)

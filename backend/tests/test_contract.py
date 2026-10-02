@@ -30,6 +30,7 @@ CONTRACT_PATHS = {
     "/api/me/todos/{id}",
     "/api/me/notifications",
     "/api/me/notifications/read",
+    "/api/me/notifications/delete",
     # §3 문서
     "/api/tree",
     "/api/folders",
@@ -39,6 +40,7 @@ CONTRACT_PATHS = {
     "/api/docs/{id}/versions",
     "/api/docs/{id}/restore",
     "/api/docs/{id}/comments",
+    "/api/docs/{id}/comments/{comment_id}",
     # §3 확장 (backend/README "설계와 어긋나는 것")
     "/api/docs/{id}/untrash",
     "/api/files",

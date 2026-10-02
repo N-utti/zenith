@@ -43,6 +43,7 @@ import {
   listMentionNotifications,
   listNotifications,
   markRead as markNotificationsRead,
+  removeNotifications,
 } from './notificationsDb'
 import { search } from './searchDb'
 import {
@@ -55,6 +56,7 @@ import {
   findFolder,
   findVersion,
   isDescendantFolder,
+  removeFolder,
   purgeDoc,
   trashDoc,
   untrashDoc,
@@ -657,6 +659,19 @@ export const handlers = [
       return validationError('읽음 처리할 알림 id 를 1개 이상 200개 이하로 보내 주세요.')
     }
     markNotificationsRead(body.ids.map(String))
+    return new HttpResponse(null, { status: 204 })
+  }),
+
+  // 알림 지우기(백엔드 #276). 읽음 처리와 같은 모양이다: `ids` 1개 이상 200개 이하, 204,
+  // 남의 것이나 없는 id 는 조용히 건너뛴다.
+  http.post('/api/me/notifications/delete', async ({ request }) => {
+    if (!authenticate()) return unauthorized()
+
+    const body = await readJson<{ ids?: unknown }>(request)
+    if (!body || !Array.isArray(body.ids) || body.ids.length === 0 || body.ids.length > 200) {
+      return validationError('지울 알림 id 를 1개 이상 200개 이하로 보내 주세요.')
+    }
+    removeNotifications(body.ids.map(String))
     return new HttpResponse(null, { status: 204 })
   }),
 
@@ -1623,6 +1638,31 @@ data: ${JSON.stringify(data)}
     )
   }),
 
+  // 폴더 지우기. 실서버에는 아직 없는 경로다(04 §3 의 폴더는 만들기와 고치기뿐). 프론트가 정한
+  // 가정: 빈 폴더만 지운다. 하위 폴더나 문서가 있으면 409, 휴지통에 그 폴더의 문서가 남아 있어도
+  // 409(되살릴 자리가 없어진다). 없는 폴더는 404, 성공은 204.
+  http.delete('/api/folders/:folderId', ({ params }) => {
+    if (!authenticate()) return unauthorized()
+
+    const folder = findFolder(String(params.folderId))
+    if (!folder) return notFound()
+
+    const blocked = removeFolder(folder)
+    if (blocked) {
+      return HttpResponse.json(
+        {
+          detail:
+            blocked === 'not_empty'
+              ? '안에 문서나 폴더가 있는 폴더는 지울 수 없습니다.'
+              : '휴지통에 이 폴더의 문서가 남아 있어 지울 수 없습니다. 되살려 옮기거나 영구 삭제한 뒤 지워 주세요.',
+          code: 'FOLDER_NOT_EMPTY',
+        },
+        { status: 409 },
+      )
+    }
+    return new HttpResponse(null, { status: 204 })
+  }),
+
   // ── 문서 ──────────────────────────────────────────────────
   http.post('/api/docs', async ({ request }) => {
     const user = authenticate()
@@ -1875,7 +1915,7 @@ data: ${JSON.stringify(data)}
     })
   }),
 
-  // 댓글 고치기. 실서버에는 아직 없는 경로다. 모양은 프론트가 정한 가정이다: `{body}` 를 받아
+  // 댓글 고치기. 실서버에는 아직 없는 경로다(이슈 #274). 모양은 프론트가 정한 가정이다: `{body}` 를 받아
   // 고친 뒤의 `CommentOut`(+ `edited_at`)을 돌려준다. 쓴 사람이 아니면 403, 없는 댓글과 휴지통
   // 문서는 404, 글 규칙은 등록과 같다.
   http.patch('/api/docs/:docId/comments/:commentId', async ({ request, params }) => {
@@ -1895,7 +1935,8 @@ data: ${JSON.stringify(data)}
     return HttpResponse.json(result)
   }),
 
-  // 실서버에는 아직 없는 경로다(이슈 #253). 모양은 프론트가 정한 가정이다.
+  // 댓글 지우기(백엔드 #273). 쓴 사람만 204, 남의 것은 403, 없는 댓글과 휴지통 문서는 404.
+  // 서버는 그 댓글에서 나간 멘션 알림도 같이 지운다. 목은 댓글이 알림을 만들지 않아 지울 것이 없다.
   http.delete('/api/docs/:docId/comments/:commentId', ({ params }) => {
     const user = authenticate()
     if (!user) return unauthorized()

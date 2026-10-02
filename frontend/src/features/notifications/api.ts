@@ -50,3 +50,22 @@ export function useMarkNotificationsRead() {
     },
   })
 }
+
+/**
+ * 알림을 지운다(백엔드 #276). 읽음 처리와 같은 모양(`ids` 를 본문으로)이다. 하나를 지울 때도 이
+ * 경로다. 서버는 내 알림만 지우고 남의 것이나 없는 id 는 조용히 건너뛴다.
+ *
+ * 바로 반영하지 않고 목록을 다시 받는다. 실패해도 다시 받는다. 일부만 지워진 채 실패했을 수 있다.
+ */
+export function useDeleteNotifications() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (ids: string[]) =>
+      api<void>('/me/notifications/delete', { method: 'POST', body: JSON.stringify({ ids }) }),
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: notificationKeys.list })
+      // 홈의 멘션 카드도 같은 알림을 본다.
+      void qc.invalidateQueries({ queryKey: homeKeys.home })
+    },
+  })
+}

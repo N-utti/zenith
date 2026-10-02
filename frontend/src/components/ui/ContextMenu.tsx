@@ -126,26 +126,41 @@ export function ContextMenuItem({
   icon: Icon,
   label,
   danger,
+  disabledReason,
   onSelect,
 }: {
   icon: LucideIcon
   label: string
   /** 지우기처럼 되돌리기 어려운 동작. 붉게 보인다. */
   danger?: boolean
+  /**
+   * 지금은 할 수 없는 이유. 주면 항목이 흐려지고 그 아래에 이유가 적힌다. 목록에서 빼지 않는
+   * 것은, 빼면 그 기능이 있는지조차 알 수 없어서다.
+   */
+  disabledReason?: string
   onSelect: () => void
 }) {
+  const disabled = disabledReason !== undefined
   return (
     <button
       type="button"
       role="menuitem"
-      onClick={onSelect}
+      // `disabled` 속성은 쓰지 않는다. 초점을 못 받게 되어 화살표로 지나갈 때 건너뛰고,
+      // 낭독기는 이유를 읽지 못한다. 눌러도 아무 일이 없고 메뉴도 닫히지 않게만 한다.
+      aria-disabled={disabled || undefined}
+      onClick={(e) => (disabled ? e.stopPropagation() : onSelect())}
       className={cn(
-        'hover:bg-surface-hover flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 text-left text-sm transition-colors',
-        danger ? 'text-danger' : 'text-fg',
+        'flex w-full items-start gap-2.5 rounded-lg px-2 py-1.5 text-left text-sm transition-colors',
+        disabled
+          ? 'text-subtle cursor-not-allowed'
+          : cn('hover:bg-surface-hover cursor-pointer', danger ? 'text-danger' : 'text-fg'),
       )}
     >
-      <Icon className="size-4 shrink-0 opacity-70" />
-      <span className="flex-1 truncate">{label}</span>
+      <Icon className="mt-0.5 size-4 shrink-0 opacity-70" />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate">{label}</span>
+        {disabledReason && <span className="mt-0.5 block text-xs">{disabledReason}</span>}
+      </span>
     </button>
   )
 }

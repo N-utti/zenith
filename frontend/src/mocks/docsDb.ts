@@ -321,6 +321,23 @@ export function updateFolder(
   return folder
 }
 
+/**
+ * 폴더를 지운다. **비어 있어야 한다.** 못 지우면 이유를, 지웠으면 `null` 을 돌려준다.
+ *
+ * 휴지통에 든 문서도 그 폴더의 것이다. 폴더가 없어지면 되살릴 자리가 없다(문서는 폴더 안에만
+ * 있을 수 있다). 트리에는 안 보이므로 이유를 따로 가른다.
+ * 서버에는 아직 없는 경로다(`handlers.ts` 의 주석).
+ */
+export function removeFolder(folder: Folder): 'not_empty' | 'has_trashed' | null {
+  const inside = DOCS.filter((doc) => doc.folder_id === folder.id)
+  if (FOLDERS.some((f) => f.parent_id === folder.id) || inside.some((doc) => !doc.deleted_at)) {
+    return 'not_empty'
+  }
+  if (inside.length > 0) return 'has_trashed'
+  FOLDERS.splice(FOLDERS.indexOf(folder), 1)
+  return null
+}
+
 /** 폴더를 자기 자손 아래로 옮기면 트리에서 통째로 사라진다. 서버도 막는 자리다. */
 export function isDescendantFolder(folderId: string, maybeAncestorId: string): boolean {
   const seen = new Set<string>()
@@ -497,7 +514,7 @@ export function editComment(
 }
 
 /**
- * 댓글을 지운다. 쓴 사람만 지울 수 있다(이슈 #253 의 가정).
+ * 댓글을 지운다. 쓴 사람만 지울 수 있다(백엔드 #273, 임원도 남의 댓글은 못 지운다).
  * 화면은 버튼을 감출 뿐이고 여기가 판정한다.
  */
 export function removeComment(
