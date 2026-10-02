@@ -29,7 +29,9 @@ import { TrashDocModal } from '@/features/docs/TrashDocModal'
 import {
   UNTITLED_DOC,
   useCreateDoc,
+  FOLDER_DELETE_ENABLED,
   useCreateFolder,
+  useDeleteFolder,
   useMoveNode,
   useRenameDoc,
   useRenameFolder,
@@ -328,6 +330,7 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
   const createFolder = useCreateFolder()
   const renameFolder = useRenameFolder()
   const renameDoc = useRenameDoc()
+  const deleteFolder = useDeleteFolder()
   const moveNode = useMoveNode()
 
   // data 는 react-query 캐시 객체라 그대로가 안정적인 참조다. `?? …`를 memo 밖에 두면
@@ -547,6 +550,18 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
     )
   }
 
+  /** 트리에 보이는 것 기준으로 그 폴더에 든 것이 있는가. */
+  const folderHasChildren = (id: string) =>
+    !!data &&
+    (data.folders.some((f) => f.parent_id === id) || data.docs.some((d) => d.folder_id === id))
+
+  // 약속으로 받는다(`move` 와 같은 이유). 트리가 다시 마운트되면 `mutate` 의 콜백은 불리지 않는다.
+  const removeFolder = (id: string, title: string) =>
+    void deleteFolder.mutateAsync(id).then(
+      () => toast.success(`${title} 폴더를 지웠습니다.`),
+      (err: unknown) => fail(err, '폴더를 지우지 못했습니다.'),
+    )
+
   const menuTarget = menu && find(menu.item)
   const movingTarget = moving && find(moving)
   // 대상이 트리에서 사라졌으면(다른 사람이 지웠거나 옮겼다) 닫는다. 상태를 남겨 두면 그것이 다시
@@ -659,6 +674,22 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
                 label="다른 폴더로 옮기기"
                 onSelect={() => setMoving(menu.item)}
               />
+              {FOLDER_DELETE_ENABLED && (
+                <>
+                  <hr className="border-line my-1" />
+                  {/* 빈 폴더만 지운다. 안에 든 것이 있으면 흐리게 두고 이유를 적는다. 휴지통에 든
+                      문서는 트리에 없어 여기서는 모른다. 그 경우는 서버가 거절하고 이유를 준다. */}
+                  <ContextMenuItem
+                    icon={Trash2}
+                    label="폴더 지우기"
+                    danger
+                    disabledReason={
+                      folderHasChildren(menu.item.id) ? '안에 문서나 폴더가 있습니다' : undefined
+                    }
+                    onSelect={() => removeFolder(menu.item.id, menuTarget.title)}
+                  />
+                </>
+              )}
             </>
           ) : (
             <>
