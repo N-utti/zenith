@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'react-router'
 import { AtSign, Hash, Lock, MessagesSquare, UserPlus, WifiOff } from 'lucide-react'
-import { CHANNEL_MENU_ENABLED, useChannels, useMessages } from '@/features/chat/api'
+import { useChannels, useMessages } from '@/features/chat/api'
 import { ChannelList } from '@/features/chat/ChannelList'
 import { ChannelMembersModal } from '@/features/chat/ChannelMembersModal'
 import { ChannelMenu } from '@/features/chat/ChannelMenu'
@@ -152,7 +152,7 @@ export function ChatPage() {
                   <span className="truncate">연결 끊김. 메시지를 주고받을 수 없습니다</span>
                 </span>
               )}
-              {CHANNEL_MENU_ENABLED && <ChannelMenu key={channel.id} channel={channel} />}
+              <ChannelMenu key={channel.id} channel={channel} />
             </div>
           </header>
 

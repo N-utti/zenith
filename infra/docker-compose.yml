@@ -24,6 +24,8 @@ services:
     ports:
       - "${ZENITH_HTTP_PORT:-80}:80"
       - "${ZENITH_HTTPS_PORT:-443}:443"
+      # 사내망 평문 HTTP(caddy/Caddyfile 의 ZENITH_LAN_SITE). 안 쓰면 localhost 만 받아 빈 응답
+      - "${ZENITH_LAN_PORT:-5180}:5180"
     volumes:
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - ./certs:/certs:ro  # 비어 있어도 된다 — ZENITH_TLS 가 파일을 가리킬 때만 읽는다(미커밋, .gitignore)

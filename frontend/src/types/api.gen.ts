@@ -539,6 +539,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/channels/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** 채널 이름 바꾸기 {name} — 멤버면 누구나. DM 은 422, 같은 이름의 공개 채널은 409 */
+        patch: operations["rename_channel_api_channels__id__patch"];
+        trace?: never;
+    };
+    "/api/channels/{id}/hide": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** DM 을 내 목록에서 숨긴다 — 새 메시지가 오거나 같은 상대와 DM 을 다시 열면 돌아온다. 채널은 422 */
+        post: operations["hide_channel_api_channels__id__hide_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/channels/{id}/members": {
         parameters: {
             query?: never;
@@ -1507,6 +1541,11 @@ export interface components {
             /** Unread */
             unread: number;
             last_message: components["schemas"]["MessageOut"] | null;
+        };
+        /** ChannelPatchIn */
+        ChannelPatchIn: {
+            /** Name */
+            name: string;
         };
         /** ChatIn */
         ChatIn: {
@@ -3418,6 +3457,77 @@ export interface operations {
             };
             /** @description CONFLICT — 같은 이름의 공개 채널(비공개는 중복 허용) */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rename_channel_api_channels__id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChannelPatchIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChannelOut"];
+                };
+            };
+            /** @description CONFLICT — 같은 이름의 공개 채널(비공개는 중복 허용) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    hide_channel_api_channels__id__hide_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
                 headers: {
                     [name: string]: unknown;
                 };
