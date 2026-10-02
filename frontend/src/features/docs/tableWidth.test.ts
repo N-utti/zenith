@@ -9,11 +9,20 @@ import { docContentExtensions } from './editorExtensions'
 const TABLE =
   '<table><tr><th><p>가</p></th><th><p>나</p></th></tr><tr><td><p>다</p></td><td><p>라</p></td></tr></table>'
 
+/**
+ * 테스트가 띄운 편집기들. 테스트가 끝나면 닫는다. 안 닫으면 편집기가 걸어 둔 타이머가 테스트 환경
+ * (jsdom)이 내려간 뒤에 돌아 `document is not defined` 가 나고, 테스트는 다 통과했는데도 실행 전체가
+ * 실패로 끝난다(타이밍에 따라 가끔만).
+ */
+const editors: Editor[] = []
+
 function collabEditor(doc: Y.Doc) {
-  return new Editor({
+  const editor = new Editor({
     element: document.createElement('div'),
     extensions: [...docContentExtensions(), Collaboration.configure({ document: doc })],
   })
+  editors.push(editor)
+  return editor
 }
 
 /** 같은 문서를 연 두 사람. 한쪽의 편집이 곧바로 다른 쪽에 닿는다. */
@@ -81,7 +90,10 @@ beforeEach(() => {
   errors = []
   window.addEventListener('error', onError)
 })
-afterEach(() => window.removeEventListener('error', onError))
+afterEach(() => {
+  window.removeEventListener('error', onError)
+  for (const editor of editors.splice(0)) editor.destroy()
+})
 
 it('세로선을 끌어 바꾼 열 너비는 문서에 남아 같이 보는 사람의 표에도 그려진다', () => {
   const { a, b } = pair()
