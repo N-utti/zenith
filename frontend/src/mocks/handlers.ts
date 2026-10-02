@@ -375,7 +375,7 @@ export const handlers = [
   // 비공개 채널의 멤버 더하기·빼기.
   http.post('/api/channels/:channelId/members', () => passthrough()),
   http.delete('/api/channels/:channelId/members/:userId', () => passthrough()),
-  // 채널 이름 바꾸기와 DM 숨기기. 실서버에는 아직 없는 경로다(릴레이의 주석).
+  // 채널 이름 바꾸기와 DM 숨기기(백엔드 #280).
   http.patch('/api/channels/:channelId', () => passthrough()),
   http.post('/api/channels/:channelId/hide', () => passthrough()),
 

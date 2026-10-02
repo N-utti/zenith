@@ -708,7 +708,7 @@ export async function handleChatRequest(req, res, url) {
   }
 
   /**
-   * 채널 이름 바꾸기와 DM 숨기기. 둘 다 실서버에 아직 없는 경로다(04 §4 에 없음, 프론트가 정한 가정).
+   * 채널 이름 바꾸기와 DM 숨기기. 실서버(#280)가 아래 규칙대로 구현했다(04 §4 에는 없다).
    *
    *   PATCH /channels/{id} {name}   → 200 `ChannelOut`. 멤버면 누구나(채널에 주인이 없다).
    *                                   DM 은 이름이 없어 422. 이름 규칙은 만들 때와 같다.
