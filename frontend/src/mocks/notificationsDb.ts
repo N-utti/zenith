@@ -142,6 +142,20 @@ export function markRead(ids: string[]): number {
   return changed
 }
 
+/**
+ * 내 알림을 지운다. 없는 id 는 건너뛴다(같은 요청을 두 번 보내도 결과가 같다). 지운 개수를 돌려준다.
+ * 읽음 처리와 같은 모양이다. 서버에는 아직 없는 경로다(`handlers.ts` 의 주석).
+ */
+export function removeNotifications(ids: string[]): number {
+  let removed = 0
+  for (let i = NOTIFICATIONS.length - 1; i >= 0; i -= 1) {
+    if (!ids.includes(NOTIFICATIONS[i].id)) continue
+    NOTIFICATIONS.splice(i, 1)
+    removed += 1
+  }
+  return removed
+}
+
 /** 멘션으로 보는 종류. 백엔드 `routers/me.py` 의 `MENTION_KINDS` 와 같다. */
 const MENTION_KINDS = ['mention', 'comment', 'reply']
 
