@@ -3,6 +3,7 @@ import { api, ApiError } from '@/lib/api'
 import { queryClient } from '@/lib/queryClient'
 import { homeKeys } from '@/features/home/keys'
 import { meQueryKey } from '@/features/auth/queries'
+import type { DragItem } from './tree'
 import type {
   DocComment,
   DocDetail,
@@ -48,6 +49,26 @@ export function useRenameFolder() {
     mutationFn: ({ id, title }: { id: string; title: string }) =>
       api<Folder>(`/folders/${id}`, { method: 'PATCH', body: JSON.stringify({ title }) }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: docKeys.tree }),
+  })
+}
+
+/**
+ * 문서·폴더를 다른 폴더로 옮긴다. `to` 가 null 이면 최상위인데 폴더만 된다(문서는 422).
+ *
+ * 서버는 문서 이동도 수정으로 친다. 수정 시각이 지금이 되어 "이어서 작업" 맨 위로 온다.
+ */
+export function useMoveNode() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ item, to }: { item: DragItem; to: string | null }) =>
+      api<DocSummary | Folder>(item.kind === 'doc' ? `/docs/${item.id}` : `/folders/${item.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(item.kind === 'doc' ? { folder_id: to } : { parent_id: to }),
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: docKeys.tree })
+      void qc.invalidateQueries({ queryKey: homeKeys.home })
+    },
   })
 }
 
