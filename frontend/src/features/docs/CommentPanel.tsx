@@ -10,15 +10,9 @@ import { useCurrentUser } from '@/features/auth/AuthContext'
 import { CommentRow as CommentRowBase } from '@/features/comments/CommentRow'
 import { MentionTextarea } from '@/features/people/MentionTextarea'
 import { useMentionNames } from '@/features/people/colleagues'
-import { MSW_ENABLED } from '@/mocks/accounts'
 import { useAddComment, useComments, useDeleteComment, useEditComment } from './api'
 import { anchoredBlocks, flashElement } from './blockId'
 import { COMMENT_BODY_MAX, type DocComment } from './types'
-
-// ponytail: 서버에 댓글을 고치는 경로가 아직 없다(이슈 #274). 목이 흉내 낼 때만 버튼을 낸다.
-// 운영 빌드와 실서버에 붙인 개발 서버에서는 안 보인다. 서버에 경로가 생기면 이 스위치를 걷는다.
-// 지우기는 서버가 받는다(백엔드 #273).
-const COMMENT_EDIT_ENABLED = MSW_ENABLED
 
 /**
  * 문서 댓글 한 줄. 옆 패널과 블록 옆 창(BlockComments)이 같이 쓴다. 그리는 일은 공용 줄
@@ -43,7 +37,7 @@ export function CommentRow({
   const user = useCurrentUser()
   const remove = useDeleteComment(docId)
   const edit = useEditComment(docId)
-  // 쓴 사람만 고치고 지운다(임원도 남의 댓글은 못 지운다, 백엔드 #273).
+  // 쓴 사람만 고치고 지운다(임원도 남의 댓글은 못 건드린다, 백엔드 #273·#296).
   const mine = comment.author.id === user.id
 
   return (
@@ -51,7 +45,7 @@ export function CommentRow({
       comment={comment}
       names={names}
       id={id}
-      canEdit={COMMENT_EDIT_ENABLED && mine}
+      canEdit={mine}
       canDelete={mine}
       maxLength={COMMENT_BODY_MAX}
       // 두 훅 모두 목록을 다시 받은 뒤에 약속이 풀린다(`api.ts` 의 `onSettled`).

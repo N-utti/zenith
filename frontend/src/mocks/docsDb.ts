@@ -207,6 +207,7 @@ const comments: Record<string, DocComment[]> = {
       author: { id: 'u-2', name: '정성운' },
       body: '예산 표에 근거 자료 링크 걸어주세요 @김철성',
       created_at: minutesAgo(34),
+      edited_at: null,
     },
   ],
   'd-3': [
@@ -216,6 +217,7 @@ const comments: Record<string, DocComment[]> = {
       author: { id: 'u-1', name: '진수연' },
       body: '회의록에 결정사항 정리해 뒀습니다 @정성운',
       created_at: minutesAgo(1400),
+      edited_at: null,
     },
   ],
   'd-2': [
@@ -225,6 +227,7 @@ const comments: Record<string, DocComment[]> = {
       author: { id: 'u-2', name: '정성운' },
       body: '퇴근 미기록을 결근으로 보지 않는다는 부분, 노무사 검토 때 꼭 짚어야 합니다.',
       created_at: minutesAgo(240),
+      edited_at: null,
     },
     {
       id: 'cm-2',
@@ -232,6 +235,7 @@ const comments: Record<string, DocComment[]> = {
       author: { id: 'u-1', name: '진수연' },
       body: '동의합니다. 홈 위젯에도 "미확정"으로 표기하도록 반영해 뒀어요.',
       created_at: minutesAgo(180),
+      edited_at: null,
     },
   ],
 }
@@ -487,6 +491,7 @@ export function addComment(
     author: { id: user.id, name: user.name },
     body,
     created_at: new Date().toISOString(),
+    edited_at: null,
   }
   comments[docId] = [...(comments[docId] ?? []), comment]
   return comment
@@ -494,8 +499,7 @@ export function addComment(
 
 /**
  * 댓글의 글을 고친다. 쓴 사람만 고칠 수 있다. 어느 블록의 댓글인지는 바뀌지 않는다.
- * 글이 그대로면 고친 것으로 치지 않는다(「수정됨」을 붙이지 않는다).
- * 서버에는 아직 없는 경로다(`handlers.ts` 의 주석).
+ * 글이 그대로면 고친 것으로 치지 않는다(「수정됨」을 붙이지 않는다). 백엔드 #296 과 같다.
  */
 export function editComment(
   docId: string,

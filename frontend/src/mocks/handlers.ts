@@ -1826,6 +1826,13 @@ data: ${JSON.stringify(data)}
           { status: 403 },
         )
       }
+      // 휴지통에 든 문서만 지운다(백엔드 #294). 그사이 누가 되돌린 문서는 그대로 둔다.
+      if (!doc.deleted_at) {
+        return HttpResponse.json(
+          { detail: '휴지통에 있는 문서만 영구 삭제할 수 있습니다.', code: 'NOT_TRASHED' },
+          { status: 409 },
+        )
+      }
       purgeDoc(doc.id)
       return new HttpResponse(null, { status: 204 })
     }
@@ -2016,9 +2023,8 @@ data: ${JSON.stringify(data)}
     })
   }),
 
-  // 댓글 고치기. 실서버에는 아직 없는 경로다(이슈 #274). 모양은 프론트가 정한 가정이다: `{body}` 를 받아
-  // 고친 뒤의 `CommentOut`(+ `edited_at`)을 돌려준다. 쓴 사람이 아니면 403, 없는 댓글과 휴지통
-  // 문서는 404, 글 규칙은 등록과 같다.
+  // 댓글 고치기(백엔드 #296). `{body}` 를 받아 고친 뒤의 `CommentOut` 을 돌려준다. 쓴 사람이 아니면
+  // 403, 없는 댓글과 휴지통 문서는 404, 글 규칙은 등록과 같다.
   http.patch('/api/docs/:docId/comments/:commentId', async ({ request, params }) => {
     const user = authenticate()
     if (!user) return unauthorized()

@@ -29,14 +29,9 @@ export type UploadedFile = Schema<'FileOut'>
  *
  * 아바타 색은 서버가 주지 않는다. `lib/avatar.ts` 가 사람 id 로 만든다(다른 화면과 같은 규약).
  * `block_id` 는 본문 어느 블록에 달렸는지다. 문서 전체에 단 댓글은 `null` 이다.
+ * `edited_at` 은 고친 시각이고 고친 적이 없으면 `null` 이다(백엔드 #296).
  */
-export type DocComment = Schema<'CommentOut'> & {
-  /**
-   * 고친 시각. 고친 적이 없으면 `null`. 서버 `CommentOut` 에는 아직 없는 칸이라(댓글 고치기는
-   * 프론트가 먼저 만들었다, `CommentPanel.tsx` 의 `COMMENT_EDIT_ENABLED`) 실서버에서는 오지 않는다.
-   */
-  edited_at?: string | null
-}
+export type DocComment = Schema<'CommentOut'>
 
 /** 백엔드 `CommentCreateIn.body` 의 max_length. 최소 한 글자는 있어야 한다. */
 export const COMMENT_BODY_MAX = 10_000
