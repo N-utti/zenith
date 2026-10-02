@@ -127,12 +127,13 @@ export function displayWidth(value: XlsxCell): number {
   return w
 }
 
-function escapeXml(text: string): string {
+/** XML 글자·속성값으로 안전하게. 문서 내보내기(docx)도 같이 쓴다. */
+export function escapeXml(text: string): string {
   return (
     text
-      // XML 1.0 이 금지하는 제어문자(탭·개행·복귀 제외). 이스케이프도 안 되니 지운다.
+      // XML 1.0 이 금지하는 제어문자(탭·개행·복귀 제외)와 비문자 둘(U+FFFE·U+FFFF). 이스케이프도 안 되니 지운다.
       // eslint-disable-next-line no-control-regex -- 제어문자 제거가 목적이다
-      .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '')
+      .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\ufffe\uffff]/g, '')
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
