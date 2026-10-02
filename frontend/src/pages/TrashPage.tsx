@@ -10,7 +10,13 @@ import { SkeletonRows } from '@/components/ui/Skeleton'
 import { Spinner } from '@/components/ui/Spinner'
 import { Table, TBody, TD, TH, THead, TR, TableEmpty } from '@/components/ui/Table'
 import { useToast } from '@/components/ui/ToastContext'
-import { UNTITLED_DOC, usePurgeDoc, useTrash, useUntrashDoc } from '@/features/docs/api'
+import {
+  UNTITLED_DOC,
+  useEmptyTrash,
+  usePurgeDoc,
+  useTrash,
+  useUntrashDoc,
+} from '@/features/docs/api'
 import { purgeAt, TRASH_KEEP_DAYS } from '@/features/docs/types'
 import { useCurrentUser } from '@/features/auth/AuthContext'
 import { ApiError } from '@/lib/api'
@@ -30,12 +36,15 @@ export function TrashPage() {
   const { data, isPending, isError, refetch } = useTrash()
   const untrash = useUntrashDoc()
   const purge = usePurgeDoc()
+  const empty = useEmptyTrash()
   const toast = useToast()
   // 영구 삭제는 임원만. 화면은 버튼을 감출 뿐이고 실제 차단은 서버의 403 이다.
   const isExec = ROLE_RANK[me.role] >= ROLE_RANK.exec
   // 한 줄이 도는 동안 모든 줄을 잠근다. 15명이 쓰는 휴지통이라 여러 줄을 동시에 누를 일이
   // 없고, 줄마다 따로 잠그면 어느 요청이 어느 줄 것인지 세는 장치가 하나 더 필요하다.
-  const busy = untrash.isPending || purge.isPending
+  const busy = untrash.isPending || purge.isPending || empty.isPending
+  /** 휴지통 비우기 확인 창. 열 때 보이던 문서만 지운다(그사이 남이 지운 문서가 섞이지 않게). */
+  const [confirmEmpty, setConfirmEmpty] = useState<string[] | null>(null)
   // 영구 삭제 확인. 되돌릴 수 없어서 `DocWorkspace` 의 휴지통 이동 확인과 같은 Modal 을 쓴다.
   const [confirmPurge, setConfirmPurge] = useState<{ id: string; title: string } | null>(null)
 
@@ -48,9 +57,23 @@ export function TrashPage() {
         title="휴지통"
         description={`지운 문서는 ${TRASH_KEEP_DAYS}일 동안 여기 있다가 서버가 영구 삭제합니다.`}
         actions={
-          <Link to="/docs" className="text-subtle hover:text-fg text-sm">
-            문서로
-          </Link>
+          <>
+            {/* 영구 삭제와 같은 권한이다. 임원에게만 보이고, 비어 있으면 누를 것이 없다. */}
+            {isExec && data && data.items.length > 0 && (
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={busy}
+                onClick={() => setConfirmEmpty(data.items.map((doc) => doc.id))}
+              >
+                {empty.isPending ? <Spinner /> : <Trash2 className="size-3.5" />}
+                휴지통 비우기
+              </Button>
+            )}
+            <Link to="/docs" className="text-subtle hover:text-fg text-sm">
+              문서로
+            </Link>
+          </>
         }
       />
 
@@ -202,6 +225,60 @@ export function TrashPage() {
         <p className="text-muted text-sm leading-relaxed">
           <span className="text-fg font-medium">{confirmPurge?.title}</span> 문서가 영구 삭제됩니다.
           되돌릴 수 없습니다.
+        </p>
+      </Modal>
+
+      <Modal
+        open={confirmEmpty !== null}
+        onClose={() => {
+          if (!empty.isPending) setConfirmEmpty(null)
+        }}
+        title="휴지통을 비울까요?"
+        description="되돌릴 수 없습니다. 버전·댓글까지 같이 사라집니다."
+        size="sm"
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setConfirmEmpty(null)}
+              disabled={empty.isPending}
+            >
+              취소
+            </Button>
+            <Button
+              variant="danger"
+              size="sm"
+              disabled={empty.isPending}
+              onClick={() => {
+                if (!confirmEmpty) return
+                empty.mutate(confirmEmpty, {
+                  onSuccess: ({ removed, failed, skipped }) => {
+                    setConfirmEmpty(null)
+                    // 그사이 누가 되돌린 문서는 지우지 않았다. 숫자가 창에서 본 것과 다른 이유를 적는다.
+                    const kept =
+                      skipped > 0 ? ` 그사이 휴지통에서 빠진 ${skipped}개는 두었습니다.` : ''
+                    if (failed === 0) toast.success(`문서 ${removed}개를 영구 삭제했습니다.${kept}`)
+                    else
+                      toast.error(
+                        `문서 ${removed}개를 영구 삭제했고 ${failed}개는 지우지 못했습니다.${kept}`,
+                      )
+                  },
+                  onError: (err) => {
+                    setConfirmEmpty(null)
+                    fail('휴지통을 비우지 못했습니다.')(err)
+                  },
+                })
+              }}
+            >
+              {empty.isPending ? <Spinner className="border-t-white" /> : '전부 영구 삭제'}
+            </Button>
+          </>
+        }
+      >
+        <p className="text-muted text-sm leading-relaxed">
+          휴지통의 문서 <span className="text-fg font-medium">{confirmEmpty?.length}개</span>가 전부
+          영구 삭제됩니다. 되돌릴 수 없습니다.
         </p>
       </Modal>
     </>
