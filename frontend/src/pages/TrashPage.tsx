@@ -122,7 +122,7 @@ export function TrashPage() {
                       disabled={busy}
                       onClick={() =>
                         untrash.mutate(doc.id, {
-                          onSuccess: () => toast.success(`되돌렸습니다: ${title}`),
+                          onSuccess: () => toast.success(`${title} 문서를 되돌렸습니다.`),
                           onError: fail('되돌리지 못했습니다.'),
                         })
                       }

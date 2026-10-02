@@ -378,10 +378,12 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
     if (!moved || moveNode.isPending) return
     const from = 'folder_id' in moved ? moved.folder_id : moved.parent_id
     const dest = data?.folders.find((f) => f.id === to)?.title
+    // 제목 뒤에 「문서」「폴더」를 붙여 쓴다. 제목에 바로 조사를 붙이면 받침에 따라 을·를이 갈린다.
+    const what = `${moved.title} ${item.kind === 'doc' ? '문서' : '폴더'}`
 
     void moveNode.mutateAsync({ item, to }).then(
       () =>
-        toast.success(`${dest ? `${dest} 폴더로` : '최상위로'} 옮겼습니다: ${moved.title}`, {
+        toast.success(`${what}를 ${dest ? `${dest} 폴더로` : '최상위로'} 옮겼습니다.`, {
           durationMs: 10_000,
           action: {
             label: '되돌리기',
