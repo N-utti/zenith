@@ -10,7 +10,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Response
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
@@ -414,6 +414,22 @@ async def read_notifications(
             Notification.read_at.is_(None),
         )
         .values(read_at=datetime.now(UTC))
+    )
+    await db.commit()
+    return Response(status_code=204)
+
+
+@router.post(
+    "/me/notifications/delete",
+    status_code=204,
+    summary="알림 지우기 {ids[]} — 내 알림만, 남의 것·없는 id 는 건너뛴다 (04 밖, 이슈 #269)",
+)
+async def delete_notifications(
+    body: ReadIn, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)
+) -> Response:
+    # 읽음 처리와 같은 태도 — 두 번 보내도 결과가 같다. 행을 지운다(내 것이라 감사 없음).
+    await db.execute(
+        delete(Notification).where(Notification.user_id == user.id, Notification.id.in_(body.ids))
     )
     await db.commit()
     return Response(status_code=204)

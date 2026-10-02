@@ -460,6 +460,46 @@ async def test_comments_and_mentions(client: AsyncClient, users: Users, app_db) 
     ).status_code == 404
 
 
+async def test_delete_comment_author_only(client: AsyncClient, users: Users, app_db) -> None:
+    """이슈 #253: 쓴 사람만 지운다(남의 것 403 + acl.denied). 멘션 알림도 같이 사라지고, 휴지통 문서는 404."""
+    root = await _root(app_db)
+    await login(client, "sujin@zenith.co.kr")
+    doc = await _doc(client, root.id)
+    url = f"/api/docs/{doc['id']}/comments"
+    mine = (await client.post(url, json={"body": "@박동현 내 댓글"}, headers=csrf(client))).json()
+    keep = (await client.post(url, json={"body": "@박동현 남는 댓글"}, headers=csrf(client))).json()
+    assert len(list((await app_db.execute(select(Notification))).scalars())) == 2
+
+    await login(client, "donghyun@zenith.co.kr")
+    r = await client.delete(f"{url}/{mine['id']}", headers=csrf(client))
+    assert (r.status_code, r.json()["code"]) == (403, "FORBIDDEN")
+    denied = (
+        await app_db.execute(select(AuditEvent).where(AuditEvent.kind == "acl.denied"))
+    ).scalar_one()
+    assert (denied.actor_id, denied.detail["comment_id"]) == (users.lead.id, mine["id"])
+
+    assert len((await client.get(url)).json()["items"]) == 2  # 거부됐으니 그대로
+
+    await login(client, "sujin@zenith.co.kr")
+    r = await client.delete(f"{url}/{mine['id']}", headers=csrf(client))
+    assert (r.status_code, r.content) == (204, b"")
+    assert [c["id"] for c in (await client.get(url)).json()["items"]] == [keep["id"]]
+    left = list((await app_db.execute(select(Notification))).scalars())  # 그 댓글의 알림만 사라진다
+    assert [n.payload["comment_id"] for n in left] == [keep["id"]]
+    done = (
+        await app_db.execute(select(AuditEvent).where(AuditEvent.kind == "docs.comment_deleted"))
+    ).scalar_one()
+    assert (done.actor_id, done.detail["preview"]) == (users.member.id, "@박동현 내 댓글")
+    # 두 번째는 404 — 처음 보는 id·다른 문서 id 아래의 댓글 id 도 404
+    assert (await client.delete(f"{url}/{mine['id']}", headers=csrf(client))).status_code == 404
+    assert (await client.delete(f"{url}/{uuid.uuid4()}", headers=csrf(client))).status_code == 404
+    other = await _doc(client, root.id, "다른 문서")
+    r = await client.delete(f"/api/docs/{other['id']}/comments/{keep['id']}", headers=csrf(client))
+    assert r.status_code == 404
+    await client.delete(f"/api/docs/{doc['id']}", headers=csrf(client))  # 휴지통
+    assert (await client.delete(f"{url}/{keep['id']}", headers=csrf(client))).status_code == 404
+
+
 async def test_purge_trash_after_30_days(client: AsyncClient, users: Users, app_db) -> None:
     """04 §3 DELETE — 휴지통 30일. 기한 지난 문서만 캐스케이드로 지우고 감사 `docs.purged` 를 남긴다."""
     root = await _root(app_db)
