@@ -168,7 +168,11 @@ export function useHideDm() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (channelId: string) => api<void>(`/channels/${channelId}/hide`, { method: 'POST' }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: chatKeys.channels }),
+    // 다시 받기를 기다리지 않는다(약속을 돌려주지 않는다). 기다리면 부른 쪽이 화면을 옮기기 전에
+    // 방이 목록에서 먼저 빠져, 보던 자리에 「채널을 선택하세요」가 스친다.
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: chatKeys.channels })
+    },
   })
 }
 

@@ -140,15 +140,16 @@ export function ChatPage() {
               </span>
             )}
 
-            {/* 오른쪽 끝 묶음. 끊김 알림과 더보기가 같이 있어도 한 덩이로 붙는다. */}
-            <div className="ml-auto flex shrink-0 items-center gap-2">
+            {/* 오른쪽 끝 묶음. 끊김 알림과 더보기가 같이 있어도 한 덩이로 붙는다. 좁은 화면에서는
+                알림 글이 줄어든다(말줄임). 묶음째 버티면 더보기가 화면 밖으로 밀린다. */}
+            <div className="ml-auto flex min-w-0 items-center gap-2">
               {!connected && (
                 <span
-                  title="npm run server 로 개발 서버를 켜면 실시간으로 주고받습니다."
-                  className="text-warning flex items-center gap-1.5 text-xs"
+                  title="연결 끊김. 메시지를 주고받을 수 없습니다. 개발 중이면 npm run server 로 개발 서버를 켭니다."
+                  className="text-warning flex min-w-0 items-center gap-1.5 text-xs"
                 >
-                  <WifiOff className="size-3.5" />
-                  연결 끊김. 메시지를 주고받을 수 없습니다
+                  <WifiOff className="size-3.5 shrink-0" />
+                  <span className="truncate">연결 끊김. 메시지를 주고받을 수 없습니다</span>
                 </span>
               )}
               {CHANNEL_MENU_ENABLED && <ChannelMenu key={channel.id} channel={channel} />}

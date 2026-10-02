@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { EyeOff, MoreHorizontal, Pencil } from 'lucide-react'
 import { ContextMenu, ContextMenuItem } from '@/components/ui/ContextMenu'
@@ -20,6 +20,8 @@ export function ChannelMenu({ channel }: { channel: ChatChannel }) {
   const rename = useRenameChannel(channel.id)
   const hide = useHideDm()
   const [at, setAt] = useState<{ x: number; y: number } | null>(null)
+  /** 누르기 시작한 순간 메뉴가 열려 있었는가. 뗄 때는 이미 닫혀 있어 그때의 상태로는 알 수 없다. */
+  const wasOpen = useRef(false)
   const [renaming, setRenaming] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -45,12 +47,13 @@ export function ChannelMenu({ channel }: { channel: ChatChannel }) {
         aria-haspopup="menu"
         aria-expanded={at !== null}
         title="더보기"
-        // 열린 채로 다시 누르면 닫는다. 메뉴는 바깥을 누르는 순간 스스로 닫히는데, 그게 여기까지
-        // 오면 닫혔다가 이 클릭으로 다시 열린다.
-        onPointerDown={(e) => at && e.stopPropagation()}
+        // 열린 채로 다시 누르면 닫는다. 메뉴는 누르는 순간 스스로 닫힌다(바깥 누름, 초점이 이
+        // 버튼으로 옮겨 감). 그래서 뗄 때 보면 늘 닫혀 있고, 그대로 두면 이 클릭이 다시 연다.
+        onPointerDown={() => (wasOpen.current = at !== null)}
         onClick={(e) => {
+          if (wasOpen.current) return setAt(null)
           const rect = e.currentTarget.getBoundingClientRect()
-          setAt(at ? null : { x: rect.left, y: rect.bottom + 4 })
+          setAt({ x: rect.left, y: rect.bottom + 4 })
         }}
         className="text-subtle hover:bg-surface-hover hover:text-fg grid size-8 shrink-0 cursor-pointer place-items-center rounded-lg transition-colors"
       >
