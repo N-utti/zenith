@@ -493,7 +493,7 @@ export function addComment(
 }
 
 /**
- * 댓글을 지운다. 쓴 사람만 지울 수 있다(이슈 #253 의 가정).
+ * 댓글을 지운다. 쓴 사람만 지울 수 있다(백엔드 #273, 임원도 남의 댓글은 못 지운다).
  * 화면은 버튼을 감출 뿐이고 여기가 판정한다.
  */
 export function removeComment(

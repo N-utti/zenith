@@ -13,14 +13,9 @@ import { useCurrentUser } from '@/features/auth/AuthContext'
 import { MentionTextarea } from '@/features/people/MentionTextarea'
 import { useMentionNames } from '@/features/people/colleagues'
 import { MentionText } from '@/features/people/MentionText'
-import { MSW_ENABLED } from '@/mocks/accounts'
 import { useAddComment, useComments, useDeleteComment } from './api'
 import { anchoredBlocks, flashElement } from './blockId'
 import { COMMENT_BODY_MAX, type DocComment } from './types'
-
-// ponytail: 서버에 댓글을 지우는 경로가 아직 없다(이슈 #253). 목이 흉내 낼 때만 버튼을 낸다.
-// 운영 빌드와 실서버에 붙인 개발 서버에서는 안 보인다. 서버에 경로가 생기면 이 스위치를 걷는다.
-const COMMENT_DELETE_ENABLED = MSW_ENABLED
 
 /**
  * 댓글 한 줄. 옆 패널과 블록 옆 창(BlockComments)이 같이 쓴다. `children` 은 이름과 본문 사이(인용).
@@ -44,8 +39,9 @@ export function CommentRow({
   const user = useCurrentUser()
   const remove = useDeleteComment(docId)
   const toast = useToast()
-  // 화면 편의일 뿐이다. 남의 댓글을 지우는 요청의 실제 차단은 서버의 403 이다.
-  const canDelete = COMMENT_DELETE_ENABLED && comment.author.id === user.id
+  // 쓴 사람만 지운다(임원도 남의 댓글은 못 지운다, 백엔드 #273). 화면 편의일 뿐이고 실제 차단은
+  // 서버의 403 이다.
+  const canDelete = comment.author.id === user.id
 
   return (
     <div id={id} className="group/comment -mx-2 flex gap-2.5 rounded-lg px-2 py-1">

@@ -12,7 +12,6 @@ import { cn } from '@/lib/cn'
 import { hueOf } from '@/lib/avatar'
 import { formatRelative } from '@/lib/datetime'
 import {
-  NOTIFICATION_DELETE_ENABLED,
   useDeleteNotifications,
   useMarkNotificationsRead,
   useNotifications,
@@ -71,10 +70,7 @@ function NotificationRow({ row, onOpen }: { row: Row; onOpen: () => void }) {
   )
 
   // 오른쪽 여백은 줄 끝에 뜨는 지우기 버튼의 자리다. 글이 그 밑으로 들어가지 않게 한다.
-  const shared = cn(
-    'flex gap-3 py-3.5 pl-4 text-left',
-    NOTIFICATION_DELETE_ENABLED ? 'pr-11' : 'pr-4',
-  )
+  const shared = 'flex gap-3 py-3.5 pr-11 pl-4 text-left'
 
   // 권한 밖이라 제목이 가려진 알림은 열 수 없다. 누를 수 있게 두면 403 으로 보내는 셈이다.
   if (!view.to) return <div className={shared}>{body}</div>
@@ -142,7 +138,7 @@ export function NotificationsPage() {
         description="멘션·댓글·새 글을 한곳에서 봅니다. 누르면 그 자리로 갑니다."
         actions={
           <>
-            {NOTIFICATION_DELETE_ENABLED && readIds.length > 0 && (
+            {readIds.length > 0 && (
               <Button
                 variant="secondary"
                 size="sm"
@@ -216,18 +212,16 @@ export function NotificationsPage() {
                           버리고, 앞에 두면 Tab 이 알림보다 지우기에 먼저 닿는다.
                           줄에 올리거나 Tab 으로 닿을 때만 보이고 손가락 기기에서는 늘 보인다.
                           숨어 있을 때는 눌리지도 않는다(할 일 카드·댓글 줄과 같은 규약). */}
-                      {NOTIFICATION_DELETE_ENABLED && (
-                        <button
-                          type="button"
-                          aria-label={`${row.view.summary} 알림 지우기`}
-                          title="알림 지우기"
-                          disabled={remove.isPending}
-                          onClick={() => removeIds([row.notification.id])}
-                          className="text-subtle hover:text-danger pointer-events-none absolute top-3 right-3 grid size-6 cursor-pointer place-items-center rounded opacity-0 transition-opacity group-focus-within/notice:pointer-events-auto group-focus-within/notice:opacity-100 group-hover/notice:pointer-events-auto group-hover/notice:opacity-100 pointer-coarse:pointer-events-auto pointer-coarse:opacity-100"
-                        >
-                          <X className="size-3.5" />
-                        </button>
-                      )}
+                      <button
+                        type="button"
+                        aria-label={`${row.view.summary} 알림 지우기`}
+                        title="알림 지우기"
+                        disabled={remove.isPending}
+                        onClick={() => removeIds([row.notification.id])}
+                        className="text-subtle hover:text-danger pointer-events-none absolute top-3 right-3 grid size-6 cursor-pointer place-items-center rounded opacity-0 transition-opacity group-focus-within/notice:pointer-events-auto group-focus-within/notice:opacity-100 group-hover/notice:pointer-events-auto group-hover/notice:opacity-100 pointer-coarse:pointer-events-auto pointer-coarse:opacity-100"
+                      >
+                        <X className="size-3.5" />
+                      </button>
                     </li>
                   ))}
                 </ul>
