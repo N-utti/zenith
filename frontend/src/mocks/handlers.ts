@@ -2,7 +2,7 @@ import { bypass, delay, http, HttpResponse, passthrough } from 'msw'
 import { PASSWORD_MIN, type User } from '@/types'
 import { BODY_MAX, TITLE_MAX } from '@/features/board/types'
 import { ARCHIVE_LIMIT, type ArchiveFile } from '@/features/archive/types'
-import type { ChatChannel, ChatMessage, Person } from '@/features/chat/types'
+import type { ChatChannel, ChatMessage } from '@/features/chat/types'
 import { chatFiles, docFiles, newestFirst } from './archiveDb'
 import { DEMO_PASSWORD } from './accounts'
 import { createAccount, emailTaken, findAccount, listAccounts, patchAccount } from './adminDb'
@@ -174,15 +174,14 @@ async function unreadChannels(meId: string) {
     // 릴레이가 떠 있으면서 응답하지 않으면 홈 카드 다섯 장이 전부 스켈레톤에 묶이므로 끊어 준다.
     const res = await fetch(bypass('/api/channels'), { signal: AbortSignal.timeout(2000) })
     if (!res.ok) return []
-    const { items } = (await res.json()) as {
-      items: { id: string; name: string; is_dm: boolean; unread: number; members: Person[] }[]
-    }
+    const { items } = (await res.json()) as { items: ChatChannel[] }
     return items
       .filter((channel) => channel.unread > 0)
       .map((channel) => ({
         channel_id: channel.id,
         name: channel.name,
         is_dm: channel.is_dm,
+        is_private: channel.is_private,
         // DM 이면 상대, 채널이면 null. 홈과 채팅이 같은 사람을 같은 색으로 그린다.
         peer_id: channel.is_dm
           ? (channel.members.find((member) => member.id !== meId)?.id ?? null)
@@ -357,7 +356,7 @@ export const handlers = [
   http.get('/api/channels/:channelId/messages', () => passthrough()),
   http.post('/api/channels/:channelId/attachments', () => passthrough()),
   http.get('/api/channels/:channelId/attachments/*', () => passthrough()),
-  // 비공개 채널의 멤버 더하기·빼기. 실서버에는 아직 없는 경로다(README "백엔드에 요청한 것").
+  // 비공개 채널의 멤버 더하기·빼기.
   http.post('/api/channels/:channelId/members', () => passthrough()),
   http.delete('/api/channels/:channelId/members/:userId', () => passthrough()),
 

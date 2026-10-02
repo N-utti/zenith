@@ -60,7 +60,15 @@ function message(channelId: string, n: number): ChatMessage {
 function channel(id: string, last: ChatMessage | null): ChatChannel {
   // 멤버 배열은 채널마다 따로다(서버 응답이 그렇다). 같은 객체를 나눠 쓰면 순서가 바뀌어도
   // react-query 가 참조를 유지해, 아래 테스트가 보려는 상황이 안 만들어진다.
-  return { id, name: id, is_dm: false, members: [...people], unread: 0, last_message: last }
+  return {
+    id,
+    name: id,
+    is_dm: false,
+    is_private: false,
+    members: [...people],
+    unread: 0,
+    last_message: last,
+  }
 }
 
 /** 방 `c` 를 보고 있다. 줄은 셋, 채널 목록에는 조용한 방 `d` 가 아래에 있다. */
