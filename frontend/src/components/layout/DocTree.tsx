@@ -556,11 +556,14 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
     (data.folders.some((f) => f.parent_id === id) || data.docs.some((d) => d.folder_id === id))
 
   // 약속으로 받는다(`move` 와 같은 이유). 트리가 다시 마운트되면 `mutate` 의 콜백은 불리지 않는다.
-  const removeFolder = (id: string, title: string) =>
+  const removeFolder = (id: string, title: string) => {
+    // 응답이 오기 전에 같은 폴더를 또 지우면 둘째 요청이 404 로 떨어져 성공 뒤에 실패가 뜬다.
+    if (deleteFolder.isPending) return
     void deleteFolder.mutateAsync(id).then(
       () => toast.success(`${title} 폴더를 지웠습니다.`),
       (err: unknown) => fail(err, '폴더를 지우지 못했습니다.'),
     )
+  }
 
   const menuTarget = menu && find(menu.item)
   const movingTarget = moving && find(moving)
