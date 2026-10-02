@@ -34,7 +34,7 @@ export function TrashDocModal({
         onTrashed?.()
         // 제목을 싣는다. 짧은 사이에 둘을 지우면 똑같은 토스트가 겹쳐 어느 것을 되돌리는지
         // 가릴 근거가 없어진다.
-        toast.success(`휴지통으로 옮겼습니다: ${title}`, {
+        toast.success(`${title} 문서를 휴지통으로 옮겼습니다.`, {
           durationMs: 10_000,
           action: {
             label: '되돌리기',
@@ -42,7 +42,7 @@ export function TrashDocModal({
             // 나타나게만 한다.
             onClick: () => {
               void untrashDoc(id)
-                .then(() => toast.success('문서를 되돌렸습니다.'))
+                .then(() => toast.success(`${title} 문서를 되돌렸습니다.`))
                 .catch((err: unknown) =>
                   toast.error(err instanceof ApiError ? err.message : '되돌리지 못했습니다.'),
                 )
