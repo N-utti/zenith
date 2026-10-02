@@ -94,7 +94,9 @@ export function TodayTasksCard() {
                       onChange={(e) => setEditing({ id: task.id, text: e.target.value })}
                       maxLength={TODO_TEXT_MAX}
                       aria-label="할 일 고치기"
-                      className="h-8 min-w-0 flex-1"
+                      // -my-1.5: 줄 높이를 그대로 둔다. 칸이 닫힐 때 아래 줄이 밀리면 그 줄의 버튼을 누르던
+                      // 클릭이 빗나간다.
+                      className="-my-1.5 h-8 min-w-0 flex-1"
                       // 다른 곳을 누르면 저장한다. 고친 글자를 잃는 쪽보다 낫다. 그만두려면 Esc.
                       onBlur={() => commitEdit(task.text)}
                       onKeyDown={(e) => {
