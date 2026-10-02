@@ -1776,7 +1776,7 @@ data: ${JSON.stringify(data)}
   }),
 
   // ── 첨부 파일 ─────────────────────────────────────────────
-  // 자료실(계약에 아직 없다, README "백엔드에 요청한 것"). 채팅과 문서에 붙은 파일을 올린 지
+  // 자료실(백엔드 `routers/archive.py`). 채팅과 문서에 붙은 파일을 올린 지
   // 최근 순으로 모아 준다. 보는 사람이 받을 수 있는 것만 싣는다.
   http.get('/api/archive', async ({ request }) => {
     if (!authenticate()) return unauthorized()

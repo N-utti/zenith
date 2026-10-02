@@ -143,11 +143,21 @@ export function ArchivePage() {
                             to={`/${file.source === 'chat' ? 'chat' : 'docs'}/${file.source_id}`}
                             className="text-muted hover:text-fg block truncate"
                           >
-                            {SOURCE_LABEL[file.source]} · {file.source_title}
+                            {/* 상대가 지워진 DM 은 서버가 빈 제목을 준다. */}
+                            {SOURCE_LABEL[file.source]} · {file.source_title || '이름 없음'}
                           </Link>
+                          {/*
+                           * 올린 사람은 좁은 화면에서도 숨기지 않는다. 서버는 누가 어느 문서 아래에
+                           * 올렸는지 검사하지 않아서, 남의 문서 제목 아래에 파일을 띄울 수 있다.
+                           * 누가 올렸는지 보이는 것이 유일한 안전장치다(백엔드 #240).
+                           * 「올림」을 붙인다. 이름만 두면 그 문서의 주인으로 읽힌다.
+                           */}
+                          <span className="text-subtle block truncate text-xs md:hidden">
+                            {file.uploaded_by.name} 올림
+                          </span>
                         </TD>
                         <TD className="text-muted hidden whitespace-nowrap md:table-cell">
-                          {file.uploaded_by?.name ?? '알 수 없음'}
+                          {file.uploaded_by.name}
                         </TD>
                         <TD className="text-muted hidden whitespace-nowrap sm:table-cell">
                           {formatRelative(file.created_at)}

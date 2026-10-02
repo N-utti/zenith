@@ -86,6 +86,8 @@ it('결재 첨부와 올린 기록이 없는 예전 파일은 싣지 않는다',
   expect(docFiles([stored({ id: 'x-1' })], titleOf)).toEqual([])
   expect(docFiles([stored({ id: '1' })], titleOf)).toEqual([])
   expect(docFiles([stored({ created_at: undefined })], titleOf)).toEqual([])
+  // 서버는 올린 사람을 항상 준다. 목이 없는 채로 내보내면 화면이 이름을 읽다 죽는다.
+  expect(docFiles([stored({ uploaded_by: undefined })], titleOf)).toEqual([])
 })
 
 it('올린 지 최근 순으로 상한만큼만 준다', () => {
