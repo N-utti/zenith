@@ -21,6 +21,8 @@ services:
       ZENITH_SITE: ${ZENITH_SITE:-localhost}
       # 비면 자체 CA(internal). 인증서 파일을 쓰면 `/certs/cert.pem /certs/key.pem`(caddy/Caddyfile 의 tls 줄)
       ZENITH_TLS: ${ZENITH_TLS:-internal}
+      # 사내망 평문 HTTP 사이트 주소(caddy/Caddyfile). 안 주면 localhost 만 받아 사실상 꺼진 것과 같다
+      ZENITH_LAN_SITE: ${ZENITH_LAN_SITE:-http://localhost:5180}
     ports:
       - "${ZENITH_HTTP_PORT:-80}:80"
       - "${ZENITH_HTTPS_PORT:-443}:443"
