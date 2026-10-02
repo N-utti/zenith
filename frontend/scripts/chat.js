@@ -712,8 +712,17 @@ export async function handleChatRequest(req, res, url) {
     if (req.method === 'GET') {
       const limit = Number(url.searchParams.get('limit') ?? 50)
       const list = messages.get(channelId) ?? []
-      // 봉투도 백엔드와 같다(`MessagePage`). 릴레이는 전부 메모리에 있어 더 과거가 없다.
-      return json(res, 200, { items: list.slice(-limit), next_cursor: null })
+      // 봉투도 백엔드와 같다(`MessagePage`). `?cursor=` 보다 과거인 것을 limit 개, 오래된 순으로 준다.
+      // 릴레이의 커서는 그 쪽에서 가장 오래된 메시지의 id 다. 실서버는 시각과 id 를 묶은 문자열을
+      // 주는데, 화면은 어느 쪽이든 뜻을 읽지 않고 그대로 돌려보낸다.
+      const cursor = url.searchParams.get('cursor')
+      const end = cursor ? list.findIndex((m) => m.id === cursor) : list.length
+      if (end < 0) return json(res, 422, { code: 'VALIDATION', detail: '잘못된 커서입니다.' })
+      const start = Math.max(0, end - limit)
+      return json(res, 200, {
+        items: list.slice(start, end),
+        next_cursor: start > 0 ? list[start].id : null,
+      })
     }
 
     // POST 는 없다. 보내기는 소켓 `msg` op 이다(04 §4.1). 실서버도 이 경로에 405 를 준다.

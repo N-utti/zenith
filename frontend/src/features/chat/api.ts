@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
-import type { ChatAttachment, ChatChannel, ChatMessage } from './types'
+import { prependOlder } from './events'
+import type { ChatAttachment, ChatChannel, MessagePage } from './types'
 
 /**
  * 채팅만 MSW를 거치지 않고 개발 서버로 간다 (vite 프록시). 누구인지는 URL·본문이 아니라
@@ -13,6 +14,9 @@ export const chatKeys = {
   allMessages: ['chat', 'messages'] as const,
 }
 
+/** 한 번에 받는 메시지 수. 서버 기본값과 같다(상한 200). */
+const PAGE_SIZE = 50
+
 export function useChannels() {
   return useQuery({
     queryKey: chatKeys.channels,
@@ -23,13 +27,32 @@ export function useChannels() {
 export function useMessages(channelId: string | null) {
   return useQuery({
     queryKey: chatKeys.messages(channelId ?? ''),
-    // 백엔드 `MessagePage`. `next_cursor` 는 더 과거가 있을 때 다음 요청의 `?cursor=` 다.
-    // 지금 화면은 과거 스크롤을 하지 않아 읽지 않는다.
-    queryFn: () =>
-      api<{ items: ChatMessage[]; next_cursor: string | null }>(
-        `/channels/${channelId}/messages?limit=50`,
-      ),
+    // 최근 한 쪽. 더 과거는 `useOlderMessages` 가 이 캐시 앞에 붙인다.
+    queryFn: () => api<MessagePage>(`/channels/${channelId}/messages?limit=${PAGE_SIZE}`),
     enabled: channelId !== null,
+  })
+}
+
+/**
+ * 더 과거 한 쪽을 받아 같은 캐시 앞에 붙인다. 커서는 목록에 실려 온 `next_cursor` 다.
+ *
+ * 쿼리를 쪽마다 나누지 않고 한 목록에 붙이는 이유는 소켓이다. 새 메시지(`appendMessage`)가
+ * 이 캐시 하나에 쓰고, 화면도 이것 하나를 그린다.
+ *
+ * ponytail: 목록을 다시 받으면(창 복귀, 소켓 재연결) 최근 한 쪽으로 돌아가고 붙여 둔 과거는
+ * 사라진다. 다시 누르면 된다. 오래 거슬러 읽는 일이 잦아지면 쪽 단위 쿼리(useInfiniteQuery)로 바꾼다.
+ */
+export function useOlderMessages(channelId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (cursor: string) =>
+      api<MessagePage>(
+        `/channels/${channelId}/messages?limit=${PAGE_SIZE}&cursor=${encodeURIComponent(cursor)}`,
+      ),
+    onSuccess: (older) =>
+      qc.setQueryData<MessagePage>(chatKeys.messages(channelId), (page) =>
+        prependOlder(page, older),
+      ),
   })
 }
 

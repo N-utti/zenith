@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState, type ReactNode } from 'react'
+import { memo, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router'
 import { Download, FileText, Paperclip } from 'lucide-react'
 import { Avatar } from '@/components/ui/Avatar'
@@ -11,7 +11,7 @@ import { useCurrentUser } from '@/features/auth/AuthContext'
 import { UNTITLED_DOC, useDoc } from '@/features/docs/api'
 import { MentionText } from '@/features/people/MentionText'
 import { isImage } from './attachments'
-import { useMessages } from './api'
+import { useMessages, useOlderMessages } from './api'
 import type { ChatAttachment, ChatMessage } from './types'
 
 /** 같은 사람이 5분 안에 이어서 보낸 메시지는 아바타·이름을 반복하지 않는다. */
@@ -176,6 +176,27 @@ export function MessageList({
   // 키보드는 탭 순서가 ⌘K 를 눌렀던 자리에 남아 다음 탭이 화면 밖으로 튄다. 자리 이동은
   // `scrollIntoView` 에 맡기고(`preventScroll`), 전역 스타일이 외곽선을 `:focus-visible` 에만
   // 걸어 두어 프로그램이 옮긴 포커스에는 테가 생기지 않는다.
+  // 더 과거를 앞에 붙이면 읽던 줄이 그만큼 아래로 밀린다. 누르는 순간 바닥에서 얼마나 떨어져
+  // 있었는지 적어 두고, 붙은 뒤 같은 거리로 되돌린다. 위에서부터 재면 브라우저가 스스로 자리를
+  // 잡아 주는 경우(크롬)와 겹쳐 두 번 밀린다. 바닥부터 재면 어느 쪽이든 같은 자리가 나온다.
+  const older = useOlderMessages(channelId)
+  const keepFromBottom = useRef<number | null>(null)
+  const firstId = data?.items[0]?.id
+  useLayoutEffect(() => {
+    const scroller = scrollerRef.current
+    if (!scroller || keepFromBottom.current === null) return
+    scroller.scrollTop = scroller.scrollHeight - keepFromBottom.current
+    keepFromBottom.current = null
+  }, [firstId])
+  const loadOlder = (cursor: string) => {
+    const scroller = scrollerRef.current
+    if (scroller) keepFromBottom.current = scroller.scrollHeight - scroller.scrollTop
+    older.mutate(cursor, {
+      // 못 받았으면 되돌릴 것도 없다. 남겨 두면 다음에 목록이 바뀔 때 엉뚱하게 튄다.
+      onError: () => (keepFromBottom.current = null),
+    })
+  }
+
   const found = data?.items.some((message) => message.id === focusId) ?? false
   useEffect(() => {
     if (!focusId || !found) return
@@ -207,6 +228,25 @@ export function MessageList({
           <p className="text-subtle py-12 text-center text-sm">
             아직 메시지가 없습니다. 첫 마디를 남겨 보세요.
           </p>
+        )}
+
+        {data.next_cursor && (
+          <div className="mb-2 flex flex-col items-center gap-1">
+            <button
+              type="button"
+              disabled={older.isPending}
+              onClick={() => data.next_cursor && loadOlder(data.next_cursor)}
+              className="border-line text-muted hover:bg-surface-hover hover:text-fg flex h-8 cursor-pointer items-center gap-2 rounded-full border px-3.5 text-xs transition-colors disabled:cursor-default disabled:opacity-60"
+            >
+              {older.isPending && <Spinner />}
+              이전 메시지 더 보기
+            </button>
+            {older.isError && (
+              <p role="alert" className="text-danger text-xs">
+                이전 메시지를 불러오지 못했습니다.
+              </p>
+            )}
+          </div>
         )}
 
         {data.items.map((message, index) => {
