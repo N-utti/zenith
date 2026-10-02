@@ -456,7 +456,8 @@ async def test_edit_and_delete_own_message(app: FastAPI, users: Users, app_db) -
             assert (await recv_until(a_ws, "msg_del"))["message_id"] == mid
             await send(a_ws, op="del", channel_id=cid, message_id=mid)
             assert (await recv_until(a_ws, "error"))["code"] == "NOT_FOUND"
-        assert (await b.get(f"/api/channels/{cid}/messages")).json()["items"] == []
+        left = (await b.get(f"/api/channels/{cid}/messages")).json()["items"]
+        assert [m["id"] for m in left] == [str(photo.id)]  # 사진 글만 남는다
         assert [u["count"] for u in (await b.get("/api/me/home")).json()["unread"]] == [1]
 
     assert [m.id for m in (await app_db.execute(select(Message))).scalars()] == [photo.id]
@@ -468,7 +469,8 @@ async def test_edit_and_delete_own_message(app: FastAPI, users: Users, app_db) -
         if e.kind.startswith(("acl.", "chat.")):
             events[(e.kind, e.detail.get("op"), e.detail.get("message_id"))] = e.detail
     assert set(events) == {
-        ("acl.denied", "edit", mid),  # c(멤버 아님)와 b(남의 글)가 하나로 합쳐지지 않는다
+        ("acl.denied", "edit", None),  # c(멤버 아님 — message_id 없음)
+        ("acl.denied", "edit", mid),  # b(남의 글) — c 와 하나로 합쳐지지 않는다
         ("acl.denied", "del", mid),
         ("chat.message_edited", None, str(photo.id)),
         ("chat.message_edited", None, mid),
