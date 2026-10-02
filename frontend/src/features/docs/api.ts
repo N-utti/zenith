@@ -368,10 +368,10 @@ export function usePurgeDoc() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (docId: string) => api<void>(`/docs/${docId}?hard=1`, { method: 'DELETE' }),
-    onSuccess: (_data, docId) => {
-      qc.removeQueries({ queryKey: docKeys.detail(docId) })
-      invalidateDocLists(qc)
-    },
+    onSuccess: (_data, docId) => qc.removeQueries({ queryKey: docKeys.detail(docId) }),
+    // 실패해도 목록은 다시 받는다. 그사이 누가 되돌렸거나(409) 이미 지운(404) 문서의 줄이 남아
+    // 있으면 다시 눌러도 같은 답만 온다.
+    onSettled: () => invalidateDocLists(qc),
   })
 }
 
