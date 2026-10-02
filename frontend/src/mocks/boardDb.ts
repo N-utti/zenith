@@ -1,4 +1,4 @@
-import type { Board, BoardPost, BoardPostDetail } from '@/features/board/types'
+import type { Board, BoardPost, BoardPostDetail, PostComment } from '@/features/board/types'
 import type { HomePost } from '@/features/home/types'
 import { ROLE_RANK, type Role, type User } from '@/types'
 
@@ -182,6 +182,8 @@ export function updatePost(
 export function deletePost(id: string): void {
   const index = POSTS.findIndex((post) => post.id === id)
   if (index >= 0) POSTS.splice(index, 1)
+  // 글이 사라지면 댓글도 같이 사라진다.
+  comments.delete(id)
 }
 
 export function createPost(
@@ -209,4 +211,75 @@ export function createPost(
 /** 상세에 나가는 모양. 목록 한 줄에 본문을 더한다. */
 export function toDetail(post: StoredPost): BoardPostDetail {
   return { ...toListShape(post), body: post.body }
+}
+
+// ── 게시글 댓글 ──────────────────────────────────────────
+// 서버에는 아직 없다. 모양은 프론트가 정한 가정이다(`handlers.ts` 의 주석).
+// 글을 읽을 수 있는지(게시판 등급)는 핸들러가 먼저 본다. 여기는 댓글 한 줄의 권한만 본다.
+
+/** 글 id → 댓글(오래된 순). */
+const comments = new Map<string, PostComment[]>([
+  [
+    'p-1',
+    [
+      {
+        id: 'pc-1',
+        author: { id: 'u-1', name: '진수연' },
+        body: '숙소 배정은 언제 공지되나요?',
+        created_at: minutesAgo(150),
+        edited_at: null,
+      },
+    ],
+  ],
+])
+let nextCommentId = 2
+
+export function listPostComments(postId: string): PostComment[] {
+  return [...(comments.get(postId) ?? [])]
+}
+
+export function addPostComment(postId: string, user: User, body: string): PostComment {
+  const comment: PostComment = {
+    id: `pc-${nextCommentId++}`,
+    author: { id: user.id, name: user.name },
+    body,
+    created_at: new Date().toISOString(),
+    edited_at: null,
+  }
+  comments.set(postId, [...(comments.get(postId) ?? []), comment])
+  return comment
+}
+
+/** 고치기는 쓴 사람만. 글이 그대로면 고친 것으로 치지 않는다(「수정됨」을 붙이지 않는다). */
+export function editPostComment(
+  postId: string,
+  user: User,
+  commentId: string,
+  body: string,
+): PostComment | 'not_found' | 'forbidden' {
+  const comment = comments.get(postId)?.find((c) => c.id === commentId)
+  if (!comment) return 'not_found'
+  if (comment.author.id !== user.id) return 'forbidden'
+  if (comment.body !== body) {
+    comment.body = body
+    comment.edited_at = new Date().toISOString()
+  }
+  return comment
+}
+
+/** 지우기는 쓴 사람 또는 임원. 글 지우기(`canEdit`)와 같은 기준이다(게시판은 임원이 정리한다). */
+export function removePostComment(
+  postId: string,
+  user: User,
+  commentId: string,
+): 'ok' | 'not_found' | 'forbidden' {
+  const list = comments.get(postId) ?? []
+  const comment = list.find((c) => c.id === commentId)
+  if (!comment) return 'not_found'
+  if (comment.author.id !== user.id && user.role !== 'exec') return 'forbidden'
+  comments.set(
+    postId,
+    list.filter((c) => c !== comment),
+  )
+  return 'ok'
 }

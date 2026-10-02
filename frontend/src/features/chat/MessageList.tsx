@@ -498,5 +498,7 @@ const MessageRow = memo(function MessageRow({
 function cnRow(compact: boolean, flash: boolean) {
   const spacing = compact ? 'mt-0.5' : 'mt-4'
   // relative: 고치기·지우기 버튼이 이 줄의 오른쪽 위에 뜬다.
-  return `group relative -mx-2 flex gap-3 rounded-lg px-2 ${spacing} ${flash ? 'animate-flash' : ''}`
+  // outline-none: 이 줄은 Tab 으로 닿는 자리가 아니다. 키보드로(Enter 저장, ⌘K 에서 Enter) 온 초점은
+  // 브라우저가 키보드 초점으로 쳐서 줄 전체에 초점 테를 두른다. 찾아온 줄은 밝히기가 대신 알린다.
+  return `group relative -mx-2 flex gap-3 rounded-lg px-2 outline-none ${spacing} ${flash ? 'animate-flash' : ''}`
 }

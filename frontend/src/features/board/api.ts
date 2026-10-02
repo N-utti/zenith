@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { homeKeys } from '@/features/home/keys'
-import type { Board, BoardPost, BoardPostDetail } from './types'
+import { MSW_ENABLED } from '@/mocks/accounts'
+import type { Board, BoardPost, BoardPostDetail, PostComment } from './types'
 
 export function useBoards() {
   return useQuery({
@@ -85,5 +86,60 @@ export function useDeletePost(boardId: string, postId: string) {
        */
       void qc.invalidateQueries({ queryKey: ['posts', postId], refetchType: 'none' })
     },
+  })
+}
+
+/**
+ * 게시글 댓글을 보일지. 서버에는 아직 그 경로가 없어서(04 §6 의 게시판은 글뿐이다) 목이 켜진
+ * 개발 화면에서만 보인다. 서버가 받게 되면 이 스위치를 걷는다.
+ */
+export const POST_COMMENTS_ENABLED = MSW_ENABLED
+
+const commentsKey = (postId: string) => ['posts', postId, 'comments'] as const
+
+/** 그 글의 댓글. 오래된 순. 글을 못 보는 사람은 댓글도 못 본다(403). */
+export function usePostComments(postId: string) {
+  return useQuery({
+    queryKey: commentsKey(postId),
+    queryFn: () => api<{ items: PostComment[] }>(`/posts/${postId}/comments`),
+    enabled: POST_COMMENTS_ENABLED && Boolean(postId),
+    retry: false,
+  })
+}
+
+export function useAddPostComment(postId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body: string) =>
+      api<PostComment>(`/posts/${postId}/comments`, {
+        method: 'POST',
+        body: JSON.stringify({ body }),
+      }),
+    // 다시 받기를 기다린다. 안 기다리면 입력칸이 비워진 뒤에야 새 줄이 뜬다.
+    onSuccess: () => qc.invalidateQueries({ queryKey: commentsKey(postId) }),
+  })
+}
+
+/**
+ * 댓글 고치기와 지우기. 실패해도 목록을 다시 받는다(다른 탭에서 이미 지운 댓글이면 이 목록이
+ * 옛것이다). 다 받을 때까지 기다린다. 줄이 옛 글로 잠깐 비치거나 버튼이 되살아나지 않게.
+ */
+export function useEditPostComment(postId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: string }) =>
+      api<PostComment>(`/posts/${postId}/comments/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ body }),
+      }),
+    onSettled: () => qc.invalidateQueries({ queryKey: commentsKey(postId) }),
+  })
+}
+
+export function useDeletePostComment(postId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => api<void>(`/posts/${postId}/comments/${id}`, { method: 'DELETE' }),
+    onSettled: () => qc.invalidateQueries({ queryKey: commentsKey(postId) }),
   })
 }

@@ -10,7 +10,8 @@ import { Spinner } from '@/components/ui/Spinner'
 import { useToast } from '@/components/ui/ToastContext'
 import { ApiError } from '@/lib/api'
 import { formatRelative } from '@/lib/datetime'
-import { useBoards, useDeletePost, usePost } from '@/features/board/api'
+import { POST_COMMENTS_ENABLED, useBoards, useDeletePost, usePost } from '@/features/board/api'
+import { PostComments } from '@/features/board/PostComments'
 import { PostComposer } from '@/features/board/PostComposer'
 import { useCurrentUser } from '@/features/auth/AuthContext'
 
@@ -134,6 +135,9 @@ export function BoardPostPage() {
           <p className="text-fg text-[15px] leading-7 whitespace-pre-wrap">{post.body}</p>
         </div>
       </Card>
+
+      {/* 글을 볼 수 있는 사람만 여기까지 온다(본문 403 은 위에서 끝난다). 글마다 새로 만든다. */}
+      {POST_COMMENTS_ENABLED && <PostComments key={post.id} postId={post.id} />}
 
       {board && editing && (
         <PostComposer board={board} post={post} onClose={() => setEditing(false)} />

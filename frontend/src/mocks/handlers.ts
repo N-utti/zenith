@@ -1,6 +1,6 @@
 import { bypass, delay, http, HttpResponse, passthrough } from 'msw'
 import { PASSWORD_MIN, type User } from '@/types'
-import { BODY_MAX, TITLE_MAX } from '@/features/board/types'
+import { BODY_MAX, POST_COMMENT_MAX, TITLE_MAX } from '@/features/board/types'
 import { ARCHIVE_LIMIT, type ArchiveFile } from '@/features/archive/types'
 import type { ChatChannel, ChatMessage } from '@/features/chat/types'
 import { chatFiles, docFiles, newestFirst } from './archiveDb'
@@ -25,14 +25,18 @@ import {
 import { AI_MODELS, answer, DOC_ACTIONS, docActionDraft } from './aiDb'
 import {
   BOARD_DEFS,
+  addPostComment,
   canEdit,
   canRead,
   createPost,
   deletePost,
+  editPostComment,
   homePosts,
   findPost,
   listBoards,
+  listPostComments,
   listPosts,
+  removePostComment,
   toDetail,
   updatePost,
 } from './boardDb'
@@ -539,6 +543,65 @@ export const handlers = [
     if (!canRead(user, post.min_role) || !canEdit(user, post)) return forbidden()
 
     deletePost(post.id)
+    return new HttpResponse(null, { status: 204 })
+  }),
+
+  // ── 게시글 댓글 ─────────────────────────────────────────
+  // 실서버에는 아직 없는 경로다(04 §6 의 게시판은 글뿐이다). 모양은 프론트가 정한 가정이다.
+  // 글을 읽을 수 있는 사람(게시판 등급)만 댓글을 보고 쓴다. 못 읽으면 글 본문과 같게 403 이다.
+  // 고치기는 쓴 사람만, 지우기는 쓴 사람과 임원(글 지우기와 같은 기준).
+  http.get('/api/posts/:postId/comments', ({ params }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    const post = findPost(String(params.postId))
+    if (!post) return notFound()
+    if (!canRead(user, post.min_role)) return forbidden()
+    return HttpResponse.json({ items: listPostComments(post.id) })
+  }),
+
+  http.post('/api/posts/:postId/comments', async ({ request, params }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    const post = findPost(String(params.postId))
+    if (!post) return notFound()
+    if (!canRead(user, post.min_role)) return forbidden()
+
+    const body = await readJson<{ body?: unknown }>(request)
+    const text = typeof body?.body === 'string' ? body.body.trim() : ''
+    if (!text || text.length > POST_COMMENT_MAX) {
+      return validationError(`댓글은 1자 이상 ${POST_COMMENT_MAX}자 이하여야 합니다.`)
+    }
+    return HttpResponse.json(addPostComment(post.id, user, text), { status: 201 })
+  }),
+
+  http.patch('/api/posts/:postId/comments/:commentId', async ({ request, params }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    const post = findPost(String(params.postId))
+    if (!post) return notFound()
+    if (!canRead(user, post.min_role)) return forbidden()
+
+    const body = await readJson<{ body?: unknown }>(request)
+    const text = typeof body?.body === 'string' ? body.body.trim() : ''
+    if (!text || text.length > POST_COMMENT_MAX) {
+      return validationError(`댓글은 1자 이상 ${POST_COMMENT_MAX}자 이하여야 합니다.`)
+    }
+    const result = editPostComment(post.id, user, String(params.commentId), text)
+    if (result === 'not_found') return notFound('댓글을 찾을 수 없습니다.')
+    if (result === 'forbidden') return forbidden()
+    return HttpResponse.json(result)
+  }),
+
+  http.delete('/api/posts/:postId/comments/:commentId', ({ params }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    const post = findPost(String(params.postId))
+    if (!post) return notFound()
+    if (!canRead(user, post.min_role)) return forbidden()
+
+    const result = removePostComment(post.id, user, String(params.commentId))
+    if (result === 'not_found') return notFound('댓글을 찾을 수 없습니다.')
+    if (result === 'forbidden') return forbidden()
     return new HttpResponse(null, { status: 204 })
   }),
 

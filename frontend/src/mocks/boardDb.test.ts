@@ -1,6 +1,17 @@
 import { expect, it } from 'vitest'
 import { MOCK_USERS } from './db'
-import { canEdit, createPost, deletePost, findPost, listPosts, updatePost } from './boardDb'
+import {
+  addPostComment,
+  canEdit,
+  createPost,
+  deletePost,
+  editPostComment,
+  findPost,
+  listPostComments,
+  listPosts,
+  removePostComment,
+  updatePost,
+} from './boardDb'
 
 const member = MOCK_USERS.find((u) => u.id === 'u-2')!
 const other = MOCK_USERS.find((u) => u.id === 'u-1')!
@@ -37,4 +48,34 @@ it('수정은 보낸 값만 바꾸고, 삭제하면 목록에서도 사라진다
   deletePost(created.id)
   expect(findPost(created.id)).toBeUndefined()
   expect(listPosts(member, 'all').some((p) => p.id === created.id)).toBe(false)
+})
+
+it('댓글은 쓴 사람만 고치고, 지우기는 쓴 사람과 임원이 한다. 글을 지우면 댓글도 사라진다', () => {
+  const post = createPost(member, 'all', { title: '댓글 시험', body: '본문' })
+  const comment = addPostComment(post.id, member, '처음 쓴 댓글')
+  expect(listPostComments(post.id).map((c) => c.body)).toEqual(['처음 쓴 댓글'])
+
+  // 고치기는 임원도 남의 것은 못 한다.
+  expect(editPostComment(post.id, other, comment.id, '남이 고침')).toBe('forbidden')
+  expect(editPostComment(post.id, exec, comment.id, '임원이 고침')).toBe('forbidden')
+  expect(editPostComment(post.id, member, 'pc-없음', '글')).toBe('not_found')
+
+  // 그대로 저장하면 「수정됨」이 붙지 않는다.
+  expect(editPostComment(post.id, member, comment.id, '처음 쓴 댓글')).toMatchObject({
+    edited_at: null,
+  })
+  expect(editPostComment(post.id, member, comment.id, '고친 댓글')).toMatchObject({
+    body: '고친 댓글',
+    edited_at: expect.any(String),
+  })
+
+  // 지우기는 남은 못 하고 임원은 한다.
+  expect(removePostComment(post.id, other, comment.id)).toBe('forbidden')
+  expect(removePostComment(post.id, exec, comment.id)).toBe('ok')
+  expect(listPostComments(post.id)).toEqual([])
+  expect(removePostComment(post.id, exec, comment.id)).toBe('not_found')
+
+  addPostComment(post.id, other, '글과 같이 사라질 댓글')
+  deletePost(post.id)
+  expect(listPostComments(post.id)).toEqual([])
 })

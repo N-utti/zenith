@@ -1,20 +1,15 @@
 import { hueOf } from '@/lib/avatar'
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { useEditorState, type Editor } from '@tiptap/react'
-import { Pencil, Quote, Trash2 } from 'lucide-react'
+import { Quote } from 'lucide-react'
 import { useSearchParams } from 'react-router'
 import { Avatar } from '@/components/ui/Avatar'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
-import { Textarea } from '@/components/ui/Textarea'
-import { useToast } from '@/components/ui/ToastContext'
-import { ApiError } from '@/lib/api'
-import { cn } from '@/lib/cn'
-import { formatRelative } from '@/lib/datetime'
 import { useCurrentUser } from '@/features/auth/AuthContext'
+import { CommentRow as CommentRowBase } from '@/features/comments/CommentRow'
 import { MentionTextarea } from '@/features/people/MentionTextarea'
 import { useMentionNames } from '@/features/people/colleagues'
-import { MentionText } from '@/features/people/MentionText'
 import { MSW_ENABLED } from '@/mocks/accounts'
 import { useAddComment, useComments, useDeleteComment, useEditComment } from './api'
 import { anchoredBlocks, flashElement } from './blockId'
@@ -25,18 +20,10 @@ import { COMMENT_BODY_MAX, type DocComment } from './types'
 // 지우기는 서버가 받는다(백엔드 #273).
 const COMMENT_EDIT_ENABLED = MSW_ENABLED
 
-/*
- * 내 댓글 줄의 작은 버튼(고치기·지우기). 줄 위에 올리거나 Tab 으로 닿을 때만 보이고, 호버가 없는
- * 기기에서는 늘 보인다. 숨어 있을 때는 눌리지도 않는다(할 일 카드의 버튼과 같은 규약).
- * -my-1: 이름 줄(16px)보다 큰 버튼이 줄 높이를 키우지 않게 한다.
- */
-const ROW_ACTION =
-  'text-subtle pointer-events-none -my-1 grid size-6 shrink-0 cursor-pointer place-items-center rounded opacity-0 transition-opacity group-focus-within/comment:pointer-events-auto group-focus-within/comment:opacity-100 group-hover/comment:pointer-events-auto group-hover/comment:opacity-100 pointer-coarse:pointer-events-auto pointer-coarse:opacity-100'
-
 /**
- * 댓글 한 줄. 옆 패널과 블록 옆 창(BlockComments)이 같이 쓴다. `children` 은 이름과 본문 사이(인용).
- * 내가 쓴 댓글에는 고치는 버튼과 지우는 버튼이 붙는다. 고치기는 그 줄에서 글 칸이 열린다.
- * `onDelete` 는 지우기를 시작한 직후에 불린다.
+ * 문서 댓글 한 줄. 옆 패널과 블록 옆 창(BlockComments)이 같이 쓴다. 그리는 일은 공용 줄
+ * (`features/comments/CommentRow`)이 하고, 여기서는 누가 할 수 있는지와 서버에 보내는 일만 정한다.
+ * `children` 은 이름과 본문 사이(인용). `onDelete` 는 지우기를 시작한 직후에 불린다.
  */
 export function CommentRow({
   docId,
@@ -56,145 +43,24 @@ export function CommentRow({
   const user = useCurrentUser()
   const remove = useDeleteComment(docId)
   const edit = useEditComment(docId)
-  const toast = useToast()
-  // 쓴 사람만 고치고 지운다(임원도 남의 댓글은 못 지운다, 백엔드 #273). 화면 편의일 뿐이고 실제
-  // 차단은 서버의 403 이다.
+  // 쓴 사람만 고치고 지운다(임원도 남의 댓글은 못 지운다, 백엔드 #273).
   const mine = comment.author.id === user.id
-  const canDelete = mine
-  const canEdit = COMMENT_EDIT_ENABLED && mine
-  /** 고치는 중인 글. 고치는 중이 아니면 `null`. */
-  const [draft, setDraft] = useState<string | null>(null)
-  const [editError, setEditError] = useState<string | null>(null)
-  const row = useRef<HTMLDivElement>(null)
-
-  /** 고치는 칸을 닫는다. 칸이 사라지면 초점이 body 로 떨어지므로 이 줄로 돌려놓는다. */
-  const closeEdit = () => {
-    setDraft(null)
-    row.current?.focus({ preventScroll: true })
-  }
-
-  const save = () => {
-    if (draft === null || edit.isPending) return
-    const next = draft.trim()
-    // 비우면 저장하지 않는다. 댓글을 없애려면 지우기를 쓴다.
-    if (!next) return
-    if (next === comment.body) return closeEdit()
-    setEditError(null)
-    edit.mutate(
-      { id: comment.id, body: next },
-      {
-        onSuccess: closeEdit,
-        // 고치던 글 바로 아래에 낸다. 토스트로 내면 무엇이 안 됐는지와 고칠 곳이 떨어진다.
-        onError: (err) =>
-          setEditError(err instanceof ApiError ? err.message : '댓글을 고치지 못했습니다.'),
-      },
-    )
-  }
 
   return (
-    <div
-      ref={row}
+    <CommentRowBase
+      comment={comment}
+      names={names}
       id={id}
-      // 고치기를 끝내면 초점이 여기로 온다(tabIndex). 블록 옆 창은 고치는 줄이 있는 동안 닫히지
-      // 않는다. 닫히면 쓰던 글이 줄과 함께 사라진다(`BlockComments` 가 이 표시를 본다).
-      tabIndex={-1}
-      data-comment-editing={draft !== null || undefined}
-      className="group/comment -mx-2 flex gap-2.5 rounded-lg px-2 py-1"
+      canEdit={COMMENT_EDIT_ENABLED && mine}
+      canDelete={mine}
+      maxLength={COMMENT_BODY_MAX}
+      // 두 훅 모두 목록을 다시 받은 뒤에 약속이 풀린다(`api.ts` 의 `onSettled`).
+      onSave={(body) => edit.mutateAsync({ id: comment.id, body })}
+      onRemove={() => remove.mutateAsync(comment.id)}
+      onDelete={onDelete}
     >
-      <Avatar name={comment.author.name} hue={hueOf(comment.author.id)} size="sm" />
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-1">
-          <p className="text-fg min-w-0 flex-1 text-xs font-medium">
-            {comment.author.name}
-            <span className="text-subtle ml-1.5 font-normal">
-              {formatRelative(comment.created_at)}
-              {comment.edited_at && ' · 수정됨'}
-            </span>
-          </p>
-          {canEdit && draft === null && (
-            <button
-              type="button"
-              aria-label={`${formatRelative(comment.created_at)} 댓글 고치기`}
-              title="댓글 고치기"
-              onClick={() => {
-                setEditError(null)
-                setDraft(comment.body)
-              }}
-              className={cn(ROW_ACTION, 'hover:text-fg')}
-            >
-              <Pencil className="size-3.5" />
-            </button>
-          )}
-          {canDelete && (
-            <button
-              type="button"
-              aria-label={`${formatRelative(comment.created_at)} 댓글 삭제`}
-              title="댓글 삭제"
-              disabled={remove.isPending}
-              onClick={() => {
-                if (!confirm('이 댓글을 지울까요? 되돌릴 수 없습니다.')) return
-                // mutate 의 onError 는 이 줄이 사라지면(창 닫기, 탭 바꾸기) 불리지 않는다.
-                // 약속에 붙인 처리는 그래도 돈다.
-                remove.mutateAsync(comment.id).catch((err: unknown) => {
-                  toast.error(err instanceof ApiError ? err.message : '댓글을 지우지 못했습니다.')
-                })
-                onDelete?.()
-              }}
-              className={cn(ROW_ACTION, 'hover:text-danger')}
-            >
-              <Trash2 className="size-3.5" />
-            </button>
-          )}
-        </div>
-        {children}
-        {draft !== null ? (
-          <div className="mt-1">
-            {/* ponytail: 멘션 자동 완성 없이 글자로만 고친다(채팅 메시지 고치기와 같다). 이미 쓴
-                `@이름` 은 그대로 남는다. 사람 목록은 입력칸 위로 뜨는데, 이 줄은 스크롤되는 목록
-                안이라 첫 줄에서는 목록이 잘린다. */}
-            <Textarea
-              autoFocus
-              value={draft}
-              onChange={(e) => {
-                setDraft(e.target.value)
-                setEditError(null)
-              }}
-              submitOnEnter
-              onSubmitEnter={save}
-              onKeyDown={(e) => {
-                if (e.key !== 'Escape') return
-                // 블록 옆 창은 Esc 로 창째 닫힌다. 고치기만 그만두고 창은 둔다.
-                e.stopPropagation()
-                // 한글을 조합하는 중의 Esc 는 조합만 취소한다. 쓰던 글까지 버리지 않는다.
-                if (!e.nativeEvent.isComposing) closeEdit()
-              }}
-              rows={Math.min(6, Math.max(draft.split('\n').length, Math.ceil(draft.length / 30)))}
-              maxLength={COMMENT_BODY_MAX}
-              aria-label="댓글 고치기"
-              aria-invalid={editError ? true : undefined}
-              className="w-full resize-none"
-            />
-            {editError && (
-              <p role="alert" className="text-danger mt-1 text-xs">
-                {editError}
-              </p>
-            )}
-            <div className="mt-1.5 flex items-center gap-2">
-              <Button size="sm" onClick={save} disabled={!draft.trim() || edit.isPending}>
-                {edit.isPending ? <Spinner className="border-t-on-accent" /> : '저장'}
-              </Button>
-              <Button size="sm" variant="secondary" onClick={closeEdit} disabled={edit.isPending}>
-                취소
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <p className="text-muted mt-0.5 text-sm break-words whitespace-pre-wrap">
-            <MentionText body={comment.body} names={names} />
-          </p>
-        )}
-      </div>
-    </div>
+      {children}
+    </CommentRowBase>
   )
 }
 
