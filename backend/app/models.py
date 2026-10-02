@@ -22,6 +22,7 @@ from sqlalchemy import (
     Integer,
     LargeBinary,
     Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy import text as sql_text
@@ -386,6 +387,20 @@ class AiMessage(Base):
     body: Mapped[str] = mapped_column(Text, nullable=False)
     citations: Mapped[list | None] = mapped_column(JSONB)  # 각주 매핑 (04 §8.1)
     feedback: Mapped[int | None] = mapped_column(Integer)  # 1 도움돼요 / -1
+
+
+class AiFeedback(Base):
+    """`POST /ai/feedback`(README 37). 대화를 서버가 저장하지 않아 `message_id` 는 클라이언트가 만든 답변 id 다.
+    ai_messages.feedback 칸은 대화 저장이 붙으면 그쪽으로 옮긴다."""
+
+    __tablename__ = "ai_feedback"
+    __table_args__ = (UniqueConstraint("user_id", "message_id"),)
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    message_id: Mapped[str] = mapped_column(Text, nullable=False)
+    value: Mapped[int] = mapped_column(Integer, nullable=False)  # 1 도움돼요 / -1
+    created_at: Mapped[datetime] = created_at_col()
 
 
 class DocChunk(Base):
