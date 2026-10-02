@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { appendMessage, errorText, prependOlder, withLastMessage, withUnread } from './events'
+import {
+  appendMessage,
+  errorText,
+  prependOlder,
+  removeMessage,
+  replaceMessage,
+  withEditedLast,
+  withLastMessage,
+  withUnread,
+} from './events'
 import type { ChatChannel, ChatMessage } from './types'
 
 function message(id: string): ChatMessage {
@@ -74,6 +83,54 @@ describe('prependOlder', () => {
   it('목록이 사라졌으면 아무것도 하지 않는다', () => {
     const older = { items: [message('m1')], next_cursor: null }
     expect(prependOlder(undefined, older, 'c-1')).toBeUndefined()
+  })
+})
+
+describe('replaceMessage', () => {
+  it('같은 id 의 메시지를 제자리에 갈아 끼우고 나머지 칸은 그대로 둔다', () => {
+    const page = { items: [message('m1'), message('m2')], next_cursor: 'c-1' }
+    const edited = { ...message('m1'), body: '고친 글', edited_at: '2026-09-21T02:05:00Z' }
+    const next = replaceMessage(page, edited)
+    expect(next?.items.map((m) => m.body)).toEqual(['고친 글', '안녕하세요'])
+    expect(next?.next_cursor).toBe('c-1')
+  })
+
+  it('목록에 없는 메시지면 같은 객체를 돌려준다', () => {
+    // 아직 안 받은 과거의 메시지다. 그 쪽을 받을 때 서버가 고친 뒤의 것을 준다.
+    const page = { items: [message('m2')] }
+    expect(replaceMessage(page, message('m1'))).toBe(page)
+  })
+})
+
+describe('removeMessage', () => {
+  it('그 id 만 뺀다', () => {
+    const page = { items: [message('m1'), message('m2')], next_cursor: null }
+    expect(removeMessage(page, 'm1')?.items.map((m) => m.id)).toEqual(['m2'])
+  })
+
+  it('없는 id 면 같은 객체를 돌려준다', () => {
+    // 탭이 여러 개면 같은 이벤트가 중복으로 온다. 두 번째는 아무 일도 없어야 한다.
+    const page = { items: [message('m1')] }
+    expect(removeMessage(page, 'm9')).toBe(page)
+    expect(removeMessage(undefined, 'm1')).toBeUndefined()
+  })
+})
+
+describe('withEditedLast', () => {
+  it('고쳐진 메시지가 마지막 메시지였던 채널의 미리보기만 바꾼다', () => {
+    const list = {
+      items: [
+        { ...channel('c1', 0), last_message: message('m1') },
+        { ...channel('c2', 0), last_message: message('m2') },
+      ],
+    }
+    const next = withEditedLast(list, { ...message('m1'), body: '고친 글' })
+    expect(next?.items.map((c) => c.last_message?.body)).toEqual(['고친 글', '안녕하세요'])
+  })
+
+  it('마지막 메시지가 아니면 같은 객체를 돌려준다', () => {
+    const list = { items: [{ ...channel('c1', 0), last_message: message('m2') }] }
+    expect(withEditedLast(list, message('m1'))).toBe(list)
   })
 })
 

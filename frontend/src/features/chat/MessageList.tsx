@@ -1,8 +1,19 @@
-import { memo, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router'
-import { Download, FileText, Paperclip } from 'lucide-react'
+import { Download, FileText, Paperclip, Pencil, Trash2 } from 'lucide-react'
 import { Avatar } from '@/components/ui/Avatar'
+import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
+import { Textarea } from '@/components/ui/Textarea'
+import { useToast } from '@/components/ui/ToastContext'
 import { hueOf } from '@/lib/avatar'
 import { formatDay, formatRelative, formatTime } from '@/lib/datetime'
 import { formatBytes } from '@/lib/format'
@@ -10,9 +21,18 @@ import { httpUrl } from '@/lib/serverOrigin'
 import { useCurrentUser } from '@/features/auth/AuthContext'
 import { UNTITLED_DOC, useDoc } from '@/features/docs/api'
 import { MentionText } from '@/features/people/MentionText'
+import { MSW_ENABLED } from '@/mocks/accounts'
 import { isImage } from './attachments'
-import { useMessages, useOlderMessages } from './api'
+import { MAX_BODY_CHARS, useMessages, useOlderMessages } from './api'
+import { useChatSocketContext } from './ChatSocketContext'
 import type { ChatAttachment, ChatMessage } from './types'
+
+/**
+ * 내 메시지 고치기·지우기를 보일지. 실서버의 소켓에는 아직 그 op 이 없다(04 §4.1 에 `msg`·`read`·
+ * `typing` 뿐). 개발 릴레이(`scripts/chat.js`)는 받으므로 목이 켜진 개발 화면에서만 보인다.
+ * 서버가 받게 되면 이 스위치를 걷는다.
+ */
+const MESSAGE_EDIT_ENABLED = MSW_ENABLED
 
 /** 같은 사람이 5분 안에 이어서 보낸 메시지는 아바타·이름을 반복하지 않는다. */
 const GROUP_WINDOW_MS = 5 * 60_000
@@ -150,12 +170,16 @@ export function MessageList({
   const lastMine = last?.author.id === me
   const settledChannel = useRef<string | null>(null)
   const seenLast = useRef<string | undefined>(undefined)
+  const seenCount = useRef(0)
   useEffect(() => {
     const scroller = scrollerRef.current
     if (!scroller) return
 
-    const sentByMe = lastMine && lastId !== seenLast.current
+    // 건수가 늘었을 때만 「내가 방금 보냈다」로 본다. 내 마지막 메시지가 지워져 그 앞의 내
+    // 메시지가 마지막이 된 것도 id 가 바뀌지만, 그때 끌어내리면 위를 읽던 자리를 뺏는다.
+    const sentByMe = lastMine && lastId !== seenLast.current && count > seenCount.current
     seenLast.current = lastId
+    seenCount.current = count
     const distanceFromBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight
     if (settledChannel.current !== channelId || sentByMe || distanceFromBottom < 200) {
       settledChannel.current = channelId
@@ -190,6 +214,28 @@ export function MessageList({
       onError: () => (keepFromBottom.current = null),
     })
   }
+
+  // 내 메시지 고치기·지우기. 소켓으로 보내고 화면은 돌아오는 이벤트로 바뀐다(`useChatSocket`).
+  // 닫혀 있으면 보내지 못한다. 줄에는 고칠 입력 옆 자리가 없어 토스트로 알린다.
+  // 두 함수는 줄마다 그대로 넘어가므로 그릴 때마다 같아야 한다(`MessageRow` 의 memo).
+  const { editMessage, deleteMessage } = useChatSocketContext()
+  const toast = useToast()
+  const edit = useCallback(
+    (messageId: string, body: string) => {
+      const sent = editMessage(channelId, messageId, body)
+      if (!sent) toast.error('연결이 끊겨 고치지 못했습니다. 연결되면 다시 시도하세요.')
+      return sent
+    },
+    [editMessage, channelId, toast],
+  )
+  const remove = useCallback(
+    (messageId: string) => {
+      const sent = deleteMessage(channelId, messageId)
+      if (!sent) toast.error('연결이 끊겨 지우지 못했습니다. 연결되면 다시 시도하세요.')
+      return sent
+    },
+    [deleteMessage, channelId, toast],
+  )
 
   // 찾아온 메시지로 내려 주고 잠깐 밝힌다. 아래 붙이기보다 뒤에 둬야 한다: 같은 로딩에
   // 둘 다 돌면 나중에 부른 쪽이 자리를 정하고, 위로 올라간 뒤에는 아래 붙이기가 200px
@@ -268,6 +314,8 @@ export function MessageList({
               compact={grouped(message, previous)}
               flash={message.id === focusId}
               mentionNames={mentionNames}
+              onEdit={MESSAGE_EDIT_ENABLED && message.author.id === me ? edit : undefined}
+              onDelete={MESSAGE_EDIT_ENABLED && message.author.id === me ? remove : undefined}
             >
               {message.doc_ref && <DocCard docId={message.doc_ref} />}
             </MessageRow>
@@ -299,6 +347,8 @@ const MessageRow = memo(function MessageRow({
   compact,
   flash,
   mentionNames,
+  onEdit,
+  onDelete,
   children,
 }: {
   message: ChatMessage
@@ -309,9 +359,37 @@ const MessageRow = memo(function MessageRow({
   /** ⌘K 로 찾아온 메시지라 잠깐 밝힌다. */
   flash: boolean
   mentionNames: ReadonlySet<string>
+  /**
+   * 내 메시지일 때만 온다. 보냈으면 `true`, 소켓이 닫혀 못 보냈으면 `false`. 줄을 건너뛰게
+   * 하려면 그릴 때마다 같은 함수여야 한다(`MessageList` 가 붙잡는다).
+   */
+  onEdit?: (messageId: string, body: string) => boolean
+  onDelete?: (messageId: string) => boolean
   /** 문서 카드. 없는 줄은 `null`. */
   children: ReactNode
 }) {
+  /** 고치는 중인 글. 고치는 중이 아니면 `null`. */
+  const [draft, setDraft] = useState<string | null>(null)
+  const row = useRef<HTMLDivElement>(null)
+
+  /** 고치는 칸을 닫는다. 칸이 사라지면 초점이 body 로 떨어지므로 이 줄로 돌려놓는다(버튼도 다시 뜬다). */
+  const close = () => {
+    setDraft(null)
+    row.current?.focus({ preventScroll: true })
+  }
+
+  // ponytail: 고치는 사이 다른 탭에서 이 메시지가 지워지면 쓰던 글은 줄과 함께 사라지고,
+  // 고쳐졌으면 나중에 저장한 쪽이 남는다. 알리지 않는다.
+  const save = () => {
+    if (draft === null || !onEdit) return
+    const next = draft.trim()
+    if (next === message.body) return close()
+    // 글을 다 지우면 저장하지 않는다(첨부만 남는 경우는 된다). 메시지를 없애려면 지우기를 쓴다.
+    if (!next && !message.attachments?.length) return
+    // 화면은 돌아오는 `msg_edit` 로 바뀐다. 못 보냈으면 고치던 글을 그대로 둔다.
+    if (onEdit(message.id, next)) close()
+  }
+
   return (
     <div>
       {dayLabel && (
@@ -322,7 +400,37 @@ const MessageRow = memo(function MessageRow({
         </div>
       )}
 
-      <div id={`m-${message.id}`} tabIndex={-1} className={cnRow(compact, flash)}>
+      <div ref={row} id={`m-${message.id}`} tabIndex={-1} className={cnRow(compact, flash)}>
+        {/*
+          고치기·지우기. 줄 오른쪽 위에 떠서 줄 높이를 바꾸지 않는다. 줄에 올리거나 줄 안에 초점이
+          있을 때만 보이고(줄은 누르면 초점을 받는다. 손가락 기기는 메시지를 한 번 누르면 뜬다),
+          숨어 있을 때는 눌리지도 않는다.
+        */}
+        {onEdit && onDelete && draft === null && (
+          <div className="border-line bg-surface pointer-events-none absolute -top-3 right-2 flex rounded-md border opacity-0 shadow-sm transition-opacity group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100">
+            <button
+              type="button"
+              aria-label={`${formatTime(message.created_at)} 메시지 고치기`}
+              title="고치기"
+              onClick={() => setDraft(message.body)}
+              className="text-subtle hover:text-fg grid size-7 cursor-pointer place-items-center rounded"
+            >
+              <Pencil className="size-3.5" />
+            </button>
+            <button
+              type="button"
+              aria-label={`${formatTime(message.created_at)} 메시지 지우기`}
+              title="지우기"
+              onClick={() => {
+                if (confirm('이 메시지를 지울까요? 되돌릴 수 없습니다.')) onDelete(message.id)
+              }}
+              className="text-subtle hover:text-danger grid size-7 cursor-pointer place-items-center rounded"
+            >
+              <Trash2 className="size-3.5" />
+            </button>
+          </div>
+        )}
+
         {compact ? (
           <span className="text-subtle w-9 shrink-0 pt-0.5 text-right text-[11px] opacity-0 group-hover:opacity-100">
             {formatTime(message.created_at)}
@@ -340,10 +448,49 @@ const MessageRow = memo(function MessageRow({
               </span>
             </p>
           )}
-          {message.body && (
-            <p className="text-muted text-sm break-words whitespace-pre-wrap">
-              <MentionText body={message.body} names={mentionNames} />
-            </p>
+          {draft !== null ? (
+            <div className="mt-1">
+              {/* ponytail: 멘션 자동 완성 없이 글자로만 고친다. 이미 쓴 `@이름` 은 그대로 남는다. */}
+              <Textarea
+                autoFocus
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                maxLength={MAX_BODY_CHARS}
+                // 줄바꿈 없이 길게 쓴 글도 한 줄에 갇히지 않게 글자 수로도 어림한다.
+                rows={Math.min(8, Math.max(draft.split('\n').length, Math.ceil(draft.length / 50)))}
+                aria-label="메시지 고치기"
+                className="resize-none"
+                submitOnEnter
+                onSubmitEnter={save}
+                onKeyDown={(e) => {
+                  // 한글을 조합하는 중의 Esc 는 조합만 취소한다. 쓰던 글까지 버리지 않는다.
+                  if (e.key === 'Escape' && !e.nativeEvent.isComposing) close()
+                }}
+              />
+              <div className="mt-1.5 flex items-center gap-2">
+                <Button size="sm" onClick={save}>
+                  저장
+                </Button>
+                <Button size="sm" variant="secondary" onClick={close}>
+                  취소
+                </Button>
+                <span className="text-subtle text-xs">Enter 저장 · Esc 취소</span>
+              </div>
+            </div>
+          ) : (
+            message.body && (
+              <p className="text-muted text-sm break-words whitespace-pre-wrap">
+                <MentionText body={message.body} names={mentionNames} />
+                {message.edited_at && (
+                  <span
+                    className="text-subtle ml-1.5 text-[11px]"
+                    title={`${formatDay(message.edited_at)} ${formatTime(message.edited_at)} 수정`}
+                  >
+                    (수정됨)
+                  </span>
+                )}
+              </p>
+            )
           )}
           <Attachments files={message.attachments} />
           {children}
@@ -356,5 +503,6 @@ const MessageRow = memo(function MessageRow({
 // 가로 여백은 밝힐 때만 주면 글줄이 옆으로 밀린다. 항상 물려 두고 색만 오간다.
 function cnRow(compact: boolean, flash: boolean) {
   const spacing = compact ? 'mt-0.5' : 'mt-4'
-  return `group -mx-2 flex gap-3 rounded-lg px-2 ${spacing} ${flash ? 'animate-flash' : ''}`
+  // relative: 고치기·지우기 버튼이 이 줄의 오른쪽 위에 뜬다.
+  return `group relative -mx-2 flex gap-3 rounded-lg px-2 ${spacing} ${flash ? 'animate-flash' : ''}`
 }

@@ -8,7 +8,15 @@ import { homeKeys } from '@/features/home/keys'
 import { notificationKeys } from '@/features/notifications/api'
 import { noticeToast } from '@/features/notifications/view'
 import { chatKeys } from './api'
-import { appendMessage, errorText, withLastMessage, withUnread } from './events'
+import {
+  appendMessage,
+  errorText,
+  removeMessage,
+  replaceMessage,
+  withEditedLast,
+  withLastMessage,
+  withUnread,
+} from './events'
 import type { ChatAttachment, ChatChannel, ChatEvent, ChatMessage } from './types'
 
 /** 타이핑 표시는 이 시간 동안만 유지한다. 상대가 멈춰도 서버가 알려 주지 않는다. */
@@ -64,6 +72,15 @@ export interface ChatSocket {
    * 또 보내므로(`ChatPage`) 재시도를 여기서 쌓아 두지 않는다.
    */
   sendRead: (channelId: string) => void
+  /**
+   * 내가 보낸 메시지의 글을 고친다. 화면은 돌아오는 `msg_edit` 로 바뀐다(낙관적 반영 없음).
+   * 닫혀 있으면 `false`. 서버가 거절하면 `error` 이벤트가 토스트로 뜬다.
+   *
+   * 실서버에는 아직 없는 op 이다. 화면은 개발 릴레이일 때만 버튼을 보인다(`MessageList.tsx`).
+   */
+  editMessage: (channelId: string, messageId: string, body: string) => boolean
+  /** 내가 보낸 메시지를 지운다. 화면은 돌아오는 `msg_del` 로 바뀐다. 닫혀 있으면 `false`. */
+  deleteMessage: (channelId: string, messageId: string) => boolean
 }
 
 /**
@@ -150,6 +167,32 @@ export function useChatSocket(): ChatSocket {
           // 홈은 여기서 안 받는다. `msg` 뒤에는 늘 `unread` 가 따라오고(서버가 멤버마다 자기
           // 숫자를 보낸다) 그쪽이 홈을 다시 받는다. 둘 다 하면 메시지 한 통에 홈을 두 번 받는다.
           notifyIncoming(qc, message, user.id)
+          return
+        }
+
+        if (event.ev === 'msg_edit') {
+          const { message } = event
+          qc.setQueryData<{ items: ChatMessage[] }>(chatKeys.messages(message.channel_id), (old) =>
+            replaceMessage(old, message),
+          )
+          qc.setQueryData<{ items: ChatChannel[] }>(chatKeys.channels, (old) =>
+            withEditedLast(old, message),
+          )
+          return
+        }
+
+        if (event.ev === 'msg_del') {
+          const { channel_id, message_id } = event
+          qc.setQueryData<{ items: ChatMessage[] }>(chatKeys.messages(channel_id), (old) =>
+            removeMessage(old, message_id),
+          )
+          // 지워진 것이 그 채널의 마지막 메시지였으면 미리보기에 무엇이 올지는 서버만 안다
+          // (그 앞 메시지를 안 받아 둔 채널일 수 있다). 그때만 목록을 다시 받는다. 안읽음 숫자는
+          // 뒤따라오는 `unread` 가 정하고, 다시 받은 응답도 지운 뒤의 숫자라 서로 어긋나지 않는다.
+          const wasLast = qc
+            .getQueryData<{ items: ChatChannel[] }>(chatKeys.channels)
+            ?.items.some((item) => item.last_message?.id === message_id)
+          if (wasLast) void qc.invalidateQueries({ queryKey: chatKeys.channels })
           return
         }
 
@@ -261,6 +304,17 @@ export function useChatSocket(): ChatSocket {
     [sendOp],
   )
 
+  const editMessage = useCallback<ChatSocket['editMessage']>(
+    (channelId, messageId, body) =>
+      sendOp({ op: 'edit', channel_id: channelId, message_id: messageId, body }),
+    [sendOp],
+  )
+
+  const deleteMessage = useCallback<ChatSocket['deleteMessage']>(
+    (channelId, messageId) => sendOp({ op: 'del', channel_id: channelId, message_id: messageId }),
+    [sendOp],
+  )
+
   const notifyTyping = useCallback(
     (channelId: string) => {
       const now = Date.now()
@@ -271,5 +325,13 @@ export function useChatSocket(): ChatSocket {
     [sendOp],
   )
 
-  return { connected, typingByChannel, notifyTyping, sendMessage, sendRead }
+  return {
+    connected,
+    typingByChannel,
+    notifyTyping,
+    sendMessage,
+    sendRead,
+    editMessage,
+    deleteMessage,
+  }
 }

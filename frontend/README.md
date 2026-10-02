@@ -129,6 +129,12 @@ PR 본문에 흩어져 있던 것을 한곳에 모았다. 위는 **없어서 못
   문서는 404. 목만 먼저 주고, 휴지통 버튼은 목이 켜져 있을 때만 보인다(`features/docs/CommentPanel.tsx`
   의 `COMMENT_DELETE_ENABLED`). 임원이 남의 댓글을 지울 수 있는지, 그 댓글의 멘션 알림을 같이
   지울지는 백엔드가 정한다.
+- **채팅 메시지 고치기·지우기**(#264): 서버 소켓의 op 은 `sub`·`msg`·`read`·`typing` 넷뿐이다.
+  프론트가 가정한 모양은 `{op:'edit', channel_id, message_id, body}` → `{ev:'msg_edit', channel_id,
+  message}`, `{op:'del', channel_id, message_id}` → `{ev:'msg_del', channel_id, message_id}`, 쓴
+  사람만, `MessageOut` 에 `edited_at`. 개발 릴레이만 먼저 받고, 버튼은 목이 켜져 있을 때만 보인다
+  (`features/chat/MessageList.tsx` 의 `MESSAGE_EDIT_ENABLED`). 임원이 남의 메시지를 지울 수 있는지,
+  기한을 둘지, 지운 메시지의 첨부·알림을 어떻게 할지는 백엔드가 정한다.
 
 자료실(#226)도 백엔드가 요청한 모양 그대로 넣었다(#240, `GET /archive?limit=`). 운영 빌드에서도
 메뉴가 뜬다. 백엔드가 정한 것: 열람 권한은 파일마다 매기지 않고 원래 자리를 따른다(공개 채널과

@@ -73,6 +73,8 @@ function makeMessage(channelId, authorId, body, createdAt, files) {
     doc_ref: null,
     attachments: files?.length ? files : null,
     created_at: createdAt ?? new Date().toISOString(),
+    // 고친 적이 없으면 null. 실서버 `MessageOut` 에는 아직 없는 칸이다(아래 `edit` op 과 같이 제안 중).
+    edited_at: null,
   }
 }
 
@@ -271,6 +273,46 @@ export function handleChatConnection(conn, userId) {
       markRead(userId, channelId)
       publish(channelId, { ev: 'msg', channel_id: channelId, message })
       return publishUnread(channel)
+    }
+
+    // 고치기·지우기. 실서버에는 아직 없는 op 이다(04 §4.1 에 없음, 프론트가 정한 가정).
+    //   {op:'edit', channel_id, message_id, body} → 멤버 전원에게 {ev:'msg_edit', channel_id, message}
+    //   {op:'del',  channel_id, message_id}       → 멤버 전원에게 {ev:'msg_del', channel_id, message_id}
+    // 쓴 사람만 할 수 있다. 첨부는 고치기로 바뀌지 않는다.
+    if (op.op === 'edit' || op.op === 'del') {
+      const list = messages.get(channelId) ?? []
+      const index = list.findIndex((m) => m.id === op.message_id)
+      const target = list[index]
+      if (!target) return sendError(conn, 'NOT_FOUND', '없는 메시지입니다.', channelId)
+      if (target.author.id !== userId) {
+        return sendError(
+          conn,
+          'FORBIDDEN',
+          '내가 보낸 메시지만 고치거나 지울 수 있습니다.',
+          channelId,
+        )
+      }
+
+      if (op.op === 'del') {
+        list.splice(index, 1)
+        publish(channelId, { ev: 'msg_del', channel_id: channelId, message_id: target.id })
+        // 안 읽은 메시지가 지워졌으면 숫자가 준다. 보는 사람마다 다시 센다.
+        return publishUnread(channel)
+      }
+
+      const body = typeof op.body === 'string' ? op.body.trim() : ''
+      if (body.length > 10_000) {
+        return sendError(conn, 'VALIDATION', '본문이 너무 깁니다.', channelId)
+      }
+      // 보낼 때와 같은 규칙. 첨부가 있으면 글을 비워도 된다.
+      if (!body && !target.attachments) {
+        return sendError(conn, 'VALIDATION', '본문이나 첨부 중 하나는 있어야 한다.', channelId)
+      }
+      // 그대로면 고친 것이 아니다. 「수정됨」을 붙이지 않는다.
+      if (body === target.body) return
+      const message = { ...target, body, edited_at: new Date().toISOString() }
+      list[index] = message
+      return publish(channelId, { ev: 'msg_edit', channel_id: channelId, message })
     }
 
     if (op.op === 'read') {
