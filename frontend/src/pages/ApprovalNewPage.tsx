@@ -56,7 +56,8 @@ export function ApprovalNewPage() {
   const [params] = useSearchParams()
   const arrangementId = params.get('arrangement')
   const draftId = params.get('draft') ?? ''
-  const fromId = params.get('from') ?? ''
+  // 다시 작성은 빈 폼에서만 시작한다. 임시저장이나 출장과 같이 오면 그쪽이 이기므로 받지 않는다.
+  const fromId = draftId || arrangementId ? '' : (params.get('from') ?? '')
   const navigate = useNavigate()
   const toast = useToast()
   const user = useCurrentUser()
@@ -117,10 +118,19 @@ export function ApprovalNewPage() {
     )
   }
   if (fromId && source.isPending) return <SkeletonRows rows={4} />
-  if (fromId && source.isError) {
+  // 다시 작성은 끝난 내 문서에서만 한다. 버튼도 그때만 뜨지만 주소를 직접 쓰면 여기로 온다.
+  // 대기·승인 문서를 베끼면 같은 출장에 결의서가 둘 걸린다.
+  const rewritable =
+    source.data?.drafter.id === user.id &&
+    ['rejected', 'canceled', 'closed'].includes(source.data.status)
+  if (fromId && (source.isError || !rewritable)) {
     return (
       <div className="py-16 text-center">
-        <p className="text-muted text-sm">다시 작성할 문서를 불러오지 못했습니다.</p>
+        <p className="text-muted text-sm">
+          {source.isError
+            ? '다시 작성할 문서를 불러오지 못했습니다.'
+            : '반려·회수·강제 종결로 끝난 내 문서만 다시 작성할 수 있습니다.'}
+        </p>
         <Link to="/approvals" className="text-accent mt-4 inline-block text-sm hover:underline">
           결재함으로
         </Link>

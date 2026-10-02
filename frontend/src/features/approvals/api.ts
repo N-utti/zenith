@@ -76,11 +76,14 @@ export const DRAFT_DELETE_ENABLED = MSW_ENABLED
 
 /** 임시저장을 지운다. 내 것, 상신 전인 것만(상신한 문서는 409). */
 export function useDeleteDraft() {
-  const refetch = useRefetchApprovals()
+  const qc = useQueryClient()
   return useMutation({
     mutationFn: (id: string) => api<void>(`/approvals/drafts/${id}`, { method: 'DELETE' }),
     // 실패해도 다시 읽는다. 다른 탭에서 이미 상신했거나 지운 문서면 이 목록이 옛것이다.
-    onSettled: refetch,
+    // 결재함만 다시 읽고, 다 읽을 때까지 기다린다(약속을 돌려준다). 안 기다리면 줄이 사라지기
+    // 전에 버튼이 되살아나 한 번 더 눌리고 404 가 뜬다. 문서 상세까지 다시 읽으면 상세에서 지울
+    // 때 방금 지운 문서를 한 번 더 청해 화면이 오류로 바뀐다.
+    onSettled: () => qc.invalidateQueries({ queryKey: [...approvalsKey, 'box'] }),
   })
 }
 
