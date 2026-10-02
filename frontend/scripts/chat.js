@@ -193,6 +193,14 @@ function channelView(channel, viewerId) {
 /** @type {Map<import('ws').WebSocket, string>} 연결 → userId */
 const sockets = new Map()
 
+/**
+ * 사람마다 목록에서 숨긴 DM 방(아래 `/channels/{id}/hide`). 방과 대화는 그대로 있고 그 사람의
+ * 목록에서만 빠진다. 그 방에 새 메시지가 오거나 그 사람이 같은 상대와 대화를 다시 열면 돌아온다.
+ * @type {Map<string, Set<string>>} userId → 채널 id
+ */
+const hiddenDms = new Map()
+const isHidden = (userId, channelId) => hiddenDms.get(userId)?.has(channelId) === true
+
 function publish(channelId, event) {
   const channel = CHANNELS.find((c) => c.id === channelId)
   if (!channel) return
@@ -269,6 +277,8 @@ export function handleChatConnection(conn, userId) {
 
       const message = makeMessage(channelId, userId, body, undefined, checked.files)
       messages.get(channelId)?.push(message) ?? messages.set(channelId, [message])
+      // 숨겨 둔 사람에게도 다시 보인다. 화면은 목록에 없는 채널의 `msg` 를 받으면 목록을 다시 받는다.
+      for (const uid of channel.memberIds) hiddenDms.get(uid)?.delete(channelId)
       // 보낸 사람은 그 채널을 보고 있다. 서버도 보낸 사람의 last_read_at 을 같이 올린다.
       markRead(userId, channelId)
       publish(channelId, { ev: 'msg', channel_id: channelId, message })
@@ -504,7 +514,7 @@ export async function handleChatRequest(req, res, url) {
 
   if (path === '/channels' && req.method === 'GET') {
     if (!isUser(viewerId)) return json(res, 401, { detail: '알 수 없는 사용자입니다.' })
-    const items = CHANNELS.filter((c) => c.memberIds.includes(viewerId))
+    const items = CHANNELS.filter((c) => c.memberIds.includes(viewerId) && !isHidden(viewerId, c.id))
       .map((c) => channelView(c, viewerId))
       // 최근 대화가 위로. 대화가 없는 채널은 아래로 밀리고, 그 안에서는 이름순(백엔드와 같다).
       .sort((a, b) => {
@@ -568,6 +578,8 @@ export async function handleChatRequest(req, res, url) {
         memberIds: [viewerId, dmUserId],
       }
       if (!existing) CHANNELS.push(channel)
+      // 숨겨 둔 대화를 다시 열면 내 목록에 돌아온다.
+      hiddenDms.get(viewerId)?.delete(channel.id)
       return json(res, 201, createdView(channel, viewerId))
     }
 
@@ -701,6 +713,59 @@ export async function handleChatRequest(req, res, url) {
    * 바뀐 뒤에는 전·후 멤버 모두에게 `channels` 이벤트를 보낸다. 빠진 사람의 목록에서 채널이
    * 사라지고, 들어온 사람의 목록에 채널이 생겨야 한다.
    */
+  /**
+   * 채널 이름 바꾸기와 DM 숨기기. 둘 다 실서버에 아직 없는 경로다(04 §4 에 없음, 프론트가 정한 가정).
+   *
+   *   PATCH /channels/{id} {name}   → 200 `ChannelOut`. 멤버면 누구나(채널에 주인이 없다).
+   *                                   DM 은 이름이 없어 422. 이름 규칙은 만들 때와 같다.
+   *   POST  /channels/{id}/hide     → 204. DM 만(채널은 422). 내 목록에서만 빠진다.
+   *
+   * 이름이 바뀌면 멤버 전원에게, 숨기면 나에게만 `channels` 이벤트를 보낸다.
+   */
+  const channelMatch = path.match(/^\/channels\/([^/]+)(\/hide)?$/)
+  if (channelMatch && (req.method === 'PATCH' || req.method === 'POST')) {
+    const hide = channelMatch[2] !== undefined
+    if (hide !== (req.method === 'POST')) return json(res, 404, { detail: '없는 경로입니다.' })
+    const payload = hide ? undefined : await readBody(req)
+    if (!isUser(viewerId)) {
+      return json(res, 401, { detail: '알 수 없는 사용자입니다.', code: 'AUTH_REQUIRED' })
+    }
+    const channel = CHANNELS.find((c) => c.id === channelMatch[1])
+    if (!channel || !channel.memberIds.includes(viewerId)) return json(res, 403, FORBIDDEN)
+
+    if (hide) {
+      if (!channel.is_dm) {
+        return json(res, 422, { detail: 'DM 만 숨길 수 있습니다.', code: 'VALIDATION' })
+      }
+      const mine = hiddenDms.get(viewerId) ?? new Set()
+      hiddenDms.set(viewerId, mine.add(channel.id))
+      publishTo([viewerId], { ev: 'channels' })
+      res.writeHead(204)
+      return res.end()
+    }
+
+    if (channel.is_dm) {
+      return json(res, 422, { detail: 'DM 은 이름을 바꿀 수 없습니다.', code: 'VALIDATION' })
+    }
+    const name = typeof payload?.name === 'string' ? payload.name.trim() : ''
+    if (!name || name.length > 100) {
+      return json(res, 422, {
+        detail: '채널 이름은 1자 이상 100자 이하여야 합니다.',
+        code: 'VALIDATION',
+      })
+    }
+    // 만들 때와 같다. 공개 채널끼리만 견주고, 비공개 채널의 이름은 겹쳐도 막지 않는다.
+    const taken = CHANNELS.some(
+      (c) => c !== channel && !c.is_dm && !c.is_private && c.name === name,
+    )
+    if (!channel.is_private && taken) {
+      return json(res, 409, { detail: '같은 이름의 채널이 있습니다.', code: 'CONFLICT' })
+    }
+    channel.name = name
+    publishTo(channel.memberIds, { ev: 'channels' })
+    return json(res, 200, channelView(channel, viewerId))
+  }
+
   const membersMatch = path.match(/^\/channels\/([^/]+)\/members(?:\/([^/]+))?$/)
   if (membersMatch) {
     // 본문을 권한 확인보다 먼저 읽는다. 확인한 뒤에 기다리면, 그 사이 빠진 사람의 요청이

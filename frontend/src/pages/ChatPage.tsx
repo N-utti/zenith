@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'react-router'
 import { AtSign, Hash, Lock, MessagesSquare, UserPlus, WifiOff } from 'lucide-react'
-import { useChannels, useMessages } from '@/features/chat/api'
+import { CHANNEL_MENU_ENABLED, useChannels, useMessages } from '@/features/chat/api'
 import { ChannelList } from '@/features/chat/ChannelList'
 import { ChannelMembersModal } from '@/features/chat/ChannelMembersModal'
+import { ChannelMenu } from '@/features/chat/ChannelMenu'
 import { Composer } from '@/features/chat/Composer'
 import { MessageList } from '@/features/chat/MessageList'
 import { useChatSocketContext } from '@/features/chat/ChatSocketContext'
@@ -139,15 +140,19 @@ export function ChatPage() {
               </span>
             )}
 
-            {!connected && (
-              <span
-                title="npm run server 로 개발 서버를 켜면 실시간으로 주고받습니다."
-                className="text-warning ml-auto flex items-center gap-1.5 text-xs"
-              >
-                <WifiOff className="size-3.5" />
-                연결 끊김. 메시지를 주고받을 수 없습니다
-              </span>
-            )}
+            {/* 오른쪽 끝 묶음. 끊김 알림과 더보기가 같이 있어도 한 덩이로 붙는다. */}
+            <div className="ml-auto flex shrink-0 items-center gap-2">
+              {!connected && (
+                <span
+                  title="npm run server 로 개발 서버를 켜면 실시간으로 주고받습니다."
+                  className="text-warning flex items-center gap-1.5 text-xs"
+                >
+                  <WifiOff className="size-3.5" />
+                  연결 끊김. 메시지를 주고받을 수 없습니다
+                </span>
+              )}
+              {CHANNEL_MENU_ENABLED && <ChannelMenu key={channel.id} channel={channel} />}
+            </div>
           </header>
 
           {/* 채널마다 새로 만든다. 과거를 받는 중이라는 표시와 스크롤 자리가 옆 채널로 새지 않게.

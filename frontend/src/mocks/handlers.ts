@@ -360,7 +360,7 @@ export const handlers = [
   // 공유되지 않기 때문이다. vite가 개발 서버(`npm run server`)로 넘기도록
   // 그대로 통과시킨다.
   //
-  // 개발 릴레이(`scripts/chat.js`)가 실제로 여는 일곱 개만 넘긴다. `/api/channels/*` 로
+  // 개발 릴레이(`scripts/chat.js`)가 실제로 여는 아홉 개만 넘긴다. `/api/channels/*` 로
   // 뭉뚱그리면 아직 안 만든 경로까지 삼켜 릴레이의 404로 조용히 떨어지고,
   // 통과는 "처리됨"이라 onUnhandledRequest 경고도 안 뜬다.
   http.get('/api/channels', () => passthrough()),
@@ -372,6 +372,9 @@ export const handlers = [
   // 비공개 채널의 멤버 더하기·빼기.
   http.post('/api/channels/:channelId/members', () => passthrough()),
   http.delete('/api/channels/:channelId/members/:userId', () => passthrough()),
+  // 채널 이름 바꾸기와 DM 숨기기. 실서버에는 아직 없는 경로다(릴레이의 주석).
+  http.patch('/api/channels/:channelId', () => passthrough()),
+  http.post('/api/channels/:channelId/hide', () => passthrough()),
 
   // ── 인증 ──────────────────────────────────────────────────
   http.post('/api/auth/login', async ({ request }) => {
