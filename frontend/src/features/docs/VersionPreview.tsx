@@ -2,6 +2,7 @@ import { EditorContent, useEditor } from '@tiptap/react'
 import { docContentExtensions } from './editorExtensions'
 import { History, RotateCcw, X } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
+import { cn } from '@/lib/cn'
 import { formatDay, formatTime } from '@/lib/datetime'
 import type { RestoredContent } from './versioning'
 import type { DocVersion } from './types'
@@ -15,12 +16,15 @@ import type { DocVersion } from './types'
 export function VersionPreview({
   version,
   content,
+  widthClass,
   onRestore,
   onClose,
   restoring,
 }: {
   version: DocVersion
   content: RestoredContent
+  /** 지금 문서의 본문 폭(`useCollabWidth`). 편집 화면과 같은 폭으로 보여야 표가 같은 모양이다. */
+  widthClass: string
   onRestore: () => void
   onClose: () => void
   restoring: boolean
@@ -55,7 +59,7 @@ export function VersionPreview({
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-3xl px-6 py-8">
+        <div className={cn('mx-auto px-6 py-8', widthClass)}>
           <h1 className="text-fg py-2 text-3xl font-bold tracking-tight">
             {content.title ?? '제목 없는 문서'}
           </h1>

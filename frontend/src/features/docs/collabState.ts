@@ -59,6 +59,40 @@ export function useCollabTitle(doc: Y.Doc, fallback: string) {
   }
 }
 
+/** 본문 폭 단계. 좁은 것부터. 첫 항목이 기본값이다. */
+export const DOC_WIDTHS = [
+  { value: 'normal', label: '보통', hint: '글 읽기 좋은 폭', className: 'max-w-3xl' },
+  { value: 'wide', label: '넓게', hint: '표·사진이 많을 때', className: 'max-w-5xl' },
+  { value: 'full', label: '꽉 차게', hint: '화면 폭 전부', className: 'max-w-none' },
+] as const
+
+export type DocWidth = (typeof DOC_WIDTHS)[number]
+
+/**
+ * 본문 폭도 제목처럼 Y.Doc 안에 둔다. 문서마다 정하고, 같이 보는 사람에게도 같은 폭으로 보인다.
+ *
+ * 사람마다 따로 두지 않는 이유는 표다. 표의 열 너비는 픽셀로 문서에 남는데, 본문 폭이 사람마다
+ * 다르면 한 사람에게는 본문에 꼭 맞는 표가 다른 사람에게는 가로로 구른다.
+ * 모르는 값(다음 버전이 더한 단계)이 들어 있으면 기본 폭으로 그린다.
+ */
+export function useCollabWidth(doc: Y.Doc) {
+  const meta = doc.getMap<string>('meta')
+
+  const stored = useSyncExternalStore(
+    (onChange) => {
+      meta.observe(onChange)
+      return () => meta.unobserve(onChange)
+    },
+    () => meta.get('width'),
+    () => undefined,
+  )
+
+  return {
+    width: DOC_WIDTHS.find(({ value }) => value === stored) ?? DOC_WIDTHS[0],
+    setWidth: (next: DocWidth['value']) => meta.set('width', next),
+  }
+}
+
 /**
  * 릴레이 연결 상태.
  *
