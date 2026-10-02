@@ -31,6 +31,8 @@ CONTRACT_PATHS = {
     "/api/me/notifications",
     "/api/me/notifications/read",
     "/api/me/notifications/delete",
+    "/api/me/events",
+    "/api/me/events/{id}",
     # §3 문서
     "/api/tree",
     "/api/folders",
