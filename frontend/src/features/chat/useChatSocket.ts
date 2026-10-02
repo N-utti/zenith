@@ -76,7 +76,7 @@ export interface ChatSocket {
    * 내가 보낸 메시지의 글을 고친다. 화면은 돌아오는 `msg_edit` 로 바뀐다(낙관적 반영 없음).
    * 닫혀 있으면 `false`. 서버가 거절하면 `error` 이벤트가 토스트로 뜬다.
    *
-   * 실서버에는 아직 없는 op 이다. 화면은 개발 릴레이일 때만 버튼을 보인다(`MessageList.tsx`).
+   * 쓴 사람만 된다(백엔드 #284). 남의 메시지면 `FORBIDDEN`, 없는 메시지면 `NOT_FOUND` 가 온다.
    */
   editMessage: (channelId: string, messageId: string, body: string) => boolean
   /** 내가 보낸 메시지를 지운다. 화면은 돌아오는 `msg_del` 로 바뀐다. 닫혀 있으면 `false`. */

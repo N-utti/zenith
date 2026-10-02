@@ -21,18 +21,10 @@ import { httpUrl } from '@/lib/serverOrigin'
 import { useCurrentUser } from '@/features/auth/AuthContext'
 import { UNTITLED_DOC, useDoc } from '@/features/docs/api'
 import { MentionText } from '@/features/people/MentionText'
-import { MSW_ENABLED } from '@/mocks/accounts'
 import { isImage } from './attachments'
 import { MAX_BODY_CHARS, useMessages, useOlderMessages } from './api'
 import { useChatSocketContext } from './ChatSocketContext'
 import type { ChatAttachment, ChatMessage } from './types'
-
-/**
- * 내 메시지 고치기·지우기를 보일지. 실서버의 소켓에는 아직 그 op 이 없다(04 §4.1 에 `msg`·`read`·
- * `typing` 뿐). 개발 릴레이(`scripts/chat.js`)는 받으므로 목이 켜진 개발 화면에서만 보인다.
- * 서버가 받게 되면 이 스위치를 걷는다.
- */
-const MESSAGE_EDIT_ENABLED = MSW_ENABLED
 
 /** 같은 사람이 5분 안에 이어서 보낸 메시지는 아바타·이름을 반복하지 않는다. */
 const GROUP_WINDOW_MS = 5 * 60_000
@@ -314,8 +306,10 @@ export function MessageList({
               compact={grouped(message, previous)}
               flash={message.id === focusId}
               mentionNames={mentionNames}
-              onEdit={MESSAGE_EDIT_ENABLED && message.author.id === me ? edit : undefined}
-              onDelete={MESSAGE_EDIT_ENABLED && message.author.id === me ? remove : undefined}
+              // 쓴 사람만 고치고 지운다(백엔드 #284). 버튼을 감추는 것은 화면 편의이고 남의 메시지를
+              // 건드리는 요청의 차단은 서버의 `error` 이벤트(FORBIDDEN)다.
+              onEdit={message.author.id === me ? edit : undefined}
+              onDelete={message.author.id === me ? remove : undefined}
             >
               {message.doc_ref && <DocCard docId={message.doc_ref} />}
             </MessageRow>
