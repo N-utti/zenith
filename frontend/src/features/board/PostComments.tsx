@@ -57,7 +57,8 @@ export function PostComments({ postId }: { postId: string }) {
 
       <div className="mt-3 space-y-3">
         {isPending && <Spinner />}
-        {isError && <p className="text-subtle text-sm">댓글을 불러오지 못했습니다.</p>}
+        {/* 받아 둔 목록이 있으면 다시 받기 실패는 알리지 않는다(옛 목록과 문구가 같이 뜨지 않게). */}
+        {isError && !data && <p className="text-subtle text-sm">댓글을 불러오지 못했습니다.</p>}
         {data && items.length === 0 && (
           <p className="text-subtle text-sm">첫 댓글을 남겨 보세요.</p>
         )}
