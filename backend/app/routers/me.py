@@ -180,7 +180,7 @@ async def _unread_channels(db: AsyncSession, user: User) -> list[UnreadChannel]:
                 | (Message.created_at > ChannelMember.last_read_at)
             ),
         )
-        .where(ChannelMember.user_id == user.id)
+        .where(ChannelMember.user_id == user.id, ChannelMember.hidden_at.is_(None))  # 목록과 같은 기준
         .group_by(Channel.id)
         .order_by(func.count(Message.id).desc(), Channel.id)
         .limit(20)  # 홈 카드는 상위 몇 개면 된다 — 전체 목록은 §5 /channels

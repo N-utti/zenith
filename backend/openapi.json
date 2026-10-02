@@ -1424,6 +1424,98 @@
         }
       }
     },
+    "/api/channels/{id}": {
+      "patch": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "채널 이름 바꾸기 {name} — 멤버면 누구나. DM 은 422, 같은 이름의 공개 채널은 409",
+        "operationId": "rename_channel_api_channels__id__patch",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChannelPatchIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChannelOut"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "CONFLICT — 같은 이름의 공개 채널(비공개는 중복 허용)"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/channels/{id}/hide": {
+      "post": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "DM 을 내 목록에서 숨긴다 — 새 메시지가 오거나 같은 상대와 DM 을 다시 열면 돌아온다. 채널은 422",
+        "operationId": "hide_channel_api_channels__id__hide_post",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/channels/{id}/members": {
       "post": {
         "tags": [
@@ -3709,6 +3801,22 @@
           "last_message"
         ],
         "title": "ChannelOut"
+      },
+      "ChannelPatchIn": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "ChannelPatchIn"
       },
       "ChatIn": {
         "properties": {

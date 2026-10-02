@@ -262,6 +262,15 @@ async def _handle(ws: WebSocket, user: User, op: SubOp | MsgOp | ReadOp | Typing
                 .where(ChannelMember.channel_id == op.channel_id, ChannelMember.user_id == user.id)
                 .values(last_read_at=now)
             )
+            # 숨겨 둔 DM 은 새 글이 오면 누구 글이든 목록에 돌아온다(#268). 받는 쪽은 목록에 없는 채널의
+            # msg 를 받으면 목록을 다시 받으므로 따로 이벤트가 없다
+            await db.execute(
+                update(ChannelMember)
+                .where(
+                    ChannelMember.channel_id == op.channel_id, ChannelMember.hidden_at.is_not(None)
+                )
+                .values(hidden_at=None)
+            )
             await db.flush()  # id 를 받는다
             # 채널 밖 사람에게 열 수 없는 채널을 가리키는 알림은 만들지 않는다
             mentioned = await mention_targets(db, op.body, user.id)

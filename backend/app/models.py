@@ -241,6 +241,8 @@ class ChannelMember(Base):
     channel_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("channels.id"), primary_key=True)
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), primary_key=True)
     last_read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # 안읽음 기준
+    # 내 목록에서 치운 시각(DM 숨기기, 03 에 없는 칸 — 이슈 #268). 새 메시지·DM 다시 열기가 NULL 로 되돌린다.
+    hidden_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class Message(Base):
