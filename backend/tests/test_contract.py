@@ -99,6 +99,20 @@ CONTRACT_PATHS = {
     "/api/approvals/delegations",
     "/api/approvals/delegations/{id}",
     "/api/admin/approval-policy",
+    # CRM (04 밖 — backend/README "설계와 어긋나는 것" 32)
+    "/api/crm/orgs",
+    "/api/crm/orgs/import",
+    "/api/crm/orgs/{id}",
+    "/api/crm/contacts",
+    "/api/crm/contacts/{id}",
+    "/api/crm/contacts/{id}/erase",
+    "/api/crm/deals",
+    "/api/crm/deals/{id}",
+    "/api/crm/deals/{id}/drop",
+    "/api/crm/deals/{id}/reopen",
+    "/api/crm/activities",
+    "/api/crm/activities/{id}",
+    "/api/crm/export",
 }
 
 # 폐기된 경로 — 10-근태 v0.3 P3(출퇴근 기록), 13 §7.1(근태 승인 → 결재 엔진)

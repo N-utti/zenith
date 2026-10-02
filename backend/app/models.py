@@ -11,6 +11,7 @@ from typing import Literal
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     Computed,
     Date,
@@ -404,3 +405,142 @@ class DocChunk(Base):
     chunk_text: Mapped[str] = mapped_column(Text, nullable=False)
     embedding: Mapped[list[float] | None] = mapped_column(Vector(EMBEDDING_DIM))
     acl_role: Mapped[str] = mapped_column(Text, nullable=False)  # RAG 권한 필터 (03 §2.2)
+
+
+# ── CRM 주소록·안건 (03 에 없는 표, 2026-10-02 — README 32 · 15 CRM 모듈 설계서) ─────────────────
+# 프론트 목(`mocks/crmDb.ts`)을 역설계한 계약 그대로. 지우는 길은 soft delete(기관·활동)와 개인정보 비우기(담당자)뿐 —
+# 행을 지우면 활동 기록의 참석자·이력이 깨진다.
+
+
+class CrmOrg(Base):
+    __tablename__ = "crm_orgs"
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    # 정규화 이름 — `(주)`·`㈜`·`주식회사`·공백을 빼고 소문자(routers/crm.py normalize_org_name). 검색·중복·정렬
+    name_norm: Mapped[str] = mapped_column(Text, nullable=False)
+    org_type: Mapped[str] = mapped_column(Text, nullable=False)
+    memo: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
+    created_at: Mapped[datetime] = created_at_col()
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # 임원 삭제
+
+
+class CrmOrgOwner(Base):
+    """사내 창구 — 이 기관을 맡은 우리 쪽 사람(N:N)."""
+
+    __tablename__ = "crm_org_owners"
+
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("crm_orgs.id"), primary_key=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), primary_key=True)
+
+
+class CrmContact(Base):
+    __tablename__ = "crm_contacts"
+    __table_args__ = (Index("idx_crm_contacts_org", "org_id"),)
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("crm_orgs.id"), nullable=False)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    title: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
+    phone: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
+    email: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
+    memo: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
+    # 개인정보 삭제 — 위 칸을 "" 로 비우고 행은 남긴다(활동 참석자·이직 이력 유지)
+    erased: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=sql_text("false"))
+    created_at: Mapped[datetime] = created_at_col()
+
+
+class CrmContactMove(Base):
+    """이직 이력. 옛 활동은 기록 당시 기관에 남는다."""
+
+    __tablename__ = "crm_contact_moves"
+    __table_args__ = (Index("idx_crm_contact_moves_contact", "contact_id"),)
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    contact_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("crm_contacts.id"), nullable=False)
+    from_org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("crm_orgs.id"), nullable=False)
+    to_org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("crm_orgs.id"), nullable=False)
+    moved_at: Mapped[datetime] = created_at_col()
+
+
+class CrmDeal(Base):
+    __tablename__ = "crm_deals"
+    __table_args__ = (Index("idx_crm_deals_org", "org_id"),)
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    kind: Mapped[str] = mapped_column(Text, nullable=False)  # fundraising|investment|disposal
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("crm_orgs.id"), nullable=False)
+    owner_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
+    stage: Mapped[str] = mapped_column(
+        Text, nullable=False
+    )  # 종류별 단계 키(routers/crm.py STAGES)
+    amount_krw: Mapped[int | None] = mapped_column(
+        BigInteger
+    )  # 원 단위 — 수천억이라 int4 를 넘는다
+    target_date: Mapped[date | None] = mapped_column(Date)
+    next_action: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
+    next_action_due: Mapped[date | None] = mapped_column(Date)
+    status: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default="open"
+    )  # open|won|dropped
+    drop_reason: Mapped[str | None] = mapped_column(Text)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")  # 낙관적 잠금
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = created_at_col()
+
+
+class CrmDealEvent(Base):
+    """안건 이력 — 단계 이동(move)·중단(drop)·재개(reopen)."""
+
+    __tablename__ = "crm_deal_events"
+    __table_args__ = (Index("idx_crm_deal_events_deal", "deal_id", sql_text("created_at DESC")),)
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    deal_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("crm_deals.id"), nullable=False)
+    actor_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    from_stage: Mapped[str | None] = mapped_column(Text)
+    to_stage: Mapped[str] = mapped_column(Text, nullable=False)
+    action: Mapped[str] = mapped_column(Text, nullable=False)  # move|drop|reopen
+    reason: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = created_at_col()
+
+
+class CrmActivity(Base):
+    __tablename__ = "crm_activities"
+    __table_args__ = (
+        Index("idx_crm_activities_org", "org_id", sql_text("occurred_at DESC")),
+        Index("idx_crm_activities_deal", "deal_id"),
+    )
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    kind: Mapped[str] = mapped_column(Text, nullable=False)  # meeting|call|email|memo
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("crm_orgs.id"), nullable=False)
+    deal_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("crm_deals.id"))
+    author_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = created_at_col()
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class CrmActivityContact(Base):
+    """활동의 외부 참석자(그 기관 담당자)."""
+
+    __tablename__ = "crm_activity_contacts"
+
+    activity_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("crm_activities.id"), primary_key=True
+    )
+    contact_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("crm_contacts.id"), primary_key=True)
+
+
+class CrmActivityUser(Base):
+    """활동의 사내 참석자."""
+
+    __tablename__ = "crm_activity_users"
+
+    activity_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("crm_activities.id"), primary_key=True
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), primary_key=True)

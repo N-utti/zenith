@@ -80,7 +80,10 @@ def member(app: FastAPI) -> User:
 
 @pytest.fixture(scope="session")
 def test_db_url() -> str:
-    url = make_url(settings.database_url).set(database="zenith_test")
+    # 여러 세션이 동시에 돌 때 DB 이름을 비킨다(ZENITH_TEST_DB).
+    url = make_url(settings.database_url).set(
+        database=os.environ.get("ZENITH_TEST_DB", "zenith_test")
+    )
 
     async def prepare() -> None:
         try:
