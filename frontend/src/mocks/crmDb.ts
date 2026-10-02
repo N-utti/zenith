@@ -257,10 +257,13 @@ const nextId = (prefix: string) => `${prefix}-${++seq}`
  * 새로 만든 계정도 창구·참석자로 고르고 이름으로 보여야 한다.
  */
 const people = (ids: string[]): Person[] =>
-  ids.flatMap((id) => {
-    const account = findAccount(id)
-    return account ? [{ id: account.id, name: account.name }] : []
-  })
+  ids
+    .flatMap((id) => {
+      const account = findAccount(id)
+      return account ? [{ id: account.id, name: account.name }] : []
+    })
+    // 서버는 창구·참석자를 이름순으로 준다(백엔드 #311).
+    .sort((a, b) => a.name.localeCompare(b.name, 'ko'))
 
 /**
  * 중복 판정용 이름. 공백·대소문자·법인 표기((주)·㈜·주식회사)를 지운다(FR-CRM-01).
@@ -430,8 +433,8 @@ export function deleteOrg(user: User, id: string, reason: unknown): Failure | nu
   if (user.role !== 'exec') return forbidden()
   const org = aliveOrg(id)
   if (!org) return notFound('기관을')
-  if (typeof reason !== 'string' || !reason.trim())
-    return fail(400, 'VALIDATION', '사유를 적어 주세요.')
+  // 검증 실패는 전부 422 다(백엔드 #311. 설계서의 400 을 서버가 422 로 통일했다).
+  if (typeof reason !== 'string' || !reason.trim()) return invalid('사유를 적어 주세요.')
   const open = aliveDeals().filter((d) => d.org_id === id && d.status === 'open').length
   if (open) {
     return fail(
@@ -661,8 +664,7 @@ function contactsOutside(orgId: string, ids: string[] | undefined) {
 
 export function createActivity(user: User, input: ActivityInput): Activity | Failure {
   // 기관은 늘 있어야 한다. 안건은 기관에 딸려 있어서 안건에 거는 기록도 기관을 같이 보낸다.
-  if (!input.org_id || !aliveOrg(input.org_id))
-    return fail(400, 'VALIDATION', '기관을 골라 주세요.')
+  if (!input.org_id || !aliveOrg(input.org_id)) return invalid('기관을 골라 주세요.')
   const bad =
     checkActivityInput(input) ??
     (input.kind && input.occurred_at && input.body ? null : invalid('유형·일시·내용은 필수입니다.'))
@@ -1104,7 +1106,7 @@ export function updateDeal(
   return toDealDetail(user, row)
 }
 
-/** 중단. 진행 중인 안건만, 사유 필수(15 FR-CRM-12, TC-CRM-04 는 400). */
+/** 중단. 진행 중인 안건만, 사유 필수(15 FR-CRM-12). 사유가 없으면 422(백엔드 #311). */
 export function dropDeal(
   user: User,
   id: string,
@@ -1113,7 +1115,7 @@ export function dropDeal(
   const row = findDeal(id)
   if (!row || !aliveOrg(row.org_id)) return notFound('안건을')
   const reason = typeof body.reason === 'string' ? body.reason.trim() : ''
-  if (!reason) return fail(400, 'VALIDATION', '중단 사유를 적어 주세요.')
+  if (!reason) return invalid('중단 사유를 적어 주세요.')
   if (body.version !== row.version) return conflict()
   if (row.status !== 'open') return fail(409, 'CONFLICT', '진행 중인 안건만 중단할 수 있습니다.')
   row.status = 'dropped'

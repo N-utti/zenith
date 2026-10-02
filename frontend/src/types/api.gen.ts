@@ -1351,6 +1351,234 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/crm/orgs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 기관 목록 — q(정규화 이름 부분일치)·type·owner·stale_days, 정규화 이름 한글순 */
+        get: operations["list_orgs_api_crm_orgs_get"];
+        put?: never;
+        /** 기관 등록 — 정규화 이름이 같은 기관이 있어도 만들고 duplicates 로 알린다 */
+        post: operations["create_org_api_crm_orgs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/crm/orgs/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** CSV 가져오기(multipart file) — dry_run=true 면 판정만. 행별 ok·skip·error, 부분 반영 */
+        post: operations["import_orgs_api_crm_orgs_import_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/crm/orgs/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 기관 상세 — 지운 기관은 404 */
+        get: operations["get_org_api_crm_orgs__id__get"];
+        put?: never;
+        post?: never;
+        /** 기관 삭제(soft) — exec 만, 본문 {reason} 필수. 진행 중 안건이 있으면 409 */
+        delete: operations["delete_org_api_crm_orgs__id__delete"];
+        options?: never;
+        head?: never;
+        /** 기관 수정 — 보낸 칸만, 누구나 */
+        patch: operations["update_org_api_crm_orgs__id__patch"];
+        trace?: never;
+    };
+    "/api/crm/contacts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 담당자 등록 */
+        post: operations["create_contact_api_crm_contacts_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/crm/contacts/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** 담당자 수정 — org_id 가 지금과 다르면 이직(이력을 남긴다). 옛 활동은 옛 기관에 남는다 */
+        patch: operations["update_contact_api_crm_contacts__id__patch"];
+        trace?: never;
+    };
+    "/api/crm/contacts/{id}/erase": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 담당자 개인정보 삭제 — exec 만. 행은 남기고 이름·연락처·메모를 비운다(멱등) */
+        post: operations["erase_contact_api_crm_contacts__id__erase_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/crm/deals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 안건 목록 — kind·status·org_id 정확 일치, 등록 최신순. 지운 기관의 안건은 빠진다 */
+        get: operations["list_deals_api_crm_deals_get"];
+        put?: never;
+        /** 안건 등록 — 종류의 첫 단계·open·version 1, 이력 1건 */
+        post: operations["create_deal_api_crm_deals_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/crm/deals/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 안건 상세 — 이력 최신 위 */
+        get: operations["get_deal_api_crm_deals__id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** 안건 수정·단계 이동 — version 필수. 마지막 단계면 won, 성사 되돌리기는 exec 만 */
+        patch: operations["update_deal_api_crm_deals__id__patch"];
+        trace?: never;
+    };
+    "/api/crm/deals/{id}/drop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 안건 중단 — {reason, version}. 진행 중(open)만 */
+        post: operations["drop_deal_api_crm_deals__id__drop_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/crm/deals/{id}/reopen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 안건 재개 — {version}. 중단(dropped)만. 성사는 exec 의 단계 이동으로 되돌린다 */
+        post: operations["reopen_deal_api_crm_deals__id__reopen_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/crm/activities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 활동 타임라인 — org_id 나 deal_id 하나 필수(둘 다면 org_id), occurred_at 최신순 */
+        get: operations["list_activities_api_crm_activities_get"];
+        put?: never;
+        /** 활동 기록 */
+        post: operations["create_activity_api_crm_activities_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/crm/activities/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** 활동 삭제(soft) — 작성자·exec 만 */
+        delete: operations["delete_activity_api_crm_activities__id__delete"];
+        options?: never;
+        head?: never;
+        /** 활동 수정 — 작성자·exec 만. 보낸 칸만, 기관은 못 바꾼다 */
+        patch: operations["update_activity_api_crm_activities__id__patch"];
+        trace?: never;
+    };
+    "/api/crm/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 내보내기 entity=orgs|contacts|deals → xlsx. 감사 crm.exported (POST — 감사·CSRF) */
+        post: operations["export_api_crm_export_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/teams": {
         parameters: {
             query?: never;
@@ -1513,6 +1741,79 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** ActivityIn */
+        ActivityIn: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "meeting" | "call" | "email" | "memo";
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /**
+             * Org Id
+             * Format: uuid
+             */
+            org_id: string;
+            /** Deal Id */
+            deal_id?: string | null;
+            /**
+             * Contact Ids
+             * @default []
+             */
+            contact_ids: string[];
+            /**
+             * User Ids
+             * @default []
+             */
+            user_ids: string[];
+            /** Body */
+            body: string;
+        };
+        /** ActivityOut */
+        ActivityOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Kind */
+            kind: string;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            org: components["schemas"]["Person"];
+            deal: components["schemas"]["Person"] | null;
+            /** Contacts */
+            contacts: components["schemas"]["Person"][];
+            /** Users */
+            users: components["schemas"]["Person"][];
+            author: components["schemas"]["Person"];
+            /** Body */
+            body: string;
+            /** Can Edit */
+            can_edit: boolean;
+        };
+        /** ActivityPatch */
+        ActivityPatch: {
+            /** Kind */
+            kind?: ("meeting" | "call" | "email" | "memo") | null;
+            /** Occurred At */
+            occurred_at?: string | null;
+            /** Deal Id */
+            deal_id?: string | "" | null;
+            /** Contact Ids */
+            contact_ids?: string[] | null;
+            /** User Ids */
+            user_ids?: string[] | null;
+            /** Body */
+            body?: string | null;
+        };
         /** ArchiveFile */
         ArchiveFile: {
             /** Url */
@@ -1607,6 +1908,11 @@ export interface components {
             /** Allowed */
             allowed: boolean;
         };
+        /** Body_import_orgs_api_crm_orgs_import_post */
+        Body_import_orgs_api_crm_orgs_import_post: {
+            /** File */
+            file?: string | null;
+        };
         /** Body_upload_attachment_api_channels__id__attachments_post */
         Body_upload_attachment_api_channels__id__attachments_post: {
             /** File */
@@ -1700,6 +2006,214 @@ export interface components {
             /** Body */
             body: string;
         };
+        /** ContactIn */
+        ContactIn: {
+            /**
+             * Org Id
+             * Format: uuid
+             */
+            org_id: string;
+            /** Name */
+            name: string;
+            /**
+             * Title
+             * @default
+             */
+            title: string;
+            /**
+             * Phone
+             * @default
+             */
+            phone: string;
+            /**
+             * Email
+             * @default
+             */
+            email: string;
+            /**
+             * Memo
+             * @default
+             */
+            memo: string;
+        };
+        /** ContactOut */
+        ContactOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Org Id
+             * Format: uuid
+             */
+            org_id: string;
+            /** Name */
+            name: string;
+            /** Title */
+            title: string;
+            /** Phone */
+            phone: string;
+            /** Email */
+            email: string;
+            /** Memo */
+            memo: string;
+            /** Erased */
+            erased: boolean;
+            /** Moves */
+            moves: components["schemas"]["Move"][];
+        };
+        /** ContactPatch */
+        ContactPatch: {
+            /** Org Id */
+            org_id?: string | null;
+            /** Name */
+            name?: string | null;
+            /** Title */
+            title?: string | null;
+            /** Phone */
+            phone?: string | null;
+            /** Email */
+            email?: string | null;
+            /** Memo */
+            memo?: string | null;
+        };
+        /** DealDetail */
+        DealDetail: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Kind */
+            kind: string;
+            /** Name */
+            name: string;
+            org: components["schemas"]["Person"];
+            owner: components["schemas"]["Person"] | null;
+            /** Stage */
+            stage: string;
+            /** Amount Krw */
+            amount_krw: number | null;
+            /** Target Date */
+            target_date: string | null;
+            /** Next Action */
+            next_action: string;
+            /** Next Action Due */
+            next_action_due: string | null;
+            /** Status */
+            status: string;
+            /** Version */
+            version: number;
+            /** Drop Reason */
+            drop_reason: string | null;
+            /** Closed At */
+            closed_at: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Events */
+            events: components["schemas"]["DealEventOut"][];
+        };
+        /** DealEventOut */
+        DealEventOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            actor: components["schemas"]["Person"];
+            /** From Stage */
+            from_stage: string | null;
+            /** To Stage */
+            to_stage: string;
+            /** Action */
+            action: string;
+            /** Reason */
+            reason: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** DealIn */
+        DealIn: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "fundraising" | "investment" | "disposal";
+            /** Name */
+            name: string;
+            /**
+             * Org Id
+             * Format: uuid
+             */
+            org_id: string;
+            /** Owner Id */
+            owner_id?: string | null;
+            /** Amount Krw */
+            amount_krw?: number | null;
+            /** Target Date */
+            target_date?: string | null;
+            /**
+             * Next Action
+             * @default
+             */
+            next_action: string;
+            /** Next Action Due */
+            next_action_due?: string | null;
+        };
+        /** DealOut */
+        DealOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Kind */
+            kind: string;
+            /** Name */
+            name: string;
+            org: components["schemas"]["Person"];
+            owner: components["schemas"]["Person"] | null;
+            /** Stage */
+            stage: string;
+            /** Amount Krw */
+            amount_krw: number | null;
+            /** Target Date */
+            target_date: string | null;
+            /** Next Action */
+            next_action: string;
+            /** Next Action Due */
+            next_action_due: string | null;
+            /** Status */
+            status: string;
+            /** Version */
+            version: number;
+        };
+        /** DealPatch */
+        DealPatch: {
+            /** Version */
+            version?: number | null;
+            /** Name */
+            name?: string | null;
+            /** Owner Id */
+            owner_id?: string | null;
+            /** Amount Krw */
+            amount_krw?: number | null;
+            /** Target Date */
+            target_date?: string | null;
+            /** Next Action */
+            next_action?: string | null;
+            /** Next Action Due */
+            next_action_due?: string | null;
+            /** Stage */
+            stage?: string | null;
+        };
         /**
          * DocCreateIn
          * @description 04 의 `blocks?`(AI 템플릿 저장)는 받지 않는다 — AI 보류(2026-09-07). 본문은 Y.Doc 으로 들어온다.
@@ -1767,6 +2281,16 @@ export interface components {
             title?: string | null;
             /** Folder Id */
             folder_id?: string | null;
+        };
+        /** DropIn */
+        DropIn: {
+            /**
+             * Reason
+             * @default
+             */
+            reason: string;
+            /** Version */
+            version?: number | null;
         };
         /** EventCreateIn */
         EventCreateIn: {
@@ -1924,6 +2448,31 @@ export interface components {
              */
             created_at: string;
         };
+        /** ImportResult */
+        ImportResult: {
+            /** Rows */
+            rows: components["schemas"]["ImportRow"][];
+            /** New Orgs */
+            new_orgs: number;
+            /** New Contacts */
+            new_contacts: number;
+        };
+        /** ImportRow */
+        ImportRow: {
+            /** Line */
+            line: number;
+            /** Org Name */
+            org_name: string;
+            /** Contact Name */
+            contact_name: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "skip" | "error";
+            /** Note */
+            note: string;
+        };
         /** Items[ArchiveFile] */
         Items_ArchiveFile_: {
             /** Items */
@@ -2055,6 +2604,15 @@ export interface components {
             /** Size */
             size?: number | null;
         };
+        /** Move */
+        Move: {
+            from: components["schemas"]["Person"];
+            /**
+             * Moved At
+             * Format: date-time
+             */
+            moved_at: string;
+        };
         /** NotificationOut */
         NotificationOut: {
             /**
@@ -2130,6 +2688,117 @@ export interface components {
              * @default true
              */
             approval: boolean;
+        };
+        /** OrgCreated */
+        OrgCreated: {
+            org: components["schemas"]["OrgDetail"];
+            /** Duplicates */
+            duplicates: components["schemas"]["Person"][];
+        };
+        /** OrgDeleteIn */
+        OrgDeleteIn: {
+            /**
+             * Reason
+             * @default
+             */
+            reason: string;
+        };
+        /** OrgDetail */
+        OrgDetail: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Org Type */
+            org_type: string;
+            /** Owners */
+            owners: components["schemas"]["Person"][];
+            /** Contact Count */
+            contact_count: number;
+            /** Last Contacted At */
+            last_contacted_at: string | null;
+            /** Memo */
+            memo: string;
+            /** Contacts */
+            contacts: components["schemas"]["ContactOut"][];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** OrgIn */
+        OrgIn: {
+            /** Name */
+            name: string;
+            /**
+             * Org Type
+             * @enum {string}
+             */
+            org_type: "pension" | "mutual_aid" | "insurance" | "bank" | "securities" | "am" | "asset_owner" | "advisor" | "etc";
+            /**
+             * Memo
+             * @default
+             */
+            memo: string;
+            /**
+             * Owner Ids
+             * @default []
+             */
+            owner_ids: string[];
+        };
+        /** OrgItem */
+        OrgItem: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Org Type */
+            org_type: string;
+            /** Owners */
+            owners: components["schemas"]["Person"][];
+            /** Contact Count */
+            contact_count: number;
+            /** Last Contacted At */
+            last_contacted_at: string | null;
+        };
+        /** OrgPatch */
+        OrgPatch: {
+            /** Name */
+            name?: string | null;
+            /** Org Type */
+            org_type?: ("pension" | "mutual_aid" | "insurance" | "bank" | "securities" | "am" | "asset_owner" | "advisor" | "etc") | null;
+            /** Memo */
+            memo?: string | null;
+            /** Owner Ids */
+            owner_ids?: string[] | null;
+        };
+        /** Page[ActivityOut] */
+        Page_ActivityOut_: {
+            /** Items */
+            items: components["schemas"]["ActivityOut"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** Page[DealOut] */
+        Page_DealOut_: {
+            /** Items */
+            items: components["schemas"]["DealOut"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** Page[OrgItem] */
+        Page_OrgItem_: {
+            /** Items */
+            items: components["schemas"]["OrgItem"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
         };
         /** PasswordIn */
         PasswordIn: {
@@ -2320,6 +2989,11 @@ export interface components {
              */
             updated_at: string;
             updated_by: components["schemas"]["Person"] | null;
+        };
+        /** ReopenIn */
+        ReopenIn: {
+            /** Version */
+            version?: number | null;
         };
         /** RestoreIn */
         RestoreIn: {
@@ -5511,6 +6185,703 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    list_orgs_api_crm_orgs_get: {
+        parameters: {
+            query?: {
+                q?: string;
+                type?: string;
+                owner?: string;
+                stale_days?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_OrgItem_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_org_api_crm_orgs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrgIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrgCreated"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    import_orgs_api_crm_orgs_import_post: {
+        parameters: {
+            query?: {
+                dry_run?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_import_orgs_api_crm_orgs_import_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_org_api_crm_orgs__id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrgDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_org_api_crm_orgs__id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["OrgDeleteIn"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 진행 중(open) 안건이 남은 기관 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_org_api_crm_orgs__id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrgPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrgDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_contact_api_crm_contacts_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContactIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContactOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_contact_api_crm_contacts__id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContactPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContactOut"];
+                };
+            };
+            /** @description 개인정보를 지운 담당자 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    erase_contact_api_crm_contacts__id__erase_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContactOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_deals_api_crm_deals_get: {
+        parameters: {
+            query?: {
+                kind?: string;
+                status?: string;
+                org_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_DealOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_deal_api_crm_deals_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DealIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DealDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_deal_api_crm_deals__id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DealDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_deal_api_crm_deals__id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DealPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DealDetail"];
+                };
+            };
+            /** @description version 어긋남(누락 포함)·끝난 안건의 단계 이동 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    drop_deal_api_crm_deals__id__drop_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DropIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DealDetail"];
+                };
+            };
+            /** @description version 어긋남·진행 중이 아닌 안건 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reopen_deal_api_crm_deals__id__reopen_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReopenIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DealDetail"];
+                };
+            };
+            /** @description version 어긋남·중단되지 않은 안건 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_activities_api_crm_activities_get: {
+        parameters: {
+            query?: {
+                org_id?: string | null;
+                deal_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_ActivityOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_activity_api_crm_activities_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ActivityIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_activity_api_crm_activities__id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_activity_api_crm_activities__id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ActivityPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_api_crm_export_post: {
+        parameters: {
+            query?: {
+                entity?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description xlsx 시트 1장(파일명은 프론트가 정한다) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };
