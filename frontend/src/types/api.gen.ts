@@ -480,9 +480,43 @@ export interface paths {
         /** 내 채널·DM 목록 + unread 카운트 + 마지막 메시지 — 최근 대화순 */
         get: operations["list_channels_api_channels_get"];
         put?: never;
-        /** {name} 공개 채널(활성 사용자 전원 멤버) 또는 {dm_user_id} DM(있으면 그것) 생성 */
+        /** {name} 공개 채널(전원 멤버) · {name, is_private:true, member_ids} 비공개 채널(만든 사람+고른 사람) · {dm_user_id} DM(있으면 그것) */
         post: operations["create_channel_api_channels_post"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/channels/{id}/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 비공개 채널에 사람 더하기 {user_ids} — 멤버면 누구나. 이미 멤버인 사람은 건너뛴다. 공개·DM 은 422 */
+        post: operations["add_members_api_channels__id__members_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/channels/{id}/members/{user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** 비공개 채널에서 사람 빼기 — 자기 자신이면 나가기. 멤버 아닌 사람 404, 공개·DM 은 422 */
+        delete: operations["remove_member_api_channels__id__members__user_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1365,6 +1399,10 @@ export interface components {
             name?: string | null;
             /** Dm User Id */
             dm_user_id?: string | null;
+            /** Is Private */
+            is_private?: boolean | null;
+            /** Member Ids */
+            member_ids?: string[] | null;
         };
         /** ChannelOut */
         ChannelOut: {
@@ -1377,6 +1415,8 @@ export interface components {
             name: string;
             /** Is Dm */
             is_dm: boolean;
+            /** Is Private */
+            is_private: boolean;
             /** Members */
             members: components["schemas"]["Person"][];
             /** Unread */
@@ -1671,6 +1711,11 @@ export interface components {
             /** Avatar */
             avatar: string | null;
             team: components["schemas"]["TeamOut"] | null;
+        };
+        /** MembersIn */
+        MembersIn: {
+            /** User Ids */
+            user_ids: string[];
         };
         /**
          * MessageOut
@@ -2021,6 +2066,8 @@ export interface components {
             name: string;
             /** Is Dm */
             is_dm: boolean;
+            /** Is Private */
+            is_private: boolean;
             /** Peer Id */
             peer_id: string | null;
             /** Count */
@@ -3171,8 +3218,73 @@ export interface operations {
                     "application/json": components["schemas"]["ChannelOut"];
                 };
             };
-            /** @description CONFLICT — 같은 이름의 채널 */
+            /** @description CONFLICT — 같은 이름의 공개 채널(비공개는 중복 허용) */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_members_api_channels__id__members_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MembersIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChannelOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_member_api_channels__id__members__user_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
                 headers: {
                     [name: string]: unknown;
                 };
