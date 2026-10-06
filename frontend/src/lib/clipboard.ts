@@ -13,12 +13,15 @@ export async function copyText(text: string): Promise<void> {
   area.value = text
   // 화면이 움직이거나 깜빡이지 않게 자리만 잡고 안 보이게 둔다.
   area.style.position = 'fixed'
+  area.style.top = '0'
   area.style.opacity = '0'
   area.setAttribute('readonly', '')
   document.body.append(area)
   // `select()` 만으로는 초점이 오지 않는 브라우저가 있고, 초점 없는 선택은 복사되지 않는다.
-  area.focus()
+  area.focus({ preventScroll: true })
   area.select()
+  // 아이폰 사파리는 읽기 전용 칸에서 `select()` 만으로 선택이 안 잡힐 때가 있다.
+  area.setSelectionRange(0, text.length)
   const copied = document.execCommand('copy')
   area.remove()
   // 고르느라 옮겨 간 초점을 누른 버튼으로 돌려놓는다.

@@ -5,6 +5,7 @@ afterEach(() => {
   vi.unstubAllGlobals()
   // jsdom 에는 `execCommand` 가 없어 테스트가 붙인 것이다.
   delete (document as { execCommand?: unknown }).execCommand
+  document.body.replaceChildren()
 })
 
 // 평문 http 로 열면 `navigator.clipboard` 가 없다. 사무실 PC 가 들어오는 주소가 그 주소다.
@@ -24,7 +25,6 @@ test('navigator.clipboard 가 없으면 옛 방식으로 복사하고 흔적을 
   expect(selected).toBe('zenith@example.com')
   expect(document.querySelector('textarea')).toBeNull()
   expect(document.activeElement).toBe(button)
-  button.remove()
 })
 
 test('옛 방식도 안 되면 던진다. 부르는 쪽이 실패를 알린다', async () => {
