@@ -76,6 +76,8 @@ interface MoveRow {
   from_org_id: string
   to_org_id: string
   moved_at: string
+  /** 이직을 처리한 사람. 시드에는 없다(누군지 모르는 남으로 친다). */
+  moved_by?: string
 }
 
 interface ActivityRow {
@@ -538,6 +540,7 @@ export function updateContact(
       from_org_id: contact.org_id,
       to_org_id: patch.org_id!,
       moved_at: new Date().toISOString(),
+      moved_by: user.id,
     })
     contact.org_id = patch.org_id!
   }
@@ -563,8 +566,12 @@ export function eraseContact(user: User, id: string): Contact | Failure {
  */
 function canDeleteContact(user: User, row: ContactRow): boolean {
   if (user.role === 'exec') return true
+  // 남이 이직 처리했으면 그 사람도 쓴 것이다(백엔드 #318).
+  const movedByOthers = contactMoves.some((m) => m.contact_id === row.id && m.moved_by !== user.id)
   return (
-    row.created_by === user.id && !aliveActivities().some((a) => a.contact_ids.includes(row.id))
+    row.created_by === user.id &&
+    !movedByOthers &&
+    !aliveActivities().some((a) => a.contact_ids.includes(row.id))
   )
 }
 
@@ -896,8 +903,15 @@ function findDeal(id: string) {
  */
 function canDeleteDeal(user: User, row: DealRow): boolean {
   if (user.role === 'exec') return true
-  const creator = dealEvents.find((e) => e.deal_id === row.id && e.from_stage === null)?.actor_id
-  return creator === user.id && !aliveActivities().some((a) => a.deal_id === row.id)
+  const events = dealEvents.filter((e) => e.deal_id === row.id)
+  const creator = events.find((e) => e.from_stage === null)?.actor_id
+  // 끝났거나(성사·중단) 남이 단계를 옮겼으면 이미 쓰인 안건이다(백엔드 #318).
+  return (
+    creator === user.id &&
+    row.status === 'open' &&
+    events.every((e) => e.actor_id === user.id) &&
+    !aliveActivities().some((a) => a.deal_id === row.id)
+  )
 }
 const stages = (kind: DealKind) => DEAL_STAGES[kind].map((s) => s.key)
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/
@@ -1458,7 +1472,9 @@ export function undoImport(user: User, id: string): ImportUndone | Failure {
         aliveDeals().some((d) => d.org_id === orgId) ||
         records.some((a) => a.org_id === orgId) ||
         contactMoves.some((m) => m.from_org_id === orgId || m.to_org_id === orgId) ||
-        contacts.some((c) => c.org_id === orgId && !mine.has(c.id) && !c.deleted_at),
+        contacts.some((c) => c.org_id === orgId && !mine.has(c.id) && !c.deleted_at) ||
+        // 누가 창구를 맡았으면 쓰기 시작한 것이다(백엔드 #318). 가져온 기관은 창구 없이 생긴다.
+        (orgs.find((o) => o.id === orgId)?.owner_ids.length ?? 0) > 0,
     ),
   )
 

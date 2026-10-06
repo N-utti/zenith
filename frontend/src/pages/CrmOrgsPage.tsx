@@ -11,7 +11,7 @@ import { SkeletonRows } from '@/components/ui/Skeleton'
 import { Table, TableEmpty, TBody, TD, TH, THead, TR } from '@/components/ui/Table'
 import { useToast } from '@/components/ui/ToastContext'
 import { useCurrentUser } from '@/features/auth/AuthContext'
-import { CRM_EXTRAS_ENABLED, useDeletedOrgs, useOrgs, useRestoreOrg } from '@/features/crm/api'
+import { useDeletedOrgs, useOrgs, useRestoreOrg } from '@/features/crm/api'
 import { OrgFormModal } from '@/features/crm/CrmForms'
 import { ExportButton } from '@/features/crm/ExportButton'
 import { ImportButton } from '@/features/crm/ImportButton'
@@ -173,7 +173,7 @@ export function CrmOrgsPage() {
 
       {/* 머리줄에 두면 버튼이 다섯이 되어 한 줄에 안 들어간다. 드물게 쓰는 길이라 표 아래에 둔다.
           화면 편의일 뿐이다. 지운 기관 목록의 실제 차단은 서버 403 이다. */}
-      {CRM_EXTRAS_ENABLED && me.role === 'exec' && (
+      {me.role === 'exec' && (
         <div className="mt-3 text-right">
           <button
             type="button"

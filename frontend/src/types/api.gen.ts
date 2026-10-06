@@ -879,8 +879,8 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** {message_id, value: 1|-1} */
-        post: operations["stub_api_ai_feedback_post"];
+        /** {message_id, value: 1|-1} 답변 평가 → 204 */
+        post: operations["feedback_api_ai_feedback_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -896,8 +896,8 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** {doc_id, block_id?, action: summarize|continue|polish|translate|table} 인라인 AI */
-        post: operations["stub_api_ai_doc_action_post"];
+        /** {doc_id, block_id?, action} → {draft} 문서 안 인라인 AI (근거 = 그 문서 본문) */
+        post: operations["doc_action_api_ai_doc_action_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -913,8 +913,8 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** {template: minutes|weekly|notice, context?} → {blocks[]} */
-        post: operations["stub_api_ai_template_post"];
+        /** {template: minutes|weekly|notice, context?} → {blocks[]} (한 칸 = 마크다운 한 덩이) */
+        post: operations["template_api_ai_template_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -928,8 +928,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** ?month= 월별 일자 배열 + 월 집계 {days[], summary} */
-        get: operations["stub_api_attendance_me_get"];
+        /** ?month=YYYY-MM 근무일 배열 + 월 집계 {days[], summary} */
+        get: operations["my_month_api_attendance_me_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -945,8 +945,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** ?from=&to= 기간 집계 */
-        get: operations["stub_api_attendance_me_summary_get"];
+        /** ?from=&to= 기간 집계 {from, to, summary} — 양끝 포함 366일까지 */
+        get: operations["my_range_api_attendance_me_summary_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -962,11 +962,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** ?scope=me|team 예외근무 목록 (team은 lead 이상) */
-        get: operations["stub_api_attendance_arrangements_get"];
+        /** ?scope=me 내 예외 근무 · ?scope=all&from=&to= 전 직원의 승인분(홈 캘린더, 사유 없음) */
+        get: operations["list_arrangements_api_attendance_arrangements_get"];
         put?: never;
-        /** {kind, start_date, end_date, reason} 재택·외근·출장 */
-        post: operations["stub_api_attendance_arrangements_post"];
+        /** {kind, start_date, end_date, reason} 재택·외근·출장 → 결재 상신. 마감된 달 409 MONTH_CLOSED */
+        post: operations["create_arrangement_api_attendance_arrangements_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -980,11 +980,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** ?from=&to= 내 연장근로 목록·누계 */
-        get: operations["stub_api_attendance_overtime_get"];
+        /** ?from=&to= 내 연장근로 목록(일자 최근 순) + 승인분 누계 */
+        get: operations["list_overtime_api_attendance_overtime_get"];
         put?: never;
-        /** {work_date, start_time, end_time, reason} 연장근로 */
-        post: operations["stub_api_attendance_overtime_post"];
+        /** {work_date, start_time, end_time, reason} 연장근로 → 결재 상신. 18:00 이후 구간 없으면 422 */
+        post: operations["create_overtime_api_attendance_overtime_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -998,11 +998,45 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** ?status=pending 내 정정 신청 목록 */
-        get: operations["stub_api_attendance_corrections_get"];
+        /** 내 정정 신청 목록(일자 최근 순) */
+        get: operations["list_corrections_api_attendance_corrections_get"];
         put?: never;
-        /** {work_date, after:{status?, note?}, reason} 정정 신청 */
-        post: operations["stub_api_attendance_corrections_post"];
+        /** {work_date, after:{status?, note?}, reason} 정정 신청 → 결재 상신. 바꿀 내용 없으면 422 */
+        post: operations["create_correction_api_attendance_corrections_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/attendance/{store}/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 예외 근무·연장·정정의 승인 전 취소(결재 회수) — 내 것만(404), 처리된 것 409 REQUEST_DECIDED */
+        post: operations["cancel_exception_api_attendance__store___id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/leave-types": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 휴가 종류 목록 */
+        get: operations["leave_types_api_leave_types_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1016,8 +1050,25 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** {year, granted, used, remaining, expires_on, grant_basis} */
-        get: operations["stub_api_leaves_balance_get"];
+        /** {year, granted, used, remaining, expires_on, grant_basis} 올해 내 연차 */
+        get: operations["my_balance_api_leaves_balance_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/leaves/balances": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 전 직원의 올해 연차 잔여(연차 관리) — exec, 그 밖 403 */
+        get: operations["all_balances_api_leaves_balances_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1033,11 +1084,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** ?scope=me|team 휴가 목록 */
-        get: operations["stub_api_leaves_get"];
+        /** ?scope=me 내 휴가 · ?scope=all&from=&to= 전 직원의 승인 휴가(홈 캘린더, 사유 없음) */
+        get: operations["list_leaves_api_leaves_get"];
         put?: never;
-        /** {type_code, start_date, end_date, reason} — 잔여 부족 422 */
-        post: operations["stub_api_leaves_post"];
+        /** {type_code, start_date, end_date, reason?} → 결재 상신. 잔여 부족 422 LEAVE_INSUFFICIENT, 마감된 달 409 */
+        post: operations["create_leave_api_leaves_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1053,25 +1104,8 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 승인 전 취소 */
-        post: operations["stub_api_leaves__id__cancel_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/leave-types": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 휴가 종류 목록 */
-        get: operations["stub_api_leave_types_get"];
-        put?: never;
-        post?: never;
+        /** 승인 전 취소(결재 회수) — 내 것만(404), 처리된 것 409 REQUEST_DECIDED */
+        post: operations["cancel_leave_api_leaves__id__cancel_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1085,8 +1119,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** ?month=&team_id= 팀원 × 일자 그리드 — 타 팀 403 */
-        get: operations["stub_api_attendance_team_get"];
+        /** ?month=&team_id= 팀원 × 일자 그리드 — 팀장(teams.lead_id)·exec 만, team_id 없으면 전사(exec). 그 밖 403 */
+        get: operations["team_grid_api_attendance_team_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1102,8 +1136,42 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** ?month=&format=csv 월 리포트 (exec) */
-        get: operations["stub_api_attendance_report_get"];
+        /** ?month=&format=csv 월 리포트 (exec) — 사람마다 근무일·휴가일·연장·야간(분). UTF-8 BOM */
+        get: operations["report_api_attendance_report_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/attendance/closings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** ?year= 열두 달의 마감 상태와 이력 — 로그인하면 누구나 */
+        get: operations["list_closings_api_attendance_closings_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/attendance/closings/{month}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 한 달의 마감 상태와 마감·해제 이력(최신순) — 로그인하면 누구나 */
+        get: operations["get_closing_api_attendance_closings__month__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1121,8 +1189,8 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 월 마감 (exec) */
-        post: operations["stub_api_attendance_close_post"];
+        /** {month} 월 마감 (exec) — 오지 않은 달 422, 이미 마감 409 ALREADY_CLOSED. 감사 attendance.closed */
+        post: operations["close_month_api_attendance_close_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1138,8 +1206,8 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 월 마감 해제 {reason} 필수 + 감사 로그 (exec) */
-        post: operations["stub_api_attendance_reopen_post"];
+        /** {month, reason} 월 마감 해제 (exec) — 마감 안 된 달 409 NOT_CLOSED, 사유 필수 422. 감사 attendance.reopened */
+        post: operations["reopen_month_api_attendance_reopen_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1153,161 +1221,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 문서 유형 목록 + 유형별 기본 결재선 */
-        get: operations["stub_api_approval_types_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/approvals/drafts": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** {type_code, title, subject, steps?} 임시저장 */
-        post: operations["stub_api_approvals_drafts_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/approvals/drafts/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        /** 임시저장 수정 */
-        patch: operations["stub_api_approvals_drafts__id__patch"];
-        trace?: never;
-    };
-    "/api/approvals/{id}/submit": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** 상신 → pending. 도메인 사전검증 실패 422 */
-        post: operations["stub_api_approvals__id__submit_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/approvals/{id}/cancel": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** 회수. 승인된 단계가 있으면 409 */
-        post: operations["stub_api_approvals__id__cancel_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/approvals/{id}/approve": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** {comment?, version} → 다음 단계 또는 확정. version 불일치 409 */
-        post: operations["stub_api_approvals__id__approve_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/approvals/{id}/reject": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** {reason, version} — 사유 없으면 400 */
-        post: operations["stub_api_approvals__id__reject_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/approvals/{id}/force-close": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** {reason} exec 강제 종결 — 감사 로그 */
-        post: operations["stub_api_approvals__id__force_close_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/approvals": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** ?box=inbox|sent|reference|draft 결재함 · ?type=&status=&from=&to=&drafter= 필터 */
-        get: operations["stub_api_approvals_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/approvals/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 문서 상세 + 결재선 진행 + 의견 이력. 권한 밖 403 */
-        get: operations["stub_api_approvals__id__get"];
+        /** 문서 유형 목록 + 유형별 기본 결재 단계 수 */
+        get: operations["list_types_api_approval_types_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1323,11 +1238,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 위임 목록 */
-        get: operations["stub_api_approvals_delegations_get"];
+        /** 내가 건 위임 — 지금 유효한 것 먼저, 그다음 시작일 최근 순 */
+        get: operations["list_delegations_api_approvals_delegations_get"];
         put?: never;
-        /** 위임 설정 */
-        post: operations["stub_api_approvals_delegations_post"];
+        /** 위임 설정 — 자기 자신·거꾸로 된 기간·없는 사람 422, 위임 불가 유형 422 DELEGATE_NOT_ALLOWED, 겹침 409 */
+        post: operations["create_delegation_api_approvals_delegations_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1344,8 +1259,196 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** 위임 해제 */
-        delete: operations["stub_api_approvals_delegations__id__delete"];
+        /** 위임 해제 — 내 것만(남의 것 404) */
+        delete: operations["delete_delegation_api_approvals_delegations__id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/approvals/drafts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** {type_code: general, title, subject, references?} 임시저장. 첨부는 저장 뒤 그 문서에 올린다 */
+        post: operations["create_draft_api_approvals_drafts_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/approvals/drafts/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** 임시저장 지우기(#281) — 내 것만(404), 상신한 적 있으면 409 NOT_DRAFT. 첨부도 같이, 감사 없음 */
+        delete: operations["delete_draft_api_approvals_drafts__id__delete"];
+        options?: never;
+        head?: never;
+        /** 임시저장 수정 — 내 것만(404), 상신한 문서 409 NOT_DRAFT. references 생략은 그대로, [] 는 전부 해제 */
+        patch: operations["update_draft_api_approvals_drafts__id__patch"];
+        trace?: never;
+    };
+    "/api/approvals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 결재함 ?box=inbox|sent|reference|draft · ?type=&status=&from=&to=&drafter= 필터 */
+        get: operations["list_approvals_api_approvals_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/approvals/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 문서 상세 + 결재선 진행 + 의견 이력. 열람은 기안자·결재선·참조자(상신 뒤)·대결자·exec, 그 밖 403 */
+        get: operations["get_approval_api_approvals__id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/approvals/{id}/submit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 상신 → pending(결재선 고정). 내 임시저장만(404), 이미 상신 409 NOT_DRAFT, 본문 없음 422 */
+        post: operations["submit_api_approvals__id__submit_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/approvals/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 회수 — 기안자만(404). 대기 중이 아니면 409 NOT_PENDING, 처리된 단계가 있으면 409 STEP_APPROVED */
+        post: operations["cancel_api_approvals__id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/approvals/{id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** {version, comment?} → 다음 단계 또는 확정. 차례 아님 403 NOT_YOUR_TURN, version 불일치 409 */
+        post: operations["approve_api_approvals__id__approve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/approvals/{id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** {reason, version} — 사유 없으면 400 REASON_REQUIRED. 반려되면 뒤 단계는 skipped */
+        post: operations["reject_api_approvals__id__reject_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/approvals/{id}/force-close": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** {reason} exec 강제 종결 → closed. 대기 중만(409 NOT_PENDING), 사유 없으면 400. 감사 approvals.force_closed */
+        post: operations["force_close_api_approvals__id__force_close_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/approvals/{id}/attachments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** multipart `file` → MinIO. 내 임시저장만(404·상신 뒤 409 NOT_DRAFT). 받은 값을 subject.attachments 에 넣어 저장해야 붙는다 */
+        post: operations["upload_attachment_api_approvals__id__attachments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/approvals/{id}/attachments/{file_id}/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 결재 첨부 내려받기 — 문서를 열 수 있는 사람만(403), 문서에 붙어 있는 파일만(404) */
+        get: operations["download_attachment_api_approvals__id__attachments__file_id___name__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1380,6 +1483,40 @@ export interface paths {
         put?: never;
         /** CSV 가져오기(multipart file) — dry_run=true 면 판정만. 행별 ok·skip·error, 부분 반영 */
         post: operations["import_orgs_api_crm_orgs_import_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/crm/orgs/deleted": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 지운 기관 목록 — exec 만, 최근에 지운 것부터. duplicate 는 그사이 생긴 같은 이름의 기관 */
+        get: operations["list_deleted_orgs_api_crm_orgs_deleted_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/crm/orgs/{id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 지운 기관 되살리기 — exec 만. 담당자·안건·활동이 그대로 돌아온다. 같은 이름 기관이 있어도 막지 않는다 */
+        post: operations["restore_org_api_crm_orgs__id__restore_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1432,7 +1569,8 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        delete?: never;
+        /** 담당자 지우기(목록에서 뺌) — 등록한 사람(지우지 않은 활동에 붙기 전)·exec. 활동 참석자 이름은 남는다 */
+        delete: operations["delete_contact_api_crm_contacts__id__delete"];
         options?: never;
         head?: never;
         /** 담당자 수정 — org_id 가 지금과 다르면 이직(이력을 남긴다). 옛 활동은 옛 기관에 남는다 */
@@ -1485,7 +1623,8 @@ export interface paths {
         get: operations["get_deal_api_crm_deals__id__get"];
         put?: never;
         post?: never;
-        delete?: never;
+        /** 안건 지우기(목록에서 뺌) — 등록한 사람(지우지 않은 활동이 붙기 전)·exec. 이력·활동은 남는다 */
+        delete: operations["delete_deal_api_crm_deals__id__delete"];
         options?: never;
         head?: never;
         /** 안건 수정·단계 이동 — version 필수. 마지막 단계면 won, 성사 되돌리기는 exec 만 */
@@ -1560,6 +1699,48 @@ export interface paths {
         head?: never;
         /** 활동 수정 — 작성자·exec 만. 보낸 칸만, 기관은 못 바꾼다 */
         patch: operations["update_activity_api_crm_activities__id__patch"];
+        trace?: never;
+    };
+    "/api/crm/imports/last": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 내가 한 마지막 가져오기 — 되돌릴 것이 없거나 24시간이 지났으면 {import: null} */
+        get: operations["last_import_api_crm_imports_last_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/crm/imports/{id}/undo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 가져오기 되돌리기 — 가져온 사람만, 24시간 안에. 그사이 쓰이기 시작한 기관·담당자는 남긴다(kept_*)
+         * @description 쓰이기 시작한 것: 기관 — 안건·활동·이직 이력이 있거나 다른 담당자가 있다(지운 안건·활동·담당자도 센다,
+         *     아래 ponytail). 그 기관과 거기 가져온 담당자는 통째로 남긴다. 담당자 — 그 기관이 남거나, 개인정보를 지웠거나,
+         *     이직했거나, 활동 참석자다. 목록에서 지운 행도 같은 판정으로 치우되 수에는 넣지 않는다(화면에 없던 것).
+         *
+         *     ponytail: 지운 안건·활동·담당자가 가리키는 행은 외래키 때문에 행째 지울 수 없어 「쓰인 것」으로 남긴다(목은 지운다).
+         *     판정과 DELETE 사이에 누가 그 담당자를 활동에 붙이면 외래키 위반 409 — 다시 누르면 남긴 쪽으로 판정된다.
+         */
+        post: operations["undo_import_api_crm_imports__id__undo_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/crm/export": {
@@ -1673,15 +1854,33 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 공휴일·회사 휴일 목록 */
-        get: operations["stub_api_admin_holidays_get"];
+        /** ?year= 공휴일·회사 휴일 목록(날짜순) */
+        get: operations["list_holidays_api_admin_holidays_get"];
         put?: never;
-        /** 휴일 등록 → 근무 달력 재생성 (10-근태 §6.2) */
-        post: operations["stub_api_admin_holidays_post"];
+        /** 휴일 등록 → 근무 달력이 바로 따라온다(10 §6.2). 이미 있으면 409 HOLIDAY_EXISTS, 마감된 달 409 MONTH_CLOSED */
+        post: operations["create_holiday_api_admin_holidays_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/admin/holidays/{date}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** 회사 휴일 지우기 — 법정 공휴일 403, 없는 날짜 404, 마감된 달 409 MONTH_CLOSED */
+        delete: operations["delete_holiday_api_admin_holidays__date__delete"];
+        options?: never;
+        head?: never;
+        /** 회사 휴일 이름 고치기(#286) — 날짜는 못 바꾼다. 법정 공휴일 403, 없는 날짜 404. 마감된 달도 된다 */
+        patch: operations["rename_holiday_api_admin_holidays__date__patch"];
         trace?: never;
     };
     "/api/admin/attendance/calendar/rebuild": {
@@ -1693,8 +1892,8 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** {year} 근무 달력 재생성 */
-        post: operations["stub_api_admin_attendance_calendar_rebuild_post"];
+        /** {year} 근무 달력 재생성 → {year, workdays}. 달력은 읽을 때 세므로 그 해 근무일 수를 다시 세어 돌려준다 */
+        post: operations["rebuild_calendar_api_admin_attendance_calendar_rebuild_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1814,6 +2013,109 @@ export interface components {
             /** Body */
             body?: string | null;
         };
+        /** ApprovalListItem */
+        ApprovalListItem: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Type Code
+             * @enum {string}
+             */
+            type_code: "leave" | "arrangement" | "overtime" | "correction" | "general";
+            drafter: components["schemas"]["Person"];
+            /** Title */
+            title: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "draft" | "pending" | "approved" | "rejected" | "canceled" | "closed";
+            /** Current Step */
+            current_step: number | null;
+            waiting_on: components["schemas"]["Person"] | null;
+            /** Submitted At */
+            submitted_at: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Amount */
+            amount: number | null;
+            related: components["schemas"]["Related"] | null;
+        };
+        /** ApprovalOut */
+        ApprovalOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Type Code
+             * @enum {string}
+             */
+            type_code: "leave" | "arrangement" | "overtime" | "correction" | "general";
+            drafter: components["schemas"]["Person"];
+            /** Title */
+            title: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "draft" | "pending" | "approved" | "rejected" | "canceled" | "closed";
+            /** Current Step */
+            current_step: number | null;
+            waiting_on: components["schemas"]["Person"] | null;
+            /** Submitted At */
+            submitted_at: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Amount */
+            amount: number | null;
+            related: components["schemas"]["Related"] | null;
+            subject: components["schemas"]["Subject"];
+            /** Steps */
+            steps: components["schemas"]["StepOut"][];
+            /** Closed At */
+            closed_at: string | null;
+            /** Can Decide */
+            can_decide: boolean;
+        };
+        /** ApprovalPage */
+        ApprovalPage: {
+            /** Items */
+            items: components["schemas"]["ApprovalListItem"][];
+            /** Next Cursor */
+            next_cursor: string | null;
+        };
+        /** ApprovalTypeOut */
+        ApprovalTypeOut: {
+            /**
+             * Code
+             * @enum {string}
+             */
+            code: "leave" | "arrangement" | "overtime" | "correction" | "general";
+            /** Name */
+            name: string;
+            /** Default Steps */
+            default_steps: number;
+            /** Allow Delegate Decision */
+            allow_delegate_decision: boolean;
+        };
+        /** ApproveIn */
+        ApproveIn: {
+            /** Version */
+            version: number;
+            /** Comment */
+            comment?: string | null;
+        };
         /** ArchiveFile */
         ArchiveFile: {
             /** Url */
@@ -1845,6 +2147,87 @@ export interface components {
              * @enum {string}
              */
             scope: "all" | "members";
+        };
+        /** ArrangementIn */
+        ArrangementIn: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "remote" | "field" | "trip";
+            /**
+             * Start Date
+             * Format: date
+             */
+            start_date: string;
+            /**
+             * End Date
+             * Format: date
+             */
+            end_date: string;
+            /** Reason */
+            reason: string;
+        };
+        /** ArrangementOnCalendar */
+        ArrangementOnCalendar: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            user: components["schemas"]["Person"];
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "remote" | "field" | "trip";
+            /**
+             * Start Date
+             * Format: date
+             */
+            start_date: string;
+            /**
+             * End Date
+             * Format: date
+             */
+            end_date: string;
+        };
+        /** ArrangementOut */
+        ArrangementOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "remote" | "field" | "trip";
+            /**
+             * Start Date
+             * Format: date
+             */
+            start_date: string;
+            /**
+             * End Date
+             * Format: date
+             */
+            end_date: string;
+            /** Reason */
+            reason: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "approved" | "rejected" | "canceled";
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Decided At */
+            decided_at: string | null;
         };
         /**
          * AttachmentOut
@@ -1913,6 +2296,11 @@ export interface components {
             /** File */
             file?: string | null;
         };
+        /** Body_upload_attachment_api_approvals__id__attachments_post */
+        Body_upload_attachment_api_approvals__id__attachments_post: {
+            /** File */
+            file: string;
+        };
         /** Body_upload_attachment_api_channels__id__attachments_post */
         Body_upload_attachment_api_channels__id__attachments_post: {
             /** File */
@@ -1973,6 +2361,42 @@ export interface components {
             message: string;
             /** Scope */
             scope?: string | null;
+        };
+        /** CloseIn */
+        CloseIn: {
+            /** Month */
+            month: string;
+        };
+        /** ClosingEvent */
+        ClosingEvent: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "close" | "reopen";
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            by: components["schemas"]["Person"];
+            /** Reason */
+            reason?: string | null;
+        };
+        /** ClosingOut */
+        ClosingOut: {
+            /** Month */
+            month: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "open" | "closed";
+            /** Closed At */
+            closed_at: string | null;
+            closed_by: components["schemas"]["Person"] | null;
+            /** History */
+            history: components["schemas"]["ClosingEvent"][];
         };
         /** CommentCreateIn */
         CommentCreateIn: {
@@ -2060,6 +2484,8 @@ export interface components {
             memo: string;
             /** Erased */
             erased: boolean;
+            /** Can Delete */
+            can_delete: boolean;
             /** Moves */
             moves: components["schemas"]["Move"][];
         };
@@ -2077,6 +2503,81 @@ export interface components {
             email?: string | null;
             /** Memo */
             memo?: string | null;
+        };
+        /** CorrectionAfter */
+        CorrectionAfter: {
+            /** Status */
+            status?: ("normal" | "half_leave" | "remote" | "field" | "trip" | "absent") | null;
+            /** Note */
+            note?: string | null;
+        };
+        /** CorrectionIn */
+        CorrectionIn: {
+            /**
+             * Work Date
+             * Format: date
+             */
+            work_date: string;
+            after: components["schemas"]["CorrectionAfter"];
+            /** Reason */
+            reason: string;
+        };
+        /** CorrectionOut */
+        CorrectionOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Work Date
+             * Format: date
+             */
+            work_date: string;
+            after: components["schemas"]["CorrectionAfter"];
+            /** Reason */
+            reason: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "approved" | "rejected" | "canceled";
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Decided At */
+            decided_at: string | null;
+        };
+        /**
+         * DayOut
+         * @description 근무일 한 행. 주말·휴일은 행이 없고, 휴일에 승인된 연장근로가 있는 날만 day_kind 가 workday 가 아닌 행이 생긴다.
+         */
+        DayOut: {
+            /**
+             * Work Date
+             * Format: date
+             */
+            work_date: string;
+            /**
+             * Day Kind
+             * @enum {string}
+             */
+            day_kind: "workday" | "weekly_holiday" | "public_holiday" | "company_holiday";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "normal" | "leave" | "half_leave" | "remote" | "field" | "trip" | "holiday" | "absent";
+            /** Worked Days */
+            worked_days: number;
+            /** Overtime Minutes */
+            overtime_minutes: number;
+            /** Night Minutes */
+            night_minutes: number;
+            /** Note */
+            note: string | null;
         };
         /** DealDetail */
         DealDetail: {
@@ -2116,6 +2617,8 @@ export interface components {
             created_at: string;
             /** Events */
             events: components["schemas"]["DealEventOut"][];
+            /** Can Delete */
+            can_delete: boolean;
         };
         /** DealEventOut */
         DealEventOut: {
@@ -2214,6 +2717,92 @@ export interface components {
             /** Stage */
             stage?: string | null;
         };
+        /** DelegationIn */
+        DelegationIn: {
+            /**
+             * Delegate Id
+             * Format: uuid
+             */
+            delegate_id: string;
+            /**
+             * Start Date
+             * Format: date
+             */
+            start_date: string;
+            /**
+             * End Date
+             * Format: date
+             */
+            end_date: string;
+            /** Type Code */
+            type_code?: string | null;
+        };
+        /** DelegationOut */
+        DelegationOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            delegate: components["schemas"]["Person"];
+            /**
+             * Start Date
+             * Format: date
+             */
+            start_date: string;
+            /**
+             * End Date
+             * Format: date
+             */
+            end_date: string;
+            /** Type Code */
+            type_code: ("leave" | "arrangement" | "overtime" | "correction" | "general") | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** DeletedOrg */
+        DeletedOrg: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Org Type */
+            org_type: string;
+            /**
+             * Deleted At
+             * Format: date-time
+             */
+            deleted_at: string;
+            /** Reason */
+            reason: string;
+            duplicate: components["schemas"]["Person"] | null;
+        };
+        /** DocActionIn */
+        DocActionIn: {
+            /**
+             * Doc Id
+             * Format: uuid
+             */
+            doc_id: string;
+            /** Block Id */
+            block_id?: string | null;
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "summarize" | "continue" | "polish" | "translate" | "table";
+        };
+        /** DocActionOut */
+        DocActionOut: {
+            /** Draft */
+            draft: string;
+        };
         /**
          * DocCreateIn
          * @description 04 의 `blocks?`(AI 템플릿 저장)는 받지 않는다 — AI 보류(2026-09-07). 본문은 Y.Doc 으로 들어온다.
@@ -2282,6 +2871,19 @@ export interface components {
             /** Folder Id */
             folder_id?: string | null;
         };
+        /** DraftIn */
+        DraftIn: {
+            /**
+             * Type Code
+             * @constant
+             */
+            type_code: "general";
+            /** Title */
+            title: string;
+            subject: components["schemas"]["Subject"];
+            /** References */
+            references?: string[] | null;
+        };
         /** DropIn */
         DropIn: {
             /**
@@ -2325,6 +2927,28 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+        };
+        /**
+         * Extra
+         * @description 서식 칸의 값 — 서버는 뜻을 모르고 받은 그대로 돌려준다(프론트 templates.ts).
+         */
+        Extra: {
+            /** Form */
+            form: string;
+            /** Fields */
+            fields: {
+                [key: string]: string;
+            };
+        };
+        /** FeedbackIn */
+        FeedbackIn: {
+            /** Message Id */
+            message_id: string;
+            /**
+             * Value
+             * @enum {integer}
+             */
+            value: 1 | -1;
         };
         /** FileOut */
         FileOut: {
@@ -2377,6 +3001,25 @@ export interface components {
             /** Sort */
             sort?: number | null;
         };
+        /** ForceCloseIn */
+        ForceCloseIn: {
+            /** Reason */
+            reason?: string | null;
+        };
+        /** Grid */
+        Grid: {
+            /** Month */
+            month: string;
+            /** Items */
+            items: components["schemas"]["GridRow"][];
+        };
+        /** GridRow */
+        GridRow: {
+            user: components["schemas"]["UserBrief"];
+            /** Days */
+            days: components["schemas"]["DayOut"][];
+            summary: components["schemas"]["Summary"];
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -2407,6 +3050,41 @@ export interface components {
              * Format: date-time
              */
             at: string;
+        };
+        /** HolidayIn */
+        HolidayIn: {
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /** Name */
+            name: string;
+            /**
+             * Kind
+             * @constant
+             */
+            kind: "company";
+        };
+        /** HolidayOut */
+        HolidayOut: {
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /** Name */
+            name: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "public" | "company";
+        };
+        /** HolidayPatchIn */
+        HolidayPatchIn: {
+            /** Name */
+            name: string;
         };
         /** HomeOut */
         HomeOut: {
@@ -2473,10 +3151,36 @@ export interface components {
             /** Note */
             note: string;
         };
+        /** ImportUndone */
+        ImportUndone: {
+            /** Removed Orgs */
+            removed_orgs: number;
+            /** Removed Contacts */
+            removed_contacts: number;
+            /** Kept Orgs */
+            kept_orgs: number;
+            /** Kept Contacts */
+            kept_contacts: number;
+        };
+        /** Items[ApprovalTypeOut] */
+        Items_ApprovalTypeOut_: {
+            /** Items */
+            items: components["schemas"]["ApprovalTypeOut"][];
+        };
         /** Items[ArchiveFile] */
         Items_ArchiveFile_: {
             /** Items */
             items: components["schemas"]["ArchiveFile"][];
+        };
+        /** Items[ArrangementOnCalendar] */
+        Items_ArrangementOnCalendar_: {
+            /** Items */
+            items: components["schemas"]["ArrangementOnCalendar"][];
+        };
+        /** Items[ArrangementOut] */
+        Items_ArrangementOut_: {
+            /** Items */
+            items: components["schemas"]["ArrangementOut"][];
         };
         /** Items[BoardOut] */
         Items_BoardOut_: {
@@ -2488,10 +3192,25 @@ export interface components {
             /** Items */
             items: components["schemas"]["ChannelOut"][];
         };
+        /** Items[ClosingOut] */
+        Items_ClosingOut_: {
+            /** Items */
+            items: components["schemas"]["ClosingOut"][];
+        };
         /** Items[CommentOut] */
         Items_CommentOut_: {
             /** Items */
             items: components["schemas"]["CommentOut"][];
+        };
+        /** Items[CorrectionOut] */
+        Items_CorrectionOut_: {
+            /** Items */
+            items: components["schemas"]["CorrectionOut"][];
+        };
+        /** Items[DelegationOut] */
+        Items_DelegationOut_: {
+            /** Items */
+            items: components["schemas"]["DelegationOut"][];
         };
         /** Items[DocOut] */
         Items_DocOut_: {
@@ -2502,6 +3221,31 @@ export interface components {
         Items_EventOut_: {
             /** Items */
             items: components["schemas"]["EventOut"][];
+        };
+        /** Items[HolidayOut] */
+        Items_HolidayOut_: {
+            /** Items */
+            items: components["schemas"]["HolidayOut"][];
+        };
+        /** Items[LeaveBalanceRow] */
+        Items_LeaveBalanceRow_: {
+            /** Items */
+            items: components["schemas"]["LeaveBalanceRow"][];
+        };
+        /** Items[LeaveOnCalendar] */
+        Items_LeaveOnCalendar_: {
+            /** Items */
+            items: components["schemas"]["LeaveOnCalendar"][];
+        };
+        /** Items[LeaveOut] */
+        Items_LeaveOut_: {
+            /** Items */
+            items: components["schemas"]["LeaveOut"][];
+        };
+        /** Items[LeaveTypeOut] */
+        Items_LeaveTypeOut_: {
+            /** Items */
+            items: components["schemas"]["LeaveTypeOut"][];
         };
         /** Items[NotificationOut] */
         Items_NotificationOut_: {
@@ -2527,6 +3271,157 @@ export interface components {
         Items_VersionMeta_: {
             /** Items */
             items: components["schemas"]["VersionMeta"][];
+        };
+        /** LastImport */
+        LastImport: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** New Orgs */
+            new_orgs: number;
+            /** New Contacts */
+            new_contacts: number;
+        };
+        /** LastImportOut */
+        LastImportOut: {
+            import: components["schemas"]["LastImport"] | null;
+        };
+        /** LeaveBalanceOut */
+        LeaveBalanceOut: {
+            /** Year */
+            year: number;
+            /** Granted */
+            granted: number;
+            /** Used */
+            used: number;
+            /** Remaining */
+            remaining: number;
+            /**
+             * Expires On
+             * Format: date
+             */
+            expires_on: string;
+            /**
+             * Grant Basis
+             * @enum {string}
+             */
+            grant_basis: "hire_date" | "fiscal_year";
+        };
+        /** LeaveBalanceRow */
+        LeaveBalanceRow: {
+            /** Year */
+            year: number;
+            /** Granted */
+            granted: number;
+            /** Used */
+            used: number;
+            /** Remaining */
+            remaining: number;
+            /**
+             * Expires On
+             * Format: date
+             */
+            expires_on: string;
+            /**
+             * Grant Basis
+             * @enum {string}
+             */
+            grant_basis: "hire_date" | "fiscal_year";
+            user: components["schemas"]["UserBrief"];
+        };
+        /** LeaveIn */
+        LeaveIn: {
+            /** Type Code */
+            type_code: string;
+            /**
+             * Start Date
+             * Format: date
+             */
+            start_date: string;
+            /** End Date */
+            end_date?: string | null;
+            /** Reason */
+            reason?: string | null;
+        };
+        /** LeaveOnCalendar */
+        LeaveOnCalendar: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            user: components["schemas"]["Person"];
+            /** Type Code */
+            type_code: string;
+            /**
+             * Start Date
+             * Format: date
+             */
+            start_date: string;
+            /**
+             * End Date
+             * Format: date
+             */
+            end_date: string;
+        };
+        /** LeaveOut */
+        LeaveOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Type Code */
+            type_code: string;
+            /**
+             * Start Date
+             * Format: date
+             */
+            start_date: string;
+            /**
+             * End Date
+             * Format: date
+             */
+            end_date: string;
+            /** Days */
+            days: number;
+            /** Reason */
+            reason: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "approved" | "rejected" | "canceled";
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Decided At */
+            decided_at: string | null;
+        };
+        /** LeaveTypeOut */
+        LeaveTypeOut: {
+            /** Code */
+            code: string;
+            /** Name */
+            name: string;
+            /** Paid */
+            paid: boolean;
+            /** Deduct Days */
+            deduct_days: number;
+            /**
+             * Unit
+             * @enum {string}
+             */
+            unit: "day" | "half";
         };
         /** LoginIn */
         LoginIn: {
@@ -2603,6 +3498,14 @@ export interface components {
             name: string;
             /** Size */
             size?: number | null;
+        };
+        /** MonthOut */
+        MonthOut: {
+            /** Month */
+            month: string;
+            /** Days */
+            days: components["schemas"]["DayOut"][];
+            summary: components["schemas"]["Summary"];
         };
         /** Move */
         Move: {
@@ -2779,6 +3682,68 @@ export interface components {
             /** Owner Ids */
             owner_ids?: string[] | null;
         };
+        /** OvertimeIn */
+        OvertimeIn: {
+            /**
+             * Work Date
+             * Format: date
+             */
+            work_date: string;
+            /** Start Time */
+            start_time: string;
+            /** End Time */
+            end_time: string;
+            /** Reason */
+            reason: string;
+        };
+        /** OvertimeOut */
+        OvertimeOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Work Date
+             * Format: date
+             */
+            work_date: string;
+            /** Start Time */
+            start_time: string;
+            /** End Time */
+            end_time: string;
+            /** Minutes */
+            minutes: number;
+            /** Night Minutes */
+            night_minutes: number;
+            /** Reason */
+            reason: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "approved" | "rejected" | "canceled";
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Decided At */
+            decided_at: string | null;
+        };
+        /** OvertimePage */
+        OvertimePage: {
+            /** Items */
+            items: components["schemas"]["OvertimeOut"][];
+            summary: components["schemas"]["OvertimeSum"];
+        };
+        /** OvertimeSum */
+        OvertimeSum: {
+            /** Minutes */
+            minutes: number;
+            /** Night Minutes */
+            night_minutes: number;
+        };
         /** Page[ActivityOut] */
         Page_ActivityOut_: {
             /** Items */
@@ -2790,6 +3755,13 @@ export interface components {
         Page_DealOut_: {
             /** Items */
             items: components["schemas"]["DealOut"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** Page[DeletedOrg] */
+        Page_DeletedOrg_: {
+            /** Items */
+            items: components["schemas"]["DeletedOrg"][];
             /** Next Cursor */
             next_cursor?: string | null;
         };
@@ -2967,10 +3939,36 @@ export interface components {
             /** Start Page */
             start_page?: ("/" | "/docs" | "/chat" | "/board" | "/attendance") | null;
         };
+        /** RangeOut */
+        RangeOut: {
+            /**
+             * From
+             * Format: date
+             */
+            from: string;
+            /**
+             * To
+             * Format: date
+             */
+            to: string;
+            summary: components["schemas"]["Summary"];
+        };
         /** ReadIn */
         ReadIn: {
             /** Ids */
             ids: string[];
+        };
+        /** RebuildIn */
+        RebuildIn: {
+            /** Year */
+            year: number;
+        };
+        /** RebuildOut */
+        RebuildOut: {
+            /** Year */
+            year: number;
+            /** Workdays */
+            workdays: number;
         };
         /** RecentDoc */
         RecentDoc: {
@@ -2990,10 +3988,25 @@ export interface components {
             updated_at: string;
             updated_by: components["schemas"]["Person"] | null;
         };
-        /** ReopenIn */
-        ReopenIn: {
+        /** RejectIn */
+        RejectIn: {
             /** Version */
-            version?: number | null;
+            version: number;
+            /** Reason */
+            reason?: string | null;
+        };
+        /** Related */
+        Related: {
+            /**
+             * Type
+             * @constant
+             */
+            type: "arrangement";
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
         };
         /** RestoreIn */
         RestoreIn: {
@@ -3002,6 +4015,57 @@ export interface components {
              * Format: uuid
              */
             version_id: string;
+        };
+        /** StepOut */
+        StepOut: {
+            /** Step No */
+            step_no: number;
+            approver: components["schemas"]["Person"];
+            acted_by: components["schemas"]["Person"] | null;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "approve" | "reference";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "waiting" | "approved" | "rejected" | "delegated_done" | "skipped";
+            /** Comment */
+            comment: string | null;
+            /** Acted At */
+            acted_at: string | null;
+            /** Version */
+            version: number;
+        };
+        /**
+         * Subject
+         * @description 일반 기안 본문(13 §4.1 approval_forms). 근태 4종은 서버가 요약을 `body` 에 쓴다.
+         */
+        Subject: {
+            /**
+             * Body
+             * @default
+             */
+            body: string;
+            /** Amount */
+            amount?: number | null;
+            related?: components["schemas"]["Related"] | null;
+            /** Attachments */
+            attachments?: components["schemas"]["AttachmentOut"][] | null;
+            extra?: components["schemas"]["Extra"] | null;
+        };
+        /** Summary */
+        Summary: {
+            /** Worked Days */
+            worked_days: number;
+            /** Leave Days */
+            leave_days: number;
+            /** Overtime Minutes */
+            overtime_minutes: number;
+            /** Night Minutes */
+            night_minutes: number;
         };
         /**
          * TeamIn
@@ -3020,6 +4084,21 @@ export interface components {
             id: string;
             /** Name */
             name: string;
+        };
+        /** TemplateIn */
+        TemplateIn: {
+            /**
+             * Template
+             * @enum {string}
+             */
+            template: "minutes" | "weekly" | "notice";
+            /** Context */
+            context?: string | null;
+        };
+        /** TemplateOut */
+        TemplateOut: {
+            /** Blocks */
+            blocks: string[];
         };
         /** TodoCreateIn */
         TodoCreateIn: {
@@ -3074,6 +4153,19 @@ export interface components {
             peer_id: string | null;
             /** Count */
             count: number;
+        };
+        /** UserBrief */
+        UserBrief: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Role */
+            role: string;
+            team: components["schemas"]["TeamOut"] | null;
         };
         /** UserCreateIn */
         UserCreateIn: {
@@ -3192,6 +4284,18 @@ export interface components {
             label: string | null;
             /** Snapshot */
             snapshot: string;
+        };
+        /** ReopenIn */
+        app__routers__attendance__ReopenIn: {
+            /** Month */
+            month: string;
+            /** Reason */
+            reason?: string | null;
+        };
+        /** ReopenIn */
+        app__routers__crm__ReopenIn: {
+            /** Version */
+            version?: number | null;
         };
     };
     responses: never;
@@ -5297,41 +6401,49 @@ export interface operations {
             };
         };
     };
-    stub_api_ai_feedback_post: {
+    feedback_api_ai_feedback_post: {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FeedbackIn"];
+            };
+        };
         responses: {
             /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description 미구현 스텁 — {detail, code: NOT_IMPLEMENTED} */
-            501: {
+            204: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };
-    stub_api_ai_doc_action_post: {
+    doc_action_api_ai_doc_action_post: {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DocActionIn"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -5339,26 +6451,32 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["DocActionOut"];
                 };
             };
-            /** @description 미구현 스텁 — {detail, code: NOT_IMPLEMENTED} */
-            501: {
+            /** @description Validation Error */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };
-    stub_api_ai_template_post: {
+    template_api_ai_template_post: {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TemplateIn"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -5366,21 +6484,25 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["TemplateOut"];
                 };
             };
-            /** @description 미구현 스텁 — {detail, code: NOT_IMPLEMENTED} */
-            501: {
+            /** @description Validation Error */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };
-    stub_api_attendance_me_get: {
+    my_month_api_attendance_me_get: {
         parameters: {
-            query?: never;
+            query: {
+                month: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -5393,21 +6515,26 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["MonthOut"];
                 };
             };
-            /** @description 미구현 스텁 — {detail, code: NOT_IMPLEMENTED} */
-            501: {
+            /** @description Validation Error */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };
-    stub_api_attendance_me_summary_get: {
+    my_range_api_attendance_me_summary_get: {
         parameters: {
-            query?: never;
+            query: {
+                from: string;
+                to: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -5420,21 +6547,27 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["RangeOut"];
                 };
             };
-            /** @description 미구현 스텁 — {detail, code: NOT_IMPLEMENTED} */
-            501: {
+            /** @description Validation Error */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };
-    stub_api_attendance_arrangements_get: {
+    list_arrangements_api_attendance_arrangements_get: {
         parameters: {
-            query?: never;
+            query?: {
+                scope?: "me" | "all";
+                from?: string | null;
+                to?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -5447,48 +6580,59 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["Items_ArrangementOut_"] | components["schemas"]["Items_ArrangementOnCalendar_"];
                 };
             };
-            /** @description 미구현 스텁 — {detail, code: NOT_IMPLEMENTED} */
-            501: {
+            /** @description Validation Error */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };
-    stub_api_attendance_arrangements_post: {
+    create_arrangement_api_attendance_arrangements_post: {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ArrangementIn"];
+            };
+        };
         responses: {
             /** @description Successful Response */
-            200: {
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ArrangementOut"];
                 };
             };
-            /** @description 미구현 스텁 — {detail, code: NOT_IMPLEMENTED} */
-            501: {
+            /** @description Validation Error */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };
-    stub_api_attendance_overtime_get: {
+    list_overtime_api_attendance_overtime_get: {
         parameters: {
-            query?: never;
+            query?: {
+                from?: string | null;
+                to?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -5501,46 +6645,54 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["OvertimePage"];
                 };
             };
-            /** @description 미구현 스텁 — {detail, code: NOT_IMPLEMENTED} */
-            501: {
+            /** @description Validation Error */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };
-    stub_api_attendance_overtime_post: {
+    create_overtime_api_attendance_overtime_post: {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OvertimeIn"];
+            };
+        };
         responses: {
             /** @description Successful Response */
-            200: {
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["OvertimeOut"];
                 };
             };
-            /** @description 미구현 스텁 — {detail, code: NOT_IMPLEMENTED} */
-            501: {
+            /** @description Validation Error */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };
-    stub_api_attendance_corrections_get: {
+    list_corrections_api_attendance_corrections_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -5555,50 +6707,52 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["Items_CorrectionOut_"];
                 };
-            };
-            /** @description 미구현 스텁 — {detail, code: NOT_IMPLEMENTED} */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
         };
     };
-    stub_api_attendance_corrections_post: {
+    create_correction_api_attendance_corrections_post: {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CorrectionIn"];
+            };
+        };
         responses: {
             /** @description Successful Response */
-            200: {
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["CorrectionOut"];
                 };
             };
-            /** @description 미구현 스텁 — {detail, code: NOT_IMPLEMENTED} */
-            501: {
+            /** @description Validation Error */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };
-    stub_api_leaves_balance_get: {
+    cancel_exception_api_attendance__store___id__cancel_post: {
         parameters: {
             query?: never;
             header?: never;
-            path?: never;
+            path: {
+                store: "arrangements" | "overtime" | "corrections";
+                id: string;
+            };
             cookie?: never;
         };
         requestBody?: never;
@@ -5609,19 +6763,21 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ArrangementOut"] | components["schemas"]["OvertimeOut"] | components["schemas"]["CorrectionOut"];
                 };
             };
-            /** @description 미구현 스텁 — {detail, code: NOT_IMPLEMENTED} */
-            501: {
+            /** @description Validation Error */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };
-    stub_api_leaves_get: {
+    leave_types_api_leave_types_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -5636,19 +6792,12 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["Items_LeaveTypeOut_"];
                 };
-            };
-            /** @description 미구현 스텁 — {detail, code: NOT_IMPLEMENTED} */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
         };
     };
-    stub_api_leaves_post: {
+    my_balance_api_leaves_balance_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -5663,19 +6812,12 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["LeaveBalanceOut"];
                 };
-            };
-            /** @description 미구현 스텁 — {detail, code: NOT_IMPLEMENTED} */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
         };
     };
-    stub_api_leaves__id__cancel_post: {
+    all_balances_api_leaves_balances_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -5690,21 +6832,18 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["Items_LeaveBalanceRow_"];
                 };
-            };
-            /** @description 미구현 스텁 — {detail, code: NOT_IMPLEMENTED} */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
         };
     };
-    stub_api_leave_types_get: {
+    list_leaves_api_leaves_get: {
         parameters: {
-            query?: never;
+            query?: {
+                scope?: "me" | "all";
+                from?: string | null;
+                to?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -5717,50 +6856,60 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["Items_LeaveOut_"] | components["schemas"]["Items_LeaveOnCalendar_"];
                 };
             };
-            /** @description 미구현 스텁 — {detail, code: NOT_IMPLEMENTED} */
-            501: {
+            /** @description Validation Error */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };
-    stub_api_attendance_team_get: {
+    create_leave_api_leaves_post: {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LeaveIn"];
+            };
+        };
         responses: {
             /** @description Successful Response */
-            200: {
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["LeaveOut"];
                 };
             };
-            /** @description 미구현 스텁 — {detail, code: NOT_IMPLEMENTED} */
-            501: {
+            /** @description Validation Error */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };
-    stub_api_attendance_report_get: {
+    cancel_leave_api_leaves__id__cancel_post: {
         parameters: {
             query?: never;
             header?: never;
-            path?: never;
+            path: {
+                id: string;
+            };
             cookie?: never;
         };
         requestBody?: never;
@@ -5771,21 +6920,26 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["LeaveOut"];
                 };
             };
-            /** @description 미구현 스텁 — {detail, code: NOT_IMPLEMENTED} */
-            501: {
+            /** @description Validation Error */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };
-    stub_api_attendance_close_post: {
+    team_grid_api_attendance_team_get: {
         parameters: {
-            query?: never;
+            query: {
+                month: string;
+                team_id?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -5798,21 +6952,26 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["Grid"];
                 };
             };
-            /** @description 미구현 스텁 — {detail, code: NOT_IMPLEMENTED} */
-            501: {
+            /** @description Validation Error */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };
-    stub_api_attendance_reopen_post: {
+    report_api_attendance_report_get: {
         parameters: {
-            query?: never;
+            query: {
+                month: string;
+                format?: "csv";
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -5825,21 +6984,25 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "text/csv": unknown;
                 };
             };
-            /** @description 미구현 스텁 — {detail, code: NOT_IMPLEMENTED} */
-            501: {
+            /** @description Validation Error */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };
-    stub_api_approval_types_get: {
+    list_closings_api_attendance_closings_get: {
         parameters: {
-            query?: never;
+            query: {
+                year: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -5852,23 +7015,27 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["Items_ClosingOut_"];
                 };
             };
-            /** @description 미구현 스텁 — {detail, code: NOT_IMPLEMENTED} */
-            501: {
+            /** @description Validation Error */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };
-    stub_api_approvals_drafts_post: {
+    get_closing_api_attendance_closings__month__get: {
         parameters: {
             query?: never;
             header?: never;
-            path?: never;
+            path: {
+                month: string;
+            };
             cookie?: never;
         };
         requestBody?: never;
@@ -5879,26 +7046,32 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ClosingOut"];
                 };
             };
-            /** @description 미구현 스텁 — {detail, code: NOT_IMPLEMENTED} */
-            501: {
+            /** @description Validation Error */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };
-    stub_api_approvals_drafts__id__patch: {
+    close_month_api_attendance_close_post: {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CloseIn"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -5906,26 +7079,32 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ClosingOut"];
                 };
             };
-            /** @description 미구현 스텁 — {detail, code: NOT_IMPLEMENTED} */
-            501: {
+            /** @description Validation Error */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };
-    stub_api_approvals__id__submit_post: {
+    reopen_month_api_attendance_reopen_post: {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["app__routers__attendance__ReopenIn"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -5933,19 +7112,21 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ClosingOut"];
                 };
             };
-            /** @description 미구현 스텁 — {detail, code: NOT_IMPLEMENTED} */
-            501: {
+            /** @description Validation Error */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };
-    stub_api_approvals__id__cancel_post: {
+    list_types_api_approval_types_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -5960,19 +7141,12 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["Items_ApprovalTypeOut_"];
                 };
-            };
-            /** @description 미구현 스텁 — {detail, code: NOT_IMPLEMENTED} */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
         };
     };
-    stub_api_approvals__id__approve_post: {
+    list_delegations_api_approvals_delegations_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -5987,134 +7161,149 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["Items_DelegationOut_"];
                 };
-            };
-            /** @description 미구현 스텁 — {detail, code: NOT_IMPLEMENTED} */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
         };
     };
-    stub_api_approvals__id__reject_post: {
+    create_delegation_api_approvals_delegations_post: {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DelegationIn"];
+            };
+        };
         responses: {
             /** @description Successful Response */
-            200: {
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["DelegationOut"];
                 };
             };
-            /** @description 미구현 스텁 — {detail, code: NOT_IMPLEMENTED} */
-            501: {
+            /** @description Validation Error */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };
-    stub_api_approvals__id__force_close_post: {
+    delete_delegation_api_approvals_delegations__id__delete: {
         parameters: {
             query?: never;
             header?: never;
-            path?: never;
+            path: {
+                id: string;
+            };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
             /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description 미구현 스텁 — {detail, code: NOT_IMPLEMENTED} */
-            501: {
+            204: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };
-    stub_api_approvals_get: {
+    create_draft_api_approvals_drafts_post: {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DraftIn"];
+            };
+        };
         responses: {
             /** @description Successful Response */
-            200: {
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ApprovalOut"];
                 };
             };
-            /** @description 미구현 스텁 — {detail, code: NOT_IMPLEMENTED} */
-            501: {
+            /** @description Validation Error */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };
-    stub_api_approvals__id__get: {
+    delete_draft_api_approvals_drafts__id__delete: {
         parameters: {
             query?: never;
             header?: never;
-            path?: never;
+            path: {
+                id: string;
+            };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
             /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description 미구현 스텁 — {detail, code: NOT_IMPLEMENTED} */
-            501: {
+            204: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };
-    stub_api_approvals_delegations_get: {
+    update_draft_api_approvals_drafts__id__patch: {
         parameters: {
             query?: never;
             header?: never;
-            path?: never;
+            path: {
+                id: string;
+            };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DraftIn"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -6122,21 +7311,30 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ApprovalOut"];
                 };
             };
-            /** @description 미구현 스텁 — {detail, code: NOT_IMPLEMENTED} */
-            501: {
+            /** @description Validation Error */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };
-    stub_api_approvals_delegations_post: {
+    list_approvals_api_approvals_get: {
         parameters: {
-            query?: never;
+            query?: {
+                box?: "inbox" | "sent" | "reference" | "draft";
+                type?: ("leave" | "arrangement" | "overtime" | "correction" | "general") | null;
+                status?: ("draft" | "pending" | "approved" | "rejected" | "canceled" | "closed") | null;
+                from?: string | null;
+                to?: string | null;
+                drafter?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -6149,23 +7347,27 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ApprovalPage"];
                 };
             };
-            /** @description 미구현 스텁 — {detail, code: NOT_IMPLEMENTED} */
-            501: {
+            /** @description Validation Error */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };
-    stub_api_approvals_delegations__id__delete: {
+    get_approval_api_approvals__id__get: {
         parameters: {
             query?: never;
             header?: never;
-            path?: never;
+            path: {
+                id: string;
+            };
             cookie?: never;
         };
         requestBody?: never;
@@ -6176,15 +7378,252 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ApprovalOut"];
                 };
             };
-            /** @description 미구현 스텁 — {detail, code: NOT_IMPLEMENTED} */
-            501: {
+            /** @description Validation Error */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    submit_api_approvals__id__submit_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApprovalOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_api_approvals__id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApprovalOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    approve_api_approvals__id__approve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApproveIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApprovalOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reject_api_approvals__id__reject_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RejectIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApprovalOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    force_close_api_approvals__id__force_close_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ForceCloseIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApprovalOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_attachment_api_approvals__id__attachments_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_attachment_api_approvals__id__attachments_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttachmentOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_attachment_api_approvals__id__attachments__file_id___name__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                file_id: string;
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };
@@ -6277,6 +7716,57 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ImportResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_deleted_orgs_api_crm_orgs_deleted_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_DeletedOrg_"];
+                };
+            };
+        };
+    };
+    restore_org_api_crm_orgs__id__restore_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrgDetail"];
                 };
             };
             /** @description Validation Error */
@@ -6417,6 +7907,35 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ContactOut"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_contact_api_crm_contacts__id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -6599,6 +8118,35 @@ export interface operations {
             };
         };
     };
+    delete_deal_api_crm_deals__id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     update_deal_api_crm_deals__id__patch: {
         parameters: {
             query?: never;
@@ -6694,7 +8242,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ReopenIn"];
+                "application/json": components["schemas"]["app__routers__crm__ReopenIn"];
             };
         };
         responses: {
@@ -6842,6 +8390,64 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ActivityOut"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    last_import_api_crm_imports_last_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LastImportOut"];
+                };
+            };
+        };
+    };
+    undo_import_api_crm_imports__id__undo_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportUndone"];
+                };
+            };
+            /** @description 가져온 지 24시간이 지났다 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -7136,9 +8742,11 @@ export interface operations {
             };
         };
     };
-    stub_api_admin_holidays_get: {
+    list_holidays_api_admin_holidays_get: {
         parameters: {
-            query?: never;
+            query: {
+                year: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -7151,53 +8759,96 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["Items_HolidayOut_"];
                 };
             };
-            /** @description 미구현 스텁 — {detail, code: NOT_IMPLEMENTED} */
-            501: {
+            /** @description Validation Error */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };
-    stub_api_admin_holidays_post: {
+    create_holiday_api_admin_holidays_post: {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HolidayIn"];
+            };
+        };
         responses: {
             /** @description Successful Response */
-            200: {
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["HolidayOut"];
                 };
             };
-            /** @description 미구현 스텁 — {detail, code: NOT_IMPLEMENTED} */
-            501: {
+            /** @description Validation Error */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };
-    stub_api_admin_attendance_calendar_rebuild_post: {
+    delete_holiday_api_admin_holidays__date__delete: {
         parameters: {
             query?: never;
             header?: never;
-            path?: never;
+            path: {
+                date: string;
+            };
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rename_holiday_api_admin_holidays__date__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                date: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HolidayPatchIn"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -7205,15 +8856,50 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["HolidayOut"];
                 };
             };
-            /** @description 미구현 스텁 — {detail, code: NOT_IMPLEMENTED} */
-            501: {
+            /** @description Validation Error */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rebuild_calendar_api_admin_attendance_calendar_rebuild_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RebuildIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RebuildOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };

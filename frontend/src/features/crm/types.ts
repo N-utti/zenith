@@ -73,11 +73,11 @@ export interface Contact {
   memo: string
   erased: boolean
   /**
-   * 지울 수 있는지. 등록한 사람(활동 기록에 붙기 전)과 임원. 서버가 판정한다.
+   * 지울 수 있는지. 서버가 판정한다(백엔드 #318). 등록한 사람은 아무도 안 쓴 동안만(활동 기록에
+   * 붙었거나 남이 이직 처리했으면 못 지운다), 임원은 언제나.
    * 지우면 목록에서 빠지고, 활동 기록의 참석자 이름으로만 남는다.
-   * 실서버(#311)는 아직 이 칸을 주지 않는다. 없으면 버튼을 안 보인다.
    */
-  can_delete?: boolean
+  can_delete: boolean
   /** 이전 소속, 최근 것부터(FR-CRM-04). 옛 활동 기록은 기록 당시 기관에 그대로 있다. */
   moves: { from: Person; moved_at: string }[]
 }
@@ -245,10 +245,10 @@ export interface DealDetail extends Deal {
   created_at: string
   events: DealEvent[]
   /**
-   * 지울 수 있는지. 등록한 사람(활동 기록이 붙기 전)과 임원. 서버가 판정한다.
-   * 실서버(#311)는 아직 이 칸을 주지 않는다. 없으면 버튼을 안 보인다.
+   * 지울 수 있는지. 서버가 판정한다(백엔드 #318). 등록한 사람은 아무도 안 쓴 동안만(진행 중이고,
+   * 남이 단계를 옮긴 적 없고, 활동 기록이 없을 때), 임원은 언제나.
    */
-  can_delete?: boolean
+  can_delete: boolean
 }
 
 export interface DealInput {
