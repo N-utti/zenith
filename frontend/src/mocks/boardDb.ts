@@ -226,10 +226,9 @@ export function toDetail(post: StoredPost): BoardPostDetail {
 }
 
 // ── 게시글 첨부 ──────────────────────────────────────────
-// 채팅 첨부처럼 먼저 게시판 경로 밑에 올리고, 받은 값을 글에 실어 저장한다(백엔드 #306).
+// 채팅 첨부처럼 먼저 게시판 경로 밑에 올리고, 받은 값을 글에 실어 저장한다(백엔드 #306·#323).
 // 받기는 그 게시판의 살아 있는 글이 싣고 있는 파일만 내준다. 글에서 떼거나 글을 지우면 받을 수
-// 없다(잘못 붙인 파일을 거둘 길이 그것뿐이다). 아직 글에 안 붙인 파일은 올린 사람만 받는다.
-// **여기는 목이 실서버보다 엄격하다.** 실서버는 저장 키만 봐서 뗀 파일도 계속 내준다(이슈 #309).
+// 없다(잘못 붙인 파일을 거둘 길이 그것뿐이다). 글에 새로 싣는 파일은 올린 사람 본인 것만이다.
 // 실서버는 그림 넷(png·jpeg·gif·webp)을 inline 으로 주고 목은 늘 내려받기로 준다.
 
 /** 글 하나에 붙일 수 있는 파일 수. 채팅·결재 첨부와 같다. */
@@ -268,8 +267,19 @@ function ownedFile(boardId: string, url: unknown): { id: string; name: string } 
   }
 }
 
-/** 글에 실려 온 첨부 목록의 검증. 문제가 없으면 `null`, 있으면 이유(422 의 문구). */
-export function checkPostAttachments(boardId: string, files: unknown): string | null {
+/**
+ * 글에 실려 온 첨부 목록의 검증. 문제가 없으면 `null`, 있으면 이유(422 의 문구).
+ *
+ * **새로 싣는 파일은 올린 사람 본인 것만**(임원도 같다, 백엔드 #323). 이미 실려 있던 것(`existing`)은
+ * 그대로 둘 수 있다(임원이 남의 글을 고칠 때). 남이 올린 주소를 자기 글에 미리 박아 두면, 원래 글에서
+ * 떼거나 글을 지워도 그 파일이 계속 받아져 회수가 안 된다.
+ */
+export function checkPostAttachments(
+  boardId: string,
+  files: unknown,
+  user: User,
+  existing: PostAttachment[] = [],
+): string | null {
   // 안 보낸 것은 "그대로 둔다" 이다. `null` 은 지움이 아니라 잘못된 값이다.
   if (files === undefined) return null
   if (!Array.isArray(files)) return '첨부 목록이 올바르지 않습니다.'
@@ -279,17 +289,23 @@ export function checkPostAttachments(boardId: string, files: unknown): string | 
   const ok = items.every(
     (f) => typeof f?.size === 'number' && f.size >= 0 && ownedFile(boardId, f.url)?.name === f.name,
   )
-  return ok ? null : '이 게시판에 올린 파일만 붙일 수 있습니다.'
+  if (!ok) return '이 게시판에 올린 파일만 붙일 수 있습니다.'
+  const kept = new Set(existing.map((f) => ownedFile(boardId, f.url)?.id))
+  const foreign = items.some((f) => {
+    const id = ownedFile(boardId, f?.url)?.id
+    return !!id && !kept.has(id) && uploads.get(id)?.userId !== user.id
+  })
+  return foreign ? '직접 올린 첨부만 붙일 수 있습니다.' : null
 }
 
 /**
  * 이 주소의 파일을 받을 수 있는가. 게시판 등급은 부르는 쪽(핸들러)이 먼저 본다.
- * 살아 있는 글이 싣고 있으면 그 게시판을 읽는 누구나, 아니면 올린 사람만이다.
+ * 살아 있는 글이 싣고 있을 때만 받는다. 아직 글에 안 붙인 파일은 올린 사람도 못 받는다(백엔드 #323.
+ * 글쓰기 창은 올린 파일을 다시 받지 않는다).
  */
-export function canDownloadPostAttachment(user: User, boardId: string, url: string): boolean {
+export function canDownloadPostAttachment(boardId: string, url: string): boolean {
   const file = ownedFile(boardId, url)
   if (!file) return false
-  if (uploads.get(file.id)?.userId === user.id) return true
   return POSTS.some(
     (post) =>
       post.board_id === boardId &&
