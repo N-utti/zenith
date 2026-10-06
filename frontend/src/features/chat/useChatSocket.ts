@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { useToast } from '@/components/ui/ToastContext'
 import { useCurrentUser } from '@/features/auth/AuthContext'
+import { meQueryKey } from '@/features/auth/queries'
+import { api, ApiError } from '@/lib/api'
 import { notify } from '@/lib/desktop'
 import { wsUrl } from '@/lib/serverOrigin'
 import { approvalsKey } from '@/features/approvals/api'
@@ -134,9 +136,24 @@ export function useChatSocket(): ChatSocket {
         reconnectedRef.current = true
       }
 
-      socket.onclose = () => {
+      socket.onclose = (event) => {
         setConnected(false)
-        if (!closed) reconnectTimer = window.setTimeout(connect, RECONNECT_MS)
+        if (closed) return
+        const retry = () => {
+          if (!closed) reconnectTimer = window.setTimeout(connect, RECONNECT_MS)
+        }
+        if (event.code !== 4401) return retry()
+        // 4401 은 서버가 세션을 거절했다는 뜻이다(쿠키 없음·세션 회수·비활성 계정, 이슈 #340).
+        // 그대로 다시 붙으면 같은 거절만 되풀이하므로 `/me` 로 세션부터 확인한다. access 만료면
+        // `lib/api.ts` 가 refresh 로 살린다. 그래도 401 이면 진짜 끝이라 프로필을 비워 로그인
+        // 화면으로 보낸다. 그 밖의 실패(네트워크·서버 재시작)는 세션 탓이 아니므로 다시 붙어 본다.
+        //
+        // 내 정보 쿼리를 다시 받지 않고 직접 부른다. 그 쿼리는 실패하면 `AuthProvider` 가
+        // 익명으로 판정해서, 서버가 잠깐 502 를 준 것만으로 로그인 화면에 앉게 된다.
+        void api('/me').then(retry, (error: unknown) => {
+          if (error instanceof ApiError && error.status === 401) qc.setQueryData(meQueryKey, null)
+          else retry()
+        })
       }
 
       socket.onmessage = (raw) => {
