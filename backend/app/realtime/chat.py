@@ -45,9 +45,22 @@ from app import audit
 from app.db import session_scope
 from app.deps import _own_origin, authenticate, origin_allowed
 from app.errors import ApiError
-from app.models import Channel, ChannelMember, Document, Message, Notification, User
+from app.models import (
+    Channel,
+    ChannelMember,
+    ChannelUpload,
+    Document,
+    Message,
+    Notification,
+    User,
+)
 from app.prefs import wants
-from app.routers.channels import MAX_ATTACHMENTS, AttachmentOut, parse_attachment_url
+from app.routers.channels import (
+    MAX_ATTACHMENTS,
+    AttachmentOut,
+    attachment_url,
+    parse_attachment_url,
+)
 
 log = logging.getLogger("zenith.ws")
 
@@ -246,24 +259,39 @@ async def _handle(ws: WebSocket, user: User, op: AnyOp) -> None:
                         ),
                     )
                     return
-            # 남의 채널에 올린 파일(멤버였다가 빠졌거나 URL 을 손으로 만든 경우)을 여기에 끼우면 다운로드가 열린다 —
-            # 다운로드도 멤버십을 보지만, 메시지에는 이 채널의 URL 만 남긴다. 표시 이름도 URL 의 것과 같아야
-            # 한다(report.png 를 "연봉계약서.pdf" 로 보이게 못 한다). size 는 표시용 — 존재 확인은 다운로드 때 404.
-            if op.attachments and any(
-                parse_attachment_url(a.url, op.channel_id) != a.name for a in op.attachments
-            ):
-                await _send(
-                    ws,
-                    _dumps(
-                        _error(
-                            "VALIDATION",
-                            "이 채널에 올린 첨부가 아닙니다.",
-                            channel_id=op.channel_id,
+            # 메시지에는 이 채널에 **내가 올린** 파일만 싣는다(#324, 게시글 #309 와 같다) — 남의 채널 URL 을 손으로
+            # 끼우는 것도, 남이 지운 메시지의 url 을 내 메시지에 박아 두고 회수를 피하는 것도 막는다. 표시 이름은
+            # URL 의 것과 같아야 하고(report.png 를 "연봉계약서.pdf" 로 못 보이게), size·content_type 은 올릴 때 기록한 값.
+            attachments = None
+            if op.attachments:
+                attachments = []
+                for a in op.attachments:
+                    parsed = parse_attachment_url(a.url, op.channel_id)
+                    rec = (
+                        await db.get(ChannelUpload, parsed[0])
+                        if parsed is not None and parsed[1] == a.name
+                        else None
+                    )
+                    if rec is None or rec.channel_id != op.channel_id or rec.uploader_id != user.id:
+                        await _send(
+                            ws,
+                            _dumps(
+                                _error(
+                                    "VALIDATION",
+                                    "이 채널에 직접 올린 첨부만 붙일 수 있습니다.",
+                                    channel_id=op.channel_id,
+                                )
+                            ),
                         )
-                    ),
-                )
-                return
-            attachments = [a.model_dump() for a in op.attachments] if op.attachments else None
+                        return
+                    attachments.append(
+                        {
+                            "url": attachment_url(op.channel_id, *parsed),
+                            "name": a.name,
+                            "size": rec.size,
+                            "content_type": rec.content_type,
+                        }
+                    )
             message = Message(
                 channel_id=op.channel_id,
                 author_id=user.id,

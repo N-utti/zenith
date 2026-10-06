@@ -33,7 +33,7 @@ from app import audit, storage
 from app.db import get_db
 from app.deps import current_user
 from app.errors import ApiError
-from app.models import Channel, ChannelMember, Message, User, Workspace
+from app.models import Channel, ChannelMember, ChannelUpload, Message, User, Workspace
 from app.paging import decode_cursor, encode_cursor
 
 router = APIRouter(tags=["chat"], dependencies=[Depends(current_user)])
@@ -93,9 +93,8 @@ class AttachmentOut(BaseModel):
     )  # 한글 이름은 quote 로 글자당 9자 — 200자 이름이면 1900자 남짓
     name: str = Field(min_length=1, max_length=200)
     size: int = Field(ge=0, le=MAX_ATTACHMENT_BYTES)
-    # 아이콘·미리보기를 이름의 확장자로 짐작하지 않게. name·size 와 같이 **표시용**이다 — msg op 로 되돌아올 때
-    # 클라이언트가 바꿔 보낼 수 있고, 실제 내려받기는 MinIO 에 저장된 형식으로 판정한다(inline 여부도 거기서).
-    # `name` 과 달리 URL 로 대조할 수 없다(대조하면 표시만 갈리고 내려받기는 저장값이라 이득이 없다).
+    # 아이콘·미리보기를 이름의 확장자로 짐작하지 않게. 표시용이지만 msg op 로 되돌아올 때 클라이언트 값은 버리고
+    # 올릴 때 기록한 값(channel_uploads)으로 덮어쓴다(#324). 실제 내려받기는 MinIO 에 저장된 형식으로 판정한다.
     # 2026-09-18 이전 메시지는 저장된 JSONB 에 이 칸이 없어 응답에 null 로 나간다.
     content_type: CONTENT_TYPE | None = None
 
@@ -114,8 +113,8 @@ def attachment_url(channel_id: uuid.UUID, file_id: uuid.UUID, name: str) -> str:
     return f"/api/channels/{channel_id}/attachments/{file_id}/{quote(name, safe='')}"
 
 
-def parse_attachment_url(url: str, channel_id: uuid.UUID) -> str | None:
-    """이 채널의 업로드 URL 이면 그 파일명, 아니면 None — 소켓 `msg` op 가 첨부를 끼울 때 대조한다.
+def parse_attachment_url(url: str, channel_id: uuid.UUID) -> tuple[uuid.UUID, str] | None:
+    """이 채널의 업로드 URL 이면 (file_id, 파일명), 아니면 None — 소켓 `msg` op 가 첨부를 끼울 때 대조한다.
 
     채널 id 가 경로에 있어 남의 채널 파일을 메시지에 끼울 수 없고, 파일명은 업로드 때 정해진 것과 같아야 한다."""
     prefix = f"/api/channels/{channel_id}/attachments/"
@@ -125,10 +124,9 @@ def parse_attachment_url(url: str, channel_id: uuid.UUID) -> str | None:
     if len(rest) != 2 or not rest[1]:
         return None
     try:
-        uuid.UUID(rest[0])
+        return uuid.UUID(rest[0]), unquote(rest[1])
     except ValueError:
         return None
-    return unquote(rest[1])
 
 
 class Person(BaseModel):
@@ -728,6 +726,16 @@ async def upload_attachment(
     file_id = uuid.uuid4()
     content_type = _normalize_content_type(file.content_type)
     await storage.put(attachment_key(id, file_id, name), data, content_type)
+    db.add(  # 누가 올렸나 — 메시지에 싣는 url 은 올린 사람 본인 것만 받는다(#324, 게시글 #309 와 같다)
+        ChannelUpload(
+            file_id=file_id,
+            channel_id=id,
+            uploader_id=user.id,
+            size=len(data),
+            content_type=content_type,
+        )
+    )
+    await db.commit()
     return AttachmentOut(
         url=attachment_url(id, file_id, name),
         name=name,
@@ -738,7 +746,7 @@ async def upload_attachment(
 
 @router.get(
     "/channels/{id}/attachments/{file_id}/{name}",
-    summary="첨부 내려받기 — 채널 멤버만. 이미지(png·jpeg·gif·webp)는 inline, 나머지는 attachment",
+    summary="첨부 내려받기 — 채널 멤버만, 이 채널의 살아 있는 메시지에 실린 파일만(아니면 404). 이미지(png·jpeg·gif·webp)는 inline, 나머지는 attachment",
     response_class=Response,
     responses={200: {"content": {"application/octet-stream": {}}}},
 )
@@ -752,7 +760,20 @@ async def download_attachment(
 ) -> Response:
     await _require_member(db, request, user, id)
     # 이름을 다시 정규화하지 않는다 — 서버가 발급한 URL 만 통하고(`..a.png` 같은 별칭 없음) 저장된 이름 그대로 내려간다
-    found = await storage.get(attachment_key(id, file_id, name))
+    # 이슈 #324: 지운 메시지의 파일은 주소를 알아도 못 받는다(게시글 #309 와 같다). 아직 안 보낸 파일도 404.
+    # ponytail: idx_messages_channel 로 채널을 좁힌 뒤 JSONB @> 순차 — 느려지면 GIN(attachments jsonb_path_ops)
+    carried = await db.scalar(
+        select(Message.id)
+        .where(
+            Message.channel_id == id,
+            Message.attachments.contains([{"url": attachment_url(id, file_id, name)}]),
+        )
+        .order_by(
+            Message.created_at.desc()
+        )  # 화면의 이미지는 대개 최근 것 — 인덱스를 최신부터 읽다 멈추게
+        .limit(1)
+    )
+    found = await storage.get(attachment_key(id, file_id, name)) if carried else None
     if found is None:
         raise ApiError(404, "NOT_FOUND", "없는 첨부입니다.")
     return attachment_response(*found, name)
@@ -771,7 +792,9 @@ def attachment_response(data: bytes, content_type: str, name: str) -> Response:
             # 주소창에 직접 열어도 실행 없음 — files.py 와 같은 헤더. 첨부는 형식 제한도 매직바이트 검사도
             # 없어서(15(d)) 방어가 INLINE_TYPES 허용목록과 nosniff 뿐이었다. <img src> 표시에는 영향 없다.
             "Content-Security-Policy": "default-src 'none'; sandbox",
-            # 키에 랜덤 file_id 가 있어 불변 — 인라인 이미지가 스크롤마다 MinIO 를 다시 타지 않게(main.py 의 no-store 는 setdefault)
-            "Cache-Control": "private, max-age=86400",
+            # no-store (#324): 브라우저 캐시는 쿠키를 안 가려, 하루 캐시면 같은 브라우저의 다음 로그인 사용자가
+            # 서버 판정 없이 열고, 메시지를 지운 뒤에도 캐시로 남는다. 인라인 이미지가 스크롤마다 MinIO 를 다시
+            # 타는 비용은 15명 사내라 무시한다(결재 첨부도 같은 함수).
+            "Cache-Control": "no-store",
         },
     )
