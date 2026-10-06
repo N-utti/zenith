@@ -18,7 +18,8 @@ export function VersionPanel({
   selectedId: string | null
   /** 스냅샷을 받아 오는 중인 버전. 누른 즉시 표시가 있어야 같은 행을 또 누르지 않는다. */
   pendingId: string | null
-  onSelect: (version: DocVersion | null) => void
+  /** `previous` 는 바로 앞 버전(목록에서 한 칸 아래). 미리보기가 그것과 견줘 바뀐 곳을 칠한다. */
+  onSelect: (version: DocVersion | null, previous?: DocVersion) => void
 }) {
   const { data, isPending, isError } = useVersions(docId)
 
@@ -49,7 +50,7 @@ export function VersionPanel({
             key={version.id}
             type="button"
             disabled={pendingId !== null}
-            onClick={() => onSelect(selected ? null : version)}
+            onClick={() => onSelect(selected ? null : version, data.items[index + 1])}
             className={cn(
               'flex w-full cursor-pointer items-start gap-2.5 rounded-lg px-3 py-2.5 text-left transition-colors',
               'disabled:cursor-default',

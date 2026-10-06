@@ -285,6 +285,23 @@
     @apply cursor-row-resize;
   }
 
+  /* 버전 미리보기의 바뀐 곳(versionDiff). 블록 바탕을 칠하고 같은 색 그림자로 4px 넓힌다.
+     여백을 주지 않아 본문이 들썩이지 않는다. 고쳐 쓴 블록은 달라진 구간(diff-part)만 더 진하다. */
+  .zenith-editor .diff-added {
+    @apply bg-success/10 rounded-sm;
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-success) 10%, transparent);
+  }
+  .zenith-editor .diff-removed {
+    @apply bg-danger/10 rounded-sm;
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-danger) 10%, transparent);
+  }
+  .zenith-editor .diff-added .diff-part {
+    @apply bg-success/25;
+  }
+  .zenith-editor .diff-removed .diff-part {
+    @apply bg-danger/25 line-through;
+  }
+
   .zenith-editor hr {
     @apply border-line my-8 border-t;
   }

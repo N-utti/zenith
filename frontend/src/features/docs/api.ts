@@ -261,7 +261,10 @@ export function useSaveVersion(docId: string) {
         method: 'POST',
         body: JSON.stringify(input),
       }),
-    onSuccess: () => {
+    onSuccess: (saved) => {
+      // 서버는 같은 사람의 이어진 저장을 같은 버전 id 에 덮어쓴다. 그 id 의 스냅샷을 받아 둔 것이
+      // 있으면 옛 내용이므로 버린다. 안 그러면 미리보기와 앞 버전 비교가 옛 내용을 쓴다.
+      qc.removeQueries({ queryKey: docKeys.snapshot(docId, saved.id) })
       // 응답에 스냅샷이 실려 오지만 목록 캐시에 넣지 않는다. `DocVersionSnapshot` 은
       // `DocVersion` 의 하위 타입이라 `setQueryData` 가 타입 검사를 통과하면서 목록에 스냅샷을
       // 도로 섞어 넣는다. 이 커밋이 없애려던 상태가 캐시 안에서 되살아난다.
