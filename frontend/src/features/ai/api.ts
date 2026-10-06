@@ -1,6 +1,7 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { api, apiEvents } from '@/lib/api'
-import { appendMessage, getSessionId, patchMessage, uuid } from './store'
+import { uuid } from '@/lib/uuid'
+import { appendMessage, getSessionId, patchMessage } from './store'
 import type { AiModel, Citation } from './types'
 
 /**

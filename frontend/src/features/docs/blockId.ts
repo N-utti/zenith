@@ -2,6 +2,7 @@ import { Extension, type Editor } from '@tiptap/core'
 import { isChangeOrigin } from '@tiptap/extension-collaboration'
 import type { Node as PmNode } from '@tiptap/pm/model'
 import { Plugin, type EditorState } from '@tiptap/pm/state'
+import { uuid } from '@/lib/uuid'
 
 /** 댓글이 달릴 수 있는 블록. 편집기가 실제로 쓰는 것만. 달 때는 최상위에만 단다. */
 const BLOCK_TYPES = [
@@ -128,7 +129,7 @@ export function anchorBlock(editor: Editor, pos?: number): string | null {
 
   let blockId = block.node.attrs.blockId as string | null
   if (!blockId) {
-    blockId = crypto.randomUUID()
+    blockId = uuid()
     editor.view.dispatch(
       editor.state.tr
         .setNodeAttribute(block.pos, 'blockId', blockId)

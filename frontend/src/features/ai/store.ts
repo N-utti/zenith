@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react'
+import { uuid } from '@/lib/uuid'
 import type { AiMessage } from './types'
 
 /**
@@ -11,19 +12,6 @@ import type { AiMessage } from './types'
 interface Thread {
   sessionId: string
   messages: AiMessage[]
-}
-
-/**
- * `crypto.randomUUID` 는 보안 컨텍스트(https·localhost) 전용이다. 파일럿은 caddy(TLS) 전까지 평문
- * http 라(infra/README) LAN 주소로 열면 없다. 서버가 `session_id` 를 uuid 로 파싱하므로 모양은 v4 로 맞춘다.
- */
-export function uuid(): string {
-  if (crypto.randomUUID) return crypto.randomUUID()
-  const bytes = crypto.getRandomValues(new Uint8Array(16))
-  bytes[6] = (bytes[6] & 0x0f) | 0x40
-  bytes[8] = (bytes[8] & 0x3f) | 0x80
-  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
 }
 
 let thread: Thread = { sessionId: uuid(), messages: [] }

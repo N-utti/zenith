@@ -8,7 +8,7 @@ import type {
 } from '@/features/docs/types'
 import type { RecentDoc } from '@/features/home/types'
 import type { User } from '@/types'
-import { uuid } from '@/features/ai/store'
+import { uuid } from '@/lib/uuid'
 
 function minutesAgo(minutes: number): string {
   return new Date(Date.now() - minutes * 60_000).toISOString()

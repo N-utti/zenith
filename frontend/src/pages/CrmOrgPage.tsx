@@ -38,6 +38,7 @@ import {
   REASON_MAX,
 } from '@/features/crm/types'
 import { ApiError } from '@/lib/api'
+import { copyText } from '@/lib/clipboard'
 import { formatDateTime, formatRelative } from '@/lib/datetime'
 
 /** 열려 있는 창. 한 번에 하나만 뜬다. */
@@ -182,10 +183,8 @@ export function CrmOrgPage() {
                           aria-label={`${c.email} 복사`}
                           title="주소 복사"
                           className={`${iconButton} -my-1 shrink-0`}
-                          // http(IP) 로 열면 navigator.clipboard 가 없어 바로 던진다. 그것도 실패 토스트로 받는다.
                           onClick={() =>
-                            Promise.resolve()
-                              .then(() => navigator.clipboard.writeText(c.email))
+                            copyText(c.email)
                               .then(() => toast.success('메일 주소를 복사했습니다.'))
                               .catch(() =>
                                 toast.error(

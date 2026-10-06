@@ -21,6 +21,7 @@ import { RetryButton } from '@/components/ui/Card'
 import { ContextMenu, ContextMenuItem } from '@/components/ui/ContextMenu'
 import { useToast } from '@/components/ui/ToastContext'
 import { ApiError } from '@/lib/api'
+import { copyText } from '@/lib/clipboard'
 import { isDesktopShell } from '@/lib/desktop'
 import { serverOrigin } from '@/lib/serverOrigin'
 import { FolderNameModal } from '@/features/docs/FolderNameModal'
@@ -471,15 +472,12 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
     })
   }
 
-  // http(IP) 로 열면 navigator.clipboard 가 없어 바로 던진다. 그것도 실패 토스트로 받는다.
   const copyLink = (id: string) =>
-    void Promise.resolve()
-      // 받은 사람의 채팅·댓글에서 문서 제목 칩으로 바뀌는 주소(서버 주소 기준).
-      .then(() => navigator.clipboard.writeText(`${serverOrigin() || location.origin}/docs/${id}`))
-      .then(
-        () => toast.success('문서 링크를 복사했습니다.'),
-        () => toast.error('링크를 복사하지 못했습니다.'),
-      )
+    // 받은 사람의 채팅·댓글에서 문서 제목 칩으로 바뀌는 주소(서버 주소 기준).
+    void copyText(`${serverOrigin() || location.origin}/docs/${id}`).then(
+      () => toast.success('문서 링크를 복사했습니다.'),
+      () => toast.error('링크를 복사하지 못했습니다.'),
+    )
 
   const actions: RowActions = {
     dragId: drag?.id ?? null,

@@ -1,6 +1,7 @@
 import { Fragment, memo, useEffect, useRef, useState } from 'react'
 import { Check, Copy, FilePlus2, RefreshCw, Sparkles, ThumbsUp } from 'lucide-react'
 import { cn } from '@/lib/cn'
+import { copyText } from '@/lib/clipboard'
 import { useToast } from '@/components/ui/ToastContext'
 import { NewDocModal } from '@/features/docs/NewDocModal'
 import { useFeedback } from './api'
@@ -76,11 +77,14 @@ function AnswerActions({
     }
   }
 
-  const copy = async () => {
-    await navigator.clipboard.writeText(body.replace(/\[\[\d+\]\]/g, ''))
-    setCopied(true)
-    setTimeout(() => setCopied(false), 1500)
-  }
+  const copy = () =>
+    void copyText(body.replace(/\[\[\d+\]\]/g, '')).then(
+      () => {
+        setCopied(true)
+        setTimeout(() => setCopied(false), 1500)
+      },
+      () => toast.error('답변을 복사하지 못했습니다.'),
+    )
 
   const item =
     'text-subtle hover:text-fg flex cursor-pointer items-center gap-1.5 transition-colors disabled:cursor-default disabled:opacity-50'
@@ -102,7 +106,7 @@ function AnswerActions({
         <ThumbsUp className={cn('size-3.5', helpful && 'fill-current')} />
         도움돼요
       </button>
-      <button type="button" onClick={() => void copy()} className={item}>
+      <button type="button" onClick={copy} className={item}>
         {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
         {copied ? '복사됨' : '복사'}
       </button>
