@@ -289,6 +289,9 @@ function actingFor(user: User, doc: Stored) {
   const step = doc.steps.find((s) => s.status === 'waiting')
   if (!step) return undefined
   if (step.approver.id === user.id) return { step, delegation: undefined }
+  // 위임을 받았어도 기안자 본인과 같은 문서의 다른 결재자는 대신 처리하지 못한다(백엔드 `_acting`).
+  const onLine = doc.steps.some((s) => s.role !== 'reference' && s.approver.id === user.id)
+  if (user.id === doc.drafter_id || onLine) return undefined
   const delegation = delegationFor(step.approver.id, user.id, doc.type_code)
   return delegation ? { step, delegation } : undefined
 }

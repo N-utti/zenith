@@ -1665,7 +1665,7 @@ data: ${JSON.stringify(data)}
     return new HttpResponse(stream, { headers: { 'Content-Type': 'text/event-stream' } })
   }),
 
-  // 04 §8 feedback. 응답은 04 에 없다. 204 는 프론트 가정(PR 본문).
+  // 04 §8 feedback. 응답은 204(백엔드 #317).
   http.post('/api/ai/feedback', async ({ request }) => {
     if (!authenticate()) return unauthorized()
     const { message_id, value } = (await request.json()) as {
