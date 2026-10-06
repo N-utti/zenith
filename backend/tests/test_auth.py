@@ -186,6 +186,7 @@ async def test_logout_revokes_immediately_and_is_idempotent(
     assert r.status_code == 204
     assert all("Max-Age=0" in c for c in r.headers.get_list("set-cookie"))
     assert _cookie_names(r) == ["access", "csrf", "refresh"]
+    assert r.headers["clear-site-data"] == '"cache"'  # 공용 PC 의 캐시 비우기(#328)
 
     # 아직 15분이 안 지난 access 를 다시 보내도 세션이 죽었으니 401
     r = await client.get("/api/me", headers=_cookies(access=access))

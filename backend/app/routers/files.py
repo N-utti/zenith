@@ -116,6 +116,17 @@ async def upload_file(
     )
 
 
+_FILE_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    # 사용자 바이트를 같은 오리진에서 낸다 — 주소창에 직접 열어도 이 응답 안에서는 아무것도 실행되지 않게.
+    "Content-Security-Policy": "default-src 'none'; sandbox",
+    # no-cache + ETag (#328): 저장은 하되 열 때마다 쿠키로 재검증한다 — 하루 캐시(max-age)는 같은 브라우저의
+    # 다음 로그인 사용자·로그아웃 뒤에도 서버 판정 없이 열렸다. 문서 본문의 인라인 이미지가 많아 첨부처럼
+    # no-store 로 하지 않고 304 로 비용을 줄인다. main.py 의 no-store 는 setdefault 라 이 값이 남는다.
+    "Cache-Control": "private, no-cache",
+}
+
+
 @router.get(
     "/files/{id}",
     summary="문서 파일 — 로그인한 사람 누구나(문서에 열람 등급 없음). 그림 넷은 inline(<img src>), 나머지는 attachment",
@@ -123,7 +134,15 @@ async def upload_file(
     responses={200: {"content": {"application/octet-stream": {}}}},
     dependencies=[Depends(current_user)],
 )
-async def download_file(id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> Response:
+async def download_file(
+    id: uuid.UUID, request: Request, db: AsyncSession = Depends(get_db)
+) -> Response:
+    # 키에 랜덤 id — 불변. 그래서 ETag 는 id 하나로 충분하고, 재검증 요청은 MinIO 를 안 탄다(#328).
+    # ponytail: 판정(폴더 등급·삭제)이 생기면 이 분기보다 위에 둘 것 — 304 는 MinIO·DB 를 안 본다
+    etag = f'"{id}"'
+    if request.headers.get("if-none-match") == etag:
+        # 304 의 헤더가 캐시된 응답의 헤더를 덮어쓴다(RFC 9111 §4.3.4) — 보안 헤더도 200 과 같게 다시 보낸다
+        return Response(status_code=304, headers={**_FILE_HEADERS, "ETag": etag})
     found = await storage.get(_key(id))
     if found is None:
         raise ApiError(404, "NOT_FOUND", "없는 파일입니다.")
@@ -141,12 +160,5 @@ async def download_file(id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> Re
     return Response(
         data,
         media_type=content_type,
-        headers={
-            "Content-Disposition": disposition,
-            "X-Content-Type-Options": "nosniff",
-            # 사용자 바이트를 같은 오리진에서 낸다 — 주소창에 직접 열어도 이 응답 안에서는 아무것도 실행되지 않게.
-            "Content-Security-Policy": "default-src 'none'; sandbox",
-            # 키에 랜덤 id — 불변. main.py 의 no-store 는 setdefault 라 이 값이 남는다.
-            "Cache-Control": "private, max-age=86400",
-        },
+        headers={"Content-Disposition": disposition, **_FILE_HEADERS, "ETag": etag},
     )

@@ -203,6 +203,9 @@ async def logout(request: Request, response: Response, db: AsyncSession = Depend
             await db.commit()
         break
     clear_auth_cookies(response)
+    # 이 브라우저가 캐시해 둔 첨부·문서 파일을 비운다(#328) — 공용 PC 의 다음 사용자가 캐시로 열지 못하게.
+    # HTTPS 에서만 동작한다(평문 사내 주소에서는 브라우저가 무시) — 첨부는 어차피 no-store, 문서 파일은 no-cache.
+    response.headers["Clear-Site-Data"] = '"cache"'
 
 
 @router.get("/me", response_model=MeOut, summary="내 프로필")

@@ -30,11 +30,11 @@ from app.paging import decode_cursor, encode_cursor
 from app.prefs import wants
 from app.realtime import chat
 from app.routers.channels import (
-    INLINE_TYPES,
     MAX_ATTACHMENT_BYTES,
     MAX_ATTACHMENTS,
     AttachmentOut,
     _normalize_content_type,
+    attachment_response,
 )
 
 router = APIRouter(tags=["boards"], dependencies=[Depends(current_user)])
@@ -490,20 +490,7 @@ async def download_board_attachment(
     )  # 키에 게시판 id — 다른 게시판 경로로는 404
     if found is None:
         raise ApiError(404, "NOT_FOUND", "없는 첨부입니다.")
-    data, content_type = found
-    disposition = "inline" if content_type in INLINE_TYPES else "attachment"
-    return Response(  # 헤더는 채팅 첨부와 같다(channels.download_attachment)
-        data,
-        media_type=content_type,
-        headers={
-            "Content-Disposition": f"{disposition}; filename*=UTF-8''{quote(name, safe='')}",
-            "X-Content-Type-Options": "nosniff",
-            "Content-Security-Policy": "default-src 'none'; sandbox",
-            # no-store (#309): 브라우저 캐시는 쿠키를 안 가려, 하루 캐시면 같은 브라우저의 다음 로그인 사용자가
-            # 서버 판정 없이 열고, 글에서 뗀 뒤에도 캐시로 남는다. 15명 사내라 이미지 재요청 비용은 무시한다.
-            "Cache-Control": "no-store",
-        },
-    )
+    return attachment_response(*found, name)  # 헤더는 채팅·결재 첨부와 같다(no-store 포함, #309)
 
 
 @router.delete("/posts/{id}", status_code=204, summary="글 삭제 — 글쓴이 또는 exec")
