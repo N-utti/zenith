@@ -605,8 +605,9 @@ const DEAL_KIND_OPTIONS = DEAL_KINDS.map((value) => ({ value, label: DEAL_KIND_L
 const toEokInput = (won: number | null) => (won === null ? '' : String(won / 1e8))
 function fromEokInput(text: string): number | null | 'invalid' {
   if (!text.trim()) return null
-  const eok = Number(text)
-  return Number.isFinite(eok) && eok >= 0 ? Math.round(eok * 1e8) : 'invalid'
+  const won = Math.round(Number(text) * 1e8)
+  // 서버는 안전한 정수(2^53 - 1 원)까지만 받는다. 자릿수를 잘못 붙여 넣은 값이 여기서 걸린다.
+  return Number.isSafeInteger(won) && won >= 0 ? won : 'invalid'
 }
 
 /**

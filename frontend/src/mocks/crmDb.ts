@@ -495,13 +495,14 @@ function checkContactInput(input: Partial<ContactInput>): Failure | null {
   if (input.name !== undefined && (typeof input.name !== 'string' || !input.name.trim())) {
     return invalid('담당자 이름을 입력해 주세요.')
   }
-  if (input.email && !EMAIL_PATTERN.test(input.email)) return invalid('이메일 형식이 아닙니다.')
-  // 서버는 이 네 칸을 200자로 막는다(`Short`·`ContactName`·`Email`).
+  // 서버는 이 네 칸을 앞뒤 공백을 벗긴 뒤 200자로 막는다(`Short`·`ContactName`·`Email`).
   for (const key of ['name', 'title', 'phone', 'email'] as const) {
     if ((input[key]?.trim().length ?? 0) > CONTACT_FIELD_MAX) {
-      return invalid(`담당자 정보는 칸마다 ${CONTACT_FIELD_MAX}자를 넘을 수 없습니다.`)
+      return invalid(`이름·부서·직함·전화·이메일은 ${CONTACT_FIELD_MAX}자를 넘을 수 없습니다.`)
     }
   }
+  const email = input.email?.trim()
+  if (email && !EMAIL_PATTERN.test(email)) return invalid('이메일 형식이 아닙니다.')
   if (input.memo !== undefined && input.memo.length > MEMO_MAX) {
     return invalid(`메모는 ${MEMO_MAX}자를 넘을 수 없습니다.`)
   }
