@@ -12,7 +12,7 @@
  *   GET  /channels/:id/messages       최근 메시지
  *   POST /channels/:id/members        비공개 채널에 사람 더하기
  *   DELETE /channels/:id/members/:uid 비공개 채널에서 사람 빼기·나가기
- *   DELETE /channels/:id              채널 지우기 (실서버에 아직 없다. 아래 `canDelete`)
+ *   DELETE /channels/:id              채널 지우기 (아래 `canDelete`)
  *   WS   /ws                          보내는 op: sub · msg · read · typing
  *                                     받는 ev: msg · unread · typing · error · channels
  *
@@ -46,7 +46,7 @@ const FORBIDDEN = { detail: '권한이 부족합니다.', code: 'FORBIDDEN' }
 
 /**
  * `memberIds` 는 릴레이 안에서만 쓴다. 밖으로는 `members`(이름까지)로 펼쳐 나간다.
- * `createdBy` 는 비공개 채널을 연 사람이다. 지우기 권한에만 쓰고 밖으로 내보내지 않는다.
+ * `createdBy` 는 채널을 연 사람이다. 밖으로는 `created_by` 로 나간다(없으면 `null`).
  * @type {{id:string, is_dm:boolean, is_private?:boolean, name:string, memberIds:string[], createdBy?:string}[]}
  */
 const CHANNELS = [
@@ -180,15 +180,19 @@ function createdView(channel, viewerId) {
 }
 
 /**
- * 이 사람이 이 채널을 지울 수 있는가. 실서버에 아직 없는 규칙이고 프론트가 먼저 정했다.
- * 공개 채널은 임원, 비공개 채널은 그 채널을 연 멤버. DM 은 못 지운다(숨기기가 있다).
+ * 이 사람이 이 채널을 지울 수 있는가. 실서버(#352)와 같은 규칙이다.
+ * 공개 채널은 임원, 비공개 채널은 그 채널을 연 멤버. 연 사람이 멤버로 없으면(기록이 없거나
+ * 나갔으면) 멤버인 임원이 지운다. DM 은 못 지운다(숨기기가 있다).
  */
 function canDelete(channel, viewerId) {
   if (channel.is_dm || !channel.memberIds.includes(viewerId)) return false
-  return channel.is_private ? channel.createdBy === viewerId : EXECS.has(viewerId)
+  if (!channel.is_private || !channel.memberIds.includes(channel.createdBy)) {
+    return EXECS.has(viewerId)
+  }
+  return channel.createdBy === viewerId
 }
 
-/** 백엔드 `ChannelOut` 과 같은 모양(04 §5). `can_delete` 만 릴레이가 먼저 준다. */
+/** 백엔드 `ChannelOut` 과 같은 모양(04 §5). */
 function channelView(channel, viewerId) {
   const list = messages.get(channel.id) ?? []
   const since = lastReadAt(viewerId, channel.id)
@@ -208,6 +212,7 @@ function channelView(channel, viewerId) {
     unread: list.filter((m) => m.created_at > since && m.author.id !== viewerId).length,
     last_message: list.at(-1) ?? null,
     can_delete: canDelete(channel, viewerId),
+    created_by: channel.createdBy ?? null,
   }
 }
 
@@ -761,7 +766,7 @@ export async function handleChatRequest(req, res, url) {
   }
 
   /**
-   * 채널 지우기. 실서버에 아직 없는 경로다(프론트가 먼저 만들었다).
+   * 채널 지우기. 실서버(#352)와 같은 계약이다.
    *
    *   DELETE /channels/{id} → 204. 지울 수 있는 사람은 `canDelete`. 멤버인데 권한이 없어도,
    *                           없는 채널이어도 403(존재를 새지 않는다). DM 은 422.
@@ -792,7 +797,7 @@ export async function handleChatRequest(req, res, url) {
   /**
    * 채널 이름 바꾸기와 DM 숨기기. 실서버(#280)가 아래 규칙대로 구현했다(04 §4 에는 없다).
    *
-   *   PATCH /channels/{id} {name}   → 200 `ChannelOut`. 멤버면 누구나(채널에 주인이 없다).
+   *   PATCH /channels/{id} {name}   → 200 `ChannelOut`. 멤버면 누구나.
    *                                   DM 은 이름이 없어 422. 이름 규칙은 만들 때와 같다.
    *   POST  /channels/{id}/hide     → 204. DM 만(채널은 422). 내 목록에서만 빠진다.
    *
@@ -841,7 +846,7 @@ export async function handleChatRequest(req, res, url) {
   /**
    * 비공개 채널의 멤버를 더하고 뺀다. 실서버(#236)가 아래 규칙대로 구현했다.
    *
-   * 멤버면 누구나 더하고 뺄 수 있다(채널에 주인이 없다). 자기 자신을 빼는 것이 나가기다.
+   * 멤버면 누구나 더하고 뺄 수 있다. 연 사람만 남이 못 뺀다(403). 자기 자신을 빼는 것이 나가기다.
    * 공개 채널은 전원이고 DM 은 두 사람으로 고정이라 둘 다 422.
    * 바뀐 뒤에는 전·후 멤버 모두에게 `channels` 이벤트를 보낸다. 빠진 사람의 목록에서 채널이
    * 사라지고, 들어온 사람의 목록에 채널이 생겨야 한다.
@@ -879,6 +884,12 @@ export async function handleChatRequest(req, res, url) {
       const target = membersMatch[2]
       if (!before.includes(target)) {
         return json(res, 404, { detail: '이 채널의 멤버가 아닙니다.', code: 'NOT_FOUND' })
+      }
+      if (target === channel.createdBy && target !== viewerId) {
+        return json(res, 403, {
+          detail: '채널을 연 사람은 본인만 나갈 수 있습니다.',
+          code: 'FORBIDDEN',
+        })
       }
       channel.memberIds = before.filter((id) => id !== target)
       // 마지막 사람이 나가면 아무에게도 안 보이는 채널이 된다. 릴레이는 지운다. 실서버는 지우지

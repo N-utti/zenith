@@ -11,6 +11,8 @@ const old: Omit<ChatChannel, 'is_private'> = {
   members: [],
   unread: 0,
   last_message: null,
+  can_delete: false,
+  created_by: null,
 }
 const channel = (extra: Partial<ChatChannel>) => ({ ...old, ...extra }) as ChatChannel
 

@@ -586,7 +586,8 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        delete?: never;
+        /** 채널 지우기 — 공개는 임원, 비공개는 연 사람(없으면 멤버인 임원). DM 은 422(숨기기로). 메시지·첨부·멘션 알림까지 지운다 */
+        delete: operations["delete_channel_api_channels__id__delete"];
         options?: never;
         head?: never;
         /** 채널 이름 바꾸기 {name} — 멤버면 누구나. DM 은 422, 같은 이름의 공개 채널은 409 */
@@ -637,7 +638,7 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** 비공개 채널에서 사람 빼기 — 자기 자신이면 나가기. 멤버 아닌 사람 404, 공개·DM 은 422 */
+        /** 비공개 채널에서 사람 빼기 — 자기 자신이면 나가기. 연 사람은 본인만(남이 빼면 403). 멤버 아닌 사람 404, 공개·DM 은 422 */
         delete: operations["remove_member_api_channels__id__members__user_id__delete"];
         options?: never;
         head?: never;
@@ -2347,6 +2348,10 @@ export interface components {
             /** Unread */
             unread: number;
             last_message: components["schemas"]["MessageOut"] | null;
+            /** Can Delete */
+            can_delete: boolean;
+            /** Created By */
+            created_by: string | null;
         };
         /** ChannelPatchIn */
         ChannelPatchIn: {
@@ -5619,6 +5624,35 @@ export interface operations {
             };
             /** @description CONFLICT — 같은 이름의 공개 채널(비공개는 중복 허용) */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_channel_api_channels__id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
                 headers: {
                     [name: string]: unknown;
                 };

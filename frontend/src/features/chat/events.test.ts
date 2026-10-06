@@ -25,7 +25,17 @@ function message(id: string): ChatMessage {
 }
 
 function channel(id: string, unread: number): ChatChannel {
-  return { id, name: id, is_dm: false, is_private: false, members: [], unread, last_message: null }
+  return {
+    id,
+    name: id,
+    is_dm: false,
+    is_private: false,
+    members: [],
+    unread,
+    last_message: null,
+    can_delete: false,
+    created_by: null,
+  }
 }
 
 describe('appendMessage', () => {

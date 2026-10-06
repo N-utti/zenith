@@ -75,6 +75,8 @@ function channel(id: string, last: ChatMessage | null): ChatChannel {
     members: [...people],
     unread: 0,
     last_message: last,
+    can_delete: false,
+    created_by: null,
   }
 }
 
