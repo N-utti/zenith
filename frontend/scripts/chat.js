@@ -12,6 +12,7 @@
  *   GET  /channels/:id/messages       최근 메시지
  *   POST /channels/:id/members        비공개 채널에 사람 더하기
  *   DELETE /channels/:id/members/:uid 비공개 채널에서 사람 빼기·나가기
+ *   DELETE /channels/:id              채널 지우기 (실서버에 아직 없다. 아래 `canDelete`)
  *   WS   /ws                          보내는 op: sub · msg · read · typing
  *                                     받는 ev: msg · unread · typing · error · channels
  *
@@ -32,6 +33,9 @@ import users from '../src/mocks/users.json' with { type: 'json' }
 /** 명단은 MSW 와 같은 users.json. u-1 진수연(사원) · u-2 정성운(사원) · u-3 홍성완(임원)이 시드 대화에 등장한다. */
 const USERS = Object.fromEntries(users.map((u) => [u.id, { id: u.id, name: u.name }]))
 
+/** 임원 id. 채널 지우기 권한에만 쓴다. `USERS` 에 등급을 넣으면 메시지의 `author` 로 새 나간다. */
+const EXECS = new Set(users.filter((u) => u.role === 'exec').map((u) => u.id))
+
 const ALL = Object.keys(USERS)
 
 /** 아는 사용자 id 인가. `USERS[id]` 만 보면 `constructor` 같은 프로토타입 키도 참이 된다. */
@@ -42,14 +46,22 @@ const FORBIDDEN = { detail: '권한이 부족합니다.', code: 'FORBIDDEN' }
 
 /**
  * `memberIds` 는 릴레이 안에서만 쓴다. 밖으로는 `members`(이름까지)로 펼쳐 나간다.
- * @type {{id:string, is_dm:boolean, is_private?:boolean, name:string, memberIds:string[]}[]}
+ * `createdBy` 는 비공개 채널을 연 사람이다. 지우기 권한에만 쓰고 밖으로 내보내지 않는다.
+ * @type {{id:string, is_dm:boolean, is_private?:boolean, name:string, memberIds:string[], createdBy?:string}[]}
  */
 const CHANNELS = [
   { id: 'c-notice', is_dm: false, name: '공지', memberIds: ALL },
   { id: 'c-dev', is_dm: false, name: '개발', memberIds: ALL },
   { id: 'c-random', is_dm: false, name: '잡담', memberIds: ALL },
   // 비공개 채널. u-1 진수연과 u-3 홍성완만 본다. u-2 로 들어가면 목록에 없어야 한다.
-  { id: 'c-hr', is_dm: false, is_private: true, name: '인사', memberIds: ['u-1', 'u-3'] },
+  {
+    id: 'c-hr',
+    is_dm: false,
+    is_private: true,
+    name: '인사',
+    memberIds: ['u-1', 'u-3'],
+    createdBy: 'u-1',
+  },
   { id: 'dm-u1-u2', is_dm: true, name: '', memberIds: ['u-1', 'u-2'] },
   // u-5 안재호는 MSW 근태 시드에서 오늘 재택이다. DM 행의 근무 상태 표시를 보여 주는 용도.
   { id: 'dm-u2-u5', is_dm: true, name: '', memberIds: ['u-2', 'u-5'] },
@@ -167,7 +179,16 @@ function createdView(channel, viewerId) {
   return { ...channelView(channel, viewerId), unread: 0, last_message: null }
 }
 
-/** 백엔드 `ChannelOut` 과 같은 모양(04 §5). */
+/**
+ * 이 사람이 이 채널을 지울 수 있는가. 실서버에 아직 없는 규칙이고 프론트가 먼저 정했다.
+ * 공개 채널은 임원, 비공개 채널은 그 채널을 연 멤버. DM 은 못 지운다(숨기기가 있다).
+ */
+function canDelete(channel, viewerId) {
+  if (channel.is_dm || !channel.memberIds.includes(viewerId)) return false
+  return channel.is_private ? channel.createdBy === viewerId : EXECS.has(viewerId)
+}
+
+/** 백엔드 `ChannelOut` 과 같은 모양(04 §5). `can_delete` 만 릴레이가 먼저 준다. */
 function channelView(channel, viewerId) {
   const list = messages.get(channel.id) ?? []
   const since = lastReadAt(viewerId, channel.id)
@@ -186,6 +207,7 @@ function channelView(channel, viewerId) {
     // 내가 보낸 메시지는 안읽음이 아니다.
     unread: list.filter((m) => m.created_at > since && m.author.id !== viewerId).length,
     last_message: list.at(-1) ?? null,
+    can_delete: canDelete(channel, viewerId),
   }
 }
 
@@ -640,6 +662,7 @@ export async function handleChatRequest(req, res, url) {
         is_private: true,
         name,
         memberIds: [...new Set([viewerId, ...ids])],
+        createdBy: viewerId,
       }
       CHANNELS.push(channel)
       publishTo(channel.memberIds, { ev: 'channels' })
@@ -735,6 +758,35 @@ export async function handleChatRequest(req, res, url) {
       'Cache-Control': 'no-store',
     })
     return res.end(found.data)
+  }
+
+  /**
+   * 채널 지우기. 실서버에 아직 없는 경로다(프론트가 먼저 만들었다).
+   *
+   *   DELETE /channels/{id} → 204. 지울 수 있는 사람은 `canDelete`. 멤버인데 권한이 없어도,
+   *                           없는 채널이어도 403(존재를 새지 않는다). DM 은 422.
+   *
+   * 대화와 첨부를 같이 지우고, 지우기 전 멤버 전원에게 `channels` 이벤트를 보낸다.
+   */
+  const deleteMatch = req.method === 'DELETE' && path.match(/^\/channels\/([^/]+)$/)
+  if (deleteMatch) {
+    if (!isUser(viewerId)) {
+      return json(res, 401, { detail: '알 수 없는 사용자입니다.', code: 'AUTH_REQUIRED' })
+    }
+    const channel = CHANNELS.find((c) => c.id === deleteMatch[1])
+    if (!channel || !channel.memberIds.includes(viewerId)) return json(res, 403, FORBIDDEN)
+    if (channel.is_dm) {
+      return json(res, 422, { detail: 'DM 은 지울 수 없습니다.', code: 'VALIDATION' })
+    }
+    if (!canDelete(channel, viewerId)) return json(res, 403, FORBIDDEN)
+    CHANNELS.splice(CHANNELS.indexOf(channel), 1)
+    messages.delete(channel.id)
+    for (const key of attachments.keys()) {
+      if (key.startsWith(`${channel.id}/`)) attachments.delete(key)
+    }
+    publishTo(channel.memberIds, { ev: 'channels' })
+    res.writeHead(204)
+    return res.end()
   }
 
   /**

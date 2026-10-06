@@ -29,8 +29,12 @@ export type MessagePage = Schema<'MessagePage'>
  *
  * 비공개 채널(`is_private`)은 만든 사람과 고른 사람만 멤버고, 멤버가 사람을 더하고 뺀다.
  * DM 은 `false` 로 온다.
+ *
+ * `can_delete` 는 내가 이 채널을 지울 수 있는가다. 백엔드에 아직 없는 칸이라 손으로 붙였다
+ * (개발 릴레이만 준다). 누가 지울 수 있는지는 서버가 정하고 화면은 이 값만 본다. 칸이 안 오는
+ * 서버에서는 지우기 메뉴가 안 보인다. 백엔드가 넣으면 생성 타입에 실려 오므로 이 덧붙임을 뺀다.
  */
-export type ChatChannel = Schema<'ChannelOut'>
+export type ChatChannel = Schema<'ChannelOut'> & { can_delete?: boolean }
 
 /**
  * 서버가 WebSocket 으로 밀어 주는 이벤트(04 §4.1). 봉투 키는 `ev` 이고 필드는 snake_case 다.
