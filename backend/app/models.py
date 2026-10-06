@@ -332,6 +332,22 @@ class BoardUpload(Base):
     created_at: Mapped[datetime] = created_at_col()
 
 
+class ChannelUpload(Base):
+    """채팅 첨부 업로드 기록부 — BoardUpload 와 같은 이유(2026-10-06, README 15(h) · 이슈 #324)."""
+
+    __tablename__ = "channel_uploads"
+
+    file_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True
+    )  # 앱이 만든다 — 저장 키와 같아야 한다
+    channel_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("channels.id"), nullable=False)
+    uploader_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    # 메시지에 실리는 size·content_type 은 이 값으로 덮어쓴다(클라이언트 값을 믿지 않는다)
+    size: Mapped[int] = mapped_column(Integer, nullable=False)
+    content_type: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = created_at_col()
+
+
 class PostComment(Base):
     """게시글 댓글(03 에 없는 표, 2026-10-02 — README 33). 문서 댓글에서 블록 칸을 뺀 모양. 글이 지워지면 DB 가 같이 지운다."""
 

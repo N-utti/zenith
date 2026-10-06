@@ -40,6 +40,20 @@ async def _upload(client: AsyncClient, channel_id, name: str, data: bytes, conte
     )
 
 
+async def _carry(app_db, channel_id, author_id, *atts: dict) -> None:
+    """메시지에 실어 둔다 — 내려받기는 살아 있는 메시지가 싣고 있는 파일만 200 이다(#324)."""
+    app_db.add(
+        Message(
+            channel_id=channel_id,
+            author_id=author_id,
+            body="",
+            attachments=list(atts),
+            created_at=datetime.now(UTC),
+        )
+    )
+    await app_db.flush()
+
+
 async def test_upload_and_download(
     app: FastAPI, client: AsyncClient, users: Users, app_db, minio_bucket
 ) -> None:
@@ -52,15 +66,20 @@ async def test_upload_and_download(
     assert body["name"] == "회의 사진.png" and body["size"] == len(PNG)
     assert body["content_type"] == "image/png"  # 프론트가 아이콘·미리보기를 이름으로 짐작하지 않게
     assert body["url"].startswith(f"/api/channels/{channel.id}/attachments/")
+    # 아직 어떤 메시지에도 안 실린 파일은 올린 사람도 못 받는다(#324)
+    assert (await client.get(body["url"])).status_code == 404
+    await _carry(app_db, channel.id, users.member.id, body)
 
     got = await client.get(body["url"])
     assert got.status_code == 200 and got.content == PNG
     assert got.headers["content-type"] == "image/png"
     assert got.headers["content-disposition"].startswith("inline; filename*=UTF-8''")
     assert got.headers["x-content-type-options"] == "nosniff"
+    assert got.headers["cache-control"] == "no-store"
 
     # 브라우저에서 스크립트가 돌 수 있는 형식은 inline 이 아니다 — 같은 오리진 XSS
     r = await _upload(client, channel.id, "evil.svg", b"<svg onload=alert(1)/>", "image/svg+xml")
+    await _carry(app_db, channel.id, users.member.id, r.json())
     got = await client.get(r.json()["url"])
     assert got.headers["content-disposition"].startswith("attachment;")
 
@@ -87,6 +106,7 @@ async def test_upload_and_download(
 
     # content_type 은 선언값 기준(매직바이트 안 본다) — HTML 을 image/png 로 올려도 image/png + nosniff 로만 나간다
     r = await _upload(client, channel.id, "fake.png", b"<script>1</script>", "image/png")
+    await _carry(app_db, channel.id, users.member.id, r.json())
     got = await client.get(r.json()["url"])
     assert (
         got.headers["content-type"] == "image/png"
@@ -96,6 +116,7 @@ async def test_upload_and_download(
         client, channel.id, "weird.bin", b"x", "not a type"
     )  # 깨진 헤더 값은 octet-stream
     assert r.json()["content_type"] == "application/octet-stream"  # 응답도 저장된 값과 같다
+    await _carry(app_db, channel.id, users.member.id, r.json())
     assert (await client.get(r.json()["url"])).headers["content-type"] == "application/octet-stream"
 
 
@@ -118,6 +139,7 @@ async def test_limits(client: AsyncClient, users: Users, app_db, minio_bucket) -
     long_name = "가" * 200 + ".png"
     r = await _upload(client, channel.id, long_name, PNG, "image/png")
     assert r.status_code == 201 and len(r.json()["name"].encode()) <= 200  # MinIO 경로 조각 255B
+    await _carry(app_db, channel.id, users.member.id, r.json())
     assert (await client.get(r.json()["url"])).status_code == 200
     r = await _upload(client, channel.id, "big.bin", b"0" * (10 * 1024 * 1024 + 1), "text/plain")
     assert r.status_code == 422 and "10MB" in r.json()["detail"]
@@ -153,7 +175,7 @@ async def test_non_member_is_refused_and_audited(
 
 async def test_message_with_attachments(app: FastAPI, users: Users, app_db, minio_bucket) -> None:
     """업로드 응답을 msg op 에 그대로 실으면 저장·방송되고 과거 메시지 조회에도 남는다. 본문 없이 첨부만도 된다.
-    남의 채널 URL 은 VALIDATION."""
+    남의 채널 URL·남이 올린 파일은 VALIDATION(#324). 메시지를 지우면 그 파일은 못 받는다."""
     mine = await make_channel(app_db, [users.member, users.lead])
     theirs = await make_channel(app_db, [users.member], name="혼자")
     async with ws_client(app) as a, ws_client(app) as b:
@@ -167,6 +189,27 @@ async def test_message_with_attachments(app: FastAPI, users: Users, app_db, mini
             assert got["message"]["body"] == "" and got["message"]["attachments"] == [att]
             # 내려받기는 멤버인 b 도 된다
             assert (await b.get(att["url"])).content == PNG
+            # 남이 올린 파일은 멤버라도 자기 메시지에 못 싣는다 — 지운 뒤 박아 두고 회수를 피하는 길(#324)
+            await send(b_ws, op="msg", channel_id=str(mine.id), attachments=[att])
+            assert (await recv_until(b_ws, "error"))["code"] == "VALIDATION"
+            # 메시지를 지우면 그 메시지만 싣던 파일은 404 — 저장소에는 남지만 받을 길이 없다. 다른 메시지가
+            # 같은 파일을 싣고 있으면 그대로 200(판정은 살아 있는 메시지 기준)
+            only = (await _upload(a, mine.id, "한번.pdf", b"%PDF", "application/pdf")).json()
+            await send(a_ws, op="msg", channel_id=str(mine.id), attachments=[only])
+            mid = (await recv_until(b_ws, "msg"))["message"]["id"]
+            await send(a_ws, op="msg", channel_id=str(mine.id), attachments=[only])
+            mid2 = (await recv_until(b_ws, "msg"))["message"]["id"]
+            assert (await b.get(only["url"])).status_code == 200
+            await send(a_ws, op="del", channel_id=str(mine.id), message_id=mid)
+            await recv_until(b_ws, "msg_del")
+            assert (await b.get(only["url"])).status_code == 200
+            await send(a_ws, op="del", channel_id=str(mine.id), message_id=mid2)
+            await recv_until(b_ws, "msg_del")
+            assert (await b.get(only["url"])).status_code == 404
+            # 다른 채널에 올린 file_id 를 이 채널 주소에 끼워도 VALIDATION — 기록의 channel_id 가 다르다
+            smuggled = {**foreign, "url": foreign["url"].replace(str(theirs.id), str(mine.id))}
+            await send(a_ws, op="msg", channel_id=str(mine.id), attachments=[smuggled])
+            assert (await recv_until(a_ws, "error"))["code"] == "VALIDATION"
 
             await send(a_ws, op="msg", channel_id=str(mine.id), body="x", attachments=[foreign])
             # a 는 자기 msg·unread·presence 도 받는다 — error 만 골라 본다
@@ -195,15 +238,15 @@ async def test_message_with_attachments(app: FastAPI, users: Users, app_db, mini
                 attachments=[{**att, "content_type": "not a type"}],
             )
             assert (await recv_until(a_ws, "error"))["code"] == "VALIDATION"
-            # 우긴 content_type 은 저장되기만 하고 **헤더로 반사되지 않는다** — 내려받기는 MinIO 값이 정한다
+            # 우긴 content_type·size 는 저장되지 않는다 — 올릴 때 기록한 값으로 덮어쓴다(#324). 내려받기 헤더도 MinIO 값
             await send(
                 a_ws,
                 op="msg",
                 channel_id=str(mine.id),
-                attachments=[{**att, "content_type": "TEXT/HTML"}],
+                attachments=[{**att, "content_type": "TEXT/HTML", "size": 1}],
             )
             spoofed = (await recv_until(b_ws, "msg"))["message"]["attachments"][0]
-            assert spoofed["content_type"] == "text/html"  # 대소문자는 업로드 규칙대로 내린다
+            assert spoofed == att
             got = await b.get(att["url"])
             assert got.headers["content-type"] == "image/png"
             assert got.headers["content-disposition"].startswith("inline;")
@@ -224,7 +267,11 @@ async def test_message_with_attachments(app: FastAPI, users: Users, app_db, mini
         page = (await b.get(f"/api/channels/{mine.id}/messages")).json()
         assert page["items"][-1]["attachments"][0]["content_type"] is None
         assert [m["attachments"] for m in page["items"][:2]] == [[att], [spoofed]]
-    rows = (await app_db.execute(select(Message))).scalars().all()
+    rows = (
+        (await app_db.execute(select(Message).order_by(Message.created_at, Message.id)))
+        .scalars()
+        .all()
+    )
     assert len(rows) == 3 and rows[0].attachments == [att]
 
 

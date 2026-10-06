@@ -1979,7 +1979,7 @@
         "tags": [
           "chat"
         ],
-        "summary": "첨부 내려받기 — 채널 멤버만. 이미지(png·jpeg·gif·webp)는 inline, 나머지는 attachment",
+        "summary": "첨부 내려받기 — 채널 멤버만, 이 채널의 살아 있는 메시지에 실린 파일만(아니면 404). 이미지(png·jpeg·gif·webp)는 inline, 나머지는 attachment",
         "operationId": "download_attachment_api_channels__id__attachments__file_id___name__get",
         "parameters": [
           {
