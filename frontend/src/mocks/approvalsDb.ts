@@ -563,6 +563,13 @@ export function decide(
 ): ApprovalDocument | Failure {
   const doc = docs.find((d) => d.id === id)
   if (!doc) return fail('문서를 찾을 수 없습니다.', 404, 'NOT_FOUND')
+  // 다른 탭에서 이미 누른 것은 권한 거부(403)가 아니라 상태 충돌이다(백엔드 `approvals.py`).
+  if (doc.status !== 'pending') return fail('이미 처리가 끝난 문서입니다.', 409, 'NOT_PENDING')
+  const mine = (s: (typeof doc.steps)[number]) =>
+    s.approver.id === user.id || s.acted_by?.id === user.id
+  if (doc.steps.some((s) => mine(s) && DECIDED.has(s.status))) {
+    return fail('이미 처리한 문서입니다. 새로고침해 주세요.', 409, 'ALREADY_DECIDED')
+  }
   // 위임받은 사람도 처리할 수 있다(대결, 13 §4.2.3). 원 결재자 이름은 단계에 그대로 남고
   // 실제 처리자만 `acted_by` 로 붙는다.
   const acting = actingFor(user, doc)

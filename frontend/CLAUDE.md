@@ -39,6 +39,6 @@ npm run build     # tsc -b + vite build
 
 ## 계약
 
-- 응답 타입의 기계 판독본은 커밋된 **`backend/openapi.json`** 이다(백엔드 `test_contract.py` 가 최신성을 지킨다). 04 와 어긋나 보이면 이 파일이 실제 서버다. 프론트 타입은 여기서 만든 `src/types/api.gen.ts`(커밋함)를 `Schema<'TeamOut'>` 처럼 끌어 쓴다. 명세가 바뀌면 `npm run gen:api` 로 다시 만들고, 안 그러면 `api.gen.test.ts` 가 빨간불이다. 손수 타입은 서버가 501 인 모듈(결재·근태·AI 근거)과 openapi 에 없는 경로에만 남긴다. 어긋남을 발견하면 PR 본문에 적어 백엔드에 공유한다.
+- 응답 타입의 기계 판독본은 커밋된 **`backend/openapi.json`** 이다(백엔드 `test_contract.py` 가 최신성을 지킨다). 04 와 어긋나 보이면 이 파일이 실제 서버다. 프론트 타입은 여기서 만든 `src/types/api.gen.ts`(커밋함)를 `Schema<'TeamOut'>` 처럼 끌어 쓴다. 명세가 바뀌면 `npm run gen:api` 로 다시 만들고, 안 그러면 `api.gen.test.ts` 가 빨간불이다. 손수 타입은 openapi 에 없는 것(소켓 이벤트, SSE 의 AI 근거)에만 남긴다. 결재·근태·CRM 은 백엔드보다 먼저 만들어 아직 손수 타입이고, 생성 타입으로 옮길 대상이다. 어긋남을 발견하면 PR 본문에 적어 백엔드에 공유한다.
 - 목(MSW)의 에러 응답에도 `code` 를 넣는다. `lib/api.ts` 의 refresh 재시도가 `AUTH_EXPIRED` 라는 `code` 로 갈리므로, `detail` 만 있는 목은 실제 서버와 다르게 동작한다.
 - 백엔드가 04 를 넓힌 항목은 `backend/README.md` "설계와 어긋나는 것"에 있다. 목을 만들 때 그쪽을 먼저 본다.

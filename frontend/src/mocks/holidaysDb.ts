@@ -61,7 +61,8 @@ export function addHoliday(input: HolidayInput): { item: Holiday } | Failure {
   }
   const name = input.name?.trim() ?? ''
   if (!name || name.length > 100) return invalid('이름은 1~100자입니다.')
-  if (input.kind !== 'public' && input.kind !== 'company') return invalid('없는 종류입니다.')
+  // 화면에서 넣는 것은 회사 휴일뿐이다. 법정 공휴일은 서버 원천이라 `public` 은 422(백엔드와 같다).
+  if (input.kind !== 'company') return invalid('없는 종류입니다.')
   if (holidays.has(input.date)) {
     return { error: '이미 휴일로 등록된 날짜입니다.', status: 409, code: 'HOLIDAY_EXISTS' }
   }

@@ -146,7 +146,7 @@ describe('CRM 목 저장소 (15 CRM 모듈 설계서 §4·§9)', () => {
     expect(result).toMatchObject({ status: 422 })
   })
 
-  it('기관 없이 활동을 기록하면 400', () => {
+  it('기관 없이 활동을 기록하면 422', () => {
     const result = createActivity(infra, {
       kind: 'memo',
       occurred_at: new Date().toISOString(),

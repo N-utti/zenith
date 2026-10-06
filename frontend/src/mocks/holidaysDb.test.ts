@@ -24,13 +24,18 @@ it('추가하면 휴일이 되고, 중복은 409, 지우면 풀린다', () => {
 })
 
 it('입력 검증과 마감된 달 차단', () => {
-  expect(addHoliday({ date: '2031-13-01', name: 'x', kind: 'public' })).toMatchObject({
+  // 법정 공휴일은 화면에서 넣지 못한다. 서버도 `company` 만 받는다.
+  // @ts-expect-error 타입이 막는 값을 일부러 보낸다.
+  expect(addHoliday({ date: '2031-01-03', name: 'x', kind: 'public' })).toMatchObject({
     status: 422,
   })
-  expect(addHoliday({ date: '2031-02-30', name: 'x', kind: 'public' })).toMatchObject({
+  expect(addHoliday({ date: '2031-13-01', name: 'x', kind: 'company' })).toMatchObject({
     status: 422,
   })
-  expect(addHoliday({ date: '2031-01-02', name: ' ', kind: 'public' })).toMatchObject({
+  expect(addHoliday({ date: '2031-02-30', name: 'x', kind: 'company' })).toMatchObject({
+    status: 422,
+  })
+  expect(addHoliday({ date: '2031-01-02', name: ' ', kind: 'company' })).toMatchObject({
     status: 422,
   })
   expect(addHoliday({ date: closed, name: '임시', kind: 'company' })).toMatchObject({

@@ -271,4 +271,5 @@ export interface Holiday {
   kind: HolidayKind
 }
 
-export type HolidayInput = Holiday
+/** 화면에서 넣는 것은 회사 휴일뿐이다. 서버 `POST /admin/holidays` 도 `company` 만 받는다. */
+export type HolidayInput = Omit<Holiday, 'kind'> & { kind: 'company' }

@@ -64,6 +64,11 @@ describe('결재 목 저장소 (13 §5·§6·§9)', () => {
     const mid = decide(senior, pending.id, 'approve', 1, undefined)
     expect(mid).toMatchObject({ status: 'pending', current_step: 2 })
     expect(listApprovals(ceo, 'inbox').map((d) => d.id)).toContain(pending.id)
+    // 다른 탭에서 이미 누른 것은 권한 거부가 아니라 상태 충돌이다(서버와 같은 409).
+    expect(decide(senior, pending.id, 'approve', 2, undefined)).toMatchObject({
+      status: 409,
+      code: 'ALREADY_DECIDED',
+    })
 
     const done = decide(ceo, pending.id, 'approve', 1, '좋습니다')
     expect(done).toMatchObject({ status: 'approved' })
@@ -71,6 +76,10 @@ describe('결재 목 저장소 (13 §5·§6·§9)', () => {
     expect(done.steps.map((s) => s.status)).toEqual(['approved', 'approved'])
     expect(done.steps[1]).toMatchObject({ comment: '좋습니다', version: 2 })
     expect(listApprovals(ceo, 'inbox').map((d) => d.id)).not.toContain(pending.id)
+    expect(decide(ceo, pending.id, 'reject', 2, '늦은 반려')).toMatchObject({
+      status: 409,
+      code: 'NOT_PENDING',
+    })
   })
 
   it('승인된 단계가 있으면 회수 409(STEP_APPROVED), 없으면 회수되고 남은 단계는 skipped', () => {
