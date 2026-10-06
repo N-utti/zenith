@@ -23,6 +23,8 @@ const room = (id: string, extra: Partial<ChatChannel> = {}) =>
     members: [],
     unread: 0,
     last_message: null,
+    can_delete: false,
+    created_by: null,
     ...extra,
   }) as ChatChannel
 

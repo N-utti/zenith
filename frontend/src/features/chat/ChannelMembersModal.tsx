@@ -13,7 +13,8 @@ import { useAddMembers, useRemoveMember } from './api'
 import type { ChatChannel } from './types'
 
 /**
- * 비공개 채널의 멤버를 보고, 더하고, 뺀다. 멤버면 누구나 한다(채널에 주인이 없다).
+ * 비공개 채널의 멤버를 보고, 더하고, 뺀다. 멤버면 누구나 한다. 채널을 연 사람만
+ * 예외다. 남이 빼지 못하고 본인만 나간다(서버가 403 으로 막는다. 그 줄에는 빼기를 안 그린다).
  *
  * 명단은 `channel.members` 그대로다. 더하거나 빼면 채널 목록을 다시 받고, 그 응답이 이 명단을
  * 바꾼다(낙관적 갱신 없음). 내가 빠지면 채널이 목록에서 사라져 `ChatPage` 가 이 모달째 닫는다.
@@ -99,7 +100,7 @@ export function ChannelMembersModal({
                     취소
                   </Button>
                 </>
-              ) : (
+              ) : !mine && member.id === channel.created_by ? null : (
                 <Button
                   variant="ghost"
                   size="sm"
