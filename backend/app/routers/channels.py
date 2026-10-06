@@ -3,9 +3,10 @@
 멤버십 모델(README "설계와 어긋나는 것" 12): 공개 채널은 만들 때 활성 사용자 전원을 멤버로 넣는다(15명 사내,
 초대·탈퇴 없음 — 새 계정은 admin 이 만들 때 모든 공개 채널에 들어간다). DM 은 두 사람짜리 채널이고 같은 두 사람의
 DM 은 하나만 둔다. **비공개 채널**(2026-10-02, 이슈 #221)은 만든 사람 + 고른 사람만 멤버이고, 멤버면 누구나
-사람을 더하고 뺄 수 있다(`/channels/{id}/members`). 멤버 아닌 채널은 없는 채널과 같은 403 + 감사(소켓과 같은 판정).
+사람을 더하고 뺄 수 있다(`/channels/{id}/members`, 연 사람은 본인만 나간다 — #349). 멤버 아닌 채널은 없는 채널과 같은 403 + 감사(소켓과 같은 판정).
 """
 
+import logging
 import re
 import unicodedata
 import uuid
@@ -24,7 +25,7 @@ from pydantic import (
     StringConstraints,
     model_validator,
 )
-from sqlalchemy import func, select, tuple_, update
+from sqlalchemy import delete, func, select, tuple_, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
@@ -33,8 +34,18 @@ from app import audit, storage
 from app.db import get_db
 from app.deps import current_user
 from app.errors import ApiError
-from app.models import Channel, ChannelMember, ChannelUpload, Message, User, Workspace
+from app.models import (
+    Channel,
+    ChannelMember,
+    ChannelUpload,
+    Message,
+    Notification,
+    User,
+    Workspace,
+)
 from app.paging import decode_cursor, encode_cursor
+
+log = logging.getLogger(__name__)
 
 router = APIRouter(tags=["chat"], dependencies=[Depends(current_user)])
 
@@ -157,6 +168,10 @@ class ChannelOut(BaseModel):
     members: list[Person]
     unread: int
     last_message: MessageOut | None
+    can_delete: bool  # 보는 사람이 지울 수 있나(#349) — 프론트는 이 값으로만 메뉴를 그린다
+    created_by: (
+        uuid.UUID | None
+    )  # 연 사람(#349) — 멤버 명단에서 그 사람의 「빼기」를 숨기는 데 쓴다. 칸 전 채널은 null
 
 
 MemberIds = Annotated[list[uuid.UUID], Field(max_length=200)]
@@ -332,6 +347,8 @@ async def list_channels(
             members=[Person.model_validate(u) for u in members[c.id]],
             unread=count,
             last_message=last.get(c.id),
+            can_delete=_can_delete(c, members[c.id], user),
+            created_by=c.created_by,
         )
         for c, count in rows
     ]
@@ -356,7 +373,23 @@ def _channel_out(channel: Channel, members: list[User], viewer: User) -> Channel
         members=[Person.model_validate(u) for u in members],
         unread=0,
         last_message=None,
+        can_delete=_can_delete(channel, members, viewer),
+        created_by=channel.created_by,
     )
+
+
+def _can_delete(channel: Channel, members: list[User], viewer: User) -> bool:
+    """#349: 공개 채널은 임원(전 직원이 멤버라 사원 한 명이 전사 대화를 지우면 안 된다), 비공개는 연 사람.
+    연 사람 기록이 없거나(칸이 생기기 전 채널) 연 사람이 빠졌거나 비활성(퇴사)이면 멤버인 임원. DM 은 숨기기만."""
+    if channel.is_dm:
+        return False
+    if not channel.is_private:
+        return viewer.role == "exec"
+    if channel.created_by == viewer.id:
+        return True
+    # 복직하면(active) 연 사람 권한이 돌아온다
+    creator_present = any(u.id == channel.created_by and u.active for u in members)
+    return viewer.role == "exec" and not creator_present
 
 
 async def _active_users(db: AsyncSession, ids: list[uuid.UUID]) -> list[User]:
@@ -455,7 +488,7 @@ async def create_channel(
             if unhidden.rowcount:
                 notify = [user.id]  # 다른 탭의 목록도 맞춘다
         else:
-            channel = Channel(ws_id=ws_id, name="", is_dm=True)
+            channel = Channel(ws_id=ws_id, name="", is_dm=True, created_by=user.id)
             db.add(channel)
             await db.flush()
             db.add_all(
@@ -466,7 +499,9 @@ async def create_channel(
         # 비공개: 이름 중복은 보지 않는다(409 가 안 보이는 채널의 존재를 샌다). 만든 사람은 명단에 없어도 들어간다.
         member_ids = {*body.member_ids, user.id}
         await _active_users(db, [uid for uid in member_ids if uid != user.id])
-        channel = Channel(ws_id=ws_id, name=body.name, is_dm=False, is_private=True)
+        channel = Channel(
+            ws_id=ws_id, name=body.name, is_dm=False, is_private=True, created_by=user.id
+        )
         db.add(channel)
         await db.flush()
         db.add_all([ChannelMember(channel_id=channel.id, user_id=uid) for uid in member_ids])
@@ -488,7 +523,7 @@ async def create_channel(
         )
         if dup.first():
             raise ApiError(409, "CONFLICT", "같은 이름의 채널이 있습니다.")
-        channel = Channel(ws_id=ws_id, name=body.name, is_dm=False)
+        channel = Channel(ws_id=ws_id, name=body.name, is_dm=False, created_by=user.id)
         db.add(channel)
         await db.flush()
         # 비활성 계정도 넣는다 — 복직하면 그 사이 생긴 채널도 보여야 한다(seed·admin 과 같은 규칙)
@@ -553,6 +588,76 @@ async def rename_channel(
     await db.commit()
     await _notify_channels([u.id for u in members])
     return _channel_out(channel, members, user)
+
+
+@router.delete(
+    "/channels/{id}",
+    status_code=204,
+    summary="채널 지우기 — 공개는 임원, 비공개는 연 사람(없으면 멤버인 임원). DM 은 422(숨기기로). 메시지·첨부·멘션 알림까지 지운다",
+    response_class=Response,
+)
+async def delete_channel(
+    id: uuid.UUID,
+    request: Request,
+    user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    # 멤버 변경·이름 바꾸기와 같은 이유 — 확인 뒤에 빠진 사람이 지우지 못하게
+    await _lock_channel(db, id)
+    await _require_member(db, request, user, id)  # 멤버 아님·없는 채널 → 같은 403(존재를 새지 않게)
+    # 행 잠금 — 소켓 msg 는 채널 자문 잠금을 안 잡는다. 메시지를 지운 뒤 끼어든 INSERT 가 commit 되면 마지막
+    # 채널 DELETE 가 FK 위반(500)이 된다. 행을 잠그면 그 INSERT 의 FK 확인이 여기 commit 까지 기다렸다가 실패한다
+    channel = await db.get(Channel, id, with_for_update=True)
+    assert channel is not None
+    if channel.is_dm:
+        raise ApiError(422, "VALIDATION", "DM 은 지우지 않고 숨깁니다.")
+    members = (await _members_of(db, [id]))[id]
+    if not _can_delete(channel, members, user):
+        audit.record(  # 멤버지만 권한 없음 — 같은 403, 감사는 남긴다
+            db,
+            "acl.denied",
+            request=request,
+            actor_id=user.id,
+            target_id=id,
+            detail={"path": request.url.path, "reason": "delete"},
+        )
+        await db.commit()
+        raise ApiError(403, "FORBIDDEN", "권한이 부족합니다.")
+    message_count = await db.scalar(
+        select(func.count()).select_from(Message).where(Message.channel_id == id)
+    )
+    # 행째 지운다(#349 — 되살리기 없음, 프론트 문구 「되돌릴 수 없습니다」). 멘션 알림도 같이(#284 와 같게 —
+    # 남으면 눌러도 빈 화면). 첨부 오브젝트는 commit 뒤 best-effort.
+    # ponytail: payload->>'channel_id' 조건이라 notifications 를 훑는다 — 쌓이면 식 인덱스(#284 와 같은 자리)
+    await db.execute(
+        delete(Notification).where(Notification.payload["channel_id"].astext == str(id))
+    )
+    await db.execute(delete(Message).where(Message.channel_id == id))
+    await db.execute(delete(ChannelUpload).where(ChannelUpload.channel_id == id))
+    await db.execute(delete(ChannelMember).where(ChannelMember.channel_id == id))
+    audit.record(
+        db,
+        "channels.deleted",
+        request=request,
+        actor_id=user.id,
+        target_id=id,
+        detail={
+            "name": channel.name,
+            "is_private": channel.is_private,
+            "members": sorted(str(u.id) for u in members),
+            "messages": message_count,
+        },
+    )
+    await db.delete(channel)
+    await db.commit()
+    await _notify_channels([u.id for u in members])  # 지우기 전 멤버 전원 — 사이드바에서 사라지게
+    # commit 뒤의 정리 — 저장소가 죽어 있거나 설정이 깨져 있어도 지우기는 끝났다. 고아 오브젝트만 남는다(감사에 id).
+    # ponytail: 오브젝트를 하나씩 지운다 — 첨부가 수천 개면 응답이 늦어진다. 느려지면 BackgroundTasks 로.
+    try:
+        await storage.remove_prefix(f"channels/{id}/")
+    except Exception as e:  # noqa: BLE001
+        log.warning("채널 %s 첨부 정리 실패: %s %s", id, type(e).__name__, e)
+    return Response(status_code=204)
 
 
 @router.post(
@@ -635,7 +740,7 @@ async def add_members(
 @router.delete(
     "/channels/{id}/members/{user_id}",
     status_code=204,
-    summary="비공개 채널에서 사람 빼기 — 자기 자신이면 나가기. 멤버 아닌 사람 404, 공개·DM 은 422",
+    summary="비공개 채널에서 사람 빼기 — 자기 자신이면 나가기. 연 사람은 본인만(남이 빼면 403). 멤버 아닌 사람 404, 공개·DM 은 422",
     response_class=Response,
 )
 async def remove_member(
@@ -645,10 +750,14 @@ async def remove_member(
     user: User = Depends(current_user),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
-    await _private_channel(db, request, user, id)
+    channel = await _private_channel(db, request, user, id)
     row = await db.get(ChannelMember, (id, user_id))
     if row is None:
         raise ApiError(404, "NOT_FOUND", "이 채널의 멤버가 아닙니다.")
+    if user_id == channel.created_by and user_id != user.id:
+        # 연 사람은 본인만 나간다(#349 보안 리뷰) — 남이 빼면 「연 사람 우선」 지우기 판정이 임원 폴백으로 열린다.
+        # 퇴사한 연 사람도 명단에서 못 뺀다(복직하면 권한이 돌아오게) — README 39
+        raise ApiError(403, "FORBIDDEN", "채널을 연 사람은 본인만 나갈 수 있습니다.")
     before = [u.id for u in (await _members_of(db, [id]))[id]]
     await db.delete(row)
     # ponytail: 마지막 사람이 나가면 채널은 멤버 0 으로 남는다(아무에게도 안 보임, 메시지·첨부 보존) — 지우려면

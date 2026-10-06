@@ -7,7 +7,16 @@ from datetime import UTC, datetime, timedelta
 from httpx import AsyncClient
 from sqlalchemy import func, select
 
-from app.models import AuditEvent, Channel, ChannelMember, Message, User, Workspace
+from app.models import (
+    AuditEvent,
+    Channel,
+    ChannelMember,
+    ChannelUpload,
+    Message,
+    Notification,
+    User,
+    Workspace,
+)
 
 from .conftest import Users, csrf, login
 
@@ -321,7 +330,8 @@ async def test_private_channel_create(
 async def test_private_channel_members(
     client: AsyncClient, users: Users, app_db, monkeypatch
 ) -> None:
-    """멤버면 누구나 더하고 뺀다. 공개·DM 은 422, 비멤버 요청 403, 뺄 사람이 멤버 아니면 404. 전·후 멤버에게 channels 이벤트."""
+    """멤버면 누구나 더하고 뺀다(단, 연 사람은 본인만 — #349). 공개·DM 은 422, 비멤버 요청 403, 뺄 사람이 멤버 아니면 404.
+    전·후 멤버에게 channels 이벤트."""
     seeded = await _seed(app_db, users)
     sent = await _pushes(monkeypatch)
     await login(client, "sujin@zenith.co.kr")
@@ -474,6 +484,177 @@ async def test_rename_channel(client: AsyncClient, users: Users, app_db, monkeyp
     )
     assert r.status_code == 200 and r.json()["is_private"]
     assert sent[-1] == ({users.exec.id}, {"ev": "channels"})  # 그 채널 멤버에게만
+
+
+async def test_delete_channel(client: AsyncClient, users: Users, app_db, monkeypatch) -> None:
+    """이슈 #349: 공개 채널은 임원, 비공개는 연 사람(연 사람 기록이 없으면 멤버인 임원). DM 422. 멤버 아님·없는
+    채널·권한 없음은 같은 403(+acl.denied). 메시지·첨부 기록·멘션 알림·멤버가 같이 지워지고, 지우기 전 멤버
+    전원에게 channels 이벤트, 첨부 오브젝트는 commit 뒤 정리. `can_delete` 가 그 판정 그대로."""
+    from app.routers import channels as mod
+
+    seeded = await _seed(app_db, users)
+    sent = await _pushes(monkeypatch)
+    removed: list[str] = []
+
+    async def fake_remove(prefix: str) -> None:
+        removed.append(prefix)
+
+    monkeypatch.setattr(mod.storage, "remove_prefix", fake_remove)
+    general, dm, secret = seeded["general"], seeded["dm"], seeded["secret"]
+    app_db.add(
+        Notification(
+            user_id=users.member.id,
+            kind="mention",
+            payload={
+                "channel_id": str(general.id),
+                "message_id": str(uuid.uuid4()),
+                "preview": "x",
+            },
+        )
+    )
+    # 음성 대조군 — 다른 채널의 멘션·채널 없는 알림은 남아야 한다
+    keep = [
+        Notification(
+            user_id=users.member.id,
+            kind="mention",
+            payload={"channel_id": str(secret.id), "message_id": str(uuid.uuid4())},
+        ),
+        Notification(user_id=users.member.id, kind="post", payload={"post_id": str(uuid.uuid4())}),
+    ]
+    app_db.add_all(keep)
+    app_db.add(
+        ChannelUpload(
+            file_id=uuid.uuid4(),
+            channel_id=general.id,
+            uploader_id=users.lead.id,
+            size=1,
+            content_type="text/plain",
+        )
+    )
+    await app_db.flush()
+
+    # 사원: 공개 채널은 못 지운다(can_delete false → 403 + acl.denied), DM 은 422
+    await login(client, "sujin@zenith.co.kr")
+    h = csrf(client)
+    items = {i["id"]: i for i in (await client.get("/api/channels")).json()["items"]}
+    assert (
+        items[str(general.id)]["can_delete"] is False and items[str(dm.id)]["can_delete"] is False
+    )
+    assert items[str(general.id)]["created_by"] is None  # 칸 전 채널
+    r = await client.delete(f"/api/channels/{general.id}", headers=h)
+    assert (r.status_code, r.json()["code"]) == (403, "FORBIDDEN")
+    assert (await client.delete(f"/api/channels/{dm.id}", headers=h)).status_code == 422
+    assert (
+        await client.delete(f"/api/channels/{seeded['others'].id}", headers=h)
+    ).status_code == 403
+    assert (await client.delete(f"/api/channels/{uuid.uuid4()}", headers=h)).status_code == 403
+    denied = (
+        (await app_db.execute(select(AuditEvent).where(AuditEvent.kind == "acl.denied")))
+        .scalars()
+        .all()
+    )
+    assert [e.detail.get("reason") for e in denied if e.target_id == general.id] == ["delete"]
+    assert len(denied) == 3  # general(권한) + others(비멤버) + 없는 채널
+
+    # 사원이 연 비공개 채널은 그 사람이 지운다 — 다른 멤버(팀장)는 못 지운다
+    r = await client.post(
+        "/api/channels",
+        json={"name": "프로젝트", "is_private": True, "member_ids": [str(users.lead.id)]},
+        headers=h,
+    )
+    assert r.status_code == 201 and r.json()["can_delete"] is True
+    assert r.json()["created_by"] == str(users.member.id)  # 프론트가 연 사람의 「빼기」를 숨긴다
+    project_id = r.json()["id"]
+    await login(client, "donghyun@zenith.co.kr")
+    items = {i["id"]: i for i in (await client.get("/api/channels")).json()["items"]}
+    assert items[project_id]["can_delete"] is False
+    assert (
+        await client.delete(f"/api/channels/{project_id}", headers=csrf(client))
+    ).status_code == 403
+    # 연 사람이 멤버로 있는 동안은 멤버인 임원도 못 지우고, 연 사람을 남이 빼지도 못한다(빼면 폴백이 열린다)
+    app_db.add(ChannelMember(channel_id=uuid.UUID(project_id), user_id=users.exec.id))
+    await app_db.flush()
+    await login(client, "jaeho@zenith.co.kr")
+    hx = csrf(client)
+    items = {i["id"]: i for i in (await client.get("/api/channels")).json()["items"]}
+    assert items[project_id]["can_delete"] is False
+    assert (await client.delete(f"/api/channels/{project_id}", headers=hx)).status_code == 403
+    r = await client.delete(f"/api/channels/{project_id}/members/{users.member.id}", headers=hx)
+    assert (r.status_code, r.json()["code"]) == (403, "FORBIDDEN")
+    # 연 사람이 비활성(퇴사)이면 빠진 것으로 본다 → 임원 폴백. 복직하면 다시 연 사람 것
+    users.member.active = False
+    await app_db.flush()
+    items = {i["id"]: i for i in (await client.get("/api/channels")).json()["items"]}
+    assert items[project_id]["can_delete"] is True
+    users.member.active = True
+    await app_db.flush()
+    # 연 사람이 스스로 나가면 → 연 사람은 비멤버라 403, 멤버인 임원이 지운다. 저장소가 죽어도 204(고아만 남는다)
+    await login(client, "sujin@zenith.co.kr")
+    r = await client.delete(
+        f"/api/channels/{project_id}/members/{users.member.id}", headers=csrf(client)
+    )
+    assert r.status_code == 204
+    assert (
+        await client.delete(f"/api/channels/{project_id}", headers=csrf(client))
+    ).status_code == 403
+    await login(client, "jaeho@zenith.co.kr")
+    sent.clear()
+
+    async def failing_remove(prefix: str) -> None:
+        raise RuntimeError("minio down")
+
+    monkeypatch.setattr(mod.storage, "remove_prefix", failing_remove)
+    assert (
+        await client.delete(f"/api/channels/{project_id}", headers=csrf(client))
+    ).status_code == 204
+    assert sent == [({users.lead.id, users.exec.id}, {"ev": "channels"})]
+    monkeypatch.setattr(mod.storage, "remove_prefix", fake_remove)
+
+    # 임원: 공개 채널을 지운다 — 메시지 7건·멘션 알림·첨부 기록·멤버가 같이 사라지고 전 멤버에게 이벤트
+    await login(client, "jaeho@zenith.co.kr")
+    h = csrf(client)
+    assert (
+        await client.delete(f"/api/channels/{general.id}", headers=h)
+    ).status_code == 403  # 멤버 아님
+    app_db.add(ChannelMember(channel_id=general.id, user_id=users.exec.id))
+    await app_db.flush()
+    items = {i["id"]: i for i in (await client.get("/api/channels")).json()["items"]}
+    assert items[str(general.id)]["can_delete"] is True
+    assert items[str(secret.id)]["can_delete"] is True  # 연 사람 기록 없는 비공개 → 멤버인 임원
+    sent.clear()
+    assert (await client.delete(f"/api/channels/{general.id}", headers=h)).status_code == 204
+    assert sent == [({users.member.id, users.lead.id, users.exec.id}, {"ev": "channels"})]
+    assert str(general.id) not in {
+        i["id"] for i in (await client.get("/api/channels")).json()["items"]
+    }
+    assert await app_db.scalar(select(func.count()).where(Message.channel_id == general.id)) == 0
+    assert (
+        await app_db.scalar(select(func.count()).where(ChannelMember.channel_id == general.id)) == 0
+    )
+    assert (
+        await app_db.scalar(select(func.count()).where(ChannelUpload.channel_id == general.id)) == 0
+    )
+    assert (
+        await app_db.scalar(
+            select(func.count()).where(Notification.payload["channel_id"].astext == str(general.id))
+        )
+    ) == 0
+    assert await app_db.get(Channel, general.id) is None
+    for n in keep:
+        assert await app_db.get(Notification, n.id) is not None
+    ev = (
+        await app_db.execute(
+            select(AuditEvent).where(
+                AuditEvent.kind == "channels.deleted", AuditEvent.target_id == general.id
+            )
+        )
+    ).scalar_one()
+    assert (
+        ev.actor_id == users.exec.id and ev.detail["messages"] == 7 and ev.detail["name"] == "일반"
+    )
+    assert ev.detail["is_private"] is False and len(ev.detail["members"]) == 3
+    # 삭제 뒤의 요청은 없는 채널과 같은 403
+    assert (await client.delete(f"/api/channels/{general.id}", headers=h)).status_code == 403
 
 
 async def test_hide_dm(client: AsyncClient, users: Users, app_db, monkeypatch) -> None:
