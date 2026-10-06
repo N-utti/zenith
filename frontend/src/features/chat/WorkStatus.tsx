@@ -15,7 +15,7 @@ export function WorkStatus({ channel }: { channel: ChatChannel }) {
   const kind = other ? kinds.get(other) : undefined
   if (!kind) return null
   return (
-    <span className="text-info bg-info/12 shrink-0 rounded-full px-2 py-px text-[11px] leading-4 font-medium">
+    <span className="text-info bg-info/12 shrink-0 rounded-full px-2 py-px text-xs leading-4 font-medium">
       {ATTENDANCE_STATUS_LABEL[kind]}
     </span>
   )

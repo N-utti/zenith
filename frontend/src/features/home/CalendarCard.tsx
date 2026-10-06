@@ -107,7 +107,7 @@ export function CalendarCard() {
                   <span
                     key={item.id}
                     className={cn(
-                      'hidden w-full truncate rounded px-1 text-[11px] leading-4 sm:block',
+                      'hidden w-full truncate rounded px-1 text-[13px] leading-5 sm:block',
                       TONE[item.kind],
                     )}
                   >
@@ -115,7 +115,7 @@ export function CalendarCard() {
                   </span>
                 ))}
                 {items.length > MAX_CHIPS && (
-                  <span className="text-subtle hidden px-1 text-[11px] leading-4 sm:block">
+                  <span className="text-subtle hidden px-1 text-[13px] leading-5 sm:block">
                     +{items.length - MAX_CHIPS}
                   </span>
                 )}
