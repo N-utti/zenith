@@ -773,7 +773,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 게시글 첨부 내려받기 — 게시판을 읽을 수 있는 등급만. 이미지 넷은 inline, 나머지는 attachment */
+        /** 게시글 첨부 내려받기 — 게시판을 읽을 수 있는 등급만, 이 게시판의 살아 있는 글에 실린 파일만(아니면 404). 이미지 넷은 inline, 나머지는 attachment */
         get: operations["download_board_attachment_api_boards__id__attachments__file_id___name__get"];
         put?: never;
         post?: never;

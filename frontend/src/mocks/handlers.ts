@@ -533,7 +533,12 @@ export const handlers = [
     if (!canRead(user, post.min_role) || !canEdit(user, post)) return forbidden()
 
     // 첨부는 그 글이 있는 게시판에 올린 파일이어야 한다.
-    const filesError = checkPostAttachments(post.board_id, body.attachments)
+    const filesError = checkPostAttachments(
+      post.board_id,
+      body.attachments,
+      user,
+      post.attachments ?? [],
+    )
     if (filesError) return validationError(filesError)
 
     // 보내지 않은 값은 그대로 둔다. null 은 "지움" 이 아니라 422 다.
@@ -643,7 +648,7 @@ export const handlers = [
     }
     const shapeError = checkPostFields(parsed)
     if (shapeError) return shapeError
-    const filesError = checkPostAttachments(boardId, parsed.attachments)
+    const filesError = checkPostAttachments(boardId, parsed.attachments, user)
     if (filesError) return validationError(filesError)
 
     return HttpResponse.json(
@@ -659,8 +664,8 @@ export const handlers = [
   // ── 게시글 첨부 ─────────────────────────────────────────
   // 백엔드 #306 과 같은 모양이다(채팅 첨부 `/channels/{id}/attachments` 와 같은 규약).
   // 그 게시판을 읽을 수 있는 사람(등급)만 올리고 받는다. 판정은 늘 경로의 게시판으로 한다.
-  // 받기는 거기에 더해, 살아 있는 글이 싣고 있는 파일만 내준다(안 붙인 파일은 올린 사람만).
-  // 이 조건은 목에만 있다. 실서버는 아직 뗀 파일도 내준다(이슈 #309).
+  // 받기는 거기에 더해, 살아 있는 글이 싣고 있는 파일만 내준다.
+  // 실서버(#323)와 같다. 안 붙인 파일은 올린 사람도 못 받는다.
   http.post('/api/boards/:boardId/attachments', async ({ request, params }) => {
     const user = authenticate()
     if (!user) return unauthorized()
@@ -693,7 +698,7 @@ export const handlers = [
     if (!canRead(user, board.min_role)) return forbidden()
     // 다른 게시판(이나 결재 문서)에 올린 파일 id 를 이 경로에 끼워 넣은 요청, 글에서 뗀 파일과
     // 지운 글의 파일을 막는다. 등급 판정(403)이 먼저라 등급 밖에서는 파일이 있는지도 알 수 없다.
-    if (!canDownloadPostAttachment(user, board.id, new URL(request.url).pathname)) {
+    if (!canDownloadPostAttachment(board.id, new URL(request.url).pathname)) {
       return notFound('파일을 찾을 수 없습니다.')
     }
     const stored = await readFile(String(params.fileId))
