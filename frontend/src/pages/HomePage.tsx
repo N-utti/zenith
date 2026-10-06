@@ -60,8 +60,9 @@ export function HomePage() {
         </div>
       </div>
 
-      {/* 1단(모바일)일 때만 05 SCR-07 순서(이어서 작업 → 멘션 → 안 읽은 메시지 → 공지)로 다시 세운다.
-          05 에 없는 캘린더·오늘 할 일은 그 뒤로 민다. lg 부터는 order 를 지우고 기존 2열 격자대로.
+      {/* 1단(모바일)일 때만 순서를 다시 세운다. 오늘 할 일이 맨 위(폰에서는 확인하고 체크하는 일이
+          먼저다), 그 아래는 05 SCR-07 순서(이어서 작업 → 멘션 → 안 읽은 메시지 → 공지), 05 에 없는
+          캘린더는 맨 뒤. lg 부터는 order 를 지우고 기존 2열 격자대로.
           `contents` 로 열 래퍼를 없애 여섯 카드가 그리드의 한 열에서 함께 순서를 갖게 한다.
           grid-cols-1 은 minmax(0,1fr) 라서, 가로로 구르는 이어서 작업 줄이 칸을 밀어 넓히지 못한다.
           감수한 것: 1단에서 보이는 순서와 코드 순서(스크린리더·Tab)가 다르다. 코드 순서를 모바일에
@@ -85,7 +86,7 @@ export function HomePage() {
           <div className="order-4 lg:order-none">
             <AnnouncementsCard />
           </div>
-          <div className="order-6 lg:order-none">
+          <div className="order-first lg:order-none">
             <TodayTasksCard />
           </div>
         </div>
