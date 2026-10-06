@@ -4,7 +4,7 @@ import { useToast } from '@/components/ui/ToastContext'
 import { useCurrentUser } from '@/features/auth/AuthContext'
 import { meQueryKey } from '@/features/auth/queries'
 import { api, ApiError } from '@/lib/api'
-import { notify } from '@/lib/desktop'
+import { clearNotifications, notify } from '@/lib/desktop'
 import { wsUrl } from '@/lib/serverOrigin'
 import { approvalsKey } from '@/features/approvals/api'
 import { homeKeys } from '@/features/home/keys'
@@ -26,7 +26,18 @@ import type { ChatAttachment, ChatChannel, ChatEvent, ChatMessage } from './type
 const TYPING_TTL_MS = 3000
 /** 키를 칠 때마다 보내지 않는다. */
 const TYPING_THROTTLE_MS = 2000
+/** 다시 붙는 간격. 연달아 실패하면 두 배씩 늘려 상한에서 멈춘다. */
 const RECONNECT_MS = 2000
+const RECONNECT_MAX_MS = 10_000
+/**
+ * 열린 뒤 이만큼 버텨야 연결된 것으로 친다. 서버는 거절할 때도 일단 열었다가 코드를 실어 닫는다
+ * (4401·1013, 백엔드 #343). 열리자마자 연결로 치면 DB 가 끊긴 동안 연결 표시가 깜빡이고, 다시
+ * 붙을 때마다 목록을 새로 받고, 끊김 배너의 유예(`connectionLost.ts`)가 매번 처음부터 돈다.
+ *
+ * ponytail: 서버가 접속 직후 늘 보내는 프레임이 없어 시간으로 가른다. 그런 프레임이 생기면
+ * 그걸 받은 때로 바꾼다.
+ */
+const OPEN_SETTLE_MS = 300
 
 /** 누구인지는 핸드셰이크에 실리는 세션 쿠키가 말한다(11 §7.5). URL 에 사용자 id 를 싣지 않는다. */
 function socketUrl(): string {
@@ -110,6 +121,9 @@ export function useChatSocket(): ChatSocket {
   useEffect(() => {
     let closed = false
     let reconnectTimer: number | undefined
+    let settleTimer: number | undefined
+    /** 자리 잡지 못하고 연달아 닫힌 횟수. */
+    let failures = 0
     // 이 effect가 만든 소켓만 따로 붙잡는다. 공유 ref를 닫으면 effect가 겹칠 때
     // (StrictMode의 이중 마운트 등) 남의 소켓을 닫고 자기 것은 남긴다.
     let socket: WebSocket | null = null
@@ -120,14 +134,17 @@ export function useChatSocket(): ChatSocket {
       socket = new WebSocket(socketUrl())
       socketRef.current = socket
 
-      socket.onopen = () => {
+      const settled = () => {
+        const late = failures > 0
+        failures = 0
         setConnected(true)
         // 끊긴 동안 온 메시지는 아무도 안 받아 왔다. 소켓이 유일한 수신 경로다. 다시 받지
         // 않으면 `ChatPage` 가 연결 직후 읽음을 보내 서버의 안읽음이 0 이 되고, 그 메시지는
         // 화면에도 배지에도 없이 사라진다. 그래서 먼저 다시 받는다.
         //
-        // 첫 연결에는 건너뛴다. 방금 화면이 받아 온 것을 한 번 더 받을 뿐이다.
-        if (reconnectedRef.current) {
+        // 곧바로 붙은 첫 연결에는 건너뛴다. 방금 화면이 받아 온 것을 한 번 더 받을 뿐이다.
+        // 실패하다가 늦게 붙은 첫 연결은 그 사이 온 것을 놓쳤으므로 받는다.
+        if (reconnectedRef.current || late) {
           void qc.invalidateQueries({ queryKey: chatKeys.allMessages })
           void qc.invalidateQueries({ queryKey: chatKeys.channels })
           void qc.invalidateQueries({ queryKey: homeKeys.home })
@@ -136,11 +153,18 @@ export function useChatSocket(): ChatSocket {
         reconnectedRef.current = true
       }
 
+      socket.onopen = () => {
+        settleTimer = window.setTimeout(settled, OPEN_SETTLE_MS)
+      }
+
       socket.onclose = (event) => {
+        window.clearTimeout(settleTimer)
         setConnected(false)
         if (closed) return
+        const delay = Math.min(RECONNECT_MS * 2 ** failures, RECONNECT_MAX_MS)
+        failures += 1
         const retry = () => {
-          if (!closed) reconnectTimer = window.setTimeout(connect, RECONNECT_MS)
+          if (!closed) reconnectTimer = window.setTimeout(connect, delay)
         }
         if (event.code !== 4401) return retry()
         // 4401 은 서버가 세션을 거절했다는 뜻이다(쿠키 없음·세션 회수·비활성 계정, 이슈 #340).
@@ -151,8 +175,10 @@ export function useChatSocket(): ChatSocket {
         // 내 정보 쿼리를 다시 받지 않고 직접 부른다. 그 쿼리는 실패하면 `AuthProvider` 가
         // 익명으로 판정해서, 서버가 잠깐 502 를 준 것만으로 로그인 화면에 앉게 된다.
         void api('/me').then(retry, (error: unknown) => {
-          if (error instanceof ApiError && error.status === 401) qc.setQueryData(meQueryKey, null)
-          else retry()
+          if (!(error instanceof ApiError && error.status === 401)) return retry()
+          // `lib/queryClient.ts` 가 죽은 401 에 하는 것과 같은 정리다.
+          qc.setQueryData(meQueryKey, null)
+          clearNotifications()
         })
       }
 
@@ -308,6 +334,7 @@ export function useChatSocket(): ChatSocket {
     return () => {
       closed = true
       window.clearTimeout(reconnectTimer)
+      window.clearTimeout(settleTimer)
       typingTimers.forEach((timer) => window.clearTimeout(timer))
       typingTimers.clear()
       socket?.close()

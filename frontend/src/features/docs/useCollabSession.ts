@@ -49,7 +49,8 @@ export function useCollabSession(docId: string): CollabSession | null {
     // 커지므로, 릴레이(scripts/collab.js · backend realtime/yjs.py)도 같은 설정이어야 한다.
     const doc = new Y.Doc({ gc: false })
     const provider = new WebsocketProvider(relayUrl(), docId, doc)
-    // 백엔드는 60초마다 쿠키를 재검증하고 access 가 만료돼 있으면 4401 로 닫는다. y-websocket 은
+    // 백엔드는 붙을 때 access 가 만료돼 있거나, 60초마다 하는 재검증에서 세션이 회수돼 있으면
+    // 4401 로 닫는다(재검증은 만료를 보지 않는다, 백엔드 #343). y-websocket 은
     // 44xx 를 영구 종료로 보고 다시 붙지 않으므로, HTTP 와 같은 refresh 경로(lib/api.ts)로 세션을
     // 살린 뒤 한 번 다시 붙인다. 살아나지 않으면 진짜 로그아웃. 화면은 오프라인 편집으로 남는다.
     provider.on('closed', (event) => {
