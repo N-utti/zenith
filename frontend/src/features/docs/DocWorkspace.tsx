@@ -340,9 +340,12 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
    */
   const previewSeq = useRef(0)
   const [pendingVersionId, setPendingVersionId] = useState<string | null>(null)
-  const [preview, setPreview] = useState<{ version: DocVersion; content: RestoredContent } | null>(
-    null,
-  )
+  const [preview, setPreview] = useState<{
+    version: DocVersion
+    content: RestoredContent
+    /** 바로 앞 버전의 내용. 미리보기가 이것과 견줘 바뀐 곳을 칠한다. */
+    before: RestoredContent | null
+  } | null>(null)
   const [previewError, setPreviewError] = useState<string | null>(null)
 
   const editor = useEditor({
@@ -425,7 +428,7 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
     setPreview(null)
   }
 
-  const openPreview = (version: DocVersion | null) => {
+  const openPreview = (version: DocVersion | null, previous?: DocVersion) => {
     if (!version) return closePreview()
 
     // 미리보기는 편집기를 통째로 가린다. 댓글 창을 열어 둔 채 다녀오면 빈 창이 되살아나 포커스를 가져간다.
@@ -435,12 +438,25 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
     setPreviewError(null)
     setPendingVersionId(version.id)
 
+    // 바로 앞 버전도 같이 받는다. 그쪽이 실패하면 비교 없이 내용만 보여 준다.
+    const before = previous
+      ? versionSnapshot
+          .mutateAsync(previous.id)
+          .then((full) => readSnapshot(doc, full.snapshot))
+          .catch(() => null)
+      : Promise.resolve(null)
+
     versionSnapshot.mutate(version.id, {
-      onSuccess: (full) => {
+      onSuccess: async (full) => {
+        const beforeContent = await before
         if (seq !== previewSeq.current) return
         setPendingVersionId(null)
         try {
-          setPreview({ version, content: readSnapshot(doc, full.snapshot) })
+          setPreview({
+            version,
+            content: readSnapshot(doc, full.snapshot),
+            before: beforeContent,
+          })
         } catch {
           // 이 기능이 붙기 전에 만들어진 문서는 삭제 이력이 이미 수거돼 복원할 수 없다.
           setPreview(null)
@@ -535,6 +551,7 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
           <VersionPreview
             version={preview.version}
             content={preview.content}
+            before={preview.before}
             widthClass={width.className}
             onRestore={restore}
             onClose={closePreview}
