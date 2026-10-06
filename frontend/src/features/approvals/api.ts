@@ -11,7 +11,7 @@ import type {
   DraftInput,
 } from './types'
 
-const approvalsKey = ['approvals'] as const
+export const approvalsKey = ['approvals'] as const
 
 export function useApprovalTypes() {
   return useQuery({

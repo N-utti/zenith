@@ -46,7 +46,7 @@ it('방금 온 알림의 OS 알림 문구. 채팅 멘션은 msg 가 이미 울�
     }),
   ).toEqual({ title: '공지', body: '전체 공지 · 정성운' })
   // 모르는 종류는 알림함이 못 그린다. 울리기만 하고 열 곳이 없으면 안 된다.
-  expect(noticeToast({ kind: 'apv_pending', payload: { from } })).toBeNull()
+  expect(noticeToast({ kind: 'att_approved', payload: { from } })).toBeNull()
 })
 
 it('배지는 알림함이 그릴 수 있는 안 읽은 알림만 센다', () => {
@@ -56,7 +56,7 @@ it('배지는 알림함이 그릴 수 있는 안 읽은 알림만 센다', () =>
       { ...base, id: 'a', ...mention },
       { ...base, id: 'b', ...mention, read_at: '2026-09-17T01:00:00Z' },
       // 모르는 종류는 알림함에 안 보인다. 세면 배지와 목록이 어긋난다.
-      { ...base, id: 'c', kind: 'apv_pending', payload: { from } },
+      { ...base, id: 'c', kind: 'att_approved', payload: { from } },
     ]),
   ).toBe(1)
 })
@@ -121,10 +121,37 @@ it('권한 밖이라 가려진 글 알림은 누를 수 없다', () => {
 })
 
 it('모르는 종류와 빈 payload 는 건너뛴다. 새 종류가 붙어도 목록이 깨지지 않는다', () => {
-  // att_*·apv_* 는 아직 서버가 만들지 않는다. 붙었을 때 화면이 죽으면 안 된다.
+  // att_* 는 아직 서버가 만들지 않는다. 붙었을 때 화면이 죽으면 안 된다.
   // 문서 id 도 채널 id 도 없으니 멘션으로 흘려보내면 빈 링크가 된다.
   expect(view('att_approved', { from, doc_id: undefined })).toBeNull()
-  expect(view('apv_pending', { from, channel_id: 'c-1' })).toBeNull()
+  expect(view('att_pending', { from, channel_id: 'c-1' })).toBeNull()
+  // 결재 문서 id 가 없으면 갈 곳이 없다.
+  expect(view('apv_request', { from, title: '품의' })).toBeNull()
   expect(view('post', { from })).toBeNull()
   expect(view('mention', null)).toBeNull()
+})
+
+it('결재 알림은 그 결재 문서로 간다. 요청과 결과 네 종류를 그린다', () => {
+  const payload = {
+    approval_id: 'a-1',
+    type_code: 'general' as const,
+    title: '거치대 구매 품의',
+    from,
+  }
+  expect(view('apv_request', payload)).toMatchObject({
+    summary: '거치대 구매 품의 결재 차례입니다',
+    detail: '일반 기안 · 정성운',
+    to: '/approvals/a-1',
+    icon: 'approval',
+  })
+  expect(view('apv_approved', payload)?.summary).toBe('거치대 구매 품의 결재가 승인되었습니다')
+  expect(view('apv_rejected', payload)?.summary).toBe('거치대 구매 품의 결재가 반려되었습니다')
+  expect(view('apv_closed', payload)?.summary).toBe('거치대 구매 품의 결재가 강제 종결되었습니다')
+  // 근태 신청의 결과도 이 종류로 온다.
+  expect(view('apv_approved', { ...payload, type_code: 'leave' })?.detail).toBe('휴가 · 정성운')
+  // 배지와 OS 알림에도 잡힌다.
+  expect(countUnread([{ ...base, kind: 'apv_request', payload }])).toBe(1)
+  expect(noticeToast({ kind: 'apv_request', payload })?.title).toBe(
+    '거치대 구매 품의 결재 차례입니다',
+  )
 })

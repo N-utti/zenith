@@ -1,3 +1,4 @@
+import type { ApprovalTypeCode } from '@/features/approvals/types'
 import type { Schema } from '@/types'
 
 /**
@@ -20,7 +21,7 @@ export interface NotificationActor {
 }
 
 /**
- * 지금 서버가 만드는 두 종류의 payload 를 합친 것. 종류가 늘면(`att_*`·`apv_*`) 여기에 더한다.
+ * 지금 서버가 만드는 종류(멘션·새 글·결재)의 payload 를 합친 것. 종류가 늘면(`att_*`) 여기에 더한다.
  * 어느 필드가 있느냐로 갈라지므로 전부 선택 항목이다.
  */
 export interface NotificationPayload {
@@ -45,6 +46,9 @@ export interface NotificationPayload {
   title?: string
   /** 권한 밖 글이라 제목이 가려진 알림. 서버가 응답을 만들 때 붙인다. */
   masked?: boolean
+  /** 결재 (`routers/approvals.py`). 제목은 새 글과 같은 `title` 에 온다. */
+  approval_id?: string
+  type_code?: ApprovalTypeCode
 }
 
 /** 알림함 탭. 백엔드는 `?unread=1` 로 받는다. */

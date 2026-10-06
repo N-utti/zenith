@@ -1,3 +1,4 @@
+import { APPROVAL_TYPE_LABEL } from '@/features/approvals/types'
 import type { Notification, NotificationPayload } from './types'
 
 /**
@@ -7,6 +8,17 @@ import type { Notification, NotificationPayload } from './types'
  * 붙는 순간 그것들이 전부 멘션 분기로 흘러들어, 문서 id 도 채널 id 도 없는 채로 빈 링크를 만든다.
  */
 const MENTION_KINDS = ['mention', 'comment', 'reply']
+
+/**
+ * 결재 알림과 그 요약의 끝말. 백엔드 `routers/approvals.py` 의 `_notify` 가 만드는 네 종류다.
+ * 근태 신청(휴가·연장근로)도 결재 문서라 승인·반려가 이 종류로 온다. `att_*` 는 서버가 만들지 않는다.
+ */
+const APPROVAL_SUFFIX: Record<string, string> = {
+  apv_request: '결재 차례입니다',
+  apv_approved: '결재가 승인되었습니다',
+  apv_rejected: '결재가 반려되었습니다',
+  apv_closed: '결재가 강제 종결되었습니다',
+}
 
 /**
  * 알림 한 건을 화면이 그릴 수 있는 모양으로 바꾼다.
@@ -26,7 +38,7 @@ export interface NotificationView {
   detail: string | null
   to: string | null
   /** 아이콘 자리. 화면이 이 값으로 고른다. */
-  icon: 'doc' | 'chat' | 'board' | 'locked'
+  icon: 'doc' | 'chat' | 'board' | 'approval' | 'locked'
   /** 권한 밖이라 가려진 알림. 화면이 이유를 밝히고 아바타를 그리지 않는다. */
   masked: boolean
 }
@@ -112,6 +124,23 @@ function postView(p: NotificationPayload): NotificationView | null {
   }
 }
 
+function approvalView(kind: string, p: NotificationPayload): NotificationView | null {
+  if (!p.approval_id) return null
+  const actorName = p.from?.name ?? UNKNOWN
+  // 모르는 유형이 붙어도 줄은 그린다. 유형 이름만 뭉뚱그린다.
+  const type = (p.type_code && APPROVAL_TYPE_LABEL[p.type_code]) || '결재'
+  return {
+    // 요청은 문서를 넘긴 사람(기안자나 앞 단계 결재자), 결과는 마지막으로 처리한 사람이다.
+    actorId: p.from?.id ?? '',
+    actorName,
+    summary: p.title ? `${p.title} ${APPROVAL_SUFFIX[kind]}` : APPROVAL_SUFFIX[kind],
+    detail: `${type} · ${actorName}`,
+    to: `/approvals/${p.approval_id}`,
+    icon: 'approval',
+    masked: false,
+  }
+}
+
 /** 모르는 종류는 `null` 이다. 화면은 그 줄을 건너뛴다. 새 종류가 붙어도 목록이 깨지지 않는다. */
 export function notificationView(
   notification: Pick<Notification, 'kind' | 'payload'>,
@@ -120,6 +149,7 @@ export function notificationView(
   if (!p) return null
   if (notification.kind === 'post') return postView(p)
   if (MENTION_KINDS.includes(notification.kind)) return mentionView(p)
+  if (Object.hasOwn(APPROVAL_SUFFIX, notification.kind)) return approvalView(notification.kind, p)
   return null
 }
 

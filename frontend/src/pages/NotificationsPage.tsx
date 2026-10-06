@@ -1,5 +1,5 @@
 import { Link, useSearchParams } from 'react-router'
-import { FileText, Lock, Megaphone, MessagesSquare, X } from 'lucide-react'
+import { ClipboardCheck, FileText, Lock, Megaphone, MessagesSquare, X } from 'lucide-react'
 import { Avatar } from '@/components/ui/Avatar'
 import { Button } from '@/components/ui/Button'
 import { Card, CardEmpty } from '@/components/ui/Card'
@@ -22,7 +22,13 @@ import type { Notification, NotificationFilter } from '@/features/notifications/
 const FILTERS: NotificationFilter[] = ['all', 'unread']
 const FILTER_LABEL: Record<NotificationFilter, string> = { all: '전체', unread: '안 읽음' }
 
-const ICONS = { doc: FileText, chat: MessagesSquare, board: Megaphone, locked: Lock }
+const ICONS = {
+  doc: FileText,
+  chat: MessagesSquare,
+  board: Megaphone,
+  approval: ClipboardCheck,
+  locked: Lock,
+}
 
 /** 서버가 준 알림과 화면이 그릴 모양을 짝지은 것. 그릴 수 없는 알림은 애초에 여기 없다. */
 interface Row {
@@ -86,7 +92,7 @@ function NotificationRow({ row, onOpen }: { row: Row; onOpen: () => void }) {
   )
 }
 
-/** 알림함(`/notifications`). 멘션·댓글·새 글이 한 곳에 모인다. */
+/** 알림함(`/notifications`). 멘션·댓글·새 글·결재가 한 곳에 모인다. */
 export function NotificationsPage() {
   const [params, setParams] = useSearchParams()
   const requested = params.get('filter') as NotificationFilter | null
@@ -135,7 +141,7 @@ export function NotificationsPage() {
     <>
       <PageHeader
         title="받은 알림"
-        description="멘션·댓글·새 글을 한곳에서 봅니다. 누르면 그 자리로 갑니다."
+        description="멘션·댓글·새 글·결재를 한곳에서 봅니다. 누르면 그 자리로 갑니다."
         actions={
           <>
             {readIds.length > 0 && (

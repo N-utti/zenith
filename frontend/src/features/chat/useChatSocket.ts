@@ -4,6 +4,7 @@ import { useToast } from '@/components/ui/ToastContext'
 import { useCurrentUser } from '@/features/auth/AuthContext'
 import { notify } from '@/lib/desktop'
 import { wsUrl } from '@/lib/serverOrigin'
+import { approvalsKey } from '@/features/approvals/api'
 import { homeKeys } from '@/features/home/keys'
 import { notificationKeys } from '@/features/notifications/api'
 import { noticeToast } from '@/features/notifications/view'
@@ -251,6 +252,16 @@ export function useChatSocket(): ChatSocket {
           void qc.invalidateQueries({ queryKey: notificationKeys.list })
           // 채팅 멘션이면 홈은 같은 메시지의 `unread` 가 이미 다시 받는다.
           if (!event.payload?.channel_id) void qc.invalidateQueries({ queryKey: homeKeys.home })
+          // 결재 알림이면 열려 있는 결재함과 문서도 낡았다(내 차례가 왔거나 결과가 났다).
+          // 근태 신청(휴가·예외 근무·연장·정정)도 결재 문서라, 그 결과면 근태 화면도 같이 낡는다.
+          if (event.kind.startsWith('apv_')) {
+            void qc.invalidateQueries({ queryKey: approvalsKey })
+            if (event.payload?.type_code !== 'general') {
+              for (const key of ['leaves', 'attendance', 'exceptions']) {
+                void qc.invalidateQueries({ queryKey: [key] })
+              }
+            }
+          }
           // 창을 보고 있으면 사이드바 배지가 오른다. OS 알림은 `notifyIncoming` 과 같은 조건으로.
           const alert = noticeToast(event)
           if (alert && !document.hasFocus()) void notify(alert)
