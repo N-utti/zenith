@@ -1,7 +1,10 @@
 import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
-import { EyeOff, MoreHorizontal, Pencil } from 'lucide-react'
+import { EyeOff, MoreHorizontal, Pencil, Trash2 } from 'lucide-react'
+import { Button } from '@/components/ui/Button'
 import { ContextMenu, ContextMenuItem } from '@/components/ui/ContextMenu'
+import { Modal } from '@/components/ui/Modal'
+import { Spinner } from '@/components/ui/Spinner'
 import { useToast } from '@/components/ui/ToastContext'
 import { FolderNameModal } from '@/features/docs/FolderNameModal'
 import { ApiError } from '@/lib/api'
@@ -9,13 +12,15 @@ import {
   CHANNEL_NAME_MAX,
   channelNameFailure,
   checkChannelName,
+  useDeleteChannel,
   useHideDm,
   useRenameChannel,
 } from './api'
 import type { ChatChannel } from './types'
 
 /**
- * 채팅 화면 머리줄의 더보기 버튼. 채널은 이름 바꾸기, DM 은 목록에서 숨기기.
+ * 채팅 화면 머리줄의 더보기 버튼. 채널은 이름 바꾸기와 지우기, DM 은 목록에서 숨기기.
+ * 지우기는 서버가 지울 수 있다고 한 사람에게만 보인다(`can_delete`).
  *
  * 자리는 사이드바의 방 줄 우클릭이 아니라 여기다. 우클릭 메뉴는 아이폰에서 안 뜬다.
  * 메뉴 부품은 워크스페이스 트리의 것을 그대로 쓴다. 버튼 바로 아래에 띄운다.
@@ -25,11 +30,13 @@ export function ChannelMenu({ channel }: { channel: ChatChannel }) {
   const navigate = useNavigate()
   const rename = useRenameChannel(channel.id)
   const hide = useHideDm()
+  const remove = useDeleteChannel()
   const [at, setAt] = useState<{ x: number; y: number } | null>(null)
   /** 누르기 시작한 순간 메뉴가 열려 있었는가. 뗄 때는 이미 닫혀 있어 그때의 상태로는 알 수 없다. */
   const wasOpen = useRef(false)
   const [renaming, setRenaming] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   const hideDm = () =>
     // 약속으로 받는다. 숨기면 이 방이 목록에서 사라져 이 버튼도 같이 없어지는데, `mutate` 의
@@ -43,6 +50,19 @@ export function ChannelMenu({ channel }: { channel: ChatChannel }) {
       },
       (err: unknown) =>
         toast.error(err instanceof ApiError ? err.message : '대화를 숨기지 못했습니다.'),
+    )
+
+  const deleteChannel = () =>
+    // 숨기기와 같은 이유로 약속으로 받는다. 지우면 이 버튼도 같이 없어진다.
+    void remove.mutateAsync(channel.id).then(
+      () => {
+        toast.success(`${channel.name} 채널을 지웠습니다.`)
+        void navigate('/chat')
+      },
+      (err: unknown) => {
+        setDeleting(false)
+        toast.error(err instanceof ApiError ? err.message : '채널을 지우지 못했습니다.')
+      },
     )
 
   return (
@@ -71,14 +91,24 @@ export function ChannelMenu({ channel }: { channel: ChatChannel }) {
           {channel.is_dm ? (
             <ContextMenuItem icon={EyeOff} label="목록에서 숨기기" onSelect={hideDm} />
           ) : (
-            <ContextMenuItem
-              icon={Pencil}
-              label="이름 바꾸기"
-              onSelect={() => {
-                setError(null)
-                setRenaming(true)
-              }}
-            />
+            <>
+              <ContextMenuItem
+                icon={Pencil}
+                label="이름 바꾸기"
+                onSelect={() => {
+                  setError(null)
+                  setRenaming(true)
+                }}
+              />
+              {channel.can_delete && (
+                <ContextMenuItem
+                  icon={Trash2}
+                  label="채널 지우기"
+                  danger
+                  onSelect={() => setDeleting(true)}
+                />
+              )}
+            </>
           )}
         </ContextMenu>
       )}
@@ -109,6 +139,40 @@ export function ChannelMenu({ channel }: { channel: ChatChannel }) {
           }}
           onClose={() => setRenaming(false)}
         />
+      )}
+
+      {deleting && (
+        <Modal
+          open
+          onClose={() => !remove.isPending && setDeleting(false)}
+          title="채널을 지울까요?"
+          description="대화와 첨부 파일이 모든 멤버에게서 사라집니다. 되돌릴 수 없습니다."
+          size="sm"
+          footer={
+            <>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setDeleting(false)}
+                disabled={remove.isPending}
+              >
+                취소
+              </Button>
+              <Button
+                variant="danger"
+                size="sm"
+                onClick={deleteChannel}
+                disabled={remove.isPending}
+              >
+                {remove.isPending ? <Spinner className="border-t-white" /> : '지우기'}
+              </Button>
+            </>
+          }
+        >
+          <p className="text-muted text-sm leading-relaxed">
+            {channel.name} · 멤버 {channel.members.length}명
+          </p>
+        </Modal>
       )}
     </>
   )

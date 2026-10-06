@@ -268,6 +268,8 @@ export function useChatSocket(): ChatSocket {
           // 빠진 채널을 보고 있었다면 목록에서 사라지는 순간 `ChatPage` 가 방을 닫는다.
           void qc.invalidateQueries({ queryKey: chatKeys.channels })
           void qc.invalidateQueries({ queryKey: homeKeys.home })
+          // 채널이 지워졌으면 그 채널의 멘션 알림도 서버에서 사라진다. 안 받으면 죽은 링크가 남는다.
+          void qc.invalidateQueries({ queryKey: notificationKeys.list })
           return
         }
 

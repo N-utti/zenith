@@ -205,6 +205,23 @@ export function useHideDm() {
   })
 }
 
+/**
+ * 채널을 통째로 지운다. 대화와 첨부도 같이 사라지고 되돌릴 수 없다. 백엔드에 아직 없는 경로다
+ * (개발 릴레이만 받는다). 지울 수 있는 사람은 서버가 정한다(`ChatChannel.can_delete`).
+ *
+ * 다른 멤버의 화면은 소켓 `channels` 이벤트로 바뀐다.
+ */
+export function useDeleteChannel() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (channelId: string) => api<void>(`/channels/${channelId}`, { method: 'DELETE' }),
+    // `useHideDm` 과 같은 이유로 다시 받기를 기다리지 않는다.
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: chatKeys.channels })
+    },
+  })
+}
+
 /** 사내망 파일 업로드 상한. 서버도 같은 값을 강제한다(`MAX_ATTACHMENT_BYTES`). */
 export const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024
 
