@@ -4,6 +4,7 @@ import { Avatar } from '@/components/ui/Avatar'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card, CardEmpty } from '@/components/ui/Card'
+import { MailLink } from '@/components/ui/MailLink'
 import { SkeletonRows } from '@/components/ui/Skeleton'
 import { Table, TBody, TD, TH, THead, TR, TableEmpty } from '@/components/ui/Table'
 import { useCurrentUser } from '@/features/auth/AuthContext'
@@ -78,7 +79,9 @@ export function AccountList() {
                     {!user.active && <Badge tone="danger">비활성</Badge>}
                   </span>
                 </TD>
-                <TD className="text-muted">{user.email}</TD>
+                <TD>
+                  <MailLink email={user.email} />
+                </TD>
                 <TD>
                   <Badge>{ROLE_LABEL[user.role]}</Badge>
                 </TD>
