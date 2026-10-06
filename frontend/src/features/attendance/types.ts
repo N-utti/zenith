@@ -130,9 +130,8 @@ export interface AttendanceMonth {
 /**
  * `GET /attendance/me/summary?from=&to=` 응답. 기간 집계다(04 §10.1).
  *
- * **응답 모양은 계약에 없다**(경로만 스텁으로 있다). 달 조회와 같은 집계 키를 쓰고 날짜 범위를
- * 되돌려 준다고 가정했다. 일자 배열은 싣지 않는다. 기간이 길면 그게 응답의 대부분이 되는데
- * 화면은 합계만 그린다.
+ * 달 조회와 같은 집계 키를 쓰고 날짜 범위를 되돌려 준다(프론트가 정한 모양을 백엔드 #316 이
+ * 받았다). 일자 배열은 싣지 않는다. 기간이 길면 그게 응답의 대부분이 되는데 화면은 합계만 그린다.
  */
 export interface AttendanceRange {
   from: string
@@ -221,7 +220,8 @@ export interface OvertimeInput {
 export interface Correction {
   id: string
   work_date: string
-  after: { status?: AttendanceStatus; note?: string }
+  /** 서버는 안 바꾸는 칸을 `null` 로 준다. 바꿀 수 있는 상태에 휴가·휴일은 없다(#316). */
+  after: { status?: AttendanceStatus | null; note?: string | null }
   reason: string
   status: RequestStatus
   created_at: string
@@ -250,8 +250,8 @@ export interface MonthClosing {
     action: 'close' | 'reopen'
     at: string
     by: { id: string; name: string }
-    /** 해제에만. 감사 로그에도 남는다. */
-    reason?: string
+    /** 해제에만 있고 마감에는 `null` 이다. 감사 로그에도 남는다. */
+    reason?: string | null
   }[]
 }
 

@@ -52,7 +52,9 @@ export function CalendarCard() {
   const arrangements = useAllArrangements(range.from, range.to)
   const events = useMyEvents(range.from, range.to)
   const types = useLeaveTypes()
-  const typeName = (code: string) => types.data?.items.find((t) => t.code === code)?.name ?? code
+  // 남의 휴가는 종류를 가려 `leave` 로 온다(병가·경조사는 알릴 일이 아니다, 백엔드 #316). 목록에 없는
+  // 종류는 그냥 휴가로 보인다.
+  const typeName = (code: string) => types.data?.items.find((t) => t.code === code)?.name ?? '휴가'
   const isError = leaves.isError || arrangements.isError || events.isError
   const retry = () =>
     Promise.all([leaves, arrangements, events].filter((q) => q.isError).map((q) => q.refetch()))

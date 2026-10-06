@@ -27,9 +27,8 @@ export interface ApprovalType {
 /**
  * 13 §6.1 문서 상태. 종료 상태에서 되돌아오는 경로는 없다.
  *
- * `closed` 는 임원이 강제로 끝낸 문서다(13 §9.2 `force-close`). **이 값은 프론트 가정이다.**
- * 백엔드가 아직 결재 모듈 전체를 501 로 두고 있어 종결 상태 이름이 계약에 없다. 서버가 다른
- * 이름을 쓰면 여기만 고치면 되고, 그동안 모르는 값이 와도 `statusLabel` 이 코드를 그대로 그린다.
+ * `closed` 는 임원이 강제로 끝낸 문서다(13 §9.2 `force-close`). 프론트가 정한 이름을 백엔드가
+ * 그대로 받았다(#316). 모르는 값이 와도 `statusLabel` 이 코드를 그대로 그린다.
  */
 export type DocumentStatus = 'draft' | 'pending' | 'approved' | 'rejected' | 'canceled' | 'closed'
 

@@ -12,7 +12,6 @@ import { Spinner } from '@/components/ui/Spinner'
 import { Textarea } from '@/components/ui/Textarea'
 import { useToast } from '@/components/ui/ToastContext'
 import {
-  DRAFT_DELETE_ENABLED,
   useApproval,
   useApproveStep,
   useCancelApproval,
@@ -148,26 +147,24 @@ export function ApprovalDetailPage() {
             <Badge tone={statusTone(d.status)}>{statusLabel(d.status)}</Badge>
             {isDrafter && d.status === 'draft' && (
               <>
-                {DRAFT_DELETE_ENABLED && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="hover:text-danger"
-                    disabled={busy}
-                    onClick={() => {
-                      if (!confirm('이 임시저장을 지울까요? 되돌릴 수 없습니다.')) return
-                      removeDraft.mutate(d.id, {
-                        onSuccess: () => {
-                          toast.success('임시저장을 지웠습니다.')
-                          void navigate('/approvals?box=draft')
-                        },
-                        onError,
-                      })
-                    }}
-                  >
-                    삭제
-                  </Button>
-                )}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="hover:text-danger"
+                  disabled={busy}
+                  onClick={() => {
+                    if (!confirm('이 임시저장을 지울까요? 되돌릴 수 없습니다.')) return
+                    removeDraft.mutate(d.id, {
+                      onSuccess: () => {
+                        toast.success('임시저장을 지웠습니다.')
+                        void navigate('/approvals?box=draft')
+                      },
+                      onError,
+                    })
+                  }}
+                >
+                  삭제
+                </Button>
                 <Button
                   variant="secondary"
                   size="sm"

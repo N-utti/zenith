@@ -1,6 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
-import { MSW_ENABLED } from '@/mocks/accounts'
 import type {
   ApprovalAttachment,
   ApprovalBox,
@@ -68,13 +67,7 @@ export function useUpdateDraft() {
   })
 }
 
-/**
- * 임시저장 지우기를 보일지. 서버에는 아직 그 경로가 없어서(13 §9.3 의 임시저장은 만들기와
- * 고치기뿐) 목이 켜진 개발 화면에서만 보인다. 서버가 받게 되면 이 스위치를 걷는다.
- */
-export const DRAFT_DELETE_ENABLED = MSW_ENABLED
-
-/** 임시저장을 지운다. 내 것, 상신 전인 것만(상신한 문서는 409). */
+/** 임시저장을 지운다(백엔드 #316). 내 것, 상신 전인 것만(상신한 문서는 409 `NOT_DRAFT`). */
 export function useDeleteDraft() {
   const qc = useQueryClient()
   return useMutation({
