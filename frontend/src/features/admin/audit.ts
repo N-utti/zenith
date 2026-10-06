@@ -1,3 +1,4 @@
+import { APPROVAL_TYPE_LABEL, type ApprovalTypeCode } from '@/features/approvals/types'
 import { formatBytes } from '@/lib/format'
 import { ROLE_LABEL, type Role, type Schema } from '@/types'
 
@@ -14,8 +15,12 @@ export const AUDIT_FILTERS = [
   { value: '', label: '전체' },
   { value: 'auth', label: '로그인·세션' },
   { value: 'acl', label: '권한 거부' },
-  { value: 'admin', label: '계정·팀 관리' },
+  { value: 'admin', label: '계정·팀·휴일 관리' },
+  { value: 'approvals', label: '전자결재' },
+  { value: 'attendance', label: '근태 마감' },
   { value: 'boards', label: '게시판' },
+  // 채널 관리(`channels.*`)와 메시지 수정·삭제(`chat.*`)가 앞글자 `ch` 로 같이 걸린다.
+  { value: 'ch', label: '채팅' },
   { value: 'docs', label: '문서' },
   { value: 'files', label: '첨부 파일' },
   { value: 'crm', label: 'CRM' },
@@ -44,6 +49,21 @@ const text = (detail: Record<string, unknown> | null, key: string): string | und
 
 const roleLabel = (value: unknown): string | undefined =>
   typeof value === 'string' && value in ROLE_LABEL ? ROLE_LABEL[value as Role] : undefined
+
+/** 배열 칸의 개수를 「3개」처럼. 비었거나 배열이 아니면 그리지 않는다. */
+const count = (detail: Record<string, unknown> | null, key: string, unit: string) => {
+  const value = detail?.[key]
+  return Array.isArray(value) && value.length > 0 ? `${value.length}${unit}` : undefined
+}
+
+/** 결재 유형 이름. 위임은 유형을 고르지 않으면 전체다(`type_code: null`). */
+const approvalType = (detail: Record<string, unknown> | null): string | undefined => {
+  const code = detail?.type_code
+  if (code === null) return '모든 유형'
+  return typeof code === 'string' && Object.hasOwn(APPROVAL_TYPE_LABEL, code)
+    ? APPROVAL_TYPE_LABEL[code as ApprovalTypeCode]
+    : undefined
+}
 
 /**
  * 계정 수정의 앞뒤 상태. 등급과 활성 여부만 남는다(서버 `admin.user_updated`).
@@ -272,6 +292,175 @@ export function auditView(event: AuditEvent): AuditView {
 
     case 'crm.activity_deleted':
       return { summary: 'CRM 활동 기록 삭제', tone: 'neutral' }
+
+    case 'admin.holiday_created':
+      return {
+        summary: '회사 휴일 등록',
+        detail:
+          [text(detail, 'date'), text(detail, 'name')].filter(Boolean).join(' · ') || undefined,
+        tone: 'neutral',
+      }
+
+    case 'admin.holiday_updated': {
+      const before = text(detail, 'from')
+      const after = text(detail, 'to')
+      return {
+        summary: '회사 휴일 이름 변경',
+        detail:
+          [text(detail, 'date'), before && after ? `${before} → ${after}` : after || before]
+            .filter(Boolean)
+            .join(' · ') || undefined,
+        tone: 'neutral',
+      }
+    }
+
+    case 'admin.holiday_deleted':
+      return {
+        summary: '회사 휴일 삭제',
+        detail:
+          [text(detail, 'date'), text(detail, 'name')].filter(Boolean).join(' · ') || undefined,
+        tone: 'warning',
+      }
+
+    case 'admin.calendar_rebuilt':
+      return {
+        summary: '근무 달력 다시 만들기',
+        detail:
+          [
+            typeof detail?.year === 'number' ? `${detail.year}년` : undefined,
+            typeof detail?.workdays === 'number' ? `근무일 ${detail.workdays}일` : undefined,
+          ]
+            .filter(Boolean)
+            .join(' · ') || undefined,
+        tone: 'neutral',
+      }
+
+    case 'approvals.decided': {
+      const rejected = text(detail, 'action') === 'reject'
+      return {
+        summary: rejected ? '결재 반려' : '결재 승인',
+        detail:
+          [
+            typeof detail?.step === 'number' ? `${detail.step}단계` : undefined,
+            // 위임받은 사람이 원래 결재자 대신 처리했다.
+            text(detail, 'acting_for') ? '대결' : undefined,
+          ]
+            .filter(Boolean)
+            .join(' · ') || undefined,
+        tone: rejected ? 'warning' : 'neutral',
+      }
+    }
+
+    case 'approvals.force_closed':
+      return { summary: '결재 강제 종결', detail: text(detail, 'reason'), tone: 'warning' }
+
+    // 임원이 기안하면 결재자가 없어 상신과 동시에 확정된다.
+    case 'approvals.auto_approved':
+      return {
+        summary: '결재 자동 확정',
+        detail: [approvalType(detail), '결재선 없음'].filter(Boolean).join(' · '),
+        tone: 'neutral',
+      }
+
+    case 'approvals.delegation_created': {
+      const from = text(detail, 'start_date')
+      const to = text(detail, 'end_date')
+      return {
+        summary: '결재 위임 설정',
+        detail:
+          [from && to ? `${from} ~ ${to}` : from || to, approvalType(detail)]
+            .filter(Boolean)
+            .join(' · ') || undefined,
+        tone: 'neutral',
+      }
+    }
+
+    case 'approvals.delegation_deleted':
+      return { summary: '결재 위임 해제', tone: 'neutral' }
+
+    case 'attendance.closed':
+      return { summary: '근태 월 마감', detail: text(detail, 'month'), tone: 'neutral' }
+
+    case 'attendance.reopened':
+      return {
+        summary: '근태 월 마감 해제',
+        detail:
+          [text(detail, 'month'), text(detail, 'reason')].filter(Boolean).join(' · ') || undefined,
+        tone: 'warning',
+      }
+
+    case 'boards.attachments_changed':
+      return {
+        summary: '게시글 첨부 변경',
+        detail:
+          [count(detail, 'added', '개 붙임'), count(detail, 'removed', '개 뗌')]
+            .filter(Boolean)
+            .join(' · ') || undefined,
+        tone: 'neutral',
+      }
+
+    case 'boards.comment_edited':
+      return { summary: '게시글 댓글 수정', detail: text(detail, 'before'), tone: 'neutral' }
+
+    case 'boards.comment_deleted': {
+      // 쓴 사람과 지운 사람이 다르면 임원이 남의 댓글을 지운 것이다.
+      const author = text(detail, 'author_id')
+      const byOther = author !== undefined && author !== event.actor_id
+      return {
+        summary: byOther ? '남의 게시글 댓글 삭제' : '게시글 댓글 삭제',
+        detail: text(detail, 'preview'),
+        tone: 'warning',
+      }
+    }
+
+    case 'docs.comment_edited':
+      return { summary: '문서 댓글 수정', detail: text(detail, 'before'), tone: 'neutral' }
+
+    case 'docs.comment_deleted':
+      return { summary: '문서 댓글 삭제', detail: text(detail, 'preview'), tone: 'warning' }
+
+    case 'docs.folder_deleted':
+      return { summary: '폴더 삭제', detail: text(detail, 'title'), tone: 'warning' }
+
+    case 'channels.renamed': {
+      const before = text(detail, 'from')
+      const after = text(detail, 'to')
+      return {
+        summary: '채널 이름 변경',
+        detail: before && after ? `${before} → ${after}` : after || before,
+        tone: 'neutral',
+      }
+    }
+
+    case 'channels.members_changed': {
+      if (detail?.created) {
+        return {
+          summary: '비공개 채널 생성',
+          detail: count(detail, 'added', '명'),
+          tone: 'neutral',
+        }
+      }
+      const removed = detail?.removed
+      if (Array.isArray(removed)) {
+        // 스스로 나가도 같은 기록이 남는다. 내보낸 것으로 읽히지 않게 가른다.
+        const left = removed.length === 1 && removed[0] === event.actor_id
+        return left
+          ? { summary: '채널에서 나감', tone: 'neutral' }
+          : { summary: '채널에서 내보냄', detail: count(detail, 'removed', '명'), tone: 'neutral' }
+      }
+      return { summary: '채널에 사람 추가', detail: count(detail, 'added', '명'), tone: 'neutral' }
+    }
+
+    // 채팅 본문은 서버 기록에 앞부분이 남지만 여기서는 그리지 않는다. DM 도 이 종류로 남는다.
+    case 'chat.message_edited':
+      return { summary: '채팅 메시지 수정', tone: 'neutral' }
+
+    case 'chat.message_deleted':
+      return {
+        summary: '채팅 메시지 삭제',
+        detail: count(detail, 'attachments', '개 첨부'),
+        tone: 'warning',
+      }
 
     default:
       return { summary: kind, tone: 'neutral' }
