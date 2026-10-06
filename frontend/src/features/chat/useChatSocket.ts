@@ -171,6 +171,18 @@ export function useChatSocket(): ChatSocket {
           return
         }
 
+        /*
+         * 메시지를 고치거나 지우면 서버가 그 메시지의 멘션 알림도 고치거나 지운다(#284). 알림함과
+         * 홈의 멘션 카드가 옛 미리보기를 들고 있으면, 가리려고 고친 글이 다음에 받을 때까지 보인다.
+         * 알림 캐시의 메시지 id 로 좁힐 수도 있지만 이 규모에서는 그냥 다시 받는다.
+         *
+         * 지울 때는 홈을 여기서 안 받는다. `msg_del` 뒤에는 `unread` 가 따라오고 그쪽이 받는다.
+         */
+        const staleMentions = (home: boolean) => {
+          void qc.invalidateQueries({ queryKey: notificationKeys.list })
+          if (home) void qc.invalidateQueries({ queryKey: homeKeys.home })
+        }
+
         if (event.ev === 'msg_edit') {
           const { message } = event
           qc.setQueryData<{ items: ChatMessage[] }>(chatKeys.messages(message.channel_id), (old) =>
@@ -179,6 +191,7 @@ export function useChatSocket(): ChatSocket {
           qc.setQueryData<{ items: ChatChannel[] }>(chatKeys.channels, (old) =>
             withEditedLast(old, message),
           )
+          staleMentions(true)
           return
         }
 
@@ -194,6 +207,7 @@ export function useChatSocket(): ChatSocket {
             .getQueryData<{ items: ChatChannel[] }>(chatKeys.channels)
             ?.items.some((item) => item.last_message?.id === message_id)
           if (wasLast) void qc.invalidateQueries({ queryKey: chatKeys.channels })
+          staleMentions(false)
           return
         }
 

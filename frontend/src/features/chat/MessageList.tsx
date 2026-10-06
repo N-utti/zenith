@@ -15,6 +15,7 @@ import { Spinner } from '@/components/ui/Spinner'
 import { Textarea } from '@/components/ui/Textarea'
 import { useToast } from '@/components/ui/ToastContext'
 import { hueOf } from '@/lib/avatar'
+import { cn } from '@/lib/cn'
 import { formatDay, formatRelative, formatTime } from '@/lib/datetime'
 import { formatBytes } from '@/lib/format'
 import { httpUrl } from '@/lib/serverOrigin'
@@ -472,12 +473,14 @@ const MessageRow = memo(function MessageRow({
               </div>
             </div>
           ) : (
-            message.body && (
+            // 첨부만 남기고 글을 지운 메시지도 고친 것이다. 글이 없어도 표시는 남긴다.
+            (message.body || message.edited_at) && (
               <p className="text-muted text-sm break-words whitespace-pre-wrap">
-                <MentionText body={message.body} names={mentionNames} />
+                {message.body && <MentionText body={message.body} names={mentionNames} />}
                 {message.edited_at && (
                   <span
-                    className="text-subtle ml-1.5 text-[11px]"
+                    // 왼쪽 여백은 글과 띄우는 것이다. 글이 없으면 줄 맨 앞이 안쪽으로 밀린다.
+                    className={cn('text-subtle text-[11px]', message.body && 'ml-1.5')}
                     title={`${formatDay(message.edited_at)} ${formatTime(message.edited_at)} 수정`}
                   >
                     (수정됨)
