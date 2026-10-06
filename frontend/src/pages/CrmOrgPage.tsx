@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
-import { Copy, Eraser, Mail, Pencil, Phone, Plus, Trash2 } from 'lucide-react'
+import { Eraser, Pencil, Phone, Plus, Trash2 } from 'lucide-react'
 import { BackLink } from '@/components/ui/BackLink'
 import { Button } from '@/components/ui/Button'
 import { Card, CardEmpty, CardHeader } from '@/components/ui/Card'
 import { Field } from '@/components/ui/Field'
+import { MailLink } from '@/components/ui/MailLink'
 import { Modal } from '@/components/ui/Modal'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { SkeletonRows } from '@/components/ui/Skeleton'
@@ -38,7 +39,6 @@ import {
   REASON_MAX,
 } from '@/features/crm/types'
 import { ApiError } from '@/lib/api'
-import { copyText } from '@/lib/clipboard'
 import { formatDateTime, formatRelative } from '@/lib/datetime'
 
 /** 열려 있는 창. 한 번에 하나만 뜬다. */
@@ -169,32 +169,8 @@ export function CrmOrgPage() {
                       </a>
                     )}
                     {c.email && (
-                      <div className="mt-1 flex items-center gap-1">
-                        <a
-                          href={`mailto:${c.email}`}
-                          className="text-muted hover:text-accent flex items-center gap-1.5 break-all"
-                        >
-                          <Mail className="size-3.5 shrink-0" />
-                          {c.email}
-                        </a>
-                        {/* 팀은 네이버 메일을 웹에서 쓴다. 메일 링크는 PC 메일 앱을 여니, 받는 사람 칸에 붙여 넣을 주소를 복사해 준다. */}
-                        <button
-                          type="button"
-                          aria-label={`${c.email} 복사`}
-                          title="주소 복사"
-                          className={`${iconButton} -my-1 shrink-0`}
-                          onClick={() =>
-                            copyText(c.email)
-                              .then(() => toast.success('메일 주소를 복사했습니다.'))
-                              .catch(() =>
-                                toast.error(
-                                  '복사하지 못했습니다. 주소를 직접 선택해 복사해 주세요.',
-                                ),
-                              )
-                          }
-                        >
-                          <Copy className="size-3.5" />
-                        </button>
+                      <div className="mt-1">
+                        <MailLink email={c.email} icon />
                       </div>
                     )}
                     {c.memo && <p className="text-subtle mt-1 whitespace-pre-wrap">{c.memo}</p>}
