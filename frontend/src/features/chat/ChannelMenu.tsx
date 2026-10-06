@@ -5,7 +5,13 @@ import { ContextMenu, ContextMenuItem } from '@/components/ui/ContextMenu'
 import { useToast } from '@/components/ui/ToastContext'
 import { FolderNameModal } from '@/features/docs/FolderNameModal'
 import { ApiError } from '@/lib/api'
-import { CHANNEL_NAME_MAX, useHideDm, useRenameChannel } from './api'
+import {
+  CHANNEL_NAME_MAX,
+  channelNameFailure,
+  checkChannelName,
+  useHideDm,
+  useRenameChannel,
+} from './api'
 import type { ChatChannel } from './types'
 
 /**
@@ -88,16 +94,19 @@ export function ChannelMenu({ channel }: { channel: ChatChannel }) {
           pending={rename.isPending}
           error={error}
           onDirty={() => setError(null)}
-          onSubmit={(name) =>
-            rename.mutate(name, {
+          onSubmit={(value) => {
+            const checked = checkChannelName(value)
+            if (checked.error) return setError(checked.error)
+            // 다듬고 보니 지금 이름이면 서버도 아무것도 바꾸지 않는다. 바꿨다고 말하지 않고 닫는다.
+            if (checked.name === channel.name) return setRenaming(false)
+            rename.mutate(checked.name, {
               onSuccess: () => {
                 setRenaming(false)
                 toast.success('채널 이름을 바꿨습니다.')
               },
-              onError: (err) =>
-                setError(err instanceof ApiError ? err.message : '이름을 바꾸지 못했습니다.'),
+              onError: (err) => setError(channelNameFailure(err, '이름을 바꾸지 못했습니다.')),
             })
-          }
+          }}
           onClose={() => setRenaming(false)}
         />
       )}

@@ -13,6 +13,8 @@ import { ApiError } from '@/lib/api'
 import { hueOf } from '@/lib/avatar'
 import {
   CHANNEL_NAME_MAX,
+  channelNameFailure,
+  checkChannelName,
   supportsPrivate,
   useChannels,
   useCreateChannel,
@@ -109,7 +111,7 @@ export function NewChatModal({
           setError('지금은 이 사람과 대화를 시작할 수 없습니다. 비활성 계정일 수 있습니다.')
           return
         }
-        setError(err instanceof ApiError ? err.message : '만들지 못했습니다.')
+        setError(channelNameFailure(err, '만들지 못했습니다.'))
       },
     })
   }
@@ -161,16 +163,20 @@ export function NewChatModal({
   const ready = trimmed !== '' && !create.isPending
   // 혼자 만들어도 된다. 사람은 나중에 채널 머리말에서 더한다.
   // 고른 뒤 명단에서 사라진 사람(그 사이 비활성)은 칩도 없으니 보내지 않는다.
-  const createChannel = () =>
+  const createChannel = () => {
+    // 서버가 거절할 이름은 보내기 전에 이유를 밝힌다. 보내는 것은 서버가 저장할 모양이다.
+    const checked = checkChannelName(name)
+    if (checked.error) return setError(checked.error)
     submit(
       priv
         ? {
-            name: trimmed,
+            name: checked.name,
             is_private: true,
             member_ids: memberIds.filter((id) => people.some((person) => person.id === id)),
           }
-        : { name: trimmed },
+        : { name: checked.name },
     )
+  }
 
   return (
     <Modal

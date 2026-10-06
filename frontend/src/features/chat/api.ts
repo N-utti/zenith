@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api } from '@/lib/api'
+import { api, ApiError } from '@/lib/api'
 import { prependOlder } from './events'
 import type { ChatAttachment, ChatChannel, MessagePage } from './types'
 
@@ -132,8 +132,39 @@ export function useRemoveMember(channelId: string) {
   })
 }
 
-/** 백엔드 `ChannelCreateIn.name` 의 제약(`NonBlank`, 100자). 이름을 바꿀 때도 같다고 가정한다. */
+/** 백엔드 채널 이름 제약(`routers/channels.py` 의 `NonBlank`, 100자). 만들 때와 바꿀 때가 같다. */
 export const CHANNEL_NAME_MAX = 100
+
+const NAME_CHARS_ERROR =
+  '이름에 쓸 수 없는 문자가 있습니다. 보이지 않는 문자나 합쳐진 이모지를 빼 주세요.'
+
+/**
+ * 채널 이름을 서버가 저장할 모양으로 다듬고, 서버가 거절할 이름이면 그 이유를 준다
+ * (백엔드 `_clean_name`, #308). 순서도 서버와 같다: 정규화, 금지 문자, 빈 값, 길이.
+ *
+ * 서버의 거절은 Pydantic 422 라 문구가 배열 안에 들어 있고 `ApiError.message` 로 오지 않는다.
+ * 여기서 먼저 걸러야 입력 옆에 이유가 뜬다.
+ *
+ * 서버는 미할당 문자(Cn)도 막지만 여기서는 뺀다. 브라우저와 서버의 유니코드 판이 다르면 새로
+ * 나온 이모지를 서버는 받는데 화면이 막게 된다. 그쪽은 `channelNameFailure` 가 받는다.
+ */
+export function checkChannelName(raw: string): { name: string; error: string | null } {
+  const name = raw.normalize('NFKC').trim()
+  let error: string | null = null
+  if (/[\p{Cc}\p{Cf}\p{Cs}\p{Co}\p{Zl}\p{Zp}]/u.test(name)) error = NAME_CHARS_ERROR
+  else if (!name) error = '이름을 적어 주세요.'
+  // 글자 수는 서버처럼 코드포인트로 센다. 정규화가 합자를 풀어 길이가 늘 수 있다.
+  else if ([...name].length > CHANNEL_NAME_MAX) error = '이름은 100자 이하여야 합니다.'
+  return { name, error }
+}
+
+/** 채널을 만들거나 이름을 바꾸다 실패했을 때 입력 옆에 낼 문구. */
+export function channelNameFailure(err: unknown, fallback: string): string {
+  if (!(err instanceof ApiError)) return fallback
+  const detail = (err.body as { detail?: unknown } | null)?.detail
+  // 배열이면 서버의 이름 검증이 낸 거절이다. 미리 거른 것 말고 남는 것은 문자 규칙뿐이다.
+  return err.status === 422 && Array.isArray(detail) ? NAME_CHARS_ERROR : err.message
+}
 
 /**
  * 채널 이름을 바꾼다(백엔드 #280). 멤버면 누구나 한다(채널에 주인이 없다). DM 은 이름이 없어 안 된다.
