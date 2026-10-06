@@ -128,8 +128,9 @@ const messages = new Map([
 
 /**
  * 올라온 첨부. 실제 서버는 MinIO 에 넣는다. 릴레이는 메모리라 다시 띄우면 사라진다.
- * 키는 백엔드와 같은 모양(`channels/{채널}/{파일}/{이름}`).
- * @type {Map<string, {data: Buffer, contentType: string}>}
+ * 키는 백엔드와 같은 모양(`channels/{채널}/{파일}/{이름}`). 올린 사람을 같이 둔다(백엔드
+ * `channel_uploads`, #327). 메시지에는 내가 올린 파일만 실을 수 있다.
+ * @type {Map<string, {data: Buffer, contentType: string, uploaderId: string}>}
  */
 const attachments = new Map()
 
@@ -268,7 +269,7 @@ export function handleChatConnection(conn, userId) {
       if (body.length > 10_000) {
         return sendError(conn, 'VALIDATION', '본문이 너무 깁니다.', channelId)
       }
-      const checked = checkAttachments(op.attachments, channelId)
+      const checked = checkAttachments(op.attachments, channelId, userId)
       if (checked.error) return sendError(conn, 'VALIDATION', checked.error, channelId)
       // 첨부만 보내는 메시지도 있다. 둘 다 없을 때만 막는다.
       if (!body && checked.files.length === 0) {
@@ -478,7 +479,7 @@ function readMultipartFile(req) {
  *
  * @returns 검사를 통과한 목록, 또는 거절 사유
  */
-function checkAttachments(raw, channelId) {
+function checkAttachments(raw, channelId, userId) {
   if (raw === undefined || raw === null) return { files: [] }
   if (!Array.isArray(raw)) return { error: '첨부는 배열이어야 합니다.' }
   if (raw.length > 10) return { error: '첨부는 10개까지입니다.' }
@@ -502,8 +503,12 @@ function checkAttachments(raw, channelId) {
       return { error: '이 채널에 올린 첨부가 아닙니다.' }
     }
     const stored = attachments.get(`${channelId}/${match[2]}/${name}`)
-    // 백엔드는 존재를 여기서 보지 않는다(없으면 내려받을 때 404). 릴레이는 크기를 채워야 해서 본다.
-    files.push({ url: item.url, name, size: stored ? stored.data.length : 0 })
+    // 이 채널에 내가 올린 파일만 싣는다(백엔드 #327). 남이 올린 주소를 미리 실어 두면 원래
+    // 메시지를 지워도 그 파일이 계속 받아져 회수가 안 된다. 크기는 올릴 때 잰 값이다.
+    if (!stored || stored.uploaderId !== userId) {
+      return { error: '이 채널에 직접 올린 첨부만 붙일 수 있습니다.' }
+    }
+    files.push({ url: item.url, name, size: stored.data.length })
   }
   return { files }
 }
@@ -665,6 +670,7 @@ export async function handleChatRequest(req, res, url) {
     attachments.set(`${channelId}/${fileId}/${name}`, {
       data: part.data,
       contentType: part.contentType,
+      uploaderId: viewerId,
     })
     return json(res, 201, {
       url: `/api/channels/${channelId}/attachments/${fileId}/${encodeURIComponent(name)}`,
@@ -673,7 +679,11 @@ export async function handleChatRequest(req, res, url) {
     })
   }
 
-  /** 첨부 내려받기. 채널 멤버만. 이미지는 inline, 나머지는 내려받기. */
+  /**
+   * 첨부 내려받기. 채널 멤버만, 그리고 그 채널의 살아 있는 메시지가 싣고 있는 파일만(백엔드 #327).
+   * 메시지를 지우면 주소를 알아도 못 받는다. 아직 안 보낸 파일도 404 다. 이미지는 inline, 나머지는
+   * 내려받기.
+   */
   const downloadMatch = path.match(/^\/channels\/([^/]+)\/attachments\/([^/]+)\/(.+)$/)
   if (downloadMatch && req.method === 'GET') {
     if (!isUser(viewerId)) {
@@ -692,7 +702,10 @@ export async function handleChatRequest(req, res, url) {
       return json(res, 404, { detail: '없는 첨부입니다.', code: 'NOT_FOUND' })
     }
     const found = attachments.get(`${channelId}/${fileId}/${name}`)
-    if (!found) return json(res, 404, { detail: '없는 첨부입니다.', code: 'NOT_FOUND' })
+    const carried = (messages.get(channelId) ?? []).some((m) =>
+      (m.attachments ?? []).some((a) => a.url.split('/')[5] === fileId),
+    )
+    if (!found || !carried) return json(res, 404, { detail: '없는 첨부입니다.', code: 'NOT_FOUND' })
 
     const inline = INLINE_TYPES.has(found.contentType)
     res.writeHead(200, {
@@ -701,8 +714,9 @@ export async function handleChatRequest(req, res, url) {
       // 한글 파일명은 filename* 로(RFC 6266). 스크립트가 돌 수 있는 형식은 내려받기만.
       'Content-Disposition': `${inline ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(name)}`,
       'X-Content-Type-Options': 'nosniff',
-      // 키에 랜덤 파일 id 가 있어 불변이다. 인라인 이미지가 스크롤마다 다시 내려오지 않게.
-      'Cache-Control': 'private, max-age=86400',
+      // 캐시에 남기지 않는다(백엔드 #327). 브라우저 캐시는 쿠키를 가리지 않아 같은 브라우저의
+      // 다음 사용자가 판정 없이 열 수 있고, 지운 메시지의 파일도 남는다.
+      'Cache-Control': 'no-store',
     })
     return res.end(found.data)
   }
