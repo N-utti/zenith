@@ -1495,7 +1495,7 @@ export const handlers = [
   }),
 
   // ── 근태 · 휴가 (04 §10.2) ────────────────────────────────
-  // 백엔드는 501 스텁. 목록 응답의 `{items}` 감싸기와 항목 모양은 프론트 가정(PR 본문).
+  // 목록 응답의 `{items}` 감싸기와 항목 모양은 백엔드(#316)와 같다.
   http.get(
     '/api/leave-types',
     authed(() => HttpResponse.json({ items: LEAVE_TYPES })),
@@ -1665,7 +1665,7 @@ data: ${JSON.stringify(data)}
     return new HttpResponse(stream, { headers: { 'Content-Type': 'text/event-stream' } })
   }),
 
-  // 04 §8 feedback. 응답은 04 에 없다. 204 는 프론트 가정(PR 본문).
+  // 04 §8 feedback. 응답은 204(백엔드 #317).
   http.post('/api/ai/feedback', async ({ request }) => {
     if (!authenticate()) return unauthorized()
     const { message_id, value } = (await request.json()) as {
@@ -1687,7 +1687,7 @@ data: ${JSON.stringify(data)}
     return new HttpResponse(null, { status: 204 })
   }),
 
-  // 04 §8 doc-action. 응답 모양은 04 에 없다. `{draft}` 는 프론트 제안(PR 본문).
+  // 04 §8 doc-action. 응답 `{draft}` 는 백엔드(#317)의 `DocActionOut` 과 같다.
   http.post('/api/ai/doc-action', async ({ request }) => {
     if (!authenticate()) return unauthorized()
     const { doc_id, action } = (await request.json()) as { doc_id?: string; action?: string }

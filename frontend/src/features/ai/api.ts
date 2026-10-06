@@ -5,7 +5,7 @@ import { appendMessage, getSessionId, patchMessage } from './store'
 import type { AiModel, Citation } from './types'
 
 /**
- * 04 §8 `POST /ai/feedback {message_id, value: 1|-1}`. 응답은 04 에 없어 204 로 가정.
+ * 04 §8 `POST /ai/feedback {message_id, value: 1|-1}`. 응답은 204(백엔드 #317).
  * message_id 는 클라이언트가 만든 답변 id 다. 서버가 세션을 저장하지 않아 대응되는 행이 없다(PR 본문).
  */
 export function useFeedback() {

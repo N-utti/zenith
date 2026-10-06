@@ -1,6 +1,6 @@
 import type { AiScope, AiTemplate } from './types'
 
-/** 템플릿은 프롬프트를 채울 뿐이라 서버가 필요 없다. `POST /ai/template`(501) 이 붙으면 그쪽으로. */
+/** 템플릿은 프롬프트를 채울 뿐이라 서버가 필요 없다. `POST /ai/template`(백엔드 #317)은 쓰지 않는다. */
 export const AI_TEMPLATES: AiTemplate[] = [
   {
     id: 't-minutes',

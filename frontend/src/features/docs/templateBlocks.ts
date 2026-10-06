@@ -8,8 +8,8 @@ const WEEKLY_ROW = '|  |  |  |  |  |'
 /**
  * 문서 템플릿. **블록 하나는 마크다운 한 덩이다.**
  *
- * 고정 문안이라 AI 서버(04 §8 `POST /ai/template`)를 거치지 않는다. 그 경로는 실서버에서 아직
- * 501 이라 템플릿이 통째로 안 됐다(PR 본문). 서버가 `context` 로 제목·참석자를 채우게 되면 그때 붙인다.
+ * 고정 문안이라 AI 서버(04 §8 `POST /ai/template`)를 거치지 않는다. 그 경로는 백엔드 #317 로
+ * 생겼지만 고정 문안이면 충분해 쓰지 않는다. `context` 로 제목·참석자를 채우고 싶어지면 그때 붙인다.
  */
 export const TEMPLATE_BLOCKS: Record<DocTemplate, string[]> = {
   minutes: [
