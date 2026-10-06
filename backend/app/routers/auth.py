@@ -5,6 +5,7 @@
 FR-AUTH-04(LDAP/AD 확장점): 자격증명 검증은 `_verify_credentials` 한 곳이다 — LDAP 은 이 함수를 바꾼다.
 """
 
+import logging
 import uuid
 from datetime import UTC, datetime, timedelta
 
@@ -27,6 +28,10 @@ from app.security import (
     set_auth_cookies,
     verify_password_async,
 )
+
+log = logging.getLogger(__name__)
+
+REFRESH_GRACE = timedelta(seconds=10)  # 동시 refresh 유예(#340) — 아래 refresh() 참조
 
 router = APIRouter(tags=["auth"])
 
@@ -149,10 +154,18 @@ async def refresh(request: Request, response: Response, db: AsyncSession = Depen
     if not token:
         raise ApiError(401, "AUTH_REQUIRED", "로그인이 필요합니다.")
     claims = decode_token(token, "refresh")
-    session = await db.get(AuthSession, claims.session_id)
+    # 행 잠금(#340 M2) — 같은 refresh 토큰이 동시에 둘 오면 둘째는 첫째의 커밋을 기다렸다가 회전된 jti 를 본다.
+    # 잠금이 없으면 둘 다 통과해 커밋 순서에 따라 브라우저가 낡은 쿠키를 들게 된다(다음 refresh 에서 탈취로 오판).
+    session = await db.get(AuthSession, claims.session_id, with_for_update=True)
     if session is None or session.revoked_at is not None or session.expires_at <= _now():
         raise ApiError(401, "AUTH_INVALID", "세션이 종료되었습니다. 다시 로그인해 주세요.")
-    if session.refresh_jti != claims.jti:
+    # 직전 회전 직후(REFRESH_GRACE 안)에 옛 토큰이 또 오면 동시 refresh 로 본다 — 평문 사내 주소에는
+    # navigator.locks 가 없어 탭마다 따로 부른다(lib/api.ts). 회전도 회수도 하지 않고 현재 쿠키를 다시 내준다.
+    # 대가: 회전 직후 10초 동안은 이 세션의 **어떤** 옛 jti 도 재사용으로 탐지되지 않고 현재 쿠키를 받는다
+    # (직전 것만이 아니다). 창 밖이면 바로 회수되므로 반복 시도로 창을 노리기는 어렵다.
+    # ponytail: 정확히 「직전 jti」만 봐주려면 prev_refresh_jti 칸.
+    race = session.refresh_jti != claims.jti and _now() - session.last_used_at < REFRESH_GRACE
+    if session.refresh_jti != claims.jti and not race:
         # 이미 회전된 토큰이 다시 왔다 — 탈취로 간주하고 세션을 닫는다.
         session.revoked_at = _now()
         audit.record(
@@ -171,9 +184,12 @@ async def refresh(request: Request, response: Response, db: AsyncSession = Depen
         raise ApiError(401, "AUTH_DISABLED", "비활성화된 계정입니다. 관리자에게 문의하세요.")
 
     # expires_at 은 로그인 때 정한 그대로다 — 세션 수명은 절대값 14일이고 쓸수록 늘어나지 않는다.
-    session.refresh_jti = uuid.uuid4()
-    session.last_used_at = _now()
-    await db.commit()
+    if race:
+        log.info("refresh 동시 유예 %s", session.id)  # 탐지를 완화한 흔적 — 감사까지는 두지 않는다
+    else:
+        session.refresh_jti = uuid.uuid4()
+        session.last_used_at = _now()
+        await db.commit()
     set_auth_cookies(
         response, user_id=user.id, session_id=session.id, refresh_jti=session.refresh_jti
     )

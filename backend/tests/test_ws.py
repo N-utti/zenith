@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 import pytest
 from fastapi import FastAPI
 from httpx import AsyncClient
-from httpx_ws import HTTPXWSException, aconnect_ws
+from httpx_ws import HTTPXWSException, WebSocketDisconnect, aconnect_ws
 from httpx_ws.transport import ASGIWebSocketTransport
 from sqlalchemy import select, update
 
@@ -70,6 +70,13 @@ async def recv_until(ws, ev: str, timeout: float = 2.0) -> dict:
     raise AssertionError(f"{ev} 이벤트가 오지 않았다")
 
 
+async def expect_close(ws, code: int, timeout: float = 3.0) -> None:
+    """서버가 accept 뒤 이 코드로 닫았는지 — 핸드셰이크 거부(HTTP 403)와 달리 클라이언트가 이유를 받는다(#340)."""
+    with pytest.raises(WebSocketDisconnect) as excinfo:
+        await asyncio.wait_for(ws.receive_text(), timeout)
+    assert excinfo.value.code == code
+
+
 async def silent(ws, seconds: float = 0.3) -> None:
     with pytest.raises(TimeoutError):
         await recv(ws, seconds)
@@ -79,16 +86,29 @@ async def send(ws, **op) -> None:
     await ws.send_text(json.dumps(op))
 
 
-async def test_rejects_without_cookie_and_cross_site(app: FastAPI, users: Users) -> None:
-    """TC-SEC-03: 쿠키 없이는 핸드셰이크에서 거부. 우리 것이 아닌 Origin 도(Cross-Site WebSocket Hijacking)."""
+async def test_rejects_without_cookie_and_cross_site(
+    app: FastAPI, users: Users, monkeypatch
+) -> None:
+    """TC-SEC-03: 쿠키 없이는 바이트 하나도 못 받는다 — accept 뒤 4401 로 닫혀 클라이언트가 이유를 안다(#340).
+    우리 것이 아닌 Origin 은 핸드셰이크 403(Cross-Site WebSocket Hijacking — 남의 사이트엔 코드도 안 준다).
+    DB 가 끊겨 있으면 1013(잠시 뒤 다시) — 전에는 미처리 500 이었다."""
+    from app.realtime import chat as mod
+
     async with ws_client(app) as anon, ws_client(app) as client:
-        with pytest.raises(HTTPXWSException):
-            async with aconnect_ws(WS + "?token=x", anon):
-                pass
+        async with aconnect_ws(WS + "?token=x", anon) as ws:
+            await expect_close(ws, 4401)
         await login(client, "sujin@zenith.co.kr")
         with pytest.raises(HTTPXWSException):
             async with aconnect_ws(WS, client, headers={"Origin": "https://evil.example"}):
                 pass
+        assert SOCKETS == {}
+
+        async def db_down(*a, **kw):
+            raise RuntimeError("connection refused")
+
+        monkeypatch.setattr(mod, "authenticate", db_down)
+        async with aconnect_ws(WS, client) as ws:
+            await expect_close(ws, 1013)
         assert SOCKETS == {}
 
 

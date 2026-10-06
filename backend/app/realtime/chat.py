@@ -43,7 +43,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import audit
 from app.db import session_scope
-from app.deps import _own_origin, authenticate, origin_allowed
+from app.deps import _own_origin, authenticate, origin_allowed, ws_reject
 from app.errors import ApiError
 from app.models import (
     Channel,
@@ -525,12 +525,18 @@ async def ws_endpoint(websocket: WebSocket) -> None:
         log.info("ws 거부: CSRF_ORIGIN %s", websocket.headers.get("origin"))
         await websocket.close(code=4403)
         return
+    # 인증 실패는 accept 한 뒤 4401(deps.ws_reject, #340 — 09-29 실서버에서 비활성화된 계정이 2분에 403 15번
+    # 재접속). 출처 거부(위 4403)는 그대로 HTTP 403. DB 가 끊겨 있으면 1013(잠시 뒤 다시) — 전에는 미처리 500.
     try:
         async with session_scope() as db:
             user, _session = await authenticate(websocket.cookies, db)
     except ApiError as e:
         log.info("ws 거부: %s", e.code)
-        await websocket.close(code=4401)
+        await ws_reject(websocket, 4401)
+        return
+    except Exception as e:  # noqa: BLE001 — DB 접속 실패 등
+        log.warning("ws 핸드셰이크 실패: %s %s", type(e).__name__, e)
+        await ws_reject(websocket, 1013)
         return
 
     await websocket.accept()
@@ -558,10 +564,17 @@ async def ws_endpoint(websocket: WebSocket) -> None:
             except TimeoutError:
                 raw = None  # 조용한 소켓도 주기적으로 세션을 다시 본다
             if datetime.now(UTC) - checked_at >= REAUTH_INTERVAL:
-                async with session_scope() as db:
-                    # 회수·비활성이면 ApiError → 아래서 닫힌다. 소켓의 쿠키는 핸드셰이크 시점에 고정이라
-                    # exp 는 안 본다(deps.authenticate) — 안 그러면 모든 소켓이 15분 안에 죽는다
-                    user, _session = await authenticate(websocket.cookies, db, verify_exp=False)
+                try:
+                    async with session_scope() as db:
+                        # 회수·비활성이면 ApiError → 아래서 닫힌다. 소켓의 쿠키는 핸드셰이크 시점에 고정이라
+                        # exp 는 안 본다(deps.authenticate) — 안 그러면 모든 소켓이 15분 안에 죽는다
+                        user, _session = await authenticate(websocket.cookies, db, verify_exp=False)
+                except ApiError:
+                    raise
+                except Exception as e:  # noqa: BLE001 — DB 가 잠깐 끊김. 핸드셰이크와 같은 1013 으로(#340)
+                    log.warning("ws 재검증 실패 %s: %s %s", user.id, type(e).__name__, e)
+                    await websocket.close(code=1013)
+                    break
                 checked_at = datetime.now(UTC)
             if raw is None:
                 continue

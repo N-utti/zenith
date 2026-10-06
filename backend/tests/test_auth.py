@@ -122,9 +122,12 @@ async def test_expired_access_then_refresh(client: AsyncClient, users: Users) ->
 
 
 async def test_refresh_rotates_and_reuse_kills_the_session(
-    client: AsyncClient, users: Users
+    client: AsyncClient, users: Users, monkeypatch
 ) -> None:
-    """NFR-02 회전: 옛 refresh 가 다시 오면 탈취로 보고 세션을 통째로 닫는다."""
+    """NFR-02 회전: 옛 refresh 가 다시 오면 탈취로 보고 세션을 통째로 닫는다(유예 창 밖)."""
+    from app.routers import auth as mod
+
+    monkeypatch.setattr(mod, "REFRESH_GRACE", timedelta(0))
     await login(client, "sujin@zenith.co.kr")
     old_refresh = client.cookies["refresh"]
     assert (await client.post("/api/auth/refresh", headers=csrf(client))).status_code == 204
@@ -137,6 +140,34 @@ async def test_refresh_rotates_and_reuse_kills_the_session(
     )
     assert (r.status_code, r.json()["code"]) == (401, "AUTH_INVALID")
     assert (await client.get("/api/me")).status_code == 401  # access 도 같이 죽는다
+
+
+async def test_concurrent_refresh_within_grace_is_not_theft(
+    client: AsyncClient, users: Users, monkeypatch
+) -> None:
+    """#340: 회전 직후(유예 안) 같은 옛 토큰이 또 오면 동시 refresh 로 본다 — 평문 주소엔 navigator.locks 가 없어
+    탭마다 부른다. 회수하지 않고 현재 쿠키를 다시 내준다. 유예가 지나면 재사용 → 회수."""
+    from app.routers import auth as mod
+
+    await login(client, "sujin@zenith.co.kr")
+    old_refresh = client.cookies["refresh"]
+    assert (await client.post("/api/auth/refresh", headers=csrf(client))).status_code == 204
+    from app.security import decode_token as _dt
+
+    rotated_jti = _dt(client.cookies["refresh"], "refresh").jti
+    r = await client.post(
+        "/api/auth/refresh",
+        headers={**csrf(client), **_cookies(refresh=old_refresh, csrf=client.cookies["csrf"])},
+    )
+    assert r.status_code == 204  # 유예 안 — 세션은 살아 있고 쿠키는 현재(회전된) jti 로 다시 내준다
+    assert _dt(client.cookies["refresh"], "refresh").jti == rotated_jti
+    assert (await client.get("/api/me")).status_code == 200
+    monkeypatch.setattr(mod, "REFRESH_GRACE", timedelta(0))
+    r = await client.post(
+        "/api/auth/refresh",
+        headers={**csrf(client), **_cookies(refresh=old_refresh, csrf=client.cookies["csrf"])},
+    )
+    assert (r.status_code, r.json()["code"]) == (401, "AUTH_INVALID")
 
 
 async def test_refresh_keeps_the_absolute_expiry_and_rejects_deactivated_user(
