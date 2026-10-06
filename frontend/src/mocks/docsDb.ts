@@ -9,6 +9,7 @@ import type {
 import type { RecentDoc } from '@/features/home/types'
 import type { User } from '@/types'
 import { uuid } from '@/lib/uuid'
+import { demoSnapshots } from './demoVersions'
 
 function minutesAgo(minutes: number): string {
   return new Date(Date.now() - minutes * 60_000).toISOString()
@@ -426,8 +427,36 @@ const versions: Record<string, DocVersionSnapshot[]> = {}
  */
 const COALESCE_MS = 3 * 60_000
 
+/**
+ * 버전 기록을 기다리지 않고 볼 수 있게, 이 문서는 목록을 처음 받을 때 지어낸 버전 넷을 깐다
+ * (`demoVersions.ts`). 실제 편집으로 생긴 버전보다 오래된 것으로 앞에 끼운다.
+ */
+const DEMO_VERSIONS_DOC = 'd-1'
+let demoSeeded = false
+
+function seedDemoVersions() {
+  const authors = [
+    { id: 'u-2', name: '정성운' },
+    { id: 'u-1', name: '진수연' },
+    { id: 'u-4', name: '장지윤' },
+    { id: 'u-1', name: '진수연' },
+  ]
+  const hoursAgo = [72, 26, 5, 1]
+  const seeded = demoSnapshots().map((snapshot, index) => ({
+    id: `v-demo-${index}`,
+    created_at: new Date(Date.now() - hoursAgo[index] * 3_600_000).toISOString(),
+    author: authors[index],
+    snapshot,
+    label: null,
+  }))
+  if (seeded.length === 0) return
+  demoSeeded = true
+  ;(versions[DEMO_VERSIONS_DOC] ??= []).unshift(...seeded)
+}
+
 /** 최신순. **스냅샷은 싣지 않는다**(백엔드 `VersionMeta`). 내용은 `/restore` 로 한 건씩. */
 export function listVersions(docId: string): DocVersion[] {
+  if (docId === DEMO_VERSIONS_DOC && !demoSeeded) seedDemoVersions()
   return [...(versions[docId] ?? [])].reverse().map((version) => ({
     id: version.id,
     created_at: version.created_at,
