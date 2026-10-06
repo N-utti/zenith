@@ -25,7 +25,7 @@ from app import audit, storage
 from app.db import get_db
 from app.deps import current_user
 from app.errors import ApiError
-from app.models import ROLE_RANK, Board, Notification, Post, PostComment, User
+from app.models import ROLE_RANK, Board, BoardUpload, Notification, Post, PostComment, User
 from app.paging import decode_cursor, encode_cursor
 from app.prefs import wants
 from app.realtime import chat
@@ -184,8 +184,8 @@ def _att_url(board_id: uuid.UUID, file_id: uuid.UUID, name: str) -> str:
     return f"/api/boards/{board_id}/attachments/{file_id}/{quote(name, safe='')}"
 
 
-def _parse_att_url(url: str, board_id: uuid.UUID) -> str | None:
-    """이 게시판의 업로드 URL 이면 파일명, 아니면 None — 임원 게시판 파일 id 를 공지 글에 끼워 등급 밖에서 받는 길을 막는다."""
+def _parse_att_url(url: str, board_id: uuid.UUID) -> tuple[uuid.UUID, str] | None:
+    """이 게시판의 업로드 URL 이면 (file_id, 파일명), 아니면 None — 임원 게시판 파일 id 를 공지 글에 끼워 등급 밖에서 받는 길을 막는다."""
     prefix = f"/api/boards/{board_id}/attachments/"
     if not url.startswith(prefix) or any(c in url for c in "?#\\"):
         return None  # ?·# 는 브라우저가 떼어 내 칩의 이름과 실제로 받는 파일이 달라진다
@@ -193,18 +193,41 @@ def _parse_att_url(url: str, board_id: uuid.UUID) -> str | None:
     if len(rest) != 2 or not rest[1]:
         return None
     try:
-        uuid.UUID(rest[0])
+        return uuid.UUID(rest[0]), unquote(rest[1])
     except ValueError:
         return None
-    return unquote(rest[1])
 
 
-def _checked_attachments(board: Board, items: list[AttachmentOut] | None) -> list[dict] | None:
+async def _checked_attachments(
+    db: AsyncSession,
+    board: Board,
+    user: User,
+    items: list[AttachmentOut] | None,
+    keep: list[dict] | None = None,
+) -> list[dict] | None:
+    """글에 실을 첨부 목록. 이 게시판의 url 모양이고 이름이 같아야 하며(422), **새로 들어오는 url 은 올린 사람 본인 것만**(#309).
+
+    `keep` 은 고치기 전 목록 — 이미 실린 url 은 그대로 통과한다(임원이 남의 글을 고칠 때 깨지지 않게).
+    기록부(board_uploads)가 없던 때 올린 파일은 새로 붙일 수 없다 — 다시 올린다."""
     if items is None:
         return None
-    if any(_parse_att_url(a.url, board.id) != a.name for a in items):
-        raise ApiError(422, "VALIDATION", "이 게시판에 올린 첨부가 아닙니다.")
-    return [a.model_dump() for a in items]
+    kept = {x["url"]: x for x in keep or []}
+    out = []
+    for a in items:
+        parsed = _parse_att_url(a.url, board.id)
+        if parsed is None or parsed[1] != a.name:
+            raise ApiError(422, "VALIDATION", "이 게시판에 올린 첨부가 아닙니다.")
+        # url 은 서버가 만든 모양으로 다시 쓴다 — 내려받기가 글의 url 을 그대로 대조하므로 인코딩이 달라도 맞아야 한다
+        url = _att_url(board.id, parsed[0], a.name)
+        if url in kept:
+            out.append(kept[url])
+            continue
+        rec = await db.get(BoardUpload, parsed[0])
+        if rec is None or rec.board_id != board.id or rec.uploader_id != user.id:
+            raise ApiError(422, "VALIDATION", "직접 올린 첨부만 붙일 수 있습니다.")
+        # 크기·형식은 클라이언트 값이 아니라 올릴 때 기록한 값
+        out.append({"url": url, "name": a.name, "size": rec.size, "content_type": rec.content_type})
+    return out
 
 
 async def _get_board(db: AsyncSession, board_id: uuid.UUID) -> Board:
@@ -298,7 +321,7 @@ async def create_post(
         title=body.title,
         body=body.body,
         author_id=user.id,
-        attachments=_checked_attachments(board, body.attachments),
+        attachments=await _checked_attachments(db, board, user, body.attachments),
         created_at=now,
     )
     db.add(post)
@@ -370,8 +393,23 @@ async def update_post(
     for key, value in changes.items():
         if value is None:  # me.py 의 todo PATCH 와 같은 계약 — null 은 "지움" 이 아니라 422
             raise ApiError(422, "VALIDATION", f"{key} 는 null 일 수 없습니다.")
-        if key == "attachments":
-            value = _checked_attachments(board, body.attachments)  # [] 는 전부 뗀다
+        if key == "attachments":  # [] 는 전부 뗀다
+            value = await _checked_attachments(db, board, user, body.attachments, post.attachments)
+            before = {x["url"] for x in post.attachments or []}
+            after = {x["url"] for x in value}
+            if before != after:  # 붙이고 뗀 흔적(#309) — 임원이 「회수했다」는 사실이 남는다
+                audit.record(
+                    db,
+                    "boards.attachments_changed",
+                    request=request,
+                    actor_id=user.id,
+                    target_id=board.id,
+                    detail={
+                        "post_id": str(post.id),
+                        "added": sorted(after - before),
+                        "removed": sorted(before - after),
+                    },
+                )
         setattr(post, key, value)
     if changes:
         await db.commit()
@@ -404,6 +442,16 @@ async def upload_board_attachment(
     file_id = uuid.uuid4()
     content_type = _normalize_content_type(file.content_type)
     await storage.put(_att_key(board.id, file_id, name), data, content_type)
+    db.add(  # 누가 올렸나 — 글에 새로 싣는 url 은 올린 사람 본인 것만 받는다(#309)
+        BoardUpload(
+            file_id=file_id,
+            board_id=board.id,
+            uploader_id=user.id,
+            size=len(data),
+            content_type=content_type,
+        )
+    )
+    await db.commit()
     return AttachmentOut(
         url=_att_url(board.id, file_id, name), name=name, size=len(data), content_type=content_type
     )
@@ -411,7 +459,7 @@ async def upload_board_attachment(
 
 @router.get(
     "/boards/{id}/attachments/{file_id}/{name}",
-    summary="게시글 첨부 내려받기 — 게시판을 읽을 수 있는 등급만. 이미지 넷은 inline, 나머지는 attachment",
+    summary="게시글 첨부 내려받기 — 게시판을 읽을 수 있는 등급만, 이 게시판의 살아 있는 글에 실린 파일만(아니면 404). 이미지 넷은 inline, 나머지는 attachment",
     response_class=Response,
     responses={200: {"content": {"application/octet-stream": {}}}},
 )
@@ -426,8 +474,19 @@ async def download_board_attachment(
     board = await _get_board(db, id)
     if not _allowed(user, board):
         await _deny(db, request, user, board, "attach")
-    found = await storage.get(
-        _att_key(board.id, file_id, name)
+    # 이슈 #309: 글에서 뗀 파일·지운 글의 파일은 주소를 알아도 못 받는다(잘못 올린 파일의 회수).
+    # 글에 아직 안 붙인 파일도 404 — 글쓰기 창은 올린 파일을 다시 받지 않는다.
+    # ponytail: JSONB @> 로 게시판의 글을 순차 스캔 — 글 수백 건. 느려지면 GIN(attachments jsonb_path_ops)
+    carried = await db.scalar(
+        select(Post.id)
+        .where(
+            Post.board_id == board.id,
+            Post.attachments.contains([{"url": _att_url(board.id, file_id, name)}]),
+        )
+        .limit(1)
+    )
+    found = (
+        await storage.get(_att_key(board.id, file_id, name)) if carried else None
     )  # 키에 게시판 id — 다른 게시판 경로로는 404
     if found is None:
         raise ApiError(404, "NOT_FOUND", "없는 첨부입니다.")
@@ -440,7 +499,9 @@ async def download_board_attachment(
             "Content-Disposition": f"{disposition}; filename*=UTF-8''{quote(name, safe='')}",
             "X-Content-Type-Options": "nosniff",
             "Content-Security-Policy": "default-src 'none'; sandbox",
-            "Cache-Control": "private, max-age=86400",
+            # no-store (#309): 브라우저 캐시는 쿠키를 안 가려, 하루 캐시면 같은 브라우저의 다음 로그인 사용자가
+            # 서버 판정 없이 열고, 글에서 뗀 뒤에도 캐시로 남는다. 15명 사내라 이미지 재요청 비용은 무시한다.
+            "Cache-Control": "no-store",
         },
     )
 

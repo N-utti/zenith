@@ -2,6 +2,7 @@
 
 import uuid
 from datetime import UTC, datetime, timedelta
+from urllib.parse import unquote
 
 from httpx import AsyncClient
 from sqlalchemy import select
@@ -349,15 +350,8 @@ async def test_post_attachments(client: AsyncClient, users: Users, app_db, minio
     ] == len(PNG)
     assert (await _attach(client, s["notice"].id, "e.txt", b"", "text/plain")).status_code == 422
     doc = (await _attach(client, s["notice"].id, "자료.pdf", b"%PDF", "application/pdf")).json()
-
-    got = await client.get(att["url"])
-    assert got.status_code == 200 and got.content == PNG
-    assert got.headers["content-disposition"].startswith("inline;")
-    got = await client.get(doc["url"])
-    assert got.headers["content-disposition"].startswith("attachment;")
-    assert got.headers["x-content-type-options"] == "nosniff"
-    assert got.headers["content-security-policy"] == "default-src 'none'; sandbox"
-    assert got.headers["cache-control"] == "private, max-age=86400"
+    # 글에 아직 안 붙은 파일은 올린 사람도 못 받는다(#309 — 글쓰기 창은 다시 받지 않는다)
+    assert (await client.get(att["url"])).status_code == 404
     # 임원 게시판에 올린 파일은 등급 밖에서 못 받는다 — 403 + acl.denied(reason attach)
     await login(client, "jaeho@zenith.co.kr")
     sec = (await _attach(client, s["execs"].id, "비밀.pdf", b"%PDF", "application/pdf")).json()
@@ -385,6 +379,60 @@ async def test_post_attachments(client: AsyncClient, users: Users, app_db, minio
     assert r.status_code == 201, r.text
     post = r.json()
     assert [a["name"] for a in post["attachments"]] == ["회의 사진.png", "자료.pdf"]
+    # 글에 실린 뒤에야 받아진다 — 헤더는 채팅 첨부와 같고 캐시만 no-store(#309)
+    got = await client.get(att["url"])
+    assert got.status_code == 200 and got.content == PNG
+    assert got.headers["content-disposition"].startswith("inline;")
+    got = await client.get(doc["url"])
+    assert got.headers["content-disposition"].startswith("attachment;")
+    assert got.headers["x-content-type-options"] == "nosniff"
+    assert got.headers["content-security-policy"] == "default-src 'none'; sandbox"
+    assert got.headers["cache-control"] == "no-store"
+    # 글이 인코딩을 달리 보낸 url(한글 그대로)도 서버 모양으로 고쳐 싣는다 — 대조가 어긋나지 않게
+    raw = {**att, "url": unquote(att["url"])}
+    assert raw["url"] != att["url"]
+    r = await client.post(url, json={"title": "둘째", "body": "y", "attachments": [raw]}, headers=h)
+    assert r.status_code == 201 and r.json()["attachments"][0]["url"] == att["url"]
+    second = r.json()["id"]
+    # 남이 올린 파일 url 은 자기 글에 못 붙인다 — 박아 두고 회수를 피하는 길(#309). 임원도 같다
+    await login(client, "jaeho@zenith.co.kr")
+    hj = csrf(client)
+    r = await client.post(
+        url, json={"title": "박기", "body": "y", "attachments": [att]}, headers=hj
+    )
+    assert (r.status_code, r.json()["detail"]) == (422, "직접 올린 첨부만 붙일 수 있습니다.")
+    # 임원이 남의 글을 고칠 때 이미 실린 첨부는 그대로 통과하고, 자기가 올린 것은 더할 수 있다.
+    # 크기·형식은 클라이언트가 보낸 값이 아니라 올릴 때 기록한 값
+    mine = (await _attach(client, s["notice"].id, "임원.pdf", b"%PDF", "application/pdf")).json()
+    r = await client.patch(
+        f"/api/posts/{post['id']}",
+        json={"attachments": [att, doc, {**mine, "size": 1, "content_type": "text/html"}]},
+        headers=hj,
+    )
+    assert r.status_code == 200, r.text
+    assert [(a["size"], a["content_type"]) for a in r.json()["attachments"]] == [
+        (len(PNG), "image/png"),
+        (4, "application/pdf"),
+        (4, "application/pdf"),
+    ]
+    r = await client.patch(f"/api/posts/{post['id']}", json={"attachments": [att, doc]}, headers=hj)
+    assert r.status_code == 200
+    # 고치기에서도 남이 올린 새 파일은 임원도 못 더한다. 다른 게시판에 올린 file_id 를 이 게시판 url 에 끼워도 422
+    await login(client, "sujin@zenith.co.kr")
+    h = csrf(client)
+    other = (await _attach(client, s["notice"].id, "남의것.pdf", b"%PDF", "application/pdf")).json()
+    await login(client, "jaeho@zenith.co.kr")
+    r = await client.patch(
+        f"/api/posts/{post['id']}", json={"attachments": [att, doc, other]}, headers=csrf(client)
+    )
+    assert r.status_code == 422
+    smuggled = {**sec, "url": sec["url"].replace(str(s["execs"].id), str(s["notice"].id))}
+    r = await client.post(
+        url, json={"title": "x", "body": "y", "attachments": [smuggled]}, headers=csrf(client)
+    )
+    assert r.status_code == 422
+    await login(client, "sujin@zenith.co.kr")
+    h = csrf(client)
     bad = {**att, "url": swapped}
     r = await client.post(url, json={"title": "x", "body": "y", "attachments": [bad]}, headers=h)
     assert r.status_code == 422
@@ -416,9 +464,35 @@ async def test_post_attachments(client: AsyncClient, users: Users, app_db, minio
     assert r.status_code == 422
     r = await client.patch(f"/api/posts/{post['id']}", json={"attachments": [doc]}, headers=h)
     assert r.status_code == 200 and [a["name"] for a in r.json()["attachments"]] == ["자료.pdf"]
+    assert (await client.get(att["url"])).status_code == 200  # 둘째 글이 아직 싣고 있다
     r = await client.patch(f"/api/posts/{post['id']}", json={"attachments": []}, headers=h)
     assert r.status_code == 200 and r.json()["attachments"] == []
-    assert (await client.get(att["url"])).status_code == 200  # 뗀 파일은 저장소에 남는다(README 34)
+    assert (await client.get(doc["url"])).status_code == 404  # 글에서 뗀 파일은 회수된다(#309)
+    # 글을 지우면 그 글만 싣던 파일도 404 — 저장소에는 남지만(README 34) 받을 길이 없다
+    assert (await client.delete(f"/api/posts/{second}", headers=h)).status_code == 204
+    assert (await client.get(att["url"])).status_code == 404
+    # 등급 판정이 글 대조보다 먼저 — 글에 안 실린 임원 게시판 파일도 403(404 로 존재를 안 알린다)
+    r = await client.get(sec["url"])
+    assert r.status_code == 403
+    # 붙이고 뗀 흔적 — 임원 추가(+1)·임원 되돌림(-1)·sujin [doc](-att)·[](-doc) 네 번. 안 바뀐 PATCH 는 안 남긴다
+    changed = (
+        (
+            await app_db.execute(
+                select(AuditEvent).where(AuditEvent.kind == "boards.attachments_changed")
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert sorted((len(e.detail["added"]), len(e.detail["removed"])) for e in changed) == [
+        (0, 1),
+        (0, 1),
+        (0, 1),
+        (1, 0),
+    ]
+    assert {"post_id": post["id"], "added": [], "removed": [doc["url"]]} in [
+        e.detail for e in changed
+    ]
 
 
 async def test_review_edges(client: AsyncClient, users: Users, app_db) -> None:

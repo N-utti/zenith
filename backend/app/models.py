@@ -313,6 +313,25 @@ class Post(Base):
     )
 
 
+class BoardUpload(Base):
+    """게시글 첨부 업로드 기록부(03 에 없는 표, 2026-10-06 — README 34 · 이슈 #309).
+
+    오브젝트는 MinIO `boards/{board_id}/{file_id}/{name}` 에 있고 여기는 누가 어느 게시판에 올렸나만.
+    글에 새로 싣는 url 은 올린 사람 본인 것만 받는다 — 남이 뗀 파일 url 을 자기 글에 박아 두고 회수를 피하는 길을 막는다."""
+
+    __tablename__ = "board_uploads"
+
+    file_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True
+    )  # 앱이 만든다 — 저장 키와 같아야 한다
+    board_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("boards.id"), nullable=False)
+    uploader_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    # 글에 실리는 size·content_type 은 이 값으로 덮어쓴다(클라이언트 값을 믿지 않는다)
+    size: Mapped[int] = mapped_column(Integer, nullable=False)
+    content_type: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = created_at_col()
+
+
 class PostComment(Base):
     """게시글 댓글(03 에 없는 표, 2026-10-02 — README 33). 문서 댓글에서 블록 칸을 뺀 모양. 글이 지워지면 DB 가 같이 지운다."""
 
