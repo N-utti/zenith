@@ -188,9 +188,17 @@ describe('CRM 목 저장소 (15 CRM 모듈 설계서 §4·§9)', () => {
     )
     expect(deleteOrg(infra, made.org.id, '정리')).toMatchObject({ status: 403 })
     expect(deleteOrg(exec, made.org.id, '  ')).toMatchObject({ status: 422 })
+    // 서버의 사유 상한(500자). 목이 받아 주면 실서버에서만 거절당한다.
+    expect(deleteOrg(exec, made.org.id, 'x'.repeat(501))).toMatchObject({ status: 422 })
     expect(deleteOrg(exec, made.org.id, '중복 등록')).toBeNull()
     expect(getOrg(infra, made.org.id)).toMatchObject({ status: 404 })
     expect(listOrgs({}).some((o) => o.id === made.org.id)).toBe(false)
+  })
+
+  it('담당자의 이름·직함·전화·이메일은 칸마다 200자까지다(서버와 같은 상한)', () => {
+    const base = { org_id: 'org-2', name: '길이', title: '', phone: '', email: '', memo: '' }
+    expect(createContact(infra, { ...base, title: 'x'.repeat(201) })).toMatchObject({ status: 422 })
+    expect(createContact(infra, { ...base, title: 'x'.repeat(200) })).not.toHaveProperty('error')
   })
 
   it('개인정보 삭제는 임원만. 연락처는 비우고 활동 기록의 참석자 자리는 남긴다', () => {
@@ -413,6 +421,15 @@ describe('CRM 목 저장소 (15 CRM 모듈 설계서 §4·§9)', () => {
     it('중단은 사유가 없으면 422, 재개하면 같은 안건으로 돌아온다', () => {
       const deal = newDeal()
       expect(dropDeal(fund, deal.id, { reason: ' ', version: 1 })).toMatchObject({ status: 422 })
+      expect(dropDeal(fund, deal.id, { reason: 'x'.repeat(501), version: 1 })).toMatchObject({
+        status: 422,
+      })
+      // 다음 할 일은 500자까지(서버 `NextAction`).
+      expect(updateDeal(fund, deal.id, { next_action: 'x'.repeat(501), version: 1 })).toMatchObject(
+        {
+          status: 422,
+        },
+      )
       const dropped = ok(dropDeal(fund, deal.id, { reason: '조건 불일치', version: 1 }))
       expect(dropped).toMatchObject({ status: 'dropped', drop_reason: '조건 불일치' })
       const back = ok(reopenDeal(infra, deal.id, { version: dropped.version }))

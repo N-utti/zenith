@@ -22,12 +22,15 @@ import {
   useUpdateDeal,
   useUpdateOrg,
 } from './api'
+import { EMAIL_PATTERN } from '@/features/admin/types'
 import { ChipPicker } from './ChipPicker'
 import {
   ACTIVITY_BODY_MAX,
   ACTIVITY_KIND_LABEL,
   ACTIVITY_KINDS,
+  CONTACT_FIELD_MAX,
   MEMO_MAX,
+  NEXT_ACTION_MAX,
   ORG_NAME_MAX,
   ORG_TYPE_LABEL,
   ORG_TYPES,
@@ -300,6 +303,11 @@ export function ContactFormModal({
 
   const submit = () => {
     setError(null)
+    // 브라우저의 이메일 검사는 `a@b` 를 받는데 서버는 점까지 본다. 그 거절은 문구가 배열에 들어 와
+    // 이유 없이 「저장하지 못했습니다」만 뜬다. 보내기 전에 같은 규칙으로 거른다.
+    if (form.email.trim() && !EMAIL_PATTERN.test(form.email.trim())) {
+      return setError('이메일 형식이 아닙니다.')
+    }
     if (!creatingOrg) return saveContact(toOrg)
     if (!newOrg.org_type) return
     createOrg.mutate(
@@ -328,6 +336,7 @@ export function ContactFormModal({
           {...slot}
           type={type}
           value={form[key]}
+          maxLength={CONTACT_FIELD_MAX}
           autoFocus={key === 'name'}
           onChange={(e) => set(key)(e.target.value)}
         />
@@ -596,8 +605,9 @@ const DEAL_KIND_OPTIONS = DEAL_KINDS.map((value) => ({ value, label: DEAL_KIND_L
 const toEokInput = (won: number | null) => (won === null ? '' : String(won / 1e8))
 function fromEokInput(text: string): number | null | 'invalid' {
   if (!text.trim()) return null
-  const eok = Number(text)
-  return Number.isFinite(eok) && eok >= 0 ? Math.round(eok * 1e8) : 'invalid'
+  const won = Math.round(Number(text) * 1e8)
+  // 서버는 안전한 정수(2^53 - 1 원)까지만 받는다. 자릿수를 잘못 붙여 넣은 값이 여기서 걸린다.
+  return Number.isSafeInteger(won) && won >= 0 ? won : 'invalid'
 }
 
 /**
@@ -770,7 +780,12 @@ export function DealFormModal({
       <div className="grid gap-4 sm:grid-cols-[1fr_auto]">
         <Field label="다음 할 일">
           {(slot) => (
-            <Input {...slot} value={nextAction} onChange={(e) => setNextAction(e.target.value)} />
+            <Input
+              {...slot}
+              value={nextAction}
+              maxLength={NEXT_ACTION_MAX}
+              onChange={(e) => setNextAction(e.target.value)}
+            />
           )}
         </Field>
         <Field label="기한">
