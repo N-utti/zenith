@@ -14,6 +14,96 @@ const event = (over: Partial<AuditEvent>): AuditEvent => ({
 })
 
 describe('auditView', () => {
+  // 백엔드가 남기는 종류를 화면이 모르면 `approvals.decided` 같은 식별자가 그대로 보인다.
+  it('결재·근태·휴일 기록을 읽을 수 있는 말로 바꾼다', () => {
+    expect(
+      auditView(event({ kind: 'approvals.decided', detail: { step: 2, action: 'reject' } })),
+    ).toMatchObject({ summary: '결재 반려', detail: '2단계', tone: 'warning' })
+    expect(
+      auditView(
+        event({
+          kind: 'approvals.decided',
+          detail: { step: 1, action: 'approve', acting_for: 'u-3' },
+        }),
+      ),
+    ).toMatchObject({ summary: '결재 승인', detail: '1단계 · 대결' })
+    expect(
+      auditView(event({ kind: 'approvals.force_closed', detail: { reason: '중복 상신' } })),
+    ).toMatchObject({ summary: '결재 강제 종결', detail: '중복 상신' })
+    expect(
+      auditView(
+        event({
+          kind: 'approvals.delegation_created',
+          detail: { start_date: '2026-10-08', end_date: '2026-10-10', type_code: null },
+        }),
+      ).detail,
+    ).toBe('2026-10-08 ~ 2026-10-10 · 모든 유형')
+    expect(
+      auditView(event({ kind: 'approvals.auto_approved', detail: { type_code: 'leave' } })).detail,
+    ).toBe('휴가 · 결재선 없음')
+    expect(
+      auditView(
+        event({ kind: 'attendance.reopened', detail: { month: '2026-09', reason: '정정' } }),
+      ),
+    ).toMatchObject({ summary: '근태 월 마감 해제', detail: '2026-09 · 정정', tone: 'warning' })
+    expect(
+      auditView(
+        event({
+          kind: 'admin.holiday_updated',
+          detail: { date: '2026-10-09', from: '창립일', to: '창립기념일' },
+        }),
+      ).detail,
+    ).toBe('2026-10-09 · 창립일 → 창립기념일')
+    expect(
+      auditView(event({ kind: 'admin.calendar_rebuilt', detail: { year: 2027, workdays: 249 } }))
+        .detail,
+    ).toBe('2027년 · 근무일 249일')
+  })
+
+  it('게시판·문서·채팅 기록. 채팅 본문은 그리지 않는다', () => {
+    expect(
+      auditView(
+        event({
+          kind: 'boards.attachments_changed',
+          detail: { post_id: 'p-1', added: ['/a', '/b'], removed: [] },
+        }),
+      ),
+    ).toMatchObject({ summary: '게시글 첨부 변경', detail: '2개 붙임' })
+    // 쓴 사람과 지운 사람이 다르면 임원이 남의 댓글을 지운 것이다.
+    expect(
+      auditView(
+        event({ kind: 'boards.comment_deleted', detail: { author_id: 'u-9', preview: '안녕' } }),
+      ).summary,
+    ).toBe('남의 게시글 댓글 삭제')
+    expect(
+      auditView(
+        event({ kind: 'boards.comment_deleted', detail: { author_id: 'u-1', preview: '안녕' } }),
+      ),
+    ).toMatchObject({ summary: '게시글 댓글 삭제', detail: '안녕' })
+    expect(
+      auditView(event({ kind: 'channels.members_changed', detail: { removed: ['u-2'] } })),
+    ).toMatchObject({ summary: '채널에서 내보냄', detail: '1명' })
+    expect(
+      auditView(
+        event({
+          kind: 'channels.members_changed',
+          detail: { created: true, added: ['u-1', 'u-2'] },
+        }),
+      ).summary,
+    ).toBe('비공개 채널 생성')
+    const deleted = auditView(
+      event({
+        kind: 'chat.message_deleted',
+        detail: { preview: '둘만 아는 말', attachments: ['/f'] },
+      }),
+    )
+    expect(deleted).toMatchObject({ summary: '채팅 메시지 삭제', detail: '1개 첨부' })
+    expect(JSON.stringify(deleted)).not.toContain('둘만 아는 말')
+    expect(
+      auditView(event({ kind: 'docs.folder_deleted', detail: { title: '회의록' } })),
+    ).toMatchObject({ summary: '폴더 삭제', detail: '회의록' })
+  })
+
   it('모르는 종류는 종류 이름을 그대로 보여 준다', () => {
     // 줄이 사라지거나 빈칸이 되면 "무슨 일이 있었는지 다 남는다" 는 전제가 깨진다.
     const view = auditView(event({ kind: 'approvals.something_new' }))
