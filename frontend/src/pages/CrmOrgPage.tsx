@@ -35,6 +35,7 @@ import {
   stageLabel,
   type Activity,
   type Contact,
+  REASON_MAX,
 } from '@/features/crm/types'
 import { ApiError } from '@/lib/api'
 import { formatDateTime, formatRelative } from '@/lib/datetime'
@@ -430,6 +431,7 @@ function DeleteOrgModal({
               {...slot}
               rows={3}
               value={reason}
+              maxLength={REASON_MAX}
               autoFocus
               onChange={(e) => setReason(e.target.value)}
             />

@@ -45,6 +45,10 @@ export const STALE_DAYS = [30, 90, 180] as const
 export const ORG_NAME_MAX = 100
 export const MEMO_MAX = 2000
 export const ACTIVITY_BODY_MAX = 5000
+/** 담당자의 이름·부서 직함·전화·이메일. 백엔드 `routers/crm.py` 의 `Short`·`ContactName`·`Email`. */
+export const CONTACT_FIELD_MAX = 200
+/** 기관 삭제 사유와 안건 중단 사유. 백엔드 `REASON_MAX`. */
+export const REASON_MAX = 500
 
 export interface Person {
   id: string
@@ -209,6 +213,8 @@ export const DEAL_STATUS_LABEL: Record<DealStatus, string> = {
 }
 
 export const DEAL_NAME_MAX = 200
+/** 안건의 다음 할 일. 백엔드 `NextAction`. */
+export const NEXT_ACTION_MAX = 500
 
 export interface Deal {
   id: string

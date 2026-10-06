@@ -33,6 +33,9 @@ import {
   type ImportRow,
   type ImportUndone,
   type LastImport,
+  CONTACT_FIELD_MAX,
+  NEXT_ACTION_MAX,
+  REASON_MAX,
 } from '@/features/crm/types'
 import { EMAIL_PATTERN } from '@/features/admin/types'
 import { toISODate } from '@/lib/datetime'
@@ -439,7 +442,9 @@ export function deleteOrg(user: User, id: string, reason: unknown): Failure | nu
   const org = aliveOrg(id)
   if (!org) return notFound('기관을')
   // 검증 실패는 전부 422 다(백엔드 #311. 설계서의 400 을 서버가 422 로 통일했다).
-  if (typeof reason !== 'string' || !reason.trim()) return invalid('사유를 적어 주세요.')
+  if (typeof reason !== 'string' || !reason.trim() || reason.trim().length > REASON_MAX) {
+    return invalid(`사유를 1자 이상 ${REASON_MAX}자 이하로 적어 주세요.`)
+  }
   const open = aliveDeals().filter((d) => d.org_id === id && d.status === 'open').length
   if (open) {
     return fail(
@@ -491,6 +496,12 @@ function checkContactInput(input: Partial<ContactInput>): Failure | null {
     return invalid('담당자 이름을 입력해 주세요.')
   }
   if (input.email && !EMAIL_PATTERN.test(input.email)) return invalid('이메일 형식이 아닙니다.')
+  // 서버는 이 네 칸을 200자로 막는다(`Short`·`ContactName`·`Email`).
+  for (const key of ['name', 'title', 'phone', 'email'] as const) {
+    if ((input[key]?.trim().length ?? 0) > CONTACT_FIELD_MAX) {
+      return invalid(`담당자 정보는 칸마다 ${CONTACT_FIELD_MAX}자를 넘을 수 없습니다.`)
+    }
+  }
   if (input.memo !== undefined && input.memo.length > MEMO_MAX) {
     return invalid(`메모는 ${MEMO_MAX}자를 넘을 수 없습니다.`)
   }
@@ -1000,6 +1011,9 @@ function checkDealInput(input: Partial<DealInput>, currentOwner: string | null):
     }
   }
   if (input.org_id !== undefined && !aliveOrg(input.org_id)) return invalid('기관을 골라 주세요.')
+  if ((input.next_action?.trim().length ?? 0) > NEXT_ACTION_MAX) {
+    return invalid(`다음 할 일은 ${NEXT_ACTION_MAX}자를 넘을 수 없습니다.`)
+  }
   // 퇴사한 기존 담당자는 그대로 둘 수 있다. 새로 앉히는 사람만 재직 여부를 본다(기관 창구와 같다).
   if (input.owner_id && input.owner_id !== currentOwner && !findAccount(input.owner_id)?.active) {
     return invalid('담당자는 재직 중인 사람만 지정할 수 있습니다.')
@@ -1132,7 +1146,9 @@ export function dropDeal(
   const row = findDeal(id)
   if (!row || !aliveOrg(row.org_id)) return notFound('안건을')
   const reason = typeof body.reason === 'string' ? body.reason.trim() : ''
-  if (!reason) return invalid('중단 사유를 적어 주세요.')
+  if (!reason || reason.length > REASON_MAX) {
+    return invalid(`중단 사유를 1자 이상 ${REASON_MAX}자 이하로 적어 주세요.`)
+  }
   if (body.version !== row.version) return conflict()
   if (row.status !== 'open') return fail(409, 'CONFLICT', '진행 중인 안건만 중단할 수 있습니다.')
   row.status = 'dropped'
