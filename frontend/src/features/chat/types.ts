@@ -46,7 +46,7 @@ export type ChatEvent =
    */
   | { ev: 'msg_edit'; channel_id: string; message: ChatMessage }
   | { ev: 'msg_del'; channel_id: string; message_id: string }
-  /** 알림 행 하나(`realtime/chat.py` 의 `push_notice`). 멘션·댓글·새 글이 생긴 순간에 온다. */
+  /** 알림 행 하나(`realtime/chat.py` 의 `push_notice`). 멘션·댓글·새 글·결재 알림이 생긴 순간에 온다. */
   | ({ ev: 'notice' } & Pick<Notification, 'id' | 'kind' | 'payload' | 'created_at'>)
   /** 내 안읽음 숫자. 새 메시지 때는 사람마다 자기 숫자, `read` 뒤에는 본인에게 0. */
   | { ev: 'unread'; channel_id: string; count: number }

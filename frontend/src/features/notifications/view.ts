@@ -149,7 +149,7 @@ export function notificationView(
   if (!p) return null
   if (notification.kind === 'post') return postView(p)
   if (MENTION_KINDS.includes(notification.kind)) return mentionView(p)
-  if (notification.kind in APPROVAL_SUFFIX) return approvalView(notification.kind, p)
+  if (Object.hasOwn(APPROVAL_SUFFIX, notification.kind)) return approvalView(notification.kind, p)
   return null
 }
 
