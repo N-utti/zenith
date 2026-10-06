@@ -354,7 +354,7 @@ export function auditView(event: AuditEvent): AuditView {
     case 'approvals.force_closed':
       return { summary: '결재 강제 종결', detail: text(detail, 'reason'), tone: 'warning' }
 
-    // 임원이 기안하면 결재선이 비어 상신과 동시에 확정된다.
+    // 임원이 기안하면 결재자가 없어 상신과 동시에 확정된다.
     case 'approvals.auto_approved':
       return {
         summary: '결재 자동 확정',
@@ -432,12 +432,24 @@ export function auditView(event: AuditEvent): AuditView {
       }
     }
 
-    case 'channels.members_changed':
-      return detail?.created
-        ? { summary: '비공개 채널 생성', detail: count(detail, 'added', '명'), tone: 'neutral' }
-        : Array.isArray(detail?.removed)
-          ? { summary: '채널에서 내보냄', detail: count(detail, 'removed', '명'), tone: 'neutral' }
-          : { summary: '채널에 초대', detail: count(detail, 'added', '명'), tone: 'neutral' }
+    case 'channels.members_changed': {
+      if (detail?.created) {
+        return {
+          summary: '비공개 채널 생성',
+          detail: count(detail, 'added', '명'),
+          tone: 'neutral',
+        }
+      }
+      const removed = detail?.removed
+      if (Array.isArray(removed)) {
+        // 스스로 나가도 같은 기록이 남는다. 내보낸 것으로 읽히지 않게 가른다.
+        const left = removed.length === 1 && removed[0] === event.actor_id
+        return left
+          ? { summary: '채널에서 나감', tone: 'neutral' }
+          : { summary: '채널에서 내보냄', detail: count(detail, 'removed', '명'), tone: 'neutral' }
+      }
+      return { summary: '채널에 사람 추가', detail: count(detail, 'added', '명'), tone: 'neutral' }
+    }
 
     // 채팅 본문은 서버 기록에 앞부분이 남지만 여기서는 그리지 않는다. DM 도 이 종류로 남는다.
     case 'chat.message_edited':

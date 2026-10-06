@@ -91,6 +91,17 @@ describe('auditView', () => {
         }),
       ).summary,
     ).toBe('비공개 채널 생성')
+    // 스스로 나가도 같은 기록이 남는다(행위자와 빠진 사람이 같다).
+    expect(
+      auditView(event({ kind: 'channels.members_changed', detail: { removed: ['u-1'] } })).summary,
+    ).toBe('채널에서 나감')
+    expect(
+      auditView(event({ kind: 'channels.members_changed', detail: { added: ['u-2'] } })),
+    ).toMatchObject({ summary: '채널에 사람 추가', detail: '1명' })
+    const edited = auditView(
+      event({ kind: 'chat.message_edited', detail: { before: '고치기 전 말' } }),
+    )
+    expect(JSON.stringify(edited)).not.toContain('고치기 전 말')
     const deleted = auditView(
       event({
         kind: 'chat.message_deleted',
