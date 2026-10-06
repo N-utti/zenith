@@ -62,7 +62,15 @@ async def test_upload_then_img_src_download(
     assert r.headers["content-disposition"] == "inline"
     assert r.headers["x-content-type-options"] == "nosniff"
     assert r.headers["content-security-policy"] == "default-src 'none'; sandbox"
-    assert r.headers["cache-control"] == "private, max-age=86400"
+    # no-cache + ETag(#328) — 열 때마다 쿠키로 재검증, 같은 파일이면 304 로 MinIO 를 안 탄다
+    assert r.headers["cache-control"] == "private, no-cache"
+    assert r.headers["etag"] == f'"{body["id"]}"'
+    r304 = await client.get(body["url"], headers={"If-None-Match": r.headers["etag"]})
+    assert r304.status_code == 304 and r304.content == b""
+    assert (
+        r304.headers["content-security-policy"] == "default-src 'none'; sandbox"
+    )  # 304 도 같은 보안 헤더
+    assert (await client.get(body["url"], headers={"If-None-Match": '"x"'})).status_code == 200
 
     # 다른 사용자도 읽는다(문서에 열람 등급 없음) — 로그인 없이는 401
     other = make_client()
@@ -72,6 +80,9 @@ async def test_upload_then_img_src_download(
     anon = make_client()
     async with anon:
         assert (await anon.get(body["url"])).status_code == 401
+        # 304 도 인증 뒤 — 로그인 없이 ETag 를 들고 와도 401(304 로 캐시를 살려 주지 않는다)
+        r = await anon.get(body["url"], headers={"If-None-Match": f'"{body["id"]}"'})
+        assert r.status_code == 401
     assert (await client.get("/api/files/00000000-0000-0000-0000-000000000000")).status_code == 404
 
 
