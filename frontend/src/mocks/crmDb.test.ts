@@ -888,3 +888,75 @@ describe('가져오기 되돌리기 (15 §9 에 없는 경로. 가져온 사람�
     expect(listOrgs({ q: '어제 가져온 기관' })).toHaveLength(1)
   })
 })
+
+describe('이미 쓰인 것은 등록한 사람도 못 지운다 (백엔드 #318 과 같은 판정)', () => {
+  const deal = (name: string) =>
+    ok(
+      createDeal(fund, {
+        kind: 'investment',
+        name,
+        org_id: 'org-4',
+        owner_id: null,
+        amount_krw: null,
+        target_date: null,
+        next_action: '',
+        next_action_due: null,
+      }),
+    )
+
+  it('안건: 끝났거나 남이 단계를 옮겼으면 임원만 지운다', () => {
+    const dropped = deal('중단한 안건')
+    ok(dropDeal(fund, dropped.id, { reason: '보류', version: dropped.version }))
+    expect(ok(getDeal(fund, dropped.id)).can_delete).toBe(false)
+
+    const moved = deal('남이 옮긴 안건')
+    ok(updateDeal(infra, moved.id, { stage: 'screening', version: moved.version }))
+    expect(ok(getDeal(fund, moved.id)).can_delete).toBe(false)
+    expect(deleteDeal(fund, moved.id)).toMatchObject({ status: 403 })
+    expect(deleteDeal(exec, moved.id)).toBeNull()
+
+    // 내가 옮긴 것만 있으면 지운다.
+    const mine = deal('내가 옮긴 안건')
+    ok(updateDeal(fund, mine.id, { stage: 'screening', version: mine.version }))
+    expect(deleteDeal(fund, mine.id)).toBeNull()
+  })
+
+  it('담당자: 남이 이직 처리했으면 임원만 지운다', () => {
+    const contact = ok(
+      createContact(fund, {
+        org_id: 'org-4',
+        name: '옮겨진 사람',
+        title: '',
+        phone: '',
+        email: '',
+        memo: '',
+      }),
+    )
+    ok(updateContact(infra, contact.id, { org_id: 'org-2' }))
+    expect(ok(getOrg(fund, 'org-2')).contacts.find((c) => c.id === contact.id)?.can_delete).toBe(
+      false,
+    )
+    expect(deleteContact(fund, contact.id)).toMatchObject({ status: 403 })
+    expect(deleteContact(exec, contact.id)).toBeNull()
+  })
+
+  it('가져오기 되돌리기: 누가 창구를 맡은 기관은 담당자째 남긴다', () => {
+    ok(
+      importContacts(
+        fund,
+        [
+          ['기관', '이름'],
+          ['창구 생긴 기관', '자'],
+        ],
+        false,
+      ),
+    )
+    const org = listOrgs({ q: '창구 생긴 기관' })[0]!
+    ok(updateOrg(infra, org.id, { owner_ids: [infra.id] }))
+    expect(ok(undoImport(fund, lastImport(fund)!.id))).toMatchObject({
+      removed_orgs: 0,
+      kept_orgs: 1,
+      kept_contacts: 1,
+    })
+  })
+})
