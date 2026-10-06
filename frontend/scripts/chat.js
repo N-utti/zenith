@@ -350,6 +350,26 @@ export function handleChatConnection(conn, userId) {
 
 // ── HTTP ─────────────────────────────────────────────────────
 
+/**
+ * 채널 이름을 실서버(`routers/channels.py` 의 `_clean_name`, #308)처럼 다듬는다. 거절이면 `error`.
+ * 실서버의 이 거절은 Pydantic 422 라 `detail` 이 문자열이 아니라 배열이다. 화면이 그 모양을 받는지
+ * 개발에서도 보이게 같은 모양으로 돌려준다(`nameRejected`).
+ */
+function cleanChannelName(raw) {
+  const name = raw.normalize('NFKC').trim()
+  if (/[\p{C}\p{Zl}\p{Zp}]/u.test(name)) return { error: '이름에 쓸 수 없는 문자가 있습니다.' }
+  if (!name) return { error: '이름을 적어 주세요.' }
+  if ([...name].length > 100) return { error: '이름은 100자 이하여야 합니다.' }
+  return { name }
+}
+
+function nameRejected(res, error) {
+  return json(res, 422, {
+    detail: [{ type: 'value_error', loc: ['body', 'name'], msg: `Value error, ${error}` }],
+    code: 'VALIDATION',
+  })
+}
+
 function json(res, status, body) {
   const payload = JSON.stringify(body)
   res.writeHead(status, {
@@ -549,11 +569,12 @@ export async function handleChatRequest(req, res, url) {
 
     // `readBody` 는 본문 전체를 준다. 메시지 전송은 그 안의 `body` 필드를 쓰지만 여기는 아니다.
     const payload = await readBody(req)
-    const name = typeof payload?.name === 'string' ? payload.name.trim() : undefined
+    const cleaned = typeof payload?.name === 'string' ? cleanChannelName(payload.name) : undefined
+    const name = cleaned?.name
     const dmUserId = typeof payload?.dm_user_id === 'string' ? payload.dm_user_id : undefined
 
     // 백엔드 `ChannelCreateIn` 은 둘 중 하나만 받는다.
-    if ((name === undefined) === (dmUserId === undefined)) {
+    if ((cleaned === undefined) === (dmUserId === undefined)) {
       return json(res, 422, {
         detail: 'name 또는 dm_user_id 중 하나만 보낸다.',
         code: 'VALIDATION',
@@ -590,12 +611,7 @@ export async function handleChatRequest(req, res, url) {
       return json(res, 201, createdView(channel, viewerId))
     }
 
-    if (!name || name.length > 100) {
-      return json(res, 422, {
-        detail: '채널 이름은 1자 이상 100자 이하여야 합니다.',
-        code: 'VALIDATION',
-      })
-    }
+    if (cleaned.error) return nameRejected(res, cleaned.error)
 
     // 비공개 채널. 만든 사람과 고른 사람만 멤버다. 혼자 만들고 나중에 사람을 더해도 된다.
     // 두 칸은 같이 와야 한다. 한쪽만 오거나 모양이 틀린 요청을 무시하면 전원이 들어오는
@@ -755,13 +771,9 @@ export async function handleChatRequest(req, res, url) {
     if (channel.is_dm) {
       return json(res, 422, { detail: 'DM 은 이름을 바꿀 수 없습니다.', code: 'VALIDATION' })
     }
-    const name = typeof payload?.name === 'string' ? payload.name.trim() : ''
-    if (!name || name.length > 100) {
-      return json(res, 422, {
-        detail: '채널 이름은 1자 이상 100자 이하여야 합니다.',
-        code: 'VALIDATION',
-      })
-    }
+    const cleaned = cleanChannelName(typeof payload?.name === 'string' ? payload.name : '')
+    if (cleaned.error) return nameRejected(res, cleaned.error)
+    const { name } = cleaned
     // 만들 때와 같다. 공개 채널끼리만 견주고, 비공개 채널의 이름은 겹쳐도 막지 않는다.
     const taken = CHANNELS.some(
       (c) => c !== channel && !c.is_dm && !c.is_private && c.name === name,
