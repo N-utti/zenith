@@ -29,13 +29,21 @@ export function isDesktopShell(): boolean {
  * 웹은 Caddy 의 보안 정책 헤더(`img-src 'self' data:`)가 막는다. 셸은 그 헤더를 받지 않고, 셸 정책
  * (`tauri.conf.json`)은 서버 주소를 몰라 `http: https:` 를 연다. 서버 주소는 실행 중에 정해지므로
  * (현장 탈출구 포함) 여기서 정책을 하나 더 건다. 브라우저는 두 정책을 다 만족하는 그림만 받는다.
- * 첫 그림이 그려지기 전에 불러야 한다.
+ * 첫 그림이 그려지기 전에 불러야 한다. 스크립트의 `fetch` 는 이 정책이 아니라 연결 정책을 따른다.
  */
 export function restrictImageSources(): void {
   if (!isDesktopShell()) return
+  // 오리진만 쓴다. 경로가 붙으면 그 경로 밖의 그림이 막히고, `*` 같은 값은 전부 연다.
+  // 주소로 읽히지 않으면 서버를 빼서 닫힌 쪽으로 둔다.
+  let server = ''
+  try {
+    server = new URL(serverOrigin()).origin
+  } catch {
+    // 서버 주소가 비었거나 주소가 아니다.
+  }
   const meta = document.createElement('meta')
   meta.httpEquiv = 'Content-Security-Policy'
-  meta.content = `img-src 'self' data: blob: ${serverOrigin()}`.trim()
+  meta.content = `img-src 'self' data: ${server}`.trim()
   document.head.append(meta)
 }
 

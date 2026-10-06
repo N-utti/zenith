@@ -62,10 +62,10 @@ VITE_SERVER_ORIGIN=https://zenith.example.co.kr
 ```
 
 설치 후에 서버가 옮겨 갔다면 재빌드 없이도 바꿀 수 있다.
-개발자 도구 콘솔에서 `localStorage.setItem('zenith.serverOrigin', 'https://새주소')` 후 재시작.
+개발자 도구 콘솔에서 `localStorage.setItem('zenith.serverOrigin', 'https://새주소')` 후 재시작(경로 없이 주소만).
 (빌드 기본값보다 이 값이 우선한다. `frontend/src/lib/serverOrigin.ts`)
 
-그림은 앱 자신과 이 서버 주소에서만 받는다. 셸 정책(`tauri.conf.json` 의 `img-src`)은 서버 주소를 몰라 열려 있고,
+그림(`<img>`·CSS `url()`)은 앱 자신과 이 서버 주소에서만 받는다. 셸 정책(`tauri.conf.json` 의 `img-src`)은 서버 주소를 몰라 열려 있고,
 웹앱이 켜질 때 지금 붙은 서버 주소로 정책을 하나 더 건다(`frontend/src/lib/desktop.ts` 의 `restrictImageSources`).
 문서·채팅에 섞여 든 바깥 그림 주소가 사내망 밖으로 요청을 내지 못하게 하려는 것이다. 웹은 Caddy 헤더가 같은 일을 한다.
 
