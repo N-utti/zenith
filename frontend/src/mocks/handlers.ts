@@ -901,8 +901,8 @@ export const handlers = [
     await delay(300)
     return approvalResponse(updateDraft(user, String(params.id), input))
   }),
-  // 임시저장 지우기. 실서버에는 아직 없는 경로다(13 §9.3 에 없음, 프론트가 정한 가정):
-  // 내 임시저장만 204, 남의 것이나 없는 것은 404, 상신한 문서는 409 `NOT_DRAFT`.
+  // 임시저장 지우기(백엔드 #316): 내 임시저장만 204, 남의 것이나 없는 것은 404, 상신한 문서는
+  // 409 `NOT_DRAFT`.
   http.delete('/api/approvals/drafts/:id', async ({ params }) => {
     const user = authenticate()
     if (!user) return unauthorized()
@@ -1267,7 +1267,7 @@ export const handlers = [
     }
     return HttpResponse.json(result.item, { status: 201 })
   }),
-  // 휴일 이름 고치기. 지우기와 같이 프론트 확장이다(계약에는 목록과 추가뿐). 이름만 바꾼다.
+  // 휴일 이름 고치기(백엔드 #316). 회사 휴일의 이름만 바꾼다. 마감된 달에도 된다.
   http.patch('/api/admin/holidays/:date', async ({ request, params }) => {
     const user = authenticate()
     if (!user) return unauthorized()
@@ -1516,11 +1516,11 @@ export const handlers = [
     '/api/leaves',
     authed((user, request) => {
       const params = new URL(request.url).searchParams
-      // `scope=all` 은 04 에 없는 확장(홈 캘린더). 백엔드가 붙을 때 계약을 맞춘다.
+      // `scope=all` 은 04 에 없는 확장(홈 캘린더). 백엔드 #316 이 이 모양으로 받았다.
       if (params.get('scope') === 'all') {
         const from = params.get('from') ?? ''
         const to = params.get('to') ?? ''
-        return HttpResponse.json({ items: listLeavesInRange(from, to) })
+        return HttpResponse.json({ items: listLeavesInRange(user, from, to) })
       }
       return HttpResponse.json({ items: listLeaves(user) })
     }),
@@ -2131,7 +2131,7 @@ data: ${JSON.stringify(data)}
   }),
 
   // ── CRM 주소록 (15 CRM 모듈 설계서 §9) ─────────────────────
-  // 백엔드가 아직 없다(v1.1). 모양은 설계서 §9 를 따른 가정이다.
+  // 백엔드 #311·#318 이 이 모양으로 받았다(설계서 §9 를 넓힌 것).
   http.get(
     '/api/crm/orgs',
     authed((_, request) => {

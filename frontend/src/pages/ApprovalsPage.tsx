@@ -7,7 +7,7 @@ import { SkeletonRows } from '@/components/ui/Skeleton'
 import { Table, TableEmpty, TBody, TD, TH, THead, TR } from '@/components/ui/Table'
 import { Tabs } from '@/components/ui/Tabs'
 import { useToast } from '@/components/ui/ToastContext'
-import { DRAFT_DELETE_ENABLED, useApprovals, useDeleteDraft } from '@/features/approvals/api'
+import { useApprovals, useDeleteDraft } from '@/features/approvals/api'
 import {
   APPROVAL_TYPE_LABEL,
   BOX_LABEL,
@@ -32,7 +32,7 @@ export function ApprovalsPage() {
   const removeDraft = useDeleteDraft()
   const toast = useToast()
   // 임시저장 탭에만 지우기 칸이 붙는다. 다른 탭의 문서는 이력이라 지우지 않는다.
-  const deletable = DRAFT_DELETE_ENABLED && box === 'draft'
+  const deletable = box === 'draft'
   const columns = deletable ? 6 : 5
 
   return (

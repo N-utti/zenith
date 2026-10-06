@@ -403,7 +403,7 @@ export function updateDraft(user: User, id: string, input: DraftInput): Approval
 
 /**
  * 임시저장을 지운다. 내 것, 아직 상신하지 않은 것만. 상신한 문서는 이력이라 지우지 않는다
- * (회수·반려로 끝낸 것도 남는다). 서버에는 아직 없는 경로다(`handlers.ts` 의 주석).
+ * (회수·반려로 끝낸 것도 남는다). 백엔드 #316 과 같다.
  */
 export function deleteDraft(user: User, id: string): Failure | null {
   const index = docs.findIndex((d) => d.id === id)

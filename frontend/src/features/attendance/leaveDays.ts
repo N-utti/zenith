@@ -2,8 +2,8 @@
  * 신청 기간의 차감 일수. 확정값은 서버가 `days` 로 준다(04 §10.2). 여기서는 폼에서
  * "며칠 차감되는지"를 미리 보여 주고, 잔여 초과를 제출 전에 막는 용도다.
  *
- * ponytail: 주말만 뺀다. 공휴일(`holidays`)은 목에도 서버에도 아직 없다. 서버가 달력을
- * 갖게 되면 응답의 `days` 를 그대로 믿고 이 값은 안내로만 남긴다.
+ * ponytail: 주말만 뺀다. 서버(#316)는 휴일까지 빼서 세므로, 휴일이 낀 기간은 여기 값이 서버보다
+ * 크다(잔여 초과를 너무 일찍 막을 수 있다). 확정값은 응답의 `days` 다.
  */
 export function countWorkdays(startIso: string, endIso: string): number {
   const [sy, sm, sd] = startIso.split('-').map(Number)

@@ -157,14 +157,18 @@ export function listLeaves(user: User): LeaveRequest[] {
 }
 
 /** 기간이 겹치는 전 직원의 승인 휴가. 전 직원을 훑어야 아직 근태 화면을 안 연 사람의 것도 나온다. */
-export function listLeavesInRange(from: string, to: string): LeaveOnCalendar[] {
+/**
+ * 홈 캘린더의 전사 휴가. 남의 휴가는 종류를 `leave` 로 가린다. 본인과 임원만 원래 종류를 본다
+ * (병가·경조사는 남에게 알릴 일이 아니다, 백엔드 #316).
+ */
+export function listLeavesInRange(viewer: User, from: string, to: string): LeaveOnCalendar[] {
   return MOCK_USERS.flatMap((user) =>
     listFor(user)
       .filter((r) => r.status === 'approved' && r.start_date <= to && r.end_date >= from)
       .map((r) => ({
         id: r.id,
         user: { id: user.id, name: user.name },
-        type_code: r.type_code,
+        type_code: user.id === viewer.id || viewer.role === 'exec' ? r.type_code : 'leave',
         start_date: r.start_date,
         end_date: r.end_date,
       })),
