@@ -35,13 +35,14 @@ from pycrdt import (
     YSyncMessageType,
     create_awareness_message,
     create_sync_message,
+    create_update_message,
     handle_sync_message,
     read_message,
 )
 from sqlalchemy import func, update
 
 from app.db import session_scope
-from app.deps import _own_origin, authenticate, origin_allowed
+from app.deps import _own_origin, authenticate, origin_allowed, ws_reject
 from app.errors import ApiError
 from app.models import Document
 
@@ -154,6 +155,7 @@ async def _open_room(doc_id: uuid.UUID) -> Room | None:
 
 async def save_room(room: Room) -> None:
     """Y.Doc 전체 상태를 원본으로, 제목·평문·tsv 를 파생으로 적는다(03 §2.1). 더러워진 것이 없으면 아무것도 안 한다."""
+    gone = False
     async with room.lock:
         if not room.dirty:
             return
@@ -163,7 +165,8 @@ async def save_room(room: Room) -> None:
             values: dict = {
                 "ydoc_snapshot": room.doc.get_update(),
                 "text_cache": text,
-                "tsv": func.to_tsvector("simple", text[:900_000]),  # tsvector 는 1MB 가 상한
+                # tsvector 는 1MB(바이트) 상한 — 한글은 3바이트라 글자 수로 자르면 넘친다(#340 리뷰)
+                "tsv": func.to_tsvector("simple", text.encode()[:900_000].decode(errors="ignore")),
                 "updated_at": datetime.now(UTC),
             }
             if room.last_editor is not None:
@@ -174,8 +177,12 @@ async def save_room(room: Room) -> None:
                 values["title"] = title
             async with session_scope() as db:
                 try:
-                    await db.execute(
-                        update(Document).where(Document.id == room.doc_id).values(**values)
+                    result = await db.execute(
+                        # 살아 있는 행만(#340) — 저장 사이에 휴지통·영구 삭제로 갔으면 0행. 지운 사람(updated_by)을
+                        # 덮어쓰지 않고, 되살아난 방(퇴장 저장 실패 → 복구)이 지운 문서를 다시 쓰는 길도 막는다
+                        update(Document)
+                        .where(Document.id == room.doc_id, Document.deleted_at.is_(None))
+                        .values(**values)
                     )
                     await db.commit()
                 except Exception:
@@ -184,9 +191,13 @@ async def save_room(room: Room) -> None:
             if title is not None:
                 room.projected_title = title
             room.saved_at = datetime.now(UTC)
+            gone = result.rowcount == 0
         except Exception:
             room.dirty = True  # 실패했으니 다음 기회에 다시
             raise
+    if gone:
+        log.info("yjs 저장 건너뜀 %s: 문서가 지워졌다 — 방을 걷는다", room.doc_id)
+        await close_room(room.doc_id)
 
 
 async def _send(room: Room, conn: WebSocket, message: bytes) -> None:
@@ -245,8 +256,50 @@ async def _leave(room: Room, websocket: WebSocket) -> None:
             await save_room(room)
         except Exception:
             log.exception("yjs 저장 실패 %s", room.doc_id)
+            if last:
+                # 방을 이미 걷었는데 저장이 실패하면 편집이 메모리에서 사라진다(#340 H4). 방을 되돌려 놓고 뒤에서
+                # 다시 저장한다. 그사이 새 방이 열렸으면 그 방은 실패한 편집 전의 DB 를 읽었다 — 거기에 합친다.
+                async with _rooms_lock:
+                    other = ROOMS.setdefault(room.doc_id, room)
+                if other is room:
+                    task = asyncio.get_running_loop().create_task(_retry_save(room))
+                    # 이벤트 루프는 태스크를 약하게만 잡는다 — 끝날 때까지 참조를 든다
+                    _retries.add(task)
+                    task.add_done_callback(_retries.discard)
+                else:
+                    merged = room.doc.get_update()
+                    other.doc.apply_update(merged)
+                    other.dirty = True
+                    other.last_editor = other.last_editor or room.last_editor
+                    await _broadcast(other, create_update_message(merged), exclude=None)
         finally:
             pending_saves -= 1
+
+
+# 초 — DB 가 잠깐 끊긴 경우를 넘긴다. 전부 실패하면 방은 더러운 채 남는다(다음 접속자의 퇴장 때 다시).
+# ponytail: 프로세스 종료 때 더러운 방을 저장하는 lifespan 훅은 없다 — 재시작 전에는 접속자가 다 나가야 한다.
+RETRY_DELAYS = (5.0, 30.0, 120.0)
+_retries: set[asyncio.Task] = set()
+
+
+async def _retry_save(room: Room) -> None:
+    """마지막 사람이 나간 뒤 저장이 실패한 방을 다시 저장한다. 그사이 누가 들어와 저장했으면 할 일이 없다."""
+    for delay in RETRY_DELAYS:
+        await asyncio.sleep(delay)
+        if ROOMS.get(room.doc_id) is not room:
+            return  # 방이 바뀌었다(새 방이 열렸거나 close_room) — 그쪽 흐름이 책임진다
+        try:
+            await save_room(room)
+        except Exception:
+            log.exception("yjs 재저장 실패 %s", room.doc_id)
+            continue
+        async with _rooms_lock:
+            if not room.conns and ROOMS.get(room.doc_id) is room:
+                ROOMS.pop(room.doc_id, None)  # 저장됐고 아무도 없으니 걷는다
+        return
+    log.error(
+        "yjs 저장 포기 %s — 방을 메모리에 남긴다(다음 접속자의 퇴장 때 다시 시도)", room.doc_id
+    )
 
 
 async def yjs_endpoint(websocket: WebSocket, doc_id: uuid.UUID) -> None:
@@ -254,17 +307,24 @@ async def yjs_endpoint(websocket: WebSocket, doc_id: uuid.UUID) -> None:
         log.info("yjs 거부 %s: CSRF_ORIGIN %s", doc_id, websocket.headers.get("origin"))
         await websocket.close(code=4403)
         return
+    # 인증 실패·없는 문서는 accept 뒤 4401/4404(deps.ws_reject, #340) — y-websocket 은 44xx 를 영구 종료로 보고
+    # 재접속하지 않지만, accept 전 close 는 HTTP 403 → 1006 이라 그 판정을 못 했다. 인증이 문서 조회보다 먼저라
+    # 비인증은 문서 존재 여부를 모른다. TC-SEC-03: 쿠키 없이는 바이트 하나도 받지 못한다. DB 끊김은 1013.
     try:
         async with session_scope() as db:
             user, _session = await authenticate(websocket.cookies, db)
+        room = await _open_room(doc_id)
     except ApiError as e:
         log.info("yjs 거부 %s: %s", doc_id, e.code)
-        await websocket.close(code=4401)  # TC-SEC-03: 쿠키 없이는 핸드셰이크에서 거부
+        await ws_reject(websocket, 4401)
         return
-    room = await _open_room(doc_id)
+    except Exception as e:  # noqa: BLE001 — DB 접속 실패 등
+        log.warning("yjs 핸드셰이크 실패 %s: %s %s", doc_id, type(e).__name__, e)
+        await ws_reject(websocket, 1013)
+        return
     if room is None:
         log.info("yjs 거부 %s: NOT_FOUND", doc_id)
-        await websocket.close(code=4404)
+        await ws_reject(websocket, 4404)
         return
 
     await websocket.accept()
@@ -278,17 +338,30 @@ async def yjs_endpoint(websocket: WebSocket, doc_id: uuid.UUID) -> None:
                 create_awareness_message(room.awareness.encode_awareness_update(others))
             )
         while True:
-            message = await websocket.receive_bytes()
+            remaining = REAUTH_INTERVAL - (datetime.now(UTC) - checked_at)
+            message: bytes | None
+            try:
+                async with asyncio.timeout(max(remaining.total_seconds(), 0)):
+                    message = await websocket.receive_bytes()
+            except TimeoutError:
+                message = None  # 조용한 소켓도 주기적으로 세션을 다시 본다(chat 과 같게, #340)
+            if datetime.now(UTC) - checked_at >= REAUTH_INTERVAL:
+                try:
+                    async with session_scope() as db:
+                        # 회수됐으면 ApiError → 아래서 닫힌다. exp 는 안 본다(deps.authenticate 참조)
+                        await authenticate(websocket.cookies, db, verify_exp=False)
+                except ApiError:
+                    raise
+                except Exception as e:  # noqa: BLE001 — DB 가 잠깐 끊김. 핸드셰이크와 같은 1013 으로(#340)
+                    log.warning("yjs 재검증 실패 %s: %s %s", doc_id, type(e).__name__, e)
+                    await websocket.close(code=1013)
+                    break
+                checked_at = datetime.now(UTC)
             if not message:
                 continue
             if len(message) > MAX_FRAME:
                 await websocket.close(code=1009)
                 break
-            if datetime.now(UTC) - checked_at >= REAUTH_INTERVAL:
-                async with session_scope() as db:
-                    # 회수됐으면 ApiError → 아래서 닫힌다. exp 는 안 본다(deps.authenticate 참조)
-                    await authenticate(websocket.cookies, db, verify_exp=False)
-                checked_at = datetime.now(UTC)
             kind = message[0]
             if kind == YMessageType.SYNC:
                 reply = handle_sync_message(message[1:], room.doc)  # step1 이면 step2 를 돌려준다

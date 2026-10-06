@@ -1,6 +1,7 @@
 """요청 단위 인증·권한·CSRF 의존성."""
 
 import hmac
+import logging
 from collections.abc import Callable, Coroutine, Mapping
 from datetime import UTC, datetime
 from typing import Any
@@ -9,6 +10,7 @@ from fastapi import Depends, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.requests import HTTPConnection
+from starlette.websockets import WebSocket
 
 from app import audit
 from app.config import settings
@@ -16,6 +18,8 @@ from app.db import get_db
 from app.errors import ApiError
 from app.models import ROLE_RANK, AuthSession, Role, User
 from app.security import csrf_token, decode_token, session_id_from_cookies
+
+log = logging.getLogger(__name__)
 
 Auth = tuple[User, AuthSession]
 
@@ -138,3 +142,16 @@ async def csrf_guard(request: Request) -> None:
         header = request.headers.get("x-csrf-token", "")
         if session_id is None or not hmac.compare_digest(header, csrf_token(session_id)):
             raise ApiError(403, "CSRF_TOKEN", "CSRF 토큰이 없거나 일치하지 않습니다.")
+
+
+async def ws_reject(websocket: WebSocket, code: int) -> None:
+    """핸드셰이크 거부를 close code 로 — accept 하고 바로 닫는다(#340).
+
+    accept 전 close 는 uvicorn 이 HTTP 403 으로 바꿔 브라우저는 1006 만 보고 이유를 모른다(비활성화된 계정이
+    재접속을 되풀이했다). 데이터 프레임은 하나도 보내지 않으니 핸드셰이크 거부와 같다. 출처(Origin) 거부는 이걸 쓰지 않는다 —
+    남의 사이트에 코드를 알려 줄 이유가 없다. 상대가 이미 끊었으면 조용히 끝난다."""
+    try:
+        await websocket.accept()
+        await websocket.close(code=code)
+    except Exception as e:  # noqa: BLE001
+        log.debug("ws_reject %s 중 상대가 먼저 끊음: %s", code, type(e).__name__)
