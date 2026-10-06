@@ -8,7 +8,7 @@ import type { JSONContent } from '@tiptap/react'
  * 스냅샷 자체는 작고, 대신 Y.Doc이 gc: false 여야 한다.
  */
 
-function toBase64(bytes: Uint8Array): string {
+export function toBase64(bytes: Uint8Array): string {
   // 큰 배열을 한 번에 spread 하면 인자 개수 한계에 걸린다.
   let binary = ''
   const chunk = 0x8000
