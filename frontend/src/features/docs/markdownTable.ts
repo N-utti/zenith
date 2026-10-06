@@ -41,6 +41,24 @@ export function escapeHtml(text: string): string {
   return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 
+/**
+ * 글을 편집기에 넣을 HTML 로 바꾼다. 빈 줄로 문단을, 줄바꿈으로 `<br>` 을 만들고 글자는 전부
+ * 이스케이프한다.
+ *
+ * **AI 초안을 그대로 넣으면 안 된다.** 편집기는 넣는 문자열을 HTML 로 읽는다. AI 가 낸
+ * `<img src="https://…">` 는 그림 블록이 되어 바깥 주소를 부르고(문서 내용을 주소에 실어 밖으로
+ * 보낼 수 있다), 다른 태그는 문서 구조를 바꾼다. 백엔드가 짚은 것이다(#319).
+ */
+export function textToHtml(text: string): string {
+  return text
+    .replace(/\r/g, '')
+    .split(/\n{2,}/)
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .map((p) => `<p>${escapeHtml(p).replace(/\n/g, '<br>')}</p>`)
+    .join('')
+}
+
 /** tiptap 표 확장이 그대로 읽는 HTML. 첫 행은 머리글 셀. */
 export function tableToHtml(rows: string[][]): string {
   const tr = (cells: string[], tag: 'th' | 'td') =>
