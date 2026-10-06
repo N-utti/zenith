@@ -2,9 +2,9 @@ import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import type { Editor } from '@tiptap/react'
 import { Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
-import { api } from '@/lib/api'
+import { ApiError, api } from '@/lib/api'
 import { OPEN_INLINE_AI_EVENT } from './editorBlocks'
-import { parseMarkdownTable, tableToHtml } from './markdownTable'
+import { parseMarkdownTable, tableToHtml, textToHtml } from './markdownTable'
 import { blocksToHtml, type DocTemplate, TEMPLATE_BLOCKS } from './templateBlocks'
 
 /** 04 §8 `POST /ai/doc-action` 의 `action`. 자유 프롬프트는 계약에 없다. */
@@ -135,9 +135,12 @@ export function InlineAiPopover({ editor, docId }: { editor: Editor; docId: stri
       if (reqId.current !== id) return
       setDraft(result.draft ?? null)
       setBlocks(result.blocks ?? null)
-    } catch {
+    } catch (err) {
+      // 서버는 너무 잦은 요청(429)·시간 초과·빈 답(503)에 그대로 보여 줄 문구를 준다(#317).
       if (reqId.current === id) {
-        setError('초안을 만들지 못했습니다. 다시 시도해 주세요.')
+        setError(
+          err instanceof ApiError ? err.message : '초안을 만들지 못했습니다. 다시 시도해 주세요.',
+        )
       }
     } finally {
       if (reqId.current === id) setBusy(false)
@@ -175,7 +178,8 @@ export function InlineAiPopover({ editor, docId }: { editor: Editor; docId: stri
   /** 삽입: 커서 자리에 / 아래에 추가: 커서가 든 최상위 블록 다음에. */
   const apply = (mode: 'inline' | 'below') => {
     if (draft === null && html === null) return
-    const content = html ?? (table ? tableToHtml(table) : (draft ?? ''))
+    // 초안 글은 이스케이프해서 문단으로 넣는다(`textToHtml`). 그대로 넣으면 편집기가 HTML 로 읽는다.
+    const content = html ?? (table ? tableToHtml(table) : textToHtml(draft ?? ''))
     // 응답을 기다리는 동안 남의 편집으로 문서가 줄면 저장해 둔 좌표가 밖으로 나간다. 문서 끝으로 가둔다.
     // ponytail: 상대 좌표(Y.RelativePosition)로 들면 정확해진다. 어긋난 삽입이 문제가 되면 그때.
     const at = Math.min(

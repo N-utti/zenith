@@ -1,7 +1,7 @@
 import { Editor } from '@tiptap/core'
 import { describe, expect, it } from 'vitest'
 import { docContentExtensions } from './editorExtensions'
-import { parseMarkdownTable, tableToHtml } from './markdownTable'
+import { parseMarkdownTable, tableToHtml, textToHtml } from './markdownTable'
 
 const MD = '| 항목 | 내용 | 담당 |\n| --- | --- | --- |\n| 정리 대상 | 위 본문 | 미정 |'
 
@@ -73,5 +73,35 @@ describe('편집기 삽입', () => {
     const json = JSON.stringify(editor.getJSON())
     expect(json).not.toMatch(/"tableHeader".{0,80}"type":"table"/)
     editor.destroy()
+  })
+})
+
+describe('textToHtml', () => {
+  it('AI 초안의 태그를 글자로 넣는다. 그림·링크·스크립트가 편집기 노드가 되지 않는다', () => {
+    const html = textToHtml(
+      '요약입니다.\n<img src="https://evil.example/x.png?d=secret">\n\n<a href="javascript:alert(1)">링크</a> & <b>굵게</b>',
+    )
+    expect(html).not.toMatch(/<img|<a |<b>|<script/)
+    expect(html).toBe(
+      '<p>요약입니다.<br>&lt;img src="https://evil.example/x.png?d=secret"&gt;</p>' +
+        '<p>&lt;a href="javascript:alert(1)"&gt;링크&lt;/a&gt; &amp; &lt;b&gt;굵게&lt;/b&gt;</p>',
+    )
+  })
+
+  it('편집기에 넣어도 그림 블록이 생기지 않는다', () => {
+    const editor = new Editor({ extensions: docContentExtensions(), content: '<p>앞</p>' })
+    editor.commands.insertContentAt(
+      editor.state.doc.content.size,
+      textToHtml('<img src="https://evil.example/x.png">'),
+    )
+    const types = JSON.stringify(editor.getJSON())
+    expect(types).not.toContain('imageBlock')
+    expect(editor.getText()).toContain('<img src="https://evil.example/x.png">')
+    editor.destroy()
+  })
+
+  it('빈 줄로 문단을 나누고 빈 글은 빈 문자열이다', () => {
+    expect(textToHtml('가\r\n\r\n\n나')).toBe('<p>가</p><p>나</p>')
+    expect(textToHtml('  \n\n ')).toBe('')
   })
 })
