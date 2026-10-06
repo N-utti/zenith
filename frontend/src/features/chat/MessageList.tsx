@@ -472,9 +472,10 @@ const MessageRow = memo(function MessageRow({
               </div>
             </div>
           ) : (
-            message.body && (
+            // 첨부만 남기고 글을 지운 메시지도 고친 것이다. 글이 없어도 표시는 남긴다.
+            (message.body || message.edited_at) && (
               <p className="text-muted text-sm break-words whitespace-pre-wrap">
-                <MentionText body={message.body} names={mentionNames} />
+                {message.body && <MentionText body={message.body} names={mentionNames} />}
                 {message.edited_at && (
                   <span
                     className="text-subtle ml-1.5 text-[11px]"
