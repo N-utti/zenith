@@ -1,5 +1,7 @@
 import { afterEach, expect, test, vi } from 'vitest'
-import { clearNotifications } from './desktop'
+import { clearNotifications, restrictImageSources } from './desktop'
+
+vi.mock('./serverOrigin', () => ({ serverOrigin: () => 'https://zenith.example' }))
 
 afterEach(() => {
   delete window.__TAURI__
@@ -18,4 +20,18 @@ test('데스크톱 앱이면 셸에 알림 센터 비우기를 부탁하고, 실
 
 test('브라우저에서는 아무 일도 하지 않는다', () => {
   expect(() => clearNotifications()).not.toThrow()
+})
+
+test('데스크톱 앱이면 그림 출처를 앱 자신과 붙은 서버로 좁히고, 브라우저에서는 건드리지 않는다', () => {
+  const policy = () => document.head.querySelector('meta[http-equiv="Content-Security-Policy"]')
+
+  restrictImageSources()
+  expect(policy()).toBeNull()
+
+  window.__TAURI__ = { core: { invoke: vi.fn() } }
+  restrictImageSources()
+  expect(policy()?.getAttribute('content')).toBe(
+    "img-src 'self' data: blob: https://zenith.example",
+  )
+  policy()?.remove()
 })

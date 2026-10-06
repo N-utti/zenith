@@ -65,6 +65,10 @@ VITE_SERVER_ORIGIN=https://zenith.example.co.kr
 개발자 도구 콘솔에서 `localStorage.setItem('zenith.serverOrigin', 'https://새주소')` 후 재시작.
 (빌드 기본값보다 이 값이 우선한다. `frontend/src/lib/serverOrigin.ts`)
 
+그림은 앱 자신과 이 서버 주소에서만 받는다. 셸 정책(`tauri.conf.json` 의 `img-src`)은 서버 주소를 몰라 열려 있고,
+웹앱이 켜질 때 지금 붙은 서버 주소로 정책을 하나 더 건다(`frontend/src/lib/desktop.ts` 의 `restrictImageSources`).
+문서·채팅에 섞여 든 바깥 그림 주소가 사내망 밖으로 요청을 내지 못하게 하려는 것이다. 웹은 Caddy 헤더가 같은 일을 한다.
+
 > **지금은 붙을 서버가 없다.** `backend/`에 코드가 없어 프로덕션 빌드는 로그인 화면에서
 > 멈춘다. 실제로 쓸 수 있는 건 위의 `npm run dev`(MSW 목) 쪽이다.
 
@@ -124,7 +128,7 @@ apps/desktop/
 | 파일 | 역할 |
 | --- | --- |
 | `frontend/src/lib/serverOrigin.ts` | REST·WebSocket·이미지 URL 앞에 서버 오리진을 붙인다 |
-| `frontend/src/lib/desktop.ts` | 바깥 링크를 기본 브라우저로 넘긴다 · OS 알림(`notify`) · 켤 때 업데이트 확인(`checkForUpdate`) |
+| `frontend/src/lib/desktop.ts` | 바깥 링크를 기본 브라우저로 넘긴다 · OS 알림(`notify`) · 켤 때 업데이트 확인(`checkForUpdate`) · 그림 출처를 붙은 서버로 좁힌다(`restrictImageSources`) |
 | `frontend/src/features/chat/ChatSocketProvider.tsx` | 채팅 소켓을 로그인 구역 전체에서 하나만 연결 |
 
 모두 브라우저에서는 아무 일도 하지 않는다. 웹앱은 Tauri npm 패키지에 의존하지 않고,

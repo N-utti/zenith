@@ -17,5 +17,6 @@
 ## 배포 전제
 
 - 프로덕션 빌드는 MSW 가 없고 `tauri://localhost` 에서 뜬다. `frontend/.env.production` 의 `VITE_SERVER_ORIGIN` 이 없으면 `/api` 가 셸 자신에게 간다.
+- 셸 정책(`tauri.conf.json` 의 `csp`)의 `img-src` 는 서버 주소를 몰라 열려 있다. 실제로 좁히는 것은 웹앱이 켜질 때 거는 정책(`frontend/src/lib/desktop.ts` 의 `restrictImageSources`)이다. 셸 정책만 보고 판단하지 않는다.
 - 교차 오리진 쿠키(11 I6)는 백엔드 `CORS_ORIGINS` 로 열 수 있게만 돼 있고 검증은 M4. 붙일 때 백엔드와 같이 본다.
 - 아이콘은 `app-icon.png` 만 원본. `npm run icons` 생성물 중 android/ios 는 추적하지 않는다(`.gitignore`).
