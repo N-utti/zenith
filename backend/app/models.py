@@ -239,6 +239,9 @@ class Channel(Base):
     is_private: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=sql_text("false")
     )
+    # 연 사람(03 에 없는 칸, 2026-10-06 — 이슈 #349). 비공개 채널 지우기 권한의 근거. 이 칸 전의 행은 NULL —
+    # 그때는 멤버인 임원이 지운다.
+    created_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
 
 
 class ChannelMember(Base):

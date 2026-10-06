@@ -1713,6 +1713,40 @@
             }
           }
         }
+      },
+      "delete": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "채널 지우기 — 공개는 임원, 비공개는 연 사람(없으면 멤버인 임원). DM 은 422(숨기기로). 메시지·첨부·멘션 알림까지 지운다",
+        "operationId": "delete_channel_api_channels__id__delete",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/channels/{id}/hide": {
@@ -1809,7 +1843,7 @@
         "tags": [
           "chat"
         ],
-        "summary": "비공개 채널에서 사람 빼기 — 자기 자신이면 나가기. 멤버 아닌 사람 404, 공개·DM 은 422",
+        "summary": "비공개 채널에서 사람 빼기 — 자기 자신이면 나가기. 연 사람은 본인만(남이 빼면 403). 멤버 아닌 사람 404, 공개·DM 은 422",
         "operationId": "remove_member_api_channels__id__members__user_id__delete",
         "parameters": [
           {
@@ -7644,6 +7678,22 @@
                 "type": "null"
               }
             ]
+          },
+          "can_delete": {
+            "type": "boolean",
+            "title": "Can Delete"
+          },
+          "created_by": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By"
           }
         },
         "type": "object",
@@ -7654,7 +7704,9 @@
           "is_private",
           "members",
           "unread",
-          "last_message"
+          "last_message",
+          "can_delete",
+          "created_by"
         ],
         "title": "ChannelOut"
       },
