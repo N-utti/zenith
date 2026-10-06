@@ -281,8 +281,9 @@ export function InlineAiPopover({ editor, docId }: { editor: Editor; docId: stri
               {html ? '생성된 템플릿' : '생성된 초안'}
             </p>
             {html ? (
-              /* 이 HTML 은 서버가 준 것이 아니라 `blocksToHtml` 이 만든다. 글자는 전부
-                 이스케이프되고 태그는 우리가 붙인 것뿐이다(`templateBlocks.test.ts`). */
+              /* 이 HTML 은 `blocksToHtml` 이 만든다. 블록 글은 고정 서식이든 서버 응답에 실려 온
+                 것이든 전부 이스케이프되고, 태그는 우리가 붙인 것뿐이다(`templateBlocks.test.ts`).
+                 서버의 서식 초안(`/ai/template`)을 붙이더라도 이스케이프를 빼지 않는다. */
               <div
                 // 문서 서식 CSS 는 이 클래스 아래에 있다. 안 붙이면 제목도 목록도 밋밋한
                 // 글줄 더미로 보여서, 구조를 보여 주려던 미리보기가 구조를 안 보여 준다.
