@@ -87,8 +87,8 @@ export function Header({
       </button>
 
       <div className="flex shrink-0 items-center justify-self-end gap-1">
-        {/* 본문이 최대폭(max-w-6xl, 1152px)에 닿아야 눌러서 달라진다. 사이드바(270px)를 편 채로는
-            1440px 쯤부터, 접으면 xl 부터 닿는다. 그보다 좁은 화면과 꽉 채우는 화면(bleed)에서는 숨긴다. */}
+        {/* 본문이 최대폭(max-w-6xl, 1152px)에 닿아야 눌러서 달라진다. 사이드바(300px)를 편 채로는
+            1470px 쯤부터, 접으면 xl 부터 닿는다. 그보다 좁은 화면과 꽉 채우는 화면(bleed)에서는 숨긴다. */}
         {showWidthToggle && (
           <Button
             variant="ghost"
@@ -97,7 +97,7 @@ export function Header({
             aria-label="본문 넓게 보기"
             aria-pressed={wide}
             title={wide ? '본문 기본 너비로' : '본문 넓게 보기'}
-            className={cn('hidden px-2', collapsed ? 'xl:inline-flex' : 'min-[1440px]:inline-flex')}
+            className={cn('hidden px-2', collapsed ? 'xl:inline-flex' : 'min-[1470px]:inline-flex')}
           >
             {wide ? (
               <FoldHorizontal className="size-4.5" />

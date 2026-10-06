@@ -18,7 +18,7 @@ import { Button } from '@/components/ui/Button'
 import { MaskedRow } from '@/components/ui/MaskedRow'
 import { DocTree } from './DocTree'
 
-const ROW = 'flex items-center gap-2 rounded-md px-2.5 py-1.5 text-[13.5px] transition-colors'
+const ROW = 'flex items-center gap-2 rounded-md px-2.5 py-2 text-[15px] transition-colors'
 const ROW_IDLE = 'text-muted hover:bg-surface-hover hover:text-fg'
 const ROW_ACTIVE = 'bg-accent-soft text-accent font-semibold'
 
@@ -70,7 +70,7 @@ function SectionLabel({
   const Chevron = collapsed ? ChevronRight : ChevronDown
   return (
     // 왼쪽 여백은 화살표가 문서 트리의 폴더 화살표와 같은 세로줄에 서게 맞춘 값이다.
-    <div className="text-subtle mt-4 mb-1.5 flex items-center gap-1 pr-2.5 pl-1 text-[11px] font-bold tracking-[0.08em]">
+    <div className="text-subtle mt-4 mb-1.5 flex items-center gap-1 pr-2.5 pl-[3px] text-[13px] font-bold tracking-[0.08em]">
       <button
         type="button"
         onClick={onToggle}
@@ -78,7 +78,7 @@ function SectionLabel({
         // 글자가 작아 줄 높이만으로는 손가락에 빗나간다. 위아래로 6px 씩 넓게 받는다.
         className="hover:text-fg relative flex min-w-0 flex-1 cursor-pointer items-center gap-1 rounded text-left transition-colors before:absolute before:inset-x-0 before:-inset-y-1.5"
       >
-        <Chevron className="size-3 shrink-0" />
+        <Chevron className="size-3.5 shrink-0" />
         {children}
       </button>
       {action}
@@ -94,9 +94,9 @@ function AddButton({ label, onClick }: { label: string; onClick: () => void }) {
       aria-label={label}
       title={label}
       onClick={onClick}
-      className="text-subtle hover:text-fg grid size-5 shrink-0 cursor-pointer place-items-center rounded transition-colors"
+      className="text-subtle hover:text-fg grid size-6 shrink-0 cursor-pointer place-items-center rounded transition-colors"
     >
-      <Plus className="size-3.5" />
+      <Plus className="size-4" />
     </button>
   )
 }
@@ -104,7 +104,7 @@ function AddButton({ label, onClick }: { label: string; onClick: () => void }) {
 /** 안 읽은 개수 알약. 채널 행과 「받은 알림」 행이 같은 모양을 쓴다. */
 function UnreadPill({ count }: { count: number }) {
   return (
-    <span className="bg-muted text-surface ml-auto shrink-0 rounded-full px-1.5 text-[11px] font-bold">
+    <span className="bg-muted text-surface ml-auto shrink-0 rounded-full px-1.5 text-xs font-bold">
       {/* 낭독기가 앞의 이름과 붙여 읽지 않게 끊는다("받은 알림3개" 가 아니라 "받은 알림, 3개"). */}
       <span className="sr-only">, </span>
       {count}
@@ -130,7 +130,7 @@ function NavRow({
       onClick={onNavigate}
       className={({ isActive }) => cn(ROW, isActive ? ROW_ACTIVE : ROW_IDLE)}
     >
-      <Icon className="size-4 shrink-0" strokeWidth={2} />
+      <Icon className="size-[18px] shrink-0" strokeWidth={2} />
       <span className="truncate">{item.label}</span>
       {unread > 0 && <UnreadPill count={unread} />}
     </NavLink>
@@ -148,10 +148,10 @@ function ChannelRow({ channel, onNavigate }: { channel: ChatChannel; onNavigate?
       {channel.is_dm ? (
         <AtSign className="text-subtle size-4 shrink-0" />
       ) : channel.is_private ? (
-        <Lock role="img" aria-label="비공개" className="text-subtle size-3.5 shrink-0" />
+        <Lock role="img" aria-label="비공개" className="text-subtle size-4 shrink-0" />
       ) : (
         // 자물쇠와 같은 폭을 준다. 글자 폭대로 두면 공개·비공개 행의 이름이 서로 어긋난다.
-        <span className="text-subtle w-3.5 shrink-0 text-center">#</span>
+        <span className="text-subtle w-4 shrink-0 text-center">#</span>
       )}
       <span className="flex min-w-0 items-center gap-1.5">
         <span className="truncate">{channel.name}</span>
@@ -196,7 +196,7 @@ export function ChannelSection({ onNavigate }: { onNavigate?: () => void }) {
         채널
       </SectionLabel>
       {!channelsCollapsed && channels.length === 0 && (
-        <p className="text-subtle px-3 py-1 text-xs">아직 채널이 없습니다.</p>
+        <p className="text-subtle px-3 py-1 text-[13px]">아직 채널이 없습니다.</p>
       )}
       {shown(channels, channelsCollapsed).map((channel) => (
         <ChannelRow key={channel.id} channel={channel} onNavigate={onNavigate} />
@@ -210,7 +210,7 @@ export function ChannelSection({ onNavigate }: { onNavigate?: () => void }) {
         다이렉트 메시지
       </SectionLabel>
       {!dmsCollapsed && dms.length === 0 && (
-        <p className="text-subtle px-3 py-1 text-xs">아직 대화가 없습니다.</p>
+        <p className="text-subtle px-3 py-1 text-[13px]">아직 대화가 없습니다.</p>
       )}
       {shown(dms, dmsCollapsed).map((channel) => (
         <ChannelRow key={channel.id} channel={channel} onNavigate={onNavigate} />
@@ -315,7 +315,7 @@ export function Sidebar({
 
   return (
     <>
-      {/* 데스크톱: 고정. 폭 270px은 12·UI 청사진 1b 셸 치수다. 접으면 폭을 0 으로 밀어 넣는다(아이콘 레일 없음).
+      {/* 데스크톱: 고정. 폭 300px. 12·UI 청사진 1b 셸 치수(270px)에서 글자를 키우며 같이 넓혔다. 접으면 폭을 0 으로 밀어 넣는다(아이콘 레일 없음).
           안쪽은 폭을 고정해 줄어드는 동안 내용이 찌그러지지 않고, 마운트를 유지해 문서 트리의 펼침이 남는다.
           접힌 동안은 inert 로 탭 이동에서도 뺀다. */}
       <aside
@@ -323,10 +323,10 @@ export function Sidebar({
         className={cn(
           'border-line bg-sunken hidden shrink-0 overflow-hidden md:block',
           'motion-safe:transition-[width,border-color] motion-safe:duration-200 motion-safe:ease-out',
-          collapsed ? 'w-0 border-r border-transparent' : 'w-[270px] border-r',
+          collapsed ? 'w-0 border-r border-transparent' : 'w-[300px] border-r',
         )}
       >
-        <div className="h-full w-[270px]">
+        <div className="h-full w-[300px]">
           <SidebarContent />
         </div>
       </aside>
@@ -347,7 +347,7 @@ export function Sidebar({
             aria-modal="true"
             aria-label="메뉴"
             tabIndex={-1}
-            className="border-line bg-sunken absolute inset-y-0 left-0 w-[270px] border-r shadow-xl outline-none"
+            className="border-line bg-sunken absolute inset-y-0 left-0 w-[300px] border-r shadow-xl outline-none"
           >
             <Button
               variant="ghost"

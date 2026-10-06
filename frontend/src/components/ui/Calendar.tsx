@@ -180,7 +180,7 @@ export function CalendarDayNumber({ day }: { day: CalendarDay }) {
   return (
     <span
       className={cn(
-        'inline-flex size-5 items-center justify-center rounded-full text-xs',
+        'inline-flex size-6 items-center justify-center rounded-full text-[13px]',
         day.isToday && 'bg-accent text-on-accent font-semibold',
         !day.isToday && !day.inMonth && 'text-subtle/60',
         !day.isToday && day.inMonth && (day.isWeekend ? 'text-subtle' : 'text-muted'),

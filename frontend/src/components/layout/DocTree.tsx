@@ -96,7 +96,7 @@ const ROOT_DROP = ''
 function setDragCard(e: DragEvent, row: HTMLElement) {
   const card = row.cloneNode(true) as HTMLElement
   card.className =
-    'bg-surface text-fg border-accent fixed -top-96 left-0 flex max-w-60 items-center gap-2 rounded-md border px-2.5 py-1.5 text-[13.5px] font-medium'
+    'bg-surface text-fg border-accent fixed -top-96 left-0 flex max-w-60 items-center gap-2 rounded-md border px-2.5 py-1.5 text-[15px] font-medium'
   document.body.append(card)
   e.dataTransfer.setDragImage(card, 12, 16)
   setTimeout(() => card.remove())
@@ -147,12 +147,12 @@ function DocRow({
         data-id={id}
         className={({ isActive }) =>
           cn(
-            'flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-[13.5px] transition-colors',
+            'flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-2 text-[15px] transition-colors',
             rowLink(isActive, actions.menuId === id),
           )
         }
       >
-        <FileText className="size-3.5 shrink-0" strokeWidth={2} />
+        <FileText className="size-4 shrink-0" strokeWidth={2} />
         <span className="truncate">{node.doc.title}</span>
       </NavLink>
     </div>
@@ -241,7 +241,7 @@ function FolderRow({
           className="text-subtle hover:text-fg relative grid size-5 shrink-0 cursor-pointer place-items-center rounded transition-colors before:absolute before:-inset-1"
           style={{ marginLeft: depth * 14 }}
         >
-          {expanded ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
+          {expanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
         </button>
 
         {/* 이름은 폴더 목록 화면으로 간다(노션과 같이). 펼치고 접기는 옆 화살표가 맡는다. */}
@@ -257,11 +257,11 @@ function FolderRow({
           data-drag="folder"
           data-id={id}
           className={cn(
-            'flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-[13.5px] font-medium transition-colors',
+            'flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-2 text-[15px] font-medium transition-colors',
             rowLink(current, actions.menuId === id),
           )}
         >
-          <Icon className="size-3.5 shrink-0" strokeWidth={2} />
+          <Icon className="size-4 shrink-0" strokeWidth={2} />
           <span className="truncate">{title}</span>
         </Link>
 
@@ -308,7 +308,7 @@ function FolderRow({
                 to={`/docs?folder=${id}`}
                 onClick={actions.onNavigate}
                 aria-label={`${title} 전체 ${docs.length}개 보기`}
-                className="text-subtle hover:bg-surface-hover hover:text-fg flex min-w-0 flex-1 items-center rounded-md px-2 py-1.5 text-[13px] transition-colors"
+                className="text-subtle hover:bg-surface-hover hover:text-fg flex min-w-0 flex-1 items-center rounded-md px-2 py-1.5 text-sm transition-colors"
               >
                 전체 {docs.length}개 보기
               </Link>
@@ -583,12 +583,12 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
     <div {...dragHandlers} onContextMenu={openMenu}>
       {isError && !data && (
         <div className="space-y-1 px-3 py-2">
-          <p className="text-danger text-xs">문서 트리를 불러오지 못했습니다.</p>
+          <p className="text-danger text-[13px]">문서 트리를 불러오지 못했습니다.</p>
           <RetryButton onClick={refetch} />
         </div>
       )}
       {!isError && tree.length === 0 && (
-        <p className="text-subtle px-3 py-2 text-xs">문서가 없습니다.</p>
+        <p className="text-subtle px-3 py-2 text-[13px]">문서가 없습니다.</p>
       )}
 
       {tree.map((node) =>
@@ -611,7 +611,7 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
         data-drop={ROOT_DROP}
         onClick={() => actions.onAddFolder(null)}
         className={cn(
-          'text-subtle hover:bg-surface-hover hover:text-fg mt-1 flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-[13px] transition-colors',
+          'text-subtle hover:bg-surface-hover hover:text-fg mt-1 flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors',
           over === ROOT_DROP && 'bg-accent-soft text-accent',
         )}
       >
