@@ -1,4 +1,4 @@
-import type { Extensions } from '@tiptap/core'
+import { getStyleProperty, type Extensions } from '@tiptap/core'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import Collaboration from '@tiptap/extension-collaboration'
@@ -13,6 +13,39 @@ import { ImageBlock } from './ImageBlock'
 import { SlashCommand } from './slashCommand'
 import { tableExtensions } from './tableExtensions'
 import type { CollabSession } from './useCollabSession'
+
+/**
+ * 형광펜 색으로 받을 값. 16진수, `rgb()`·`rgba()`, 색 이름만. 원래 확장은 붙여넣은 HTML 의
+ * `data-color` 를 그대로 `style="background-color: …"` 에 써서, `red;background-image:url(https://바깥/…)`
+ * 같은 값을 끼우면 문서를 여는 사람마다 바깥으로 요청이 나간다(데스크톱 앱은 막지 않는다).
+ */
+const SAFE_COLOR = /^(#[0-9a-f]{3,8}|rgba?\([\d.,%\s]+\)|[a-z]+)$/i
+const safeColor = (value: unknown) =>
+  typeof value === 'string' && SAFE_COLOR.test(value.trim()) ? value.trim() : null
+
+const SafeHighlight = Highlight.extend({
+  addAttributes() {
+    return {
+      color: {
+        default: null,
+        // 원래 확장처럼 style 의 원래 표기(`#fef08a`)를 먼저 읽는다. `el.style` 은 rgb() 로 바꿔 준다.
+        parseHTML: (el) =>
+          safeColor(
+            el.getAttribute('data-color') ||
+              getStyleProperty(el, 'background-color') ||
+              el.style.backgroundColor,
+          ),
+        // 남의 편집(Y.Doc)으로 들어온 값도 그릴 때 다시 거른다.
+        renderHTML: (attrs) => {
+          const color = safeColor(attrs.color)
+          return color
+            ? { 'data-color': color, style: `background-color: ${color}; color: inherit` }
+            : {}
+        },
+      },
+    }
+  },
+})
 
 type BuildOptions = Pick<CollabSession, 'doc' | 'provider'> & {
   user: { name: string; color: string }
@@ -54,7 +87,7 @@ export function docContentExtensions(): Extensions {
       fontSize: false,
       lineHeight: false,
     }),
-    Highlight.configure({ multicolor: true }),
+    SafeHighlight.configure({ multicolor: true }),
     TextAlign.configure({ types: ['heading', 'paragraph'] }),
     TaskList,
     TaskItem.configure({

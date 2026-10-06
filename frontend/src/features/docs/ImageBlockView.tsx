@@ -1,6 +1,7 @@
 import { useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { NodeViewContent, NodeViewWrapper, type NodeViewProps } from '@tiptap/react'
 import { cn } from '@/lib/cn'
+import { uploadedFilePath } from '@/lib/links'
 import { httpUrl } from '@/lib/serverOrigin'
 
 const MIN_WIDTH = 96
@@ -41,6 +42,9 @@ export function ImageBlockView({ node, updateAttributes, selected, editor }: Nod
   }
 
   const shownWidth = dragWidth ?? width
+  // 올린 파일 주소만 그린다. 남의 편집이나 버전 미리보기로 바깥 주소가 와도 부르지 않는다
+  // (데스크톱 앱에서는 그대로 바깥으로 요청이 나간다).
+  const path = uploadedFilePath(src)
 
   return (
     // 노드 뷰는 renderHTML 을 거치지 않는다. 댓글 닻(blockId.ts)이 DOM 에서 찾을 수 있게 직접 싣는다.
@@ -52,21 +56,27 @@ export function ImageBlockView({ node, updateAttributes, selected, editor }: Nod
     >
       <div ref={frameRef} contentEditable={false} className="relative w-full">
         <span className="relative inline-block max-w-full align-bottom">
-          <img
-            // 문서에 저장된 src는 `/api/files/{id}` 상대경로다. 서버 주소는 저장하지
-            // 않는다. 서버가 옮겨 가면 저장된 문서가 전부 깨지기 때문이다. 대신
-            // 화면에 그릴 때만 오리진을 붙인다(데스크탑 셸에서만 값이 붙는다).
-            src={src?.startsWith('/') ? httpUrl(src) : src}
-            alt={alt ?? ''}
-            draggable={false}
-            style={shownWidth ? { width: `${shownWidth}px` } : undefined}
-            className={cn(
-              'block h-auto max-w-full rounded-lg',
-              selected && 'ring-accent ring-2 ring-offset-2 ring-offset-[var(--color-surface)]',
-            )}
-          />
+          {path ? (
+            <img
+              // 문서에 저장된 src는 `/api/files/{id}` 상대경로다. 서버 주소는 저장하지
+              // 않는다. 서버가 옮겨 가면 저장된 문서가 전부 깨지기 때문이다. 대신
+              // 화면에 그릴 때만 오리진을 붙인다(데스크탑 셸에서만 값이 붙는다).
+              src={httpUrl(path)}
+              alt={alt ?? ''}
+              draggable={false}
+              style={shownWidth ? { width: `${shownWidth}px` } : undefined}
+              className={cn(
+                'block h-auto max-w-full rounded-lg',
+                selected && 'ring-accent ring-2 ring-offset-2 ring-offset-[var(--color-surface)]',
+              )}
+            />
+          ) : (
+            <span className="bg-sunken text-subtle block rounded-lg px-4 py-6 text-xs">
+              표시할 수 없는 사진입니다
+            </span>
+          )}
 
-          {editor.isEditable && (
+          {editor.isEditable && path && (
             <span
               role="separator"
               aria-label="사진 크기 조절"

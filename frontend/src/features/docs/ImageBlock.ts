@@ -1,6 +1,8 @@
 import { mergeAttributes, Node } from '@tiptap/core'
 import { ReactNodeViewRenderer } from '@tiptap/react'
 import { ImageBlockView } from './ImageBlockView'
+import { uploadedFilePath } from '@/lib/links'
+import { serverOrigin } from '@/lib/serverOrigin'
 
 declare module '@tiptap/core' {
   interface Commands<ReturnType> {
@@ -18,6 +20,18 @@ declare module '@tiptap/core' {
  */
 export const PICK_IMAGE_EVENT = 'zenith:pick-image'
 
+/**
+ * 붙여넣은 그림 주소를 올린 파일 경로로. 같은 서버의 절대 주소(`https://서버/api/files/{id}`)는 경로만
+ * 남긴다(브라우저가 상대 주소를 절대 주소로 바꿔 복사하는 경우가 있다). 그 밖은 `null`.
+ */
+function fileSrc(raw: string | null): string | null {
+  if (!raw) return null
+  for (const origin of [window.location.origin, serverOrigin()]) {
+    if (origin && raw.startsWith(`${origin}/`)) return uploadedFilePath(raw.slice(origin.length))
+  }
+  return uploadedFilePath(raw)
+}
+
 /** figure 안의 img에서 값을 읽는다. 바깥에서 붙여넣은 맨 <img> 도 같은 함수로 처리된다. */
 function fromImg(element: HTMLElement, name: string): string | null {
   return element.querySelector('img')?.getAttribute(name) ?? element.getAttribute(name)
@@ -28,6 +42,10 @@ function fromImg(element: HTMLElement, name: string): string | null {
  * 그래야 두 사람이 동시에 캡션을 고쳐도 Yjs가 글자 단위로 합쳐 준다.
  *
  * 이미지 자체는 문서에 담지 않는다. src에는 `/api/files/{id}` URL만 들어간다.
+ *
+ * **그 모양이 아닌 주소는 받지도 그리지도 않는다**(`uploadedFilePath`). 붙여넣은 HTML, 남의 편집
+ * (Y.Doc), 버전 미리보기로 `https://바깥/…` 가 들어오면 그 문서를 여는 사람마다 바깥으로 요청이
+ * 나간다. 웹은 보안 정책 헤더가 막지만 데스크톱 앱은 막지 않는다. 파일 칩과 같은 규칙이다.
  */
 export const ImageBlock = Node.create({
   name: 'imageBlock',
@@ -38,10 +56,17 @@ export const ImageBlock = Node.create({
 
   addAttributes() {
     return {
-      src: { default: null, parseHTML: (el) => fromImg(el, 'src') },
-      alt: { default: null, parseHTML: (el) => fromImg(el, 'alt') },
+      // 세 값은 아래 renderHTML 이 안쪽 <img> 에 직접 싣는다. 바깥 <figure> 에는 싣지 않는다
+      // (renderHTML 을 비워 두면 확장이 figure 에도 그대로 붙인다. 걸러지지 않은 src 까지).
+      src: {
+        default: null,
+        parseHTML: (el) => fileSrc(fromImg(el, 'src')),
+        renderHTML: () => ({}),
+      },
+      alt: { default: null, parseHTML: (el) => fromImg(el, 'alt'), renderHTML: () => ({}) },
       width: {
         default: null,
+        renderHTML: () => ({}),
         parseHTML: (el) => {
           const value = fromImg(el, 'width')
           return value ? Number(value) : null
@@ -52,8 +77,17 @@ export const ImageBlock = Node.create({
 
   parseHTML() {
     return [
-      { tag: 'figure[data-type="imageBlock"]', contentElement: 'figcaption' },
-      { tag: 'img[src]' },
+      // 올린 파일이 아닌 그림은 붙여넣어도 사진 블록으로 만들지 않는다. figure 로 와도 같다(캡션
+      // 글은 문단으로 남는다). 빈 사진 블록을 만들면 내보내기에서 사진 자리만 남는다.
+      {
+        tag: 'figure[data-type="imageBlock"]',
+        contentElement: 'figcaption',
+        getAttrs: (el) => (fileSrc(fromImg(el as HTMLElement, 'src')) ? null : false),
+      },
+      {
+        tag: 'img[src]',
+        getAttrs: (el) => (fileSrc((el as HTMLElement).getAttribute('src')) ? null : false),
+      },
     ]
   },
 
@@ -61,7 +95,14 @@ export const ImageBlock = Node.create({
     return [
       'figure',
       mergeAttributes(HTMLAttributes, { 'data-type': 'imageBlock' }),
-      ['img', { src: node.attrs.src, alt: node.attrs.alt, width: node.attrs.width || undefined }],
+      [
+        'img',
+        {
+          src: uploadedFilePath(node.attrs.src),
+          alt: node.attrs.alt,
+          width: node.attrs.width || undefined,
+        },
+      ],
       ['figcaption', 0],
     ]
   },
