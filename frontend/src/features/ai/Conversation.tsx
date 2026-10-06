@@ -76,11 +76,17 @@ function AnswerActions({
     }
   }
 
-  const copy = async () => {
-    await navigator.clipboard.writeText(body.replace(/\[\[\d+\]\]/g, ''))
-    setCopied(true)
-    setTimeout(() => setCopied(false), 1500)
-  }
+  // http(IP) 로 열면 navigator.clipboard 가 없어 바로 던진다. 그것도 실패 토스트로 받는다.
+  const copy = () =>
+    void Promise.resolve()
+      .then(() => navigator.clipboard.writeText(body.replace(/\[\[\d+\]\]/g, '')))
+      .then(
+        () => {
+          setCopied(true)
+          setTimeout(() => setCopied(false), 1500)
+        },
+        () => toast.error('답변을 복사하지 못했습니다.'),
+      )
 
   const item =
     'text-subtle hover:text-fg flex cursor-pointer items-center gap-1.5 transition-colors disabled:cursor-default disabled:opacity-50'
