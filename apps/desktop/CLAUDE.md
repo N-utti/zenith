@@ -16,7 +16,7 @@
 
 ## 배포 전제
 
-- 프로덕션 빌드는 MSW 가 없고 `tauri://localhost` 에서 뜬다. `frontend/.env.production` 의 `VITE_SERVER_ORIGIN` 이 없으면 `/api` 가 셸 자신에게 간다.
+- 프로덕션 빌드는 MSW 가 없고 Windows 설치본은 `http://tauri.localhost` 에서 뜬다(macOS·Linux 는 `tauri://localhost`). 백엔드 `CORS_ORIGINS` 에 넣는 값이 이것이다. `frontend/.env.production` 의 `VITE_SERVER_ORIGIN` 이 없으면 `/api` 가 셸 자신에게 간다.
 - 셸 정책(`tauri.conf.json` 의 `csp`)의 `img-src` 는 서버 주소를 몰라 열려 있다. 실제로 좁히는 것은 웹앱이 켜질 때 거는 정책(`frontend/src/lib/desktop.ts` 의 `restrictImageSources`)이다. 셸 정책만 보고 판단하지 않는다. `fetch` 는 연결 정책(`connect-src`, 셸에서 열려 있음)을 따르므로 문서 내용의 주소를 `fetch` 하는 코드를 넣지 않는다.
 - `tauri dev`(Windows)는 개발 서버를 직접 열어 셸 정책을 받지 않는다. 셸 정책 확인은 설치본으로 한다.
 - 교차 오리진 쿠키(11 I6)는 백엔드 `CORS_ORIGINS` 로 열 수 있게만 돼 있고 검증은 M4. 붙일 때 백엔드와 같이 본다.

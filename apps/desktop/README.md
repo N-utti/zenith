@@ -52,7 +52,7 @@ npm run build    # = tauri build → src-tauri/target/release/bundle/msi/*.msi
 
 ### ⚠️ 서버 주소를 반드시 지정할 것
 
-프로덕션 빌드에서는 MSW 목이 통째로 사라지고, 셸 화면은 `tauri://localhost`에서 뜬다.
+프로덕션 빌드에서는 MSW 목이 통째로 사라지고, 셸 화면은 Windows 설치본 기준 `http://tauri.localhost`에서 뜬다(macOS·Linux 는 `tauri://localhost`). 백엔드 `CORS_ORIGINS` 에 넣는 값이 이것이다.
 그래서 `/api` 상대경로는 사내 서버가 아니라 **셸 자신에게** 간다. 서버 오리진을 박아야 한다.
 
 `frontend/.env.production` (커밋되지 않는다. `frontend/.env.example` 참고):
