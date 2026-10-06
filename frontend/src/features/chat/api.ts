@@ -162,8 +162,13 @@ export function checkChannelName(raw: string): { name: string; error: string | n
 export function channelNameFailure(err: unknown, fallback: string): string {
   if (!(err instanceof ApiError)) return fallback
   const detail = (err.body as { detail?: unknown } | null)?.detail
-  // 배열이면 서버의 이름 검증이 낸 거절이다. 미리 거른 것 말고 남는 것은 문자 규칙뿐이다.
-  return err.status === 422 && Array.isArray(detail) ? NAME_CHARS_ERROR : err.message
+  if (err.status !== 422 || !Array.isArray(detail)) return err.message
+  // 배열 422 는 이름 말고도 난다(멤버 목록 모양 등). 이름 칸의 거절일 때만 문자 규칙을 말한다.
+  // 미리 거른 것 말고 이름에 남는 거절은 문자 규칙뿐이다.
+  const onName = detail.some((item: { loc?: unknown }) =>
+    Array.isArray(item?.loc) ? item.loc.includes('name') : false,
+  )
+  return onName ? NAME_CHARS_ERROR : fallback
 }
 
 /**
