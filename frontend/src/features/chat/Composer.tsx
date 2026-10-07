@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent } from 'react'
+import { useEffect, useEffectEvent, useRef, useState, type FormEvent } from 'react'
 import { Paperclip, Send, X } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
@@ -70,6 +70,39 @@ export function Composer({
     }
   }
 
+  // 파일을 창 어디에 놓아도 이 대화에 붙인다. 입력창에만 받으면 메시지 목록에 놓은 파일은
+  // 브라우저가 그 파일로 화면을 바꿔 버린다. 글이나 문서 줄을 끄는 것은 건드리지 않는다.
+  const [dragging, setDragging] = useState(false)
+  // 화면 안에서 시작한 끌기. 크롬은 대화 속 그림을 끌 때도 파일이라고 알려서, 가리지 않으면
+  // 그림을 살짝 끌었다 놓는 것만으로 같은 그림이 다시 올라간다. dragstart 는 화면 안의 끌기에만 온다.
+  const fromPage = useRef(false)
+  const onFileDrag = useEffectEvent((e: DragEvent) => {
+    if (fromPage.current || !e.dataTransfer?.types.includes('Files')) return
+    e.preventDefault()
+    if (e.type === 'dragover') return setDragging(true)
+    setDragging(false)
+    if (e.type === 'drop') void pick(e.dataTransfer.files)
+  })
+  useEffect(() => {
+    const handle = (e: DragEvent) => onFileDrag(e)
+    // 창 밖으로 나가면(`relatedTarget` 이 없다) 안내를 거둔다. 요소 사이를 옮길 때도 dragleave 는 온다.
+    const leave = (e: DragEvent) => e.relatedTarget === null && setDragging(false)
+    const start = () => (fromPage.current = true)
+    const end = () => (fromPage.current = false)
+    window.addEventListener('dragstart', start)
+    window.addEventListener('dragend', end)
+    window.addEventListener('dragover', handle)
+    window.addEventListener('drop', handle)
+    window.addEventListener('dragleave', leave)
+    return () => {
+      window.removeEventListener('dragstart', start)
+      window.removeEventListener('dragend', end)
+      window.removeEventListener('dragover', handle)
+      window.removeEventListener('drop', handle)
+      window.removeEventListener('dragleave', leave)
+    }
+  }, [])
+
   const dispatch = () => {
     const text = body.trim()
     // 첨부만 보내는 메시지도 있다. 둘 다 없을 때만 막는다.
@@ -110,8 +143,22 @@ export function Composer({
   const busy = uploading > 0
 
   return (
-    <form onSubmit={submit} className="border-line bg-surface border-t px-4 py-3">
+    <form
+      onSubmit={submit}
+      // 캡처한 화면이나 탐색기에서 복사한 파일을 붙여 넣으면 첨부로 올린다. 글이 같이 든 클립보드
+      // (엑셀 칸을 복사하면 글과 그림이 함께 온다)는 글로 붙게 둔다.
+      onPaste={(e) => {
+        const data = e.clipboardData
+        if (data.files.length === 0 || data.types.includes('text/plain')) return
+        e.preventDefault()
+        void pick(data.files)
+      }}
+      className="border-line bg-surface border-t px-4 py-3"
+    >
       <div className="mx-auto max-w-3xl">
+        {dragging && (
+          <p className="text-accent mb-2 text-xs">여기에 놓으면 이 대화에 파일이 붙습니다.</p>
+        )}
         {files.length > 0 && (
           <ul className="mb-2 flex flex-wrap gap-1.5">
             {files.map((file) => (
