@@ -76,3 +76,64 @@ test('다른 방에 다녀와도 쓰던 글이 남고, 보내면 사라진다', 
   expect(getDraft('a')).toBe('')
   act(() => root.unmount())
 })
+
+test('파일을 붙여 넣거나 창에 끌어 놓으면 첨부로 올라가고, 글이 같이 든 붙여넣기는 글로 둔다', async () => {
+  const upload = vi
+    .spyOn(await import('./api'), 'uploadAttachment')
+    .mockImplementation((_channel, file) =>
+      Promise.resolve({
+        url: `/f/${file.name}`,
+        name: file.name,
+        size: file.size,
+        content_type: null,
+      }),
+    )
+  const container = document.createElement('div')
+  const root = createRoot(container)
+  act(() =>
+    root.render(
+      createElement(
+        ChatSocketContext,
+        { value: socket },
+        createElement(Composer, {
+          channelId: 'a',
+          channelName: 'a',
+          hash: true,
+          mentionCandidates: [],
+          onTyping: () => {},
+        }),
+      ),
+    ),
+  )
+  const carry = (type: string, key: string, name: string, types: string[]) => {
+    const event = new Event(type, { bubbles: true, cancelable: true })
+    Object.defineProperty(event, key, { value: { files: [new File(['x'], name)], types } })
+    return event
+  }
+
+  const pasted = carry('paste', 'clipboardData', '캡처.png', ['Files'])
+  await act(async () => void container.querySelector('textarea')!.dispatchEvent(pasted))
+  expect(pasted.defaultPrevented).toBe(true)
+  expect(container.textContent).toContain('캡처.png')
+
+  const cells = carry('paste', 'clipboardData', '표.png', ['text/plain', 'Files'])
+  await act(async () => void container.querySelector('textarea')!.dispatchEvent(cells))
+  expect(cells.defaultPrevented).toBe(false)
+
+  await act(
+    async () => void window.dispatchEvent(carry('drop', 'dataTransfer', '보고서.pdf', ['Files'])),
+  )
+  expect(container.textContent).toContain('보고서.pdf')
+  expect(upload).toHaveBeenCalledTimes(2)
+
+  // 대화 속 그림처럼 화면 안에서 끌기 시작한 것은 놓아도 올리지 않는다.
+  window.dispatchEvent(new Event('dragstart'))
+  await act(
+    async () => void window.dispatchEvent(carry('drop', 'dataTransfer', '다시.png', ['Files'])),
+  )
+  window.dispatchEvent(new Event('dragend'))
+  expect(upload).toHaveBeenCalledTimes(2)
+
+  act(() => root.unmount())
+  upload.mockRestore()
+})
