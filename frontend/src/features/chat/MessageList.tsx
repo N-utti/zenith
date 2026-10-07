@@ -443,6 +443,9 @@ const MessageRow = memo(function MessageRow({
               </span>
             </p>
           )}
+          {/* 첨부가 글보다 먼저다. 입력칸에서 보던 순서 그대로이고(`Composer`), 같이 보낸 글은 대개
+              사진의 설명이라 사진 다음에 읽힌다. 문서 카드는 글 아래에 남는다. */}
+          <Attachments files={message.attachments} />
           {draft !== null ? (
             <div className="mt-1">
               {/* ponytail: 멘션 자동 완성 없이 글자로만 고친다. 이미 쓴 `@이름` 은 그대로 남는다. */}
@@ -475,7 +478,12 @@ const MessageRow = memo(function MessageRow({
           ) : (
             // 첨부만 남기고 글을 지운 메시지도 고친 것이다. 글이 없어도 표시는 남긴다.
             (message.body || message.edited_at) && (
-              <p className="text-muted text-sm break-words whitespace-pre-wrap">
+              <p
+                className={cn(
+                  'text-muted text-sm break-words whitespace-pre-wrap',
+                  message.attachments?.length && 'mt-1.5',
+                )}
+              >
                 {message.body && <MentionText body={message.body} names={mentionNames} />}
                 {message.edited_at && (
                   <span
@@ -489,7 +497,6 @@ const MessageRow = memo(function MessageRow({
               </p>
             )
           )}
-          <Attachments files={message.attachments} />
           {children}
         </div>
       </div>
