@@ -15,3 +15,11 @@
 export function isImage(name: string): boolean {
   return /\.(png|jpe?g|gif|webp)$/i.test(name)
 }
+
+/** 보내기 전 첨부의 순서를 바꾼다. `from` 자리의 것을 `to` 자리로 옮기고 나머지는 한 칸씩 민다. */
+export function reorder<T>(list: T[], from: number, to: number): T[] {
+  if (from === to || from < 0 || to < 0 || from >= list.length || to >= list.length) return list
+  const next = [...list]
+  next.splice(to, 0, ...next.splice(from, 1))
+  return next
+}

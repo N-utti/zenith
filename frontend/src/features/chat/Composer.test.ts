@@ -114,7 +114,13 @@ test('파일을 붙여 넣거나 창에 끌어 놓으면 첨부로 올라가고,
   const pasted = carry('paste', 'clipboardData', '캡처.png', ['Files'])
   await act(async () => void container.querySelector('textarea')!.dispatchEvent(pasted))
   expect(pasted.defaultPrevented).toBe(true)
-  expect(container.textContent).toContain('캡처.png')
+  // 사진은 이름이 아니라 작은 그림으로 보인다.
+  // 파일 읽기는 올리기가 끝난 뒤 따로 돈다. 그 사이의 상태 변경까지 act 안에서 받는다.
+  await act(() => new Promise((done) => setTimeout(done, 50)))
+  const preview = container.querySelector('img')!
+  expect(preview.alt).toBe('캡처.png')
+  // 서버 주소가 아니라 고른 파일을 읽은 것이다. 서버는 안 보낸 파일을 내주지 않는다.
+  expect(preview.src.startsWith('data:')).toBe(true)
 
   const cells = carry('paste', 'clipboardData', '표.png', ['text/plain', 'Files'])
   await act(async () => void container.querySelector('textarea')!.dispatchEvent(cells))
@@ -133,6 +139,29 @@ test('파일을 붙여 넣거나 창에 끌어 놓으면 첨부로 올라가고,
   )
   window.dispatchEvent(new Event('dragend'))
   expect(upload).toHaveBeenCalledTimes(2)
+
+  // 뒤의 첨부를 끌어 앞의 첨부 위로 가져가면 순서가 바뀌고, 그 순서대로 나간다.
+  const items = container.querySelectorAll('li[draggable="true"]')
+  const drag = (type: string, target: Element, clientX = 0) => {
+    const event = new Event(type, { bubbles: true, cancelable: true })
+    Object.defineProperty(event, 'dataTransfer', { value: { setData: () => {} } })
+    Object.defineProperty(event, 'clientX', { value: clientX })
+    act(() => void target.dispatchEvent(event))
+  }
+  drag('dragstart', items[1])
+  // 가운데를 넘기 전에는 그대로다(jsdom 의 칸은 전부 0 에 있다).
+  drag('dragover', items[0], 1)
+  expect(container.querySelector('li')!.querySelector('img')).not.toBeNull()
+  drag('dragover', items[0], -1)
+  drag('dragend', items[1])
+  act(() => container.querySelector('form')!.requestSubmit())
+  expect(sendMessage).toHaveBeenLastCalledWith('a', {
+    body: '',
+    attachments: [
+      expect.objectContaining({ name: '보고서.pdf' }),
+      expect.objectContaining({ name: '캡처.png' }),
+    ],
+  })
 
   act(() => root.unmount())
   upload.mockRestore()

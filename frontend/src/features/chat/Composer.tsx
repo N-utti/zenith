@@ -4,8 +4,10 @@ import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
 import { MentionTextarea } from '@/features/people/MentionTextarea'
 import { ApiError } from '@/lib/api'
+import { cn } from '@/lib/cn'
 import { formatBytes } from '@/lib/format'
 import { MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, MAX_BODY_CHARS, uploadAttachment } from './api'
+import { isImage, reorder } from './attachments'
 import { useChatSocketContext } from './ChatSocketContext'
 import { getDraft, setDraft } from './drafts'
 import type { ChatAttachment, Person } from './types'
@@ -35,6 +37,14 @@ export function Composer({
   const [files, setFiles] = useState<ChatAttachment[]>([])
   /** 올라가는 중인 개수. 개수 상한은 이것까지 세야 한다. */
   const [uploading, setUploading] = useState(0)
+  /**
+   * 사진 미리보기. 첨부 주소(`url`)마다 고른 파일 자체를 data 주소로 읽어 둔다. 서버 주소로는 못
+   * 그린다. 서버는 메시지에 실린 파일만 내주고 아직 안 보낸 파일은 404 다(백엔드 #324). blob 주소도
+   * 못 쓴다. 운영 서버의 보안 정책이 그림 출처를 자기 자신과 data 로만 연다(`infra/caddy/Caddyfile`).
+   * ponytail: 원본을 통째로 읽어 10MB 사진 열 장이면 백수십 MB 를 문자열로 든다. 무거워지면
+   * canvas 로 줄여서 든다.
+   */
+  const [previews, setPreviews] = useState<Record<string, string>>({})
   const [error, setError] = useState<string | null>(null)
   /**
    * 끊겨서 못 보낸 적이 있는지. 문구를 상태에 담지 않고 이 깃발과 `connected` 로 만든다.
@@ -62,6 +72,12 @@ export function Composer({
       try {
         const attachment = await uploadAttachment(channelId, file)
         setFiles((prev) => [...prev, attachment])
+        if (isImage(file.name)) {
+          const reader = new FileReader()
+          reader.onload = () =>
+            setPreviews((prev) => ({ ...prev, [attachment.url]: reader.result as string }))
+          reader.readAsDataURL(file)
+        }
       } catch (err) {
         setError(err instanceof ApiError ? err.message : `${file.name} 을 올리지 못했습니다.`)
       } finally {
@@ -103,6 +119,17 @@ export function Composer({
     }
   }, [])
 
+  /** 순서를 바꾸려고 끌고 있는 첨부(`url`). 끄는 동안 지나는 첨부의 자리로 바로 옮긴다. */
+  const [moving, setMoving] = useState<string | null>(null)
+  const move = (url: string, to: number) =>
+    setFiles((prev) =>
+      reorder(
+        prev,
+        prev.findIndex((f) => f.url === url),
+        to,
+      ),
+    )
+
   const dispatch = () => {
     const text = body.trim()
     // 첨부만 보내는 메시지도 있다. 둘 다 없을 때만 막는다.
@@ -127,6 +154,7 @@ export function Composer({
     setBody('')
     setDraft(channelId, '')
     setFiles([])
+    setPreviews({})
   }
 
   const submit = (e: FormEvent) => {
@@ -159,29 +187,6 @@ export function Composer({
         {dragging && (
           <p className="text-accent mb-2 text-xs">여기에 놓으면 이 대화에 파일이 붙습니다.</p>
         )}
-        {files.length > 0 && (
-          <ul className="mb-2 flex flex-wrap gap-1.5">
-            {files.map((file) => (
-              <li
-                key={file.url}
-                className="border-line bg-sunken text-muted flex items-center gap-1.5 rounded-lg border px-2 py-1 text-xs"
-              >
-                <Paperclip className="size-3 shrink-0" />
-                <span className="max-w-40 truncate">{file.name}</span>
-                <span className="text-subtle">{formatBytes(file.size)}</span>
-                <button
-                  type="button"
-                  aria-label={`${file.name} 떼기`}
-                  onClick={() => setFiles((prev) => prev.filter((f) => f.url !== file.url))}
-                  className="text-subtle hover:text-fg cursor-pointer"
-                >
-                  <X className="size-3" />
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-
         <div className="flex items-end gap-2">
           <input
             ref={picker}
@@ -206,21 +211,100 @@ export function Composer({
             {uploading > 0 ? <Spinner /> : <Paperclip className="size-4" />}
           </Button>
 
-          <MentionTextarea
-            value={body}
-            onValueChange={(next) => {
-              setBody(next)
-              setDraft(channelId, next)
-              onTyping()
-            }}
-            people={mentionCandidates}
-            submitOnEnter
-            onSubmitEnter={dispatch}
-            rows={1}
-            aria-label={`${channelName}에 메시지 보내기`}
-            placeholder={`${hash ? '#' : ''}${channelName}에 메시지 보내기…`}
-            className="max-h-40 min-h-11"
-          />
+          {/* 첨부와 글을 테두리 하나로 감싼다. 입력칸 안에 사진이 든 모양이 되어 무엇을 보내는지 보인다. */}
+          <div className="border-line bg-canvas focus-within:border-accent min-w-0 flex-1 rounded-lg border transition-colors">
+            {files.length > 0 && (
+              <ul className="flex flex-wrap gap-2 px-2.5 pt-2.5">
+                {files.map((file, index) => (
+                  <li
+                    key={file.url}
+                    // 첨부끼리 끌어 순서를 바꾼다. 화면 안에서 시작한 끌기라 창의 파일 놓기는 비킨다(`fromPage`).
+                    // 실어 보내는 값은 쓰지 않는다. 파이어폭스가 값이 없으면 끌기를 시작하지 않는다.
+                    draggable={files.length > 1}
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData('application/x-zenith-attachment', file.url)
+                      e.dataTransfer.effectAllowed = 'move'
+                      setMoving(file.url)
+                    }}
+                    // 포인터가 이 첨부의 가로 가운데를 넘었을 때만 자리를 바꾼다. 닿자마자 바꾸면 넓은
+                    // 파일 칩 위에서는 바꾼 뒤에도 포인터가 그 칩 위에 남아 순서가 왔다 갔다 한다.
+                    onDragOver={(e) => {
+                      if (!moving) return
+                      e.preventDefault()
+                      const from = files.findIndex((f) => f.url === moving)
+                      const box = e.currentTarget.getBoundingClientRect()
+                      const pastMiddle = e.clientX > box.left + box.width / 2
+                      if (from < index ? pastMiddle : from > index && !pastMiddle)
+                        move(moving, index)
+                    }}
+                    onDragEnd={() => setMoving(null)}
+                    // 키보드로는 떼기 버튼에 초점을 두고 Alt+좌우 화살표.
+                    onKeyDown={(e) => {
+                      if (!e.altKey || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return
+                      e.preventDefault()
+                      move(file.url, index + (e.key === 'ArrowLeft' ? -1 : 1))
+                      // 뒤로 옮기면 React 가 이 줄을 뺐다 다시 꽂아 초점이 빠진다. 그대로 두면 이어 누른
+                      // Alt+왼쪽이 브라우저의 뒤로 가기가 된다.
+                      const button = e.currentTarget.querySelector('button')
+                      requestAnimationFrame(() => button?.focus())
+                    }}
+                    title={
+                      files.length > 1
+                        ? `${file.name} · 끌거나 Alt+좌우 화살표로 순서 바꾸기`
+                        : file.name
+                    }
+                    className={cn(
+                      'relative',
+                      files.length > 1 && 'cursor-grab',
+                      moving === file.url && 'opacity-40',
+                    )}
+                  >
+                    {previews[file.url] ? (
+                      <img
+                        src={previews[file.url]}
+                        alt={file.name}
+                        // 그림만 따로 끌리면 크롬이 파일 끌기로 친다. 줄째로 끌리게 둔다.
+                        draggable={false}
+                        className="border-line size-16 rounded-lg border object-cover"
+                      />
+                    ) : (
+                      <div className="border-line bg-sunken text-muted flex h-16 max-w-40 flex-col justify-center gap-0.5 rounded-lg border px-2.5 text-xs">
+                        <span className="flex items-center gap-1.5">
+                          <Paperclip className="size-3 shrink-0" />
+                          <span className="truncate">{file.name}</span>
+                        </span>
+                        <span className="text-subtle">{formatBytes(file.size)}</span>
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      aria-label={`${file.name} 떼기`}
+                      onClick={() => setFiles((prev) => prev.filter((f) => f.url !== file.url))}
+                      className="border-line bg-surface text-subtle hover:text-fg absolute -top-1.5 -right-1.5 grid size-5 cursor-pointer place-items-center rounded-full border"
+                    >
+                      <X className="size-3" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <MentionTextarea
+              value={body}
+              onValueChange={(next) => {
+                setBody(next)
+                setDraft(channelId, next)
+                onTyping()
+              }}
+              people={mentionCandidates}
+              submitOnEnter
+              onSubmitEnter={dispatch}
+              rows={1}
+              aria-label={`${channelName}에 메시지 보내기`}
+              placeholder={`${hash ? '#' : ''}${channelName}에 메시지 보내기…`}
+              // 테두리는 감싼 칸이 그린다. 높이는 그 테두리 2px 을 빼서 옆 버튼(44px)과 밑선을 맞춘다.
+              className="max-h-40 min-h-[calc(2.75rem-2px)] border-0 bg-transparent"
+            />
+          </div>
           <Button
             type="submit"
             disabled={(!body.trim() && files.length === 0) || busy}
