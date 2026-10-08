@@ -11,6 +11,7 @@ import { Link, useLocation, useSearchParams } from 'react-router'
 import { ArrowDown, Download, FileText, Paperclip, Pencil, Trash2 } from 'lucide-react'
 import { Avatar } from '@/components/ui/Avatar'
 import { Button } from '@/components/ui/Button'
+import { ImageViewer } from '@/components/ui/ImageViewer'
 import { Spinner } from '@/components/ui/Spinner'
 import { Textarea } from '@/components/ui/Textarea'
 import { useToast } from '@/components/ui/ToastContext'
@@ -56,6 +57,8 @@ function grouped(message: ChatMessage, previous: ChatMessage | undefined) {
 function Attachments({ files }: { files: ChatAttachment[] | null }) {
   /** 그리지 못한 이미지. 확장자 판정이 서버와 갈렸거나 못 받아 온 것이다. */
   const [broken, setBroken] = useState<Set<string>>(new Set())
+  /** 크게 보는 중인 그림. */
+  const [viewing, setViewing] = useState<ChatAttachment | null>(null)
   if (!files || files.length === 0) return null
 
   return (
@@ -64,7 +67,18 @@ function Attachments({ files }: { files: ChatAttachment[] | null }) {
         <li key={`${file.url}-${index}`}>
           {isImage(file.name) && !broken.has(file.url) ? (
             <div className="group/image relative w-fit">
-              <a href={httpUrl(file.url)} target="_blank" rel="noreferrer" className="block">
+              <a
+                href={httpUrl(file.url)}
+                target="_blank"
+                rel="noreferrer"
+                className="block cursor-zoom-in"
+                // 그냥 누르면 이 자리에서 크게 본다. Ctrl·Shift 를 누른 채면 종전대로 새 탭·새 창이다.
+                onClick={(e) => {
+                  if (e.ctrlKey || e.metaKey || e.shiftKey) return
+                  e.preventDefault()
+                  setViewing(file)
+                }}
+              >
                 <img
                   src={httpUrl(file.url)}
                   alt={file.name}
@@ -74,7 +88,7 @@ function Attachments({ files }: { files: ChatAttachment[] | null }) {
                   className="border-line max-h-60 max-w-full rounded-lg border object-contain"
                 />
               </a>
-              {/* 이미지는 새 탭으로 열릴 뿐이라 저장할 길이 없었다. 파일 칩과 같은 `download` 를 얹는다.
+              {/* 줄에서 바로 저장하는 길. 파일 칩과 같은 `download` 를 얹는다.
                   숨어 있을 때는 눌리지도 않는다. 그림을 열려고 누른 것이 내려받기가 되면 안 된다. */}
               <a
                 href={httpUrl(file.url)}
@@ -99,6 +113,13 @@ function Attachments({ files }: { files: ChatAttachment[] | null }) {
           )}
         </li>
       ))}
+      {viewing && (
+        <ImageViewer
+          src={httpUrl(viewing.url)}
+          name={viewing.name}
+          onClose={() => setViewing(null)}
+        />
+      )}
     </ul>
   )
 }
