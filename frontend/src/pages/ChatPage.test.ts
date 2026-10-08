@@ -28,6 +28,14 @@ vi.mock('@/features/notifications/api', () => ({
 }))
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+// jsdom 에는 없다. 목록이 높이 변화를 지켜보는 데 쓴다(`MessageList` 의 맨 아래로 버튼).
+vi.stubGlobal(
+  'ResizeObserver',
+  class {
+    observe() {}
+    disconnect() {}
+  },
+)
 
 afterEach(() => {
   vi.useRealTimers()
