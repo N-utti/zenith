@@ -5,7 +5,6 @@ import { BackLink } from '@/components/ui/BackLink'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { PageHeader } from '@/components/ui/PageHeader'
-import { Select } from '@/components/ui/Select'
 import { SkeletonRows } from '@/components/ui/Skeleton'
 import { useToast } from '@/components/ui/ToastContext'
 import { useDeleteProject, useProject, useTasks, useUpdateTask } from '@/features/projects/api'
@@ -21,15 +20,14 @@ const DRAG_TYPE = 'application/x-zenith-task'
 
 /**
  * 마우스가 있는 기기에서만 끌기를 켠다(CRM 안건 보드와 같은 규칙). 아이폰 사파리는 `draggable`
- * 요소를 길게 누르면 끌기를 시작해 세로 스크롤과 부딪힌다. 손가락 기기는 카드의 단계 선택으로,
- * 키보드는 카드를 열어 그 안의 단계 선택으로 옮긴다.
+ * 요소를 길게 누르면 끌기를 시작해 세로 스크롤과 부딪힌다. 손가락 기기와 키보드는 카드를 열어
+ * 그 안의 단계 선택으로 옮긴다. 카드마다 단계 선택을 두지 않는다. 폰에서 카드마다 상자가 하나씩
+ * 더 붙어 보드가 상자투성이가 된다.
  */
 const CAN_DRAG =
   typeof window !== 'undefined' &&
   typeof window.matchMedia === 'function' &&
   window.matchMedia('(pointer: fine)').matches
-
-const STAGE_OPTIONS = TASK_STAGES.map((s) => ({ value: s.key, label: s.label }))
 
 /** 마감이 이른 것이 위, 마감 없는 것은 아래. `YYYY-MM-DD` 는 문자열 순서가 곧 날짜 순서다. */
 const byDue = (a: Task, b: Task) =>
@@ -218,7 +216,7 @@ function Board({
               </header>
               <ul className="space-y-2">
                 {inStage.map((task) => (
-                  <TaskCard key={task.id} task={task} onOpen={onOpen} onMove={moveTo} />
+                  <TaskCard key={task.id} task={task} onOpen={onOpen} />
                 ))}
               </ul>
             </section>
@@ -229,15 +227,7 @@ function Board({
   )
 }
 
-function TaskCard({
-  task,
-  onOpen,
-  onMove,
-}: {
-  task: Task
-  onOpen: (task: Task) => void
-  onMove: (task: Task, stage: TaskStage) => void
-}) {
+function TaskCard({ task, onOpen }: { task: Task; onOpen: (task: Task) => void }) {
   const done = task.stage === 'done'
   // 오늘 마감은 아직 안 지났다. 끝낸 업무는 지나도 빨갛게 하지 않는다.
   const overdue = !done && task.due_date !== null && task.due_date < toISODate(new Date())
@@ -277,19 +267,6 @@ function TaskCard({
           </span>
         )}
       </p>
-      {!CAN_DRAG && (
-        <Select
-          aria-label={`${task.title} 단계`}
-          className="h-8 text-xs"
-          value={task.stage}
-          options={STAGE_OPTIONS}
-          data-task-stage={task.id}
-          onChange={(e) => {
-            onMove(task, e.target.value as TaskStage)
-            refocus(`[data-task-stage="${task.id}"]`)
-          }}
-        />
-      )}
     </li>
   )
 }
