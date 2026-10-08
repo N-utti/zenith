@@ -183,7 +183,7 @@ export function MessageList({
   }, [count, channelId, lastId, lastMine])
 
   // 위를 읽는 중에는 새 메시지가 와도 끌어내리지 않으니(위 효과), 왔다는 것과 돌아갈 길을
-  // 버튼으로 남긴다. 올라간 순간의 마지막 메시지를 적어 두고 그 뒤에 붙은 것을 센다.
+  // 버튼으로 남긴다. 바닥에서 마지막으로 본 메시지를 적어 두고 그 뒤에 붙은 것을 센다.
   // 기준은 위 효과와 같은 200px 다. 버튼이 보이는 때가 곧 새 메시지를 따라가지 않는 때다.
   // 스크롤 자리는 코드로 옮겨도 scroll 이벤트가 오므로 여기 한 곳에서만 본다.
   const [awayFrom, setAwayFrom] = useState<string | null>(null)
@@ -191,7 +191,8 @@ export function MessageList({
   const unseen = countAfter(data?.items ?? [], awayFrom)
   const lastIdRef = useRef(lastId)
   const seenAtBottom = useRef<string | undefined>(undefined)
-  useEffect(() => {
+  // 높이 관찰 콜백보다 먼저 적혀야 한다. 늦으면 바닥에서 본 메시지가 한 건 전 것으로 남는다.
+  useLayoutEffect(() => {
     lastIdRef.current = lastId
   }, [lastId])
   const measure = useCallback(() => {
@@ -214,6 +215,8 @@ export function MessageList({
       if (!content) return
       const observer = new ResizeObserver(measure)
       observer.observe(content)
+      // 목록 영역이 줄어도 바닥에서 멀어진다(창 높이, 커진 입력칸, 모바일 키보드).
+      if (content.parentElement) observer.observe(content.parentElement)
       return () => observer.disconnect()
     },
     [measure],
@@ -221,6 +224,8 @@ export function MessageList({
   const toBottom = () => {
     const scroller = scrollerRef.current
     if (scroller) scroller.scrollTop = scroller.scrollHeight
+    // 버튼은 내려가면 사라진다. 초점이 body 로 떨어지지 않게 마지막 줄로 옮긴다.
+    document.getElementById(`m-${lastIdRef.current}`)?.focus({ preventScroll: true })
   }
 
   // 더 과거를 앞에 붙이면 읽던 줄이 그만큼 아래로 밀린다. 누르는 순간 바닥에서 얼마나 떨어져
