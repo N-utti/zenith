@@ -63,7 +63,7 @@ const errorText = (err: unknown, fallback: string) =>
   err instanceof ApiError ? err.message : fallback
 
 /** 세 폼이 같이 쓰는 껍데기. Enter 로도 저장되게 폼을 모달 본문에 두고 버튼을 `form=` 으로 잇는다. */
-function FormModal({
+export function FormModal({
   title,
   description,
   busy,

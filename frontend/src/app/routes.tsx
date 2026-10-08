@@ -1,6 +1,6 @@
 import { lazy, Suspense } from 'react'
 import { Route, Routes } from 'react-router'
-import { CRM_ENABLED } from '@/app/navigation'
+import { CRM_ENABLED, PROJECTS_ENABLED } from '@/app/navigation'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { Spinner } from '@/components/ui/Spinner'
 import { LoginPage } from '@/features/auth/LoginPage'
@@ -17,6 +17,8 @@ import { BoardPostPage } from '@/pages/BoardPostPage'
 import { ChatSocketProvider } from '@/features/chat/ChatSocketProvider'
 import { ChatPage } from '@/pages/ChatPage'
 import { CrmBoardPage } from '@/pages/CrmBoardPage'
+import { ProjectBoardPage } from '@/pages/ProjectBoardPage'
+import { ProjectsPage } from '@/pages/ProjectsPage'
 import { CrmDealPage } from '@/pages/CrmDealPage'
 import { CrmOrgPage } from '@/pages/CrmOrgPage'
 import { CrmOrgsPage } from '@/pages/CrmOrgsPage'
@@ -85,6 +87,13 @@ export function AppRoutes() {
                 <Route path="crm/deals/:dealId" element={<CrmDealPage />} />
                 <Route path="crm/orgs" element={<CrmOrgsPage />} />
                 <Route path="crm/orgs/:orgId" element={<CrmOrgPage />} />
+              </>
+            )}
+            {/* 협업 공간은 목 데이터뿐이라 운영 빌드에서 라우트째 빠진다(navigation.ts `PROJECTS_ENABLED`). */}
+            {PROJECTS_ENABLED && (
+              <>
+                <Route path="projects" element={<ProjectsPage />} />
+                <Route path="projects/:projectId" element={<ProjectBoardPage />} />
               </>
             )}
             <Route path="archive" element={<ArchivePage />} />
