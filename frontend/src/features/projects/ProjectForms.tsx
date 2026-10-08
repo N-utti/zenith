@@ -110,7 +110,7 @@ export function ProjectFormModal({ project, onClose }: { project?: Project; onCl
 }
 
 /**
- * 업무를 등록하거나(`task` 없음) 고친다. 단계 선택이 늘 있어, 카드를 끌지 못하는
+ * 업무를 등록하거나(`task` 없음) 고친다. 단계 선택이 늘 있어, 카드를 끌지 못하는 손가락 기기와
  * 키보드 사용자는 여기서 단계를 옮긴다(WCAG 2.5.7 의 끌기 대안).
  */
 export function TaskFormModal({
