@@ -11,6 +11,7 @@ import {
   Settings,
   ShieldUser,
   Sparkles,
+  SquareKanban,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { ROLE_RANK, type Role } from '@/types'
@@ -34,6 +35,16 @@ export const CRM_ENABLED = import.meta.env.DEV
 
 const CRM_NAV: NavItem[] = CRM_ENABLED ? [{ to: '/crm', label: 'CRM', icon: Building2 }] : []
 
+/**
+ * 협업 공간(프로젝트 칸반보드)은 정본(01 PRD 범위·04 API)에 아직 없고 백엔드도 없다. 목 데이터로만
+ * 돌아서 개발 빌드에서만 뜬다. 운영 빌드에서는 메뉴와 라우트를 같이 뺀다.
+ */
+export const PROJECTS_ENABLED = import.meta.env.DEV
+
+const PROJECTS_NAV: NavItem[] = PROJECTS_ENABLED
+  ? [{ to: '/projects', label: '협업 공간', icon: SquareKanban }]
+  : []
+
 const ARCHIVE_NAV: NavItem = { to: '/archive', label: '자료실', icon: Archive }
 
 /**
@@ -46,6 +57,7 @@ export const TOP_NAV: NavItem[] = [
   { to: '/attendance', label: '근태', icon: Clock },
   { to: '/approvals', label: '결재', icon: ClipboardCheck },
   ...CRM_NAV,
+  ...PROJECTS_NAV,
   ARCHIVE_NAV,
   { to: '/ai', label: 'AI 어시스턴트', icon: Sparkles },
 ]
@@ -85,6 +97,7 @@ export const ALL_NAV: NavItem[] = [
   { to: '/attendance', label: '근태', icon: Clock },
   { to: '/approvals', label: '결재', icon: ClipboardCheck },
   ...CRM_NAV,
+  ...PROJECTS_NAV,
   ARCHIVE_NAV,
   { to: '/ai', label: 'AI 어시스턴트', icon: Sparkles },
   { to: '/notifications', label: '받은 알림', icon: Bell },

@@ -145,6 +145,18 @@ import {
 import { decodeText, parseCsv } from './csv'
 
 import type { ActivityInput, ContactInput, DealInput, OrgInput } from '@/features/crm/types'
+import type { ProjectInput, TaskInput } from '@/features/projects/types'
+import {
+  createProject,
+  createTask,
+  deleteProject,
+  deleteTask,
+  getProject,
+  listProjects,
+  listTasks as listProjectTasks,
+  updateProject,
+  updateTask,
+} from './projectsDb'
 import { listFiles, readFile, saveFile } from './filesDb'
 import { isImage } from '@/features/chat/attachments'
 import { buildXlsx } from '@/lib/xlsx'
@@ -2404,5 +2416,65 @@ data: ${JSON.stringify(data)}
     const body = (await readJson<{ version?: unknown }>(request)) ?? {}
     await delay(300)
     return approvalResponse(reopenDeal(user, String(params.id), body))
+  }),
+
+  // ── 협업 공간: 프로젝트 칸반보드 ────────────────────────────
+  // 04 에 아직 없다. 프론트가 먼저 만든 모양이고 백엔드 계약은 이슈로 올린다.
+  http.get(
+    '/api/projects',
+    authed((user) => HttpResponse.json({ items: listProjects(user) })),
+  ),
+  http.post('/api/projects', async ({ request }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    const body = await readJson<ProjectInput>(request)
+    if (!body) return validationError('본문이 올바르지 않습니다.')
+    await delay(300)
+    return approvalResponse(createProject(user, body), 201)
+  }),
+  http.get('/api/projects/:id', ({ params }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    return approvalResponse(getProject(user, String(params.id)))
+  }),
+  http.patch('/api/projects/:id', async ({ request, params }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    const body = await readJson<Partial<ProjectInput>>(request)
+    if (!body) return validationError('본문이 올바르지 않습니다.')
+    await delay(300)
+    return approvalResponse(updateProject(user, String(params.id), body))
+  }),
+  http.delete('/api/projects/:id', async ({ params }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    await delay(300)
+    const result = deleteProject(user, String(params.id))
+    return 'error' in result ? approvalResponse(result) : new HttpResponse(null, { status: 204 })
+  }),
+  http.get('/api/projects/:id/tasks', ({ params }) => {
+    if (!authenticate()) return unauthorized()
+    const result = listProjectTasks(String(params.id))
+    return 'error' in result ? approvalResponse(result) : HttpResponse.json({ items: result })
+  }),
+  http.post('/api/projects/:id/tasks', async ({ request, params }) => {
+    if (!authenticate()) return unauthorized()
+    const body = await readJson<Partial<TaskInput>>(request)
+    if (!body) return validationError('본문이 올바르지 않습니다.')
+    await delay(300)
+    return approvalResponse(createTask(String(params.id), body), 201)
+  }),
+  http.patch('/api/project-tasks/:id', async ({ request, params }) => {
+    if (!authenticate()) return unauthorized()
+    const body = await readJson<Partial<TaskInput>>(request)
+    if (!body) return validationError('본문이 올바르지 않습니다.')
+    await delay(300)
+    return approvalResponse(updateTask(String(params.id), body))
+  }),
+  http.delete('/api/project-tasks/:id', async ({ params }) => {
+    if (!authenticate()) return unauthorized()
+    await delay(300)
+    const result = deleteTask(String(params.id))
+    return 'error' in result ? approvalResponse(result) : new HttpResponse(null, { status: 204 })
   }),
 ]
