@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router'
-import { Download, FileText, Paperclip, Pencil, Trash2 } from 'lucide-react'
+import { ArrowDown, Download, FileText, Paperclip, Pencil, Trash2 } from 'lucide-react'
 import { Avatar } from '@/components/ui/Avatar'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
@@ -25,6 +25,7 @@ import { MentionText } from '@/features/people/MentionText'
 import { isImage } from './attachments'
 import { MAX_BODY_CHARS, useMessages, useOlderMessages } from './api'
 import { useChatSocketContext } from './ChatSocketContext'
+import { countAfter } from './newMessages'
 import type { ChatAttachment, ChatMessage } from './types'
 
 /** 같은 사람이 5분 안에 이어서 보낸 메시지는 아바타·이름을 반복하지 않는다. */
@@ -181,6 +182,52 @@ export function MessageList({
     }
   }, [count, channelId, lastId, lastMine])
 
+  // 위를 읽는 중에는 새 메시지가 와도 끌어내리지 않으니(위 효과), 왔다는 것과 돌아갈 길을
+  // 버튼으로 남긴다. 바닥에서 마지막으로 본 메시지를 적어 두고 그 뒤에 붙은 것을 센다.
+  // 기준은 위 효과와 같은 200px 다. 버튼이 보이는 때가 곧 새 메시지를 따라가지 않는 때다.
+  // 스크롤 자리는 코드로 옮겨도 scroll 이벤트가 오므로 여기 한 곳에서만 본다.
+  const [awayFrom, setAwayFrom] = useState<string | null>(null)
+  const away = awayFrom !== null
+  const unseen = countAfter(data?.items ?? [], awayFrom)
+  const lastIdRef = useRef(lastId)
+  const seenAtBottom = useRef<string | undefined>(undefined)
+  // 높이 관찰 콜백보다 먼저 적혀야 한다. 늦으면 바닥에서 본 메시지가 한 건 전 것으로 남는다.
+  useLayoutEffect(() => {
+    lastIdRef.current = lastId
+  }, [lastId])
+  const measure = useCallback(() => {
+    const scroller = scrollerRef.current
+    if (!scroller) return
+    const distanceFromBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight
+    if (distanceFromBottom < 200) {
+      seenAtBottom.current = lastIdRef.current
+      return setAwayFrom(null)
+    }
+    // 이미 올라가 있으면 기준을 그대로 둔다. 스크롤할 때마다 바꾸면 센 것이 0 으로 돌아간다.
+    // 기준은 지금의 마지막이 아니라 바닥에서 마지막으로 본 메시지다. 한꺼번에 밀려와 바닥에서
+    // 떨어진 때에는 지금의 마지막이 이미 못 본 메시지다.
+    setAwayFrom((prev) => prev ?? seenAtBottom.current ?? lastIdRef.current ?? null)
+  }, [])
+  // 스크롤하지 않아도 바닥에서 멀어진다. 큰 사진이 달린 메시지나 한꺼번에 온 여러 건은 200px 를
+  // 넘겨 따라 내려가지 않는데, 그때는 scroll 이벤트가 없다. 목록 높이가 바뀔 때도 다시 잰다.
+  const watchHeight = useCallback(
+    (content: HTMLDivElement | null) => {
+      if (!content) return
+      const observer = new ResizeObserver(measure)
+      observer.observe(content)
+      // 목록 영역이 줄어도 바닥에서 멀어진다(창 높이, 커진 입력칸, 모바일 키보드).
+      if (content.parentElement) observer.observe(content.parentElement)
+      return () => observer.disconnect()
+    },
+    [measure],
+  )
+  const toBottom = () => {
+    const scroller = scrollerRef.current
+    if (scroller) scroller.scrollTop = scroller.scrollHeight
+    // 버튼은 내려가면 사라진다. 초점이 body 로 떨어지지 않게 마지막 줄로 옮긴다.
+    document.getElementById(`m-${lastIdRef.current}`)?.focus({ preventScroll: true })
+  }
+
   // 더 과거를 앞에 붙이면 읽던 줄이 그만큼 아래로 밀린다. 누르는 순간 바닥에서 얼마나 떨어져
   // 있었는지 적어 두고, 붙은 뒤 같은 거리로 되돌린다. 위에서부터 재면 브라우저가 스스로 자리를
   // 잡아 주는 경우(크롬)와 겹쳐 두 번 밀린다. 바닥부터 재면 어느 쪽이든 같은 자리가 나온다.
@@ -267,55 +314,75 @@ export function MessageList({
   }
 
   return (
-    <div ref={scrollerRef} className="min-h-0 flex-1 overflow-y-auto">
-      <div className="mx-auto max-w-3xl px-4 py-6">
-        {data.items.length === 0 && (
-          <p className="text-subtle py-12 text-center text-sm">
-            아직 메시지가 없습니다. 첫 마디를 남겨 보세요.
-          </p>
-        )}
+    // 버튼이 목록과 같이 흘러가지 않게 스크롤 영역 밖에 띄운다.
+    <div className="relative flex min-h-0 flex-1 flex-col">
+      {away && (
+        <button
+          type="button"
+          onClick={toBottom}
+          aria-label={unseen > 0 ? `새 메시지 ${unseen}개, 맨 아래로` : '맨 아래로'}
+          title="맨 아래로"
+          className={cn(
+            'absolute bottom-3 left-1/2 z-10 flex h-8 -translate-x-1/2 cursor-pointer items-center gap-1.5 rounded-full border px-3 text-xs shadow-sm transition-colors',
+            unseen > 0
+              ? 'border-accent bg-accent text-on-accent'
+              : 'border-line bg-surface text-muted hover:text-fg',
+          )}
+        >
+          {unseen > 0 && `새 메시지 ${unseen}개`}
+          <ArrowDown className="size-3.5" />
+        </button>
+      )}
+      <div ref={scrollerRef} onScroll={measure} className="min-h-0 flex-1 overflow-y-auto">
+        <div ref={watchHeight} className="mx-auto max-w-3xl px-4 py-6">
+          {data.items.length === 0 && (
+            <p className="text-subtle py-12 text-center text-sm">
+              아직 메시지가 없습니다. 첫 마디를 남겨 보세요.
+            </p>
+          )}
 
-        {data.next_cursor && (
-          <div className="mb-2 flex flex-col items-center gap-1">
-            <button
-              type="button"
-              disabled={older.isPending}
-              onClick={() => data.next_cursor && loadOlder(data.next_cursor)}
-              className="border-line text-muted hover:bg-surface-hover hover:text-fg flex h-8 cursor-pointer items-center gap-2 rounded-full border px-3.5 text-xs transition-colors disabled:cursor-default disabled:opacity-60"
-            >
-              {older.isPending && <Spinner />}
-              이전 메시지 더 보기
-            </button>
-            {older.isError && (
-              <p role="alert" className="text-danger text-xs">
-                이전 메시지를 불러오지 못했습니다.
-              </p>
-            )}
-          </div>
-        )}
+          {data.next_cursor && (
+            <div className="mb-2 flex flex-col items-center gap-1">
+              <button
+                type="button"
+                disabled={older.isPending}
+                onClick={() => data.next_cursor && loadOlder(data.next_cursor)}
+                className="border-line text-muted hover:bg-surface-hover hover:text-fg flex h-8 cursor-pointer items-center gap-2 rounded-full border px-3.5 text-xs transition-colors disabled:cursor-default disabled:opacity-60"
+              >
+                {older.isPending && <Spinner />}
+                이전 메시지 더 보기
+              </button>
+              {older.isError && (
+                <p role="alert" className="text-danger text-xs">
+                  이전 메시지를 불러오지 못했습니다.
+                </p>
+              )}
+            </div>
+          )}
 
-        {data.items.map((message, index) => {
-          const previous = data.items[index - 1]
+          {data.items.map((message, index) => {
+            const previous = data.items[index - 1]
 
-          const newDay = !previous || !sameDay(previous.created_at, message.created_at)
+            const newDay = !previous || !sameDay(previous.created_at, message.created_at)
 
-          return (
-            <MessageRow
-              key={message.id}
-              message={message}
-              dayLabel={newDay ? formatDay(message.created_at) : null}
-              compact={grouped(message, previous)}
-              flash={message.id === focusId}
-              mentionNames={mentionNames}
-              // 쓴 사람만 고치고 지운다(백엔드 #284). 버튼을 감추는 것은 화면 편의이고 남의 메시지를
-              // 건드리는 요청의 차단은 서버의 `error` 이벤트(FORBIDDEN)다.
-              onEdit={message.author.id === me ? edit : undefined}
-              onDelete={message.author.id === me ? remove : undefined}
-            >
-              {message.doc_ref && <DocCard docId={message.doc_ref} />}
-            </MessageRow>
-          )
-        })}
+            return (
+              <MessageRow
+                key={message.id}
+                message={message}
+                dayLabel={newDay ? formatDay(message.created_at) : null}
+                compact={grouped(message, previous)}
+                flash={message.id === focusId}
+                mentionNames={mentionNames}
+                // 쓴 사람만 고치고 지운다(백엔드 #284). 버튼을 감추는 것은 화면 편의이고 남의 메시지를
+                // 건드리는 요청의 차단은 서버의 `error` 이벤트(FORBIDDEN)다.
+                onEdit={message.author.id === me ? edit : undefined}
+                onDelete={message.author.id === me ? remove : undefined}
+              >
+                {message.doc_ref && <DocCard docId={message.doc_ref} />}
+              </MessageRow>
+            )
+          })}
+        </div>
       </div>
     </div>
   )
