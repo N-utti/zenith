@@ -1,7 +1,8 @@
 import { useEffect, useRef } from 'react'
 import { Link } from 'react-router'
-import { FileText, ShieldCheck } from 'lucide-react'
+import { ShieldCheck } from 'lucide-react'
 import { cn } from '@/lib/cn'
+import { sourceKind, sourceTo } from './source'
 import type { AiMessage, Citation, CitationFocus } from './types'
 
 export function SourceCard({
@@ -13,7 +14,9 @@ export function SourceCard({
   activeTick?: number
 }) {
   const active = activeTick !== undefined
-  const ref = useRef<HTMLAnchorElement>(null)
+  const ref = useRef<HTMLAnchorElement & HTMLDivElement>(null)
+  const kind = sourceKind(source)
+  const to = sourceTo(source)
   // 각주를 누르면 그 카드로 스크롤하고 포커스를 옮긴다(키보드·스크린리더도 이동을 안다).
   // 숨겨진(display:none) 카드에서는 아무 일도 없다.
   useEffect(() => {
@@ -22,16 +25,12 @@ export function SourceCard({
     ref.current?.focus({ preventScroll: true })
   }, [activeTick])
 
-  return (
-    <Link
-      ref={ref}
-      to={`/docs/${source.doc_id}`}
-      aria-current={active || undefined}
-      className={cn(
-        'bg-surface block rounded-xl border p-3.5 transition-colors',
-        active ? 'border-accent' : 'border-line hover:border-line-strong',
-      )}
-    >
+  const className = cn(
+    'bg-surface block rounded-xl border p-3.5 transition-colors',
+    active ? 'border-accent' : to ? 'border-line hover:border-line-strong' : 'border-line',
+  )
+  const body = (
+    <>
       <div className="flex items-center gap-2">
         <span
           className={cn(
@@ -44,10 +43,25 @@ export function SourceCard({
         <span className="text-fg min-w-0 flex-1 truncate text-[13px] font-semibold">
           {source.title}
         </span>
-        <FileText className="text-subtle size-3.5 shrink-0" />
+        <kind.icon className="text-subtle size-3.5 shrink-0" aria-hidden />
+        <span className="sr-only">{kind.label}</span>
       </div>
       <p className="text-muted mt-2 text-xs leading-relaxed">&ldquo;{source.quote}&rdquo;</p>
       <p className="text-subtle mt-2 text-[10.5px]">{source.path}</p>
+    </>
+  )
+
+  // 갈 곳을 모르는 근거는 링크로 그리지 않는다. 각주를 눌렀을 때 초점은 그대로 받는다.
+  if (!to) {
+    return (
+      <div ref={ref} tabIndex={-1} aria-current={active || undefined} className={className}>
+        {body}
+      </div>
+    )
+  }
+  return (
+    <Link ref={ref} to={to} aria-current={active || undefined} className={className}>
+      {body}
     </Link>
   )
 }
