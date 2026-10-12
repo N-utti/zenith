@@ -108,6 +108,7 @@ async def _search(user: User, query: str, sources: list[Citation]) -> str:
             PASSAGES_PER_SEARCH,
             headline=PASSAGE_HEADLINE,
             post_roles=AI_POST_ROLES,
+            docs_ai_source_only=True,  # 문서마다 켜고 끄는 「AI 근거로 쓰기」(README 43)
         )
     if not hits:
         return "찾은 자료가 없습니다."

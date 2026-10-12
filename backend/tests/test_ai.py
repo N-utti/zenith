@@ -348,9 +348,19 @@ async def _knowledge(app_db, users: Users) -> dict:
         updated_by=users.member.id,
         deleted_at=datetime.now(UTC),
     )
+    from_ai = (
+        Document(  # AI 답변을 저장한 문서 — ai_source=false, 근거로 다시 잡히지 않는다(README 43)
+            folder_id=root.id,
+            title="AI 가 정리한 연차 이월",
+            text_cache="연차 이월은 무제한이다",
+            tsv=func.to_tsvector("simple", "연차 이월은 무제한이다"),
+            updated_by=users.member.id,
+            ai_source=False,
+        )
+    )
     notice = Board(name="전체공지", min_role="member")
     exec_board = Board(name="경영 보고", min_role="exec")
-    app_db.add_all([doc, trashed, notice, exec_board])
+    app_db.add_all([doc, trashed, from_ai, notice, exec_board])
     await app_db.flush()
     app_db.add_all(
         [
@@ -407,6 +417,9 @@ async def test_chat_searches_with_askers_permissions_and_cites(
     assert "[2] (게시글) 전체공지 › 연차 이월 안내: " in result["content"]
     assert "\n[" not in result["content"].replace("\n\n[", "")  # 구절은 한 줄
     assert "옛 휴가 규정" not in result["content"] and "충당금" not in result["content"]
+    assert "무제한" not in result["content"]  # ai_source=false 문서는 빠진다
+    r = await client.get("/api/search", params={"q": "무제한", "types": "doc"})
+    assert [h["title"] for h in r.json()] == ["AI 가 정리한 연차 이월"]  # ⌘K 는 영향 없다
 
     # 저장된 답변에 각주가 같이 남는다
     saved = (

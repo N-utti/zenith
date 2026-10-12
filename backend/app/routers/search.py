@@ -86,9 +86,11 @@ async def find_hits(
     *,
     headline: str = HEADLINE_OPTS,
     post_roles: list[str] | None = None,
+    docs_ai_source_only: bool = False,
 ) -> list[Hit]:
     """FTS + 최근성, 권한 필터는 SQL 안에서. ⌘K 와 AI 검색 도구(ai.py)가 같이 쓴다 — 스니펫은 ts_headline 원문
-    (`**…**` 마커, 이스케이프 안 함). `post_roles` 는 내 등급 필터 위에 **더 좁히기만** 한다."""
+    (`**…**` 마커, 이스케이프 안 함). `post_roles` 는 내 등급 필터 위에 **더 좁히기만** 한다.
+    `docs_ai_source_only` 는 「AI 근거로 쓰기」가 켜진 문서만(README 43)."""
     tsq_text = _tsquery(q)
     if tsq_text is None:
         return []
@@ -108,7 +110,11 @@ async def find_hits(
             )
             .options(*DOC_LIST_OPTS)  # 평문·tsv 는 SQL 식에서만 쓴다. 행으로는 안 가져온다
             .join(Folder, Folder.id == Document.folder_id)
-            .where(Document.deleted_at.is_(None), tsv.op("@@")(tsq))
+            .where(
+                Document.deleted_at.is_(None),
+                tsv.op("@@")(tsq),
+                *([Document.ai_source.is_(True)] if docs_ai_source_only else []),
+            )
             .order_by(
                 score.desc(), Document.updated_at.desc(), Document.id
             )  # limit 경계가 흔들리지 않게

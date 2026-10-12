@@ -156,6 +156,10 @@ class Document(Base):
         onupdate=func.now(),
     )
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # 휴지통
+    # 「AI 근거로 쓰기」 스위치(03 에 없던 칸, 2026-10-12 — README 43). AI 답변을 저장한 문서는 false 로 만들어진다
+    ai_source: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=sql_text("true")
+    )
 
 
 # 문서 **목록**(트리·휴지통·홈·검색)에 붙이는 로더 옵션. 목록은 제목·시각만 쓰는데, 엔티티를 그냥 뽑으면
