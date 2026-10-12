@@ -20,8 +20,26 @@ const ALL_CITATIONS: (Citation & { minRole?: 'lead' | 'exec' })[] = [
     quote: '퇴사 시 지급 장비는 총무팀에 반납한다.',
     path: '회사 위키 · 온보딩/오프보딩',
   },
+  // 아래 둘의 `type`·`to` 는 실제 서버가 아직 주지 않는다(`features/ai/types.ts` 의 추정).
   {
     n: 3,
+    type: 'post',
+    to: '/board/all/p-2',
+    title: '제니스 사내 협업툴 파일럿 참여자 모집',
+    quote: '기간은 2주이며, 기존 업무 방식과 병행합니다.',
+    path: '전체 공지',
+  },
+  {
+    n: 4,
+    type: 'file',
+    doc_id: 'd-1',
+    to: '/docs/d-1',
+    title: '장비 사양표.xlsx',
+    quote: '개발 직군: 메모리 32GB 이상, 저장 장치 1TB.',
+    path: '비품·장비 지급 규정 · 첨부',
+  },
+  {
+    n: 5,
     doc_id: 'd-2',
     title: '2027 장비 예산 계획',
     quote: '내년 장비 교체 예산은 전사 기준 인당 상향을 검토한다.',
@@ -38,13 +56,22 @@ const ALL_CITATIONS: (Citation & { minRole?: 'lead' | 'exec' })[] = [
 export function answer(user: User): { body: string; citations: Citation[] } {
   const citations = ALL_CITATIONS.filter(
     (c) => !c.minRole || ROLE_RANK[user.role] >= ROLE_RANK[c.minRole],
-  ).map(({ n, doc_id, title, quote, path }) => ({ n, doc_id, title, quote, path }))
+  ).map(({ n, doc_id, type, to, title, quote, path }) => ({
+    n,
+    doc_id,
+    type,
+    to,
+    title,
+    quote,
+    path,
+  }))
   const marks = citations.map((c) => `[[${c.n}]]`)
   return {
     body:
       `신규 입사자는 입사 첫날 사양에 맞춰 노트북을 지급받습니다. 개발 직군은 고사양, 그 외 직군은 표준 사양이 기본이며${marks[0] ?? ''}, ` +
-      `반납은 퇴사 시 총무팀에 하도록 규정되어 있습니다${marks[1] ?? ''}.` +
-      (marks[2] ? ` 내년 장비 예산은 인당 상향을 검토 중입니다${marks[2]}.` : ''),
+      `반납은 퇴사 시 총무팀에 하도록 규정되어 있습니다${marks[1] ?? ''}. ` +
+      `지급받은 장비로 2주 동안 협업툴 파일럿에 참여할 수 있고${marks[2] ?? ''}, 직군별 사양은 첨부된 사양표에 있습니다${marks[3] ?? ''}.` +
+      (marks[4] ? ` 내년 장비 예산은 인당 상향을 검토 중입니다${marks[4]}.` : ''),
     citations,
   }
 }

@@ -11,7 +11,15 @@ export type AiModel = Schema<'ModelOut'>
  */
 export interface Citation {
   n: number
-  doc_id: string
+  /** 문서가 아닌 근거에는 없을 수 있다. */
+  doc_id?: string
+  /**
+   * 근거의 종류와 눌렀을 때 갈 자리. **서버는 아직 주지 않는다.** 근거를 게시글·첨부 파일로
+   * 넓히기로 한 결정(2026-09-30)에 앞서 만든 추정이고, 통합검색의 `Hit` 처럼 서버가 종류와
+   * 라우트를 준다고 봤다. 둘 다 없으면 지금처럼 문서다(`source.ts`).
+   */
+  type?: 'doc' | 'post' | 'file'
+  to?: string
   title: string
   /** 답변의 근거가 된 구절. 문서 본문에서 그대로 따온다. */
   quote: string
