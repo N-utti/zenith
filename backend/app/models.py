@@ -378,6 +378,37 @@ class Todo(Base):
     created_at: Mapped[datetime] = created_at_col()  # 03 에 없던 컬럼 — 목록 순서 (2026-09-07)
 
 
+class Project(Base):
+    """협업 공간의 프로젝트(03 에 없는 표, 2026-10-12 — README 40, 프론트 #359). 전 직원이 본다."""
+
+    __tablename__ = "projects"
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
+    created_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = created_at_col()
+
+
+class ProjectTask(Base):
+    """프로젝트의 업무 카드. 프로젝트를 지우면 같이 지워진다(ON DELETE CASCADE)."""
+
+    __tablename__ = "project_tasks"
+    __table_args__ = (Index("idx_project_tasks_project", "project_id", "created_at"),)
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
+    )
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    stage: Mapped[str] = mapped_column(Text, nullable=False, server_default="todo")
+    assignee_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
+    due_date: Mapped[date | None] = mapped_column(Date)
+    priority: Mapped[str] = mapped_column(Text, nullable=False, server_default="normal")
+    note: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
+    created_at: Mapped[datetime] = created_at_col()
+
+
 class Event(Base):
     """홈 캘린더의 개인 일정(03 에 없는 표, 2026-10-02 — README 31). 할 일(`todos`)과 같은 꼴, 본인만 본다."""
 
