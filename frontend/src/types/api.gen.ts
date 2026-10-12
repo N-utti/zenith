@@ -936,7 +936,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** {session_id?, message, scope?} → SSE 스트림 (token → citations → done {message_id, session_id}) — 같은 session_id 의 앞선 대화를 이어 보낸다(README 41) */
+        /** {session_id?, message, scope?} → SSE 스트림 (status* → token → citations → done {message_id, session_id}) — 앞선 대화를 이어 보내고(README 41), 검색 도구로 문서·일반 게시글을 근거로 쓴다(README 42) */
         post: operations["chat_api_ai_chat_post"];
         delete?: never;
         options?: never;

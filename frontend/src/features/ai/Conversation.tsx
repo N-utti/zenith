@@ -178,7 +178,7 @@ export function Conversation({
     // 스크롤 영역을 끝까지 내린다. 마지막 줄에 맞추면 아래 여백만큼 덜 내려가 바닥이 남는다.
     const scroller = scrollerRef.current
     if (scroller) scroller.scrollTop = scroller.scrollHeight
-  }, [messages.length, lastLength, generating, streaming])
+  }, [messages.length, lastLength, generating, streaming, status])
 
   return (
     <div ref={scrollerRef} className="flex-1 overflow-y-auto px-5 py-5">
@@ -209,7 +209,8 @@ export function Conversation({
           )
         })}
 
-        {generating && <Generating status={status} />}
+        {/* 말풍선이 자라다 멈추고 서버가 다시 문서를 찾는 동안에도 같은 표시를 말풍선 아래에 둔다. */}
+        {(generating || (streaming && status)) && <Generating status={status} />}
       </div>
     </div>
   )
@@ -284,7 +285,7 @@ const Answer = memo(function Answer({
         {(message.citations?.length ?? 0) > 0 && (
           <div className="mt-3 lg:hidden">
             <p className="text-subtle mb-2 text-[11px] font-bold">
-              근거 문서 {message.citations?.length}
+              근거 {message.citations?.length}
             </p>
             <ul className="space-y-2">
               {message.citations?.map((source) => (

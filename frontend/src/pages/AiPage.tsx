@@ -80,7 +80,7 @@ export function AiPage() {
           <h1 className="text-fg shrink-0 text-[15.5px] font-bold whitespace-nowrap">
             AI 어시스턴트
           </h1>
-          <span className="text-subtle hidden text-xs sm:inline">사내 위키 기반 답변</span>
+          <span className="text-subtle hidden text-xs sm:inline">사내 문서·게시글 기반 답변</span>
           <ProviderBadge />
           {messages.length > 0 && (
             <Button

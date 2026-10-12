@@ -5,19 +5,29 @@ import { expect, test, vi } from 'vitest'
 import { useAsk } from './api'
 import { getThread, resetThread } from './store'
 
-/** 첫 토큰 전에 멈춰 있다가 `release()` 하면 흘린다. 답변 말풍선은 답변의 첫 이벤트에서 생긴다. */
+/**
+ * 세 군데서 멈춘다. 첫 토큰 전, 답변을 쓰다가 다시 문서를 찾는 동안, 닫히기 직전. `release()` 마다 한 구간씩 흘린다.
+ * 답변 말풍선은 답변의 첫 이벤트에서 생긴다.
+ */
 let release: () => void = () => {}
+const gate = () => new Promise<void>((resolve) => (release = resolve))
 /** 끝까지 읽든 도중에 빠져나가든 스트림이 닫히면 켜진다. */
 const stream = vi.hoisted(() => ({ closed: false }))
 vi.mock('@/lib/api', () => ({
   ApiError: class extends Error {},
   api: vi.fn(),
   async *apiEvents() {
+    stream.closed = false
     try {
       // 서버는 문서를 찾는 동안 답변보다 먼저 진행 상황을 보낸다. 이것은 말풍선을 만들지 않는다.
       yield { event: 'status', data: { text: '문서를 찾는 중' } }
-      await new Promise<void>((resolve) => (release = resolve))
+      await gate()
       yield { event: 'token', data: { text: '앞사람 답변' } }
+      // 모델이 글을 쓰다가 다시 찾으러 갔다. 말풍선은 이미 있다.
+      yield { event: 'status', data: { text: '다시 찾는 중' } }
+      await gate()
+      yield { event: 'token', data: { text: ' 이어서' } }
+      await gate()
       yield { event: 'done', data: { message_id: 'srv-1', session_id: 's-1' } }
     } finally {
       stream.closed = true
@@ -77,10 +87,31 @@ test('done 이 알려 준 서버 답변 id 를 답변에 붙인다', async () =>
   })
   await act(async () => {
     release()
+    await new Promise((resolve) => setTimeout(resolve))
+  })
+  // 답변을 쓰다가 다시 찾는 중. 받은 데까지의 말풍선은 그대로 있고 진행 문구가 다시 켜진다.
+  expect(getThread().messages.at(-1)).toMatchObject({ role: 'assistant', body: '앞사람 답변' })
+  expect(getThread().status).toBe('다시 찾는 중')
+
+  await act(async () => {
+    release()
+    await new Promise((resolve) => setTimeout(resolve))
+  })
+  // 답변이 다시 흐르면 문구가 꺼진다. 스트림이 닫혀서가 아니다(아직 열려 있다).
+  expect(getThread().messages.at(-1)).toMatchObject({ body: '앞사람 답변 이어서' })
+  expect(getThread().status).toBeNull()
+  expect(stream.closed).toBe(false)
+
+  await act(async () => {
+    release()
     await done
   })
   // 여기서는 붙는 것까지만 본다. 평가가 이 id 로 나가는 연결은 `Conversation` 에 있다.
-  expect(getThread().messages.at(-1)).toMatchObject({ role: 'assistant', serverId: 'srv-1' })
+  expect(getThread().messages.at(-1)).toMatchObject({
+    role: 'assistant',
+    body: '앞사람 답변 이어서',
+    serverId: 'srv-1',
+  })
   expect(getThread().status).toBeNull()
   resetThread()
   act(() => root.unmount())
