@@ -13,7 +13,7 @@ import type { AiMessage } from './types'
 interface Thread {
   sessionId: string
   messages: AiMessage[]
-  /** 답변 말풍선이 생기기 전에 서버가 알려 준 진행 상황("문서를 찾는 중"). 없으면 null. */
+  /** 답변이 흐르지 않는 동안 서버가 알려 준 진행 상황("문서를 찾는 중"). 없으면 null. */
   status: string | null
 }
 

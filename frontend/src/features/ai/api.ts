@@ -68,11 +68,13 @@ export function useAsk() {
           if (getSessionId() !== session) return
           if (event === 'status') {
             // 서버가 문서를 찾는 동안 보내는 진행 상황(백엔드 #366). 답변이 아니라 말풍선을 만들지 않고
-            // "생성 중" 자리의 문구만 바꾼다. 말풍선이 생긴 뒤에 오는 것은 그릴 자리가 없어 넘긴다.
+            // "생성 중" 자리의 문구만 바꾼다. 모델이 글을 쓰다가 다시 찾으러 가면 말풍선 아래에 보인다.
             const text = (data as { text?: unknown }).text
-            if (!started && typeof text === 'string') setStatus(text)
+            if (typeof text === 'string') setStatus(text)
             continue
           }
+          // 답변이 다시 흐르면 찾는 중이 아니다. 같은 값이면 스토어가 알리지 않는다.
+          setStatus(null)
           if (!started) {
             // 답변의 첫 이벤트에서야 말풍선을 만든다. 그 전까지는 "생성 중" 표시가 자리를 지킨다.
             appendMessage({

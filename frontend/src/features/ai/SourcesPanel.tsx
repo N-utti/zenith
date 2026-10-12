@@ -71,13 +71,13 @@ export function ExcludedNote() {
   return (
     <p className="text-subtle flex items-start gap-1.5 text-[11px] leading-relaxed">
       <ShieldCheck className="mt-0.5 size-3.5 shrink-0" />
-      <span>권한 없는 문서는 근거에서 자동 제외됩니다.</span>
+      <span>권한 없는 문서와 게시글은 근거에서 자동 제외됩니다.</span>
     </p>
   )
 }
 
 /**
- * 우측 근거 문서 패널. `lg` 미만에서는 숨고, 대신 답변 아래 인라인 목록이 나온다.
+ * 우측 근거 패널. 근거는 문서와 게시글이다. `lg` 미만에서는 숨고, 대신 답변 아래 인라인 목록이 나온다.
  *
  * 한 답변의 근거만 보여준다. 대화 전체를 쌓으면 어느 문장의 근거인지 잃는다.
  * 기본은 마지막 답변이고, 예전 답변의 각주를 누르면 그 답변으로 바뀐다.
@@ -99,14 +99,14 @@ export function SourcesPanel({
     <aside className="border-line bg-canvas hidden w-72 shrink-0 flex-col border-l lg:flex">
       <header className="border-line flex h-11 shrink-0 items-center border-b px-4">
         <h2 className="text-fg text-[13.5px] font-semibold">
-          근거 문서 <span className="text-subtle font-normal">{sources.length}</span>
+          근거 <span className="text-subtle font-normal">{sources.length}</span>
         </h2>
       </header>
 
       <div className="flex-1 overflow-y-auto p-4">
         {sources.length === 0 ? (
           <p className="text-subtle text-center text-xs leading-relaxed">
-            질문하면 답변의 근거가 된 문서가
+            질문하면 답변의 근거가 된 문서와 게시글이
             <br />
             여기에 표시됩니다.
           </p>

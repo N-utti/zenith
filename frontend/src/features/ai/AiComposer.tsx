@@ -87,7 +87,7 @@ export function AiComposer({
         </div>
 
         <p className="text-subtle mt-2 text-center text-[11px]">
-          Enter 전송 · Shift+Enter 줄바꿈 · 답변은 사내 위키를 근거로만 만들어집니다
+          Enter 전송 · Shift+Enter 줄바꿈 · 답변은 사내 문서와 게시글을 근거로 만들어집니다
         </p>
       </div>
     </div>

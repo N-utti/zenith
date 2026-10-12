@@ -20,7 +20,7 @@ const ALL_CITATIONS: (Citation & { minRole?: 'lead' | 'exec' })[] = [
     quote: '퇴사 시 지급 장비는 총무팀에 반납한다.',
     path: '회사 위키 · 온보딩/오프보딩',
   },
-  // 아래 둘의 `type`·`to` 는 실제 서버가 아직 주지 않는다(`features/ai/types.ts` 의 추정).
+  // 게시글 근거는 실제 서버가 이 모양으로 준다(백엔드 #366). 그 아래 첨부 파일은 아직 주지 않는다.
   {
     n: 3,
     type: 'post',

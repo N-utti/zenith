@@ -11,12 +11,12 @@ export type AiModel = Schema<'ModelOut'>
  */
 export interface Citation {
   n: number
-  /** 문서가 아닌 근거에는 없을 수 있다. */
-  doc_id?: string
+  /** 문서일 때만 온다. 게시글 근거는 `null` 이다. */
+  doc_id?: string | null
   /**
-   * 근거의 종류와 눌렀을 때 갈 자리. **서버는 아직 주지 않는다.** 근거를 게시글·첨부 파일로
-   * 넓히기로 한 결정(2026-09-30)에 앞서 만든 추정이고, 통합검색의 `Hit` 처럼 서버가 종류와
-   * 라우트를 준다고 봤다. 둘 다 없으면 지금처럼 문서다(`source.ts`).
+   * 근거의 종류와 눌렀을 때 갈 자리. 서버는 문서(`doc`)와 일반 게시글(`post`)을 준다(백엔드 #366).
+   * `to` 는 통합검색의 `Hit` 과 같은 앱 안 경로다. 첨부 파일(`file`)은 아직 주지 않는다
+   * (2026-09-30 결정의 남은 단계). 둘 다 없으면 문서로 본다(`source.ts`).
    */
   type?: 'doc' | 'post' | 'file'
   to?: string
