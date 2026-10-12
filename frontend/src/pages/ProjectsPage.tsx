@@ -8,6 +8,7 @@ import { SkeletonRows } from '@/components/ui/Skeleton'
 import { useProjects } from '@/features/projects/api'
 import { ProjectFormModal } from '@/features/projects/ProjectForms'
 import { ProjectProgress } from '@/features/projects/ProjectProgress'
+import { personName } from '@/features/projects/types'
 
 /** 협업 공간의 첫 화면. 프로젝트마다 진행률을 보이고, 누르면 그 프로젝트의 칸반보드로 간다. */
 export function ProjectsPage() {
@@ -52,7 +53,7 @@ export function ProjectsPage() {
                   </p>
                 )}
                 <ProjectProgress project={project} />
-                <p className="text-subtle text-xs">만든 사람 {project.created_by.name}</p>
+                <p className="text-subtle text-xs">만든 사람 {personName(project.created_by)}</p>
               </Link>
             </li>
           ))}

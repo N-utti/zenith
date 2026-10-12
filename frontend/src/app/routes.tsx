@@ -89,7 +89,7 @@ export function AppRoutes() {
                 <Route path="crm/orgs/:orgId" element={<CrmOrgPage />} />
               </>
             )}
-            {/* 협업 공간은 목 데이터뿐이라 운영 빌드에서 라우트째 빠진다(navigation.ts `PROJECTS_ENABLED`). */}
+            {/* 협업 공간은 실서버 확인 전이라 운영 빌드에서 라우트째 빠진다(navigation.ts `PROJECTS_ENABLED`). */}
             {PROJECTS_ENABLED && (
               <>
                 <Route path="projects" element={<ProjectsPage />} />

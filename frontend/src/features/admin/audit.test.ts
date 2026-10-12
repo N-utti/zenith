@@ -139,6 +139,9 @@ describe('auditView', () => {
     ).toMatchObject({ summary: 'CRM 안건 삭제', detail: '잘못 만든 안건' })
     expect(auditView(event({ kind: 'crm.contact_deleted' })).summary).toBe('CRM 담당자 삭제')
     expect(
+      auditView(event({ kind: 'projects.deleted', detail: { name: '사무실 이전', tasks: 2 } })),
+    ).toMatchObject({ summary: '협업 공간 프로젝트 삭제', detail: '사무실 이전 · 업무 2개' })
+    expect(
       auditView(
         event({
           kind: 'crm.import_undone',

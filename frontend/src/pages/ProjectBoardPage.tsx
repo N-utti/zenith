@@ -10,7 +10,7 @@ import { useToast } from '@/components/ui/ToastContext'
 import { useDeleteProject, useProject, useTasks, useUpdateTask } from '@/features/projects/api'
 import { ProjectFormModal, TaskFormModal } from '@/features/projects/ProjectForms'
 import { ProjectProgress } from '@/features/projects/ProjectProgress'
-import { TASK_STAGES, type Task, type TaskStage } from '@/features/projects/types'
+import { personName, TASK_STAGES, type Task, type TaskStage } from '@/features/projects/types'
 import { ApiError } from '@/lib/api'
 import { cn } from '@/lib/cn'
 import { formatISODate, formatISOYearDate, toISODate } from '@/lib/datetime'
@@ -257,7 +257,11 @@ function TaskCard({ task, onOpen }: { task: Task; onOpen: (task: Task) => void }
       <p className="text-muted flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs">
         {task.priority === 'high' && <Badge tone="danger">높음</Badge>}
         {task.priority === 'low' && <Badge tone="subtle">낮음</Badge>}
-        {task.assignee ? task.assignee.name : <span className="text-subtle">담당자 없음</span>}
+        {task.assignee ? (
+          personName(task.assignee)
+        ) : (
+          <span className="text-subtle">담당자 없음</span>
+        )}
         {task.due_date && (
           <span
             className={cn('whitespace-nowrap', overdue ? 'text-danger font-medium' : 'text-subtle')}

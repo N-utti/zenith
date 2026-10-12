@@ -86,7 +86,7 @@ const TASKS: TaskRow[] = [
 let serial = 100
 const nextId = (prefix: string) => `${prefix}-${++serial}`
 
-const person = (id: string): Person => ({ id, name: findAccount(id)?.name ?? '알 수 없음' })
+const person = (id: string): Person => ({ id, name: findAccount(id)?.name ?? '' })
 
 function toProject(row: ProjectRow, user: User): Project {
   const tasks = TASKS.filter((t) => t.project_id === row.id)
