@@ -13,9 +13,11 @@ import type { AiMessage } from './types'
 interface Thread {
   sessionId: string
   messages: AiMessage[]
+  /** 답변 말풍선이 생기기 전에 서버가 알려 준 진행 상황("문서를 찾는 중"). 없으면 null. */
+  status: string | null
 }
 
-let thread: Thread = { sessionId: uuid(), messages: [] }
+let thread: Thread = { sessionId: uuid(), messages: [], status: null }
 const listeners = new Set<() => void>()
 
 function emit() {
@@ -64,7 +66,13 @@ export function removeMessage(id: string) {
   emit()
 }
 
+export function setStatus(status: string | null) {
+  if (thread.status === status) return
+  thread = { ...thread, status }
+  emit()
+}
+
 export function resetThread() {
-  thread = { sessionId: uuid(), messages: [] }
+  thread = { sessionId: uuid(), messages: [], status: null }
   emit()
 }

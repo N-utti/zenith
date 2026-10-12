@@ -27,7 +27,7 @@ function ProviderBadge() {
 
 export function AiPage() {
   const { data: models } = useAiModels()
-  const { messages } = useThread()
+  const { messages, status } = useThread()
   const ask = useAsk()
   const toast = useToast()
   // 컴포저를 채울 글과 리마운트 열쇠. 같은 글을 두 번 채워도 열쇠(횟수)가 바뀌어 리마운트된다.
@@ -100,6 +100,7 @@ export function AiPage() {
         <Conversation
           messages={messages}
           generating={generating}
+          status={status}
           streaming={ask.isPending}
           focus={focus}
           onCite={cite}
