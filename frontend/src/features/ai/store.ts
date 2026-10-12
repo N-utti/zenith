@@ -3,11 +3,12 @@ import { uuid } from '@/lib/uuid'
 import type { AiMessage } from './types'
 
 /**
- * 대화는 클라이언트에만 있다. 서버(04 §8)는 `session_id` 를 받기만 하고 저장하지 않는다.
+ * 화면의 대화는 클라이언트에만 있다. 서버(04 §8)는 `session_id` 별로 대화를 저장해 앞선 대화를
+ * 이어 보내지만(백엔드 #364) 되읽는 API 는 없다.
  * 페이지를 떠났다 와도 남도록 모듈 상태로 두되, 새로고침이면 사라지고 로그인할 때 비운다
  * (`AuthProvider`). 근거 인용문이 등급별로 다른 내용이라 localStorage 에 남기지 않는다.
  *
- * ponytail: 세션 저장이 백엔드에 생기면 이 파일이 `GET /ai/sessions/{id}` 로 바뀐다.
+ * ponytail: 대화 내역 조회가 백엔드에 생기면 이 파일이 그 API 로 바뀐다.
  */
 interface Thread {
   sessionId: string

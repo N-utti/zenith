@@ -29,6 +29,8 @@ export interface Citation {
 
 export interface AiMessage {
   id: string
+  /** 서버가 저장한 답변의 id(`done` 이벤트). 평가는 이 id 로 보내야 저장된 대화에 붙는다. */
+  serverId?: string
   role: 'user' | 'assistant'
   /** 본문. assistant 답변은 `[[1]]` 형태의 각주 표식을 포함할 수 있다. 스트리밍 중에는 자라난다. */
   body: string

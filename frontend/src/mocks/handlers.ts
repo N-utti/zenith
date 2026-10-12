@@ -1623,7 +1623,10 @@ export const handlers = [
   http.post('/api/ai/chat', async ({ request }) => {
     const user = authenticate()
     if (!user) return unauthorized()
-    const { message } = (await request.json()) as { message?: string }
+    const { message, session_id } = (await request.json()) as {
+      message?: string
+      session_id?: string
+    }
     if (!message?.trim()) {
       // 실제 서버(errors.py)의 422 detail 은 Pydantic 오류 배열이다. 문자열이 아니다.
       return HttpResponse.json(
@@ -1670,7 +1673,15 @@ data: ${JSON.stringify(data)}
           await delay(40)
         }
         controller.enqueue(encoder.encode(frame('citations', citations)))
-        controller.enqueue(encoder.encode(frame('done', {})))
+        // 서버는 저장한 답변의 id 와 세션 id 를 돌려준다(백엔드 #364). 안 보낸 세션은 서버가 만든다.
+        controller.enqueue(
+          encoder.encode(
+            frame('done', {
+              message_id: crypto.randomUUID(),
+              session_id: session_id ?? crypto.randomUUID(),
+            }),
+          ),
+        )
         controller.close()
       },
     })

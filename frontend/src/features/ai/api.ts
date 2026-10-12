@@ -6,7 +6,8 @@ import type { AiModel, Citation } from './types'
 
 /**
  * 04 §8 `POST /ai/feedback {message_id, value: 1|-1}`. 응답은 204(백엔드 #317).
- * message_id 는 클라이언트가 만든 답변 id 다. 서버가 세션을 저장하지 않아 대응되는 행이 없다(PR 본문).
+ * message_id 는 `done` 이 알려 준 서버 답변 id 다(백엔드 #364). 그 id 여야 저장된 대화에 평가가 붙는다.
+ * 못 받았으면 클라이언트가 만든 id 로 나가고, 그때는 평가 표에만 남는다.
  */
 export function useFeedback() {
   return useMutation({
@@ -86,6 +87,8 @@ export function useAsk() {
             // 서버는 error 뒤에 done 을 보내지 않는다. 호출자에게도 실패로 알린다(재시도 버튼).
             throw new Error(reason)
           } else if (event === 'done') {
+            const serverId = (data as { message_id?: unknown }).message_id
+            if (typeof serverId === 'string') patchMessage(answerId, { serverId })
             return
           }
         }

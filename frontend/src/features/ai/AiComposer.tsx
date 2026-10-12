@@ -55,6 +55,8 @@ export function AiComposer({
             submitOnEnter
             onSubmitEnter={send}
             rows={2}
+            // 서버 상한(ChatIn.message). 넘기면 422 인데 그 사유는 배열이라 화면에 일반 실패만 뜬다.
+            maxLength={30000}
             aria-label="AI에게 물어보기"
             placeholder="위키에 물어보거나, 템플릿으로 문서를 작성하세요"
             className="resize-none border-0 bg-transparent p-0 text-[13.5px] focus:border-0"

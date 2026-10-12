@@ -16,7 +16,7 @@ vi.mock('@/lib/api', () => ({
     try {
       await new Promise<void>((resolve) => (release = resolve))
       yield { event: 'token', data: { text: '앞사람 답변' } }
-      yield { event: 'done', data: {} }
+      yield { event: 'done', data: { message_id: 'srv-1', session_id: 's-1' } }
     } finally {
       stream.closed = true
     }
@@ -52,5 +52,32 @@ test('답변이 오기 전에 대화가 비워지면 그 답변을 새 대화에
   })
   expect(getThread().messages).toEqual([])
   expect(stream.closed).toBe(true)
+  act(() => root.unmount())
+})
+
+test('done 이 알려 준 서버 답변 id 를 답변에 붙인다', async () => {
+  let ask: ReturnType<typeof useAsk> | undefined
+  function Grab() {
+    ask = useAsk()
+    return null
+  }
+  const root = createRoot(document.createElement('div'))
+  act(() =>
+    root.render(
+      createElement(QueryClientProvider, { client: new QueryClient() }, createElement(Grab)),
+    ),
+  )
+
+  let done: Promise<unknown> = Promise.resolve()
+  await act(async () => {
+    done = ask!.mutateAsync({ prompt: '질문', scope: null })
+  })
+  await act(async () => {
+    release()
+    await done
+  })
+  // 여기서는 붙는 것까지만 본다. 평가가 이 id 로 나가는 연결은 `Conversation` 에 있다.
+  expect(getThread().messages.at(-1)).toMatchObject({ role: 'assistant', serverId: 'srv-1' })
+  resetThread()
   act(() => root.unmount())
 })

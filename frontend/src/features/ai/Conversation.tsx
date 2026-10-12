@@ -270,7 +270,11 @@ const Answer = memo(function Answer({
           </div>
         )}
         {!message.error && !growing && (
-          <AnswerActions id={message.id} body={message.body} question={question} />
+          <AnswerActions
+            id={message.serverId ?? message.id}
+            body={message.body}
+            question={question}
+          />
         )}
 
         {/* lg 미만에는 우측 근거 패널이 없다. 따라갈 수 없는 각주를 남기지 않는다. */}
