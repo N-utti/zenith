@@ -449,6 +449,7 @@ class AiSession(Base):
 
 class AiMessage(Base):
     __tablename__ = "ai_messages"
+    __table_args__ = (Index("idx_ai_messages_session", "session_id", "created_at"),)
 
     id: Mapped[uuid.UUID] = uuid_pk()
     session_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("ai_sessions.id"), nullable=False)
@@ -456,11 +457,14 @@ class AiMessage(Base):
     body: Mapped[str] = mapped_column(Text, nullable=False)
     citations: Mapped[list | None] = mapped_column(JSONB)  # 각주 매핑 (04 §8.1)
     feedback: Mapped[int | None] = mapped_column(Integer)  # 1 도움돼요 / -1
+    created_at: Mapped[datetime] = (
+        created_at_col()
+    )  # 03 에 없던 칸 — 대화 순서 (2026-10-12, README 41)
 
 
 class AiFeedback(Base):
-    """`POST /ai/feedback`(README 37). 대화를 서버가 저장하지 않아 `message_id` 는 클라이언트가 만든 답변 id 다.
-    ai_messages.feedback 칸은 대화 저장이 붙으면 그쪽으로 옮긴다."""
+    """`POST /ai/feedback`(README 37). `message_id` 는 문자열 — 대화 저장(README 41) 전 프론트는 자기가 만든 답변 id 를
+    보냈고, 저장 뒤에는 `done` 이 준 서버 id 를 보낸다(그때는 ai_messages.feedback 에도 적는다)."""
 
     __tablename__ = "ai_feedback"
     __table_args__ = (UniqueConstraint("user_id", "message_id"),)

@@ -10,7 +10,8 @@ class Base(DeclarativeBase):
     pass
 
 
-engine = create_async_engine(settings.database_url)
+# hide_parameters — DB 오류 문구에 바인딩 값(AI 대화 본문·메시지 등)이 로그로 새지 않게(보안 리뷰 2026-10-12).
+engine = create_async_engine(settings.database_url, hide_parameters=True)
 SessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 
 

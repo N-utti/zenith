@@ -3144,7 +3144,7 @@
         "tags": [
           "ai"
         ],
-        "summary": "{session_id?, message, scope?} → SSE 스트림 (token → citations → done)",
+        "summary": "{session_id?, message, scope?} → SSE 스트림 (token → citations → done {message_id, session_id}) — 같은 session_id 의 앞선 대화를 이어 보낸다(README 41)",
         "operationId": "chat_api_ai_chat_post",
         "requestBody": {
           "content": {
@@ -8111,6 +8111,7 @@
           },
           "message": {
             "type": "string",
+            "maxLength": 30000,
             "minLength": 1,
             "title": "Message"
           },
