@@ -77,21 +77,18 @@ def _score(rank: ColumnElement, at: ColumnElement) -> ColumnElement:
     return rank + 1.0 / (1.0 + age_days / 7.0)
 
 
-@router.get(
-    "/search",
-    response_model=list[Hit],
-    summary="⌘K 통합검색 — FTS + 최근성, 권한 필터 서버 적용 (FR-SHL-02). 권한 밖은 결과에서 빠진다",
-)
-async def search(
-    q: str = Query(min_length=1, max_length=200),
-    types: str = Query("doc,chat,post", description="쉼표 구분 — doc, chat, post"),
-    limit: int = Query(20, ge=1, le=50),
-    user: User = Depends(current_user),
-    db: AsyncSession = Depends(get_db),
+async def find_hits(
+    db: AsyncSession,
+    user: User,
+    q: str,
+    wanted: set[str],
+    limit: int,
+    *,
+    headline: str = HEADLINE_OPTS,
+    post_roles: list[str] | None = None,
 ) -> list[Hit]:
-    wanted = {t.strip() for t in types.split(",") if t.strip()}
-    if not wanted or not wanted <= set(ALL_TYPES):
-        raise ApiError(422, "VALIDATION", "types 는 doc, chat, post 중에서.")
+    """FTS + 최근성, 권한 필터는 SQL 안에서. ⌘K 와 AI 검색 도구(ai.py)가 같이 쓴다 — 스니펫은 ts_headline 원문
+    (`**…**` 마커, 이스케이프 안 함). `post_roles` 는 내 등급 필터 위에 **더 좁히기만** 한다."""
     tsq_text = _tsquery(q)
     if tsq_text is None:
         return []
@@ -107,9 +104,7 @@ async def search(
                 Document,
                 Folder.title,
                 score,
-                func.ts_headline(
-                    "simple", func.coalesce(Document.text_cache, ""), tsq, HEADLINE_OPTS
-                ),
+                func.ts_headline("simple", func.coalesce(Document.text_cache, ""), tsq, headline),
             )
             .options(*DOC_LIST_OPTS)  # 평문·tsv 는 SQL 식에서만 쓴다. 행으로는 안 가져온다
             .join(Folder, Folder.id == Document.folder_id)
@@ -128,7 +123,7 @@ async def search(
                         id=doc.id,
                         title=doc.title,
                         sub=folder,
-                        snippet=_snippet(snippet),
+                        snippet=snippet or "",
                         to=f"/docs/{doc.id}",
                         at=doc.updated_at,
                     ),
@@ -145,7 +140,7 @@ async def search(
                     User.name,
                     Channel,
                     score,
-                    func.ts_headline("simple", Message.body, tsq, HEADLINE_OPTS),
+                    func.ts_headline("simple", Message.body, tsq, headline),
                 )
                 .join(User, User.id == Message.author_id)
                 .join(Channel, Channel.id == Message.channel_id)
@@ -183,7 +178,7 @@ async def search(
                         id=msg.id,
                         title=author,
                         sub=sub,
-                        snippet=_snippet(snippet),
+                        snippet=snippet or "",
                         to=f"/chat/{channel.id}?m={msg.id}",
                         at=msg.created_at,
                     ),
@@ -195,13 +190,17 @@ async def search(
         allowed = [
             role for role, r in ROLE_RANK.items() if r <= my_rank
         ]  # 권한 필터: 내 등급 이상 게시판만
+        if post_roles is not None:
+            allowed = [
+                r for r in allowed if r in post_roles
+            ]  # 더 좁히기만 한다(AI 근거: 일반 게시판만)
         score = _score(func.ts_rank(Post.tsv, tsq), Post.created_at).label("score")
         rows = await db.execute(
             select(
                 Post,
                 Board.name,
                 score,
-                func.ts_headline("simple", Post.body, tsq, HEADLINE_OPTS),
+                func.ts_headline("simple", Post.body, tsq, headline),
             )
             .join(Board, Board.id == Post.board_id)
             .where(Board.min_role.in_(allowed), Post.tsv.op("@@")(tsq))  # 빈 목록이면 항상 거짓
@@ -217,7 +216,7 @@ async def search(
                         id=post.id,
                         title=post.title,
                         sub=board,
-                        snippet=_snippet(snippet),
+                        snippet=snippet or "",
                         to=f"/board/{post.board_id}/{post.id}",
                         at=post.created_at,
                     ),
@@ -226,3 +225,24 @@ async def search(
 
     hits.sort(key=lambda h: (-h[0], -h[1].at.timestamp(), str(h[1].id)))  # 동점이면 최근 것이 위
     return [hit for _, hit in hits[:limit]]
+
+
+@router.get(
+    "/search",
+    response_model=list[Hit],
+    summary="⌘K 통합검색 — FTS + 최근성, 권한 필터 서버 적용 (FR-SHL-02). 권한 밖은 결과에서 빠진다",
+)
+async def search(
+    q: str = Query(min_length=1, max_length=200),
+    types: str = Query("doc,chat,post", description="쉼표 구분 — doc, chat, post"),
+    limit: int = Query(20, ge=1, le=50),
+    user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[Hit]:
+    wanted = {t.strip() for t in types.split(",") if t.strip()}
+    if not wanted or not wanted <= set(ALL_TYPES):
+        raise ApiError(422, "VALIDATION", "types 는 doc, chat, post 중에서.")
+    hits = await find_hits(db, user, q, wanted, limit)
+    for hit in hits:
+        hit.snippet = _snippet(hit.snippet)
+    return hits
