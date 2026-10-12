@@ -1,8 +1,10 @@
 """04-API §8 — /ai/chat SSE 프레이밍·doc-action·template·feedback. 실제 Claude 호출 없이 공급자를 바꿔 끼운다."""
 
 import asyncio
+import json
 import uuid
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 
 from fastapi import FastAPI
@@ -11,7 +13,7 @@ from sqlalchemy import select
 
 from app.ai.provider import LLMError, get_provider
 from app.deps import current_user
-from app.models import AiFeedback, Document, Folder, Workspace
+from app.models import AiFeedback, AiMessage, AiSession, Document, Folder, Workspace
 from app.routers import ai
 
 from .conftest import Users, csrf, login, make_user
@@ -21,12 +23,45 @@ class FakeProvider:
     def models(self) -> list[dict[str, object]]:
         return [{"name": "fake-model", "size": None}]
 
+    seen: list[dict[str, str]] = []
+
     async def stream(
         self, *, system: str, messages: list[dict[str, str]], max_tokens: int | None = None
     ) -> AsyncIterator[str]:
-        assert messages == [{"role": "user", "content": "안녕"}]
+        FakeProvider.seen = messages
         yield "안녕"
         yield "하세요"
+
+
+def events_of(text: str) -> list[tuple[str, object]]:
+    """SSE 본문을 (event, data) 목록으로."""
+    out = []
+    for block in text.strip().split("\n\n"):
+        ev, data = block.split("\n", 1)
+        out.append((ev.removeprefix("event: "), json.loads(data.removeprefix("data: "))))
+    return out
+
+
+def share_scope(monkeypatch, app_db) -> None:
+    """질문·답변 저장은 요청 세션이 아니라 `session_scope()` 로 짧게 연다 — 테스트 세션을 대신 쓰게 한다.
+    conftest 의 `share_session` 은 쓰지 않는다: 그쪽은 get_db 에 락을 걸고, yield 의존성이 스트림 뒤에 닫히므로
+    생성기 안의 session_scope 가 같은 락을 기다리다 교착된다."""
+
+    @asynccontextmanager
+    async def scope():
+        yield app_db  # 닫지 않는다 — 트랜잭션은 conftest 가 끝에 되돌린다
+
+    monkeypatch.setattr(ai, "session_scope", scope)
+
+
+async def _chat(client: AsyncClient, message: str, session_id: str | None = None):
+    body: dict[str, object] = {"message": message}
+    if session_id:
+        body["session_id"] = session_id
+    r = await client.post("/api/ai/chat", json=body, headers=csrf(client))
+    assert r.status_code == 200, r.text
+    assert r.headers["content-type"].startswith("text/event-stream")
+    return events_of(r.text)
 
 
 class BrokenProvider(FakeProvider):
@@ -44,28 +79,129 @@ async def test_models(app: FastAPI, client: AsyncClient, member) -> None:
     assert r.json() == [{"name": "fake-model", "size": None}]
 
 
-async def test_chat_streams_sse(app: FastAPI, client: AsyncClient, member) -> None:
+async def test_chat_streams_sse_and_saves_turn(
+    app: FastAPI, client: AsyncClient, users: Users, app_db, monkeypatch
+) -> None:
+    """token → citations → done {message_id, session_id}. 질문·답변이 ai_messages 에, 세션은 내 것으로."""
     app.dependency_overrides[get_provider] = FakeProvider
-    r = await client.post("/api/ai/chat", json={"message": "안녕"})
-    assert r.status_code == 200
-    assert r.headers["content-type"].startswith("text/event-stream")
-    assert r.text == (
-        'event: token\ndata: {"text": "안녕"}\n\n'
-        'event: token\ndata: {"text": "하세요"}\n\n'
-        "event: citations\ndata: []\n\n"
-        "event: done\ndata: {}\n\n"
+    share_scope(monkeypatch, app_db)
+    await login(client, "sujin@zenith.co.kr")
+    sid = str(uuid.uuid4())  # 프론트가 새 대화마다 만든다
+    ev = await _chat(client, "안녕", sid)
+    assert ev[:3] == [("token", {"text": "안녕"}), ("token", {"text": "하세요"}), ("citations", [])]
+    assert ev[3][0] == "done" and ev[3][1]["session_id"] == sid
+    assert FakeProvider.seen == [{"role": "user", "content": "안녕"}]
+
+    session = await app_db.get(AiSession, uuid.UUID(sid))
+    assert session is not None and session.user_id == users.member.id
+    assert session.model == "fake-model"
+    rows = (
+        (
+            await app_db.execute(
+                select(AiMessage)
+                .where(AiMessage.session_id == session.id)
+                .order_by(AiMessage.created_at)
+            )
+        )
+        .scalars()
+        .all()
     )
+    assert [(m.msg_role, m.body) for m in rows] == [("user", "안녕"), ("assistant", "안녕하세요")]
+    assert str(rows[1].id) == ev[3][1]["message_id"] and rows[1].citations == []
+
+
+async def test_chat_continues_same_session(
+    app: FastAPI, client: AsyncClient, make_client, users: Users, app_db, monkeypatch
+) -> None:
+    """같은 session_id 면 앞선 질문·답변을 그대로 이어 보낸다. 남의 세션은 404. 상한을 넘는 앞부분은 뺀다."""
+    app.dependency_overrides[get_provider] = FakeProvider
+    share_scope(monkeypatch, app_db)
+    await login(client, "sujin@zenith.co.kr")
+    sid = str(uuid.uuid4())
+    await _chat(client, "안녕", sid)
+    await _chat(client, "다시", sid)
+    assert FakeProvider.seen == [
+        {"role": "user", "content": "안녕"},
+        {"role": "assistant", "content": "안녕하세요"},
+        {"role": "user", "content": "다시"},
+    ]
+    # session_id 없이 보내면 새 대화 — 앞선 것이 섞이지 않는다
+    ev = await _chat(client, "새로")
+    assert FakeProvider.seen == [{"role": "user", "content": "새로"}]
+    assert ev[-1][1]["session_id"] != sid
+
+    monkeypatch.setattr(ai, "HISTORY_MAX_MESSAGES", 2)
+    await _chat(client, "셋째", sid)
+    assert [m["content"] for m in FakeProvider.seen] == ["다시", "안녕하세요", "셋째"]
+    monkeypatch.setattr(
+        ai, "HISTORY_MAX_MESSAGES", 1
+    )  # 자른 자리가 답변이면 첫 메시지가 user 가 되게 뺀다
+    await _chat(client, "셋째2", sid)
+    assert [m["content"] for m in FakeProvider.seen] == ["셋째2"]
+    monkeypatch.setattr(ai, "HISTORY_MAX_MESSAGES", 20)
+    # 최근 답 「안녕하세요」(5) + 그 질문 「셋째2」(3) 까지만
+    monkeypatch.setattr(ai, "HISTORY_MAX_CHARS", 8)
+    await _chat(client, "넷째", sid)
+    assert [m["content"] for m in FakeProvider.seen] == ["셋째2", "안녕하세요", "넷째"]
+
+    async with make_client() as other:
+        await login(other, "donghyun@zenith.co.kr")
+        r = await other.post(
+            "/api/ai/chat", json={"message": "훔치기", "session_id": sid}, headers=csrf(other)
+        )
+    assert (r.status_code, r.json()["code"]) == (404, "NOT_FOUND")
 
 
 async def test_chat_reports_provider_error_as_event(
-    app: FastAPI, client: AsyncClient, member
+    app: FastAPI, client: AsyncClient, users: Users, app_db, monkeypatch
 ) -> None:
+    """실패한 턴은 질문도 답변도 남지 않는다 — 재시도가 같은 질문을 두 번 넣지 않고, 끊긴 답이 맥락에 안 들어간다."""
     app.dependency_overrides[get_provider] = BrokenProvider
-    r = await client.post("/api/ai/chat", json={"message": "안녕"})
+    share_scope(monkeypatch, app_db)
+    await login(client, "sujin@zenith.co.kr")
+    r = await client.post("/api/ai/chat", json={"message": "안녕"}, headers=csrf(client))
     assert r.status_code == 200
     assert r.text == (
         'event: error\ndata: {"detail": "AI 서비스에 연결할 수 없습니다.", "code": "AI_UNREACHABLE"}\n\n'
     )
+    assert (await app_db.execute(select(AiMessage))).scalars().all() == []
+    assert (await app_db.execute(select(AiSession))).scalars().one().user_id == users.member.id
+
+
+async def test_chat_message_length_and_blank_capped(
+    client: AsyncClient, users: Users, app_db
+) -> None:
+    await login(client, "sujin@zenith.co.kr")
+    for message in ("가" * (ai.HISTORY_MAX_CHARS + 1), "  \n "):
+        r = await client.post("/api/ai/chat", json={"message": message}, headers=csrf(client))
+        assert (r.status_code, r.json()["code"]) == (422, "VALIDATION"), message
+    assert (await app_db.execute(select(AiMessage))).scalars().all() == []
+
+
+async def test_chat_empty_answer_is_error_and_not_saved(
+    app: FastAPI, client: AsyncClient, users: Users, app_db, monkeypatch
+) -> None:
+    app.dependency_overrides[get_provider] = EmptyProvider
+    share_scope(monkeypatch, app_db)
+    await login(client, "sujin@zenith.co.kr")
+    ev = await _chat(client, "안녕")
+    assert ev[-1][0] == "error" and ev[-1][1]["code"] == "AI_EMPTY"
+    assert (await app_db.execute(select(AiMessage))).scalars().all() == []
+
+
+async def test_chat_session_already_mine_is_reused(
+    app: FastAPI, client: AsyncClient, users: Users, app_db, monkeypatch
+) -> None:
+    """같은 새 id 로 요청이 겹쳐도(먼저 만들어진 행이 있어도) 500 이 아니라 그 세션을 쓴다."""
+    app.dependency_overrides[get_provider] = FakeProvider
+    share_scope(monkeypatch, app_db)
+    sid = uuid.uuid4()
+    app_db.add(AiSession(id=sid, user_id=users.member.id, model="x"))
+    await app_db.commit()
+    await login(client, "sujin@zenith.co.kr")
+    ev = await _chat(client, "안녕", str(sid))
+    assert ev[-1][1]["session_id"] == str(sid)
+    assert len((await app_db.execute(select(AiSession))).scalars().all()) == 1
 
 
 async def test_chat_requires_login(client: AsyncClient) -> None:
@@ -84,11 +220,12 @@ class CrashingProvider(FakeProvider):
 
 
 async def test_chat_reports_unexpected_error_as_event(
-    app: FastAPI, client: AsyncClient, member, caplog
+    app: FastAPI, client: AsyncClient, users: Users, app_db, caplog
 ) -> None:
     """스트림이 말없이 끊기지 않는다 — 받은 데까지 보내고 error 로 닫는다. 원인은 로그에만 남는다."""
     app.dependency_overrides[get_provider] = CrashingProvider
-    r = await client.post("/api/ai/chat", json={"message": "안녕"})
+    await login(client, "sujin@zenith.co.kr")
+    r = await client.post("/api/ai/chat", json={"message": "안녕"}, headers=csrf(client))
     assert r.status_code == 200
     assert r.text == (
         'event: token\ndata: {"text": "안"}\n\n'
@@ -325,6 +462,33 @@ async def test_feedback_saves_one_row_per_answer(client: AsyncClient, users: Use
     assert r.status_code == 204
     rows = (await app_db.execute(select(AiFeedback))).scalars().all()
     assert sorted((f.user_id == users.member.id, f.value) for f in rows) == [(False, 1), (True, -1)]
+
+
+async def test_feedback_marks_saved_answer(
+    app: FastAPI, client: AsyncClient, make_client, users: Users, app_db, monkeypatch
+) -> None:
+    """`done` 의 message_id 로 평가하면 ai_messages.feedback 에 적힌다. 남의 답변 id 는 ai_feedback 에만."""
+    app.dependency_overrides[get_provider] = FakeProvider
+    share_scope(monkeypatch, app_db)
+    await login(client, "sujin@zenith.co.kr")
+    ev = await _chat(client, "안녕")
+    mid = ev[-1][1]["message_id"]
+    r = await client.post(
+        "/api/ai/feedback", json={"message_id": mid, "value": -1}, headers=csrf(client)
+    )
+    assert r.status_code == 204
+    assert (await app_db.get(AiMessage, uuid.UUID(mid), populate_existing=True)).feedback == -1
+
+    async with make_client() as other:
+        await login(other, "donghyun@zenith.co.kr")
+        r = await other.post(
+            "/api/ai/feedback", json={"message_id": mid, "value": 1}, headers=csrf(other)
+        )
+    assert r.status_code == 204
+    assert (
+        await app_db.get(AiMessage, uuid.UUID(mid), populate_existing=True)
+    ).feedback == -1  # 남의 평가는 안 닿는다
+    assert len((await app_db.execute(select(AiFeedback))).scalars().all()) == 2
 
 
 async def test_feedback_validation(client: AsyncClient, users: Users, app_db) -> None:

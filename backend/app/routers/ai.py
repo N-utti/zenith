@@ -1,5 +1,8 @@
 """04-API §8 AI. `/ai/chat` 은 SSE — event:token → event:citations → event:done (실패 시 event:error).
-`/ai/doc-action`·`/ai/template` 은 한 번에 JSON 으로 돌려준다(프론트 목 모양, README 37)."""
+`/ai/doc-action`·`/ai/template` 은 한 번에 JSON 으로 돌려준다(프론트 목 모양, README 37).
+
+대화 저장(README 41): `session_id` 마다 `ai_sessions` 한 행, 질문·답변은 `ai_messages`. 같은 세션의 앞선 대화를
+(상한 안에서) 그대로 이어 보내 이어지는 질문이 된다. `done` 은 서버가 발급한 답변 `message_id` 를 준다."""
 
 import asyncio
 import json
@@ -9,19 +12,21 @@ import time
 import uuid
 from collections import defaultdict, deque
 from collections.abc import AsyncIterator
-from typing import Literal
+from datetime import UTC, datetime
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Response
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StringConstraints
+from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.ai.provider import LLMError, LLMProvider, get_provider
-from app.db import get_db
+from app.ai.provider import ChatMessage, LLMError, LLMProvider, get_provider
+from app.db import get_db, session_scope
 from app.deps import current_user
 from app.errors import ApiError
-from app.models import AiFeedback, User
+from app.models import AiFeedback, AiMessage, AiSession, User
 from app.routers.docs import _get_doc
 
 log = logging.getLogger("zenith.ai")
@@ -33,9 +38,18 @@ SYSTEM_PROMPT = (
 )
 
 
+# ponytail: 앞선 대화는 최근 메시지 수·글자 수 두 상한 안에서만 보낸다. 긴 대화가 흔해지면 앞부분 요약으로.
+HISTORY_MAX_MESSAGES = 20
+HISTORY_MAX_CHARS = 30_000
+
+
 class ChatIn(BaseModel):
     session_id: uuid.UUID | None = None
-    message: str = Field(min_length=1)
+    # 공백뿐인 질문은 거절(저장되면 다음 턴부터 공급자가 빈 content 로 거절한다), 상한은 이어 보내기와 같은 3만 자
+    # (저장되는 글이라 상한이 없으면 디스크를 채울 수 있다 — 보안 리뷰).
+    message: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=HISTORY_MAX_CHARS)
+    ]
     scope: str | None = None
 
 
@@ -82,23 +96,95 @@ async def models(provider: LLMProvider = Depends(get_provider)) -> list[dict[str
     return provider.models()
 
 
+async def _session(
+    db: AsyncSession, user: User, session_id: uuid.UUID | None, model: str
+) -> uuid.UUID:
+    """프론트가 새 대화마다 id 를 만들어 보낸다 — 서버에 없으면 그 id 로 만들고(동시에 두 번 와도 한 행), 남의 것이면 404."""
+    session_id = session_id or uuid.uuid4()
+    await db.execute(
+        pg_insert(AiSession)
+        .values(id=session_id, user_id=user.id, model=model)
+        .on_conflict_do_nothing(index_elements=["id"])
+    )
+    owner = await db.scalar(select(AiSession.user_id).where(AiSession.id == session_id))
+    if owner != user.id:
+        await db.rollback()
+        raise ApiError(404, "NOT_FOUND", "없는 대화입니다.")
+    return session_id
+
+
+async def _history(db: AsyncSession, session_id: uuid.UUID) -> list[ChatMessage]:
+    rows = await db.execute(
+        select(AiMessage.msg_role, AiMessage.body)
+        .where(AiMessage.session_id == session_id)
+        .order_by(AiMessage.created_at.desc(), AiMessage.id)
+        .limit(HISTORY_MAX_MESSAGES)
+    )
+    picked: list[ChatMessage] = []
+    budget = HISTORY_MAX_CHARS
+    for role, body in rows.tuples():  # 최근 것부터 담고 뒤집는다
+        budget -= len(body)
+        if budget < 0:
+            break
+        picked.append({"role": role, "content": body})
+    picked.reverse()
+    while picked and picked[0]["role"] == "assistant":  # 첫 메시지는 user 여야 한다(공급자 규칙)
+        picked.pop(0)
+    return picked
+
+
 @router.post(
     "/ai/chat",
-    summary="{session_id?, message, scope?} → SSE 스트림 (token → citations → done)",
+    summary="{session_id?, message, scope?} → SSE 스트림 (token → citations → done {message_id, session_id}) — 같은 session_id 의 앞선 대화를 이어 보낸다(README 41)",
     responses={200: {"content": {"text/event-stream": {}}}},
     dependencies=[Depends(ai_throttle)],
 )
-async def chat(body: ChatIn, provider: LLMProvider = Depends(get_provider)) -> StreamingResponse:
-    # ponytail: RAG(bge-m3 임베딩 → pgvector top-k=6 + acl_role 필터, ARCHITECTURE §6)와
-    # ai_sessions/ai_messages 저장은 미구현. 근거가 없으니 citations는 빈 배열이다.
+async def chat(
+    body: ChatIn,
+    user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_db),
+    provider: LLMProvider = Depends(get_provider),
+) -> StreamingResponse:
+    # ponytail: RAG(bge-m3 임베딩 → pgvector top-k=6 + acl_role 필터, ARCHITECTURE §6)는 미구현.
+    # 근거가 없으니 citations는 빈 배열이다.
+    session_id = await _session(db, user, body.session_id, str(provider.models()[0]["name"]))
+    messages = [*await _history(db, session_id), {"role": "user", "content": body.message}]
+    await db.commit()  # 세션 행만 남긴다. 공급자를 기다리는 동안 커넥션은 풀에 돌아간다.
+    asked_at = datetime.now(UTC)
+
     async def events() -> AsyncIterator[str]:
+        parts: list[str] = []
         try:
-            async for token in provider.stream(
-                system=SYSTEM_PROMPT, messages=[{"role": "user", "content": body.message}]
-            ):
+            async for token in provider.stream(system=SYSTEM_PROMPT, messages=messages):
+                parts.append(token)
                 yield sse("token", {"text": token})
+            answer_text = "".join(parts)
+            if not answer_text.strip():
+                # 빈 답을 저장하면 다음 턴부터 공급자가 그 세션을 거절한다(빈 content 400). `_complete` 와 같은 기준.
+                raise LLMError("AI_EMPTY", "AI 가 빈 답을 냈습니다. 다시 시도해 주세요.")
+            # 질문·답변은 답을 끝까지 받은 뒤 한 트랜잭션으로 — 실패한 턴은 남지 않아 재시도가 같은 질문을
+            # 두 번 넣지 않고, 중간에 끊긴 답이 다음 질문의 맥락에 들어가지 않는다.
+            answer = AiMessage(
+                id=uuid.uuid4(),
+                session_id=session_id,
+                msg_role="assistant",
+                body=answer_text,
+                citations=[],
+                created_at=datetime.now(UTC),
+            )
+            async with session_scope() as s:
+                s.add(
+                    AiMessage(
+                        session_id=session_id,
+                        msg_role="user",
+                        body=body.message,
+                        created_at=asked_at,
+                    )
+                )
+                s.add(answer)
+                await s.commit()
             yield sse("citations", [])
-            yield sse("done", {})
+            yield sse("done", {"message_id": str(answer.id), "session_id": str(session_id)})
         except LLMError as e:
             yield sse("error", {"detail": e.detail, "code": e.code})
         except Exception:
@@ -116,7 +202,7 @@ async def chat(body: ChatIn, provider: LLMProvider = Depends(get_provider)) -> S
 
 
 class FeedbackIn(BaseModel):
-    # 대화를 서버가 저장하지 않아 클라이언트가 만든 답변 id 다(uuid 모양이지만 문자열로 받는다).
+    # 문자열로 받는다 — 대화 저장(README 41) 전의 프론트는 자기가 만든 답변 id 를 보냈다.
     message_id: str = Field(min_length=1, max_length=100)
     value: Literal[1, -1]
 
@@ -134,6 +220,18 @@ async def feedback(
             index_elements=["user_id", "message_id"], set_={"value": stmt.excluded.value}
         )
     )
+    # `done` 이 준 서버 답변 id 면 그 행에도 적는다(내 대화의 답변만 — 남의 것은 조용히 무시).
+    try:
+        message_id = uuid.UUID(body.message_id)
+    except ValueError:
+        message_id = None
+    if message_id:
+        mine = select(AiSession.id).where(AiSession.user_id == user.id)
+        await db.execute(
+            update(AiMessage)
+            .where(AiMessage.id == message_id, AiMessage.session_id.in_(mine))
+            .values(feedback=body.value)
+        )
     await db.commit()
     return Response(status_code=204)
 
