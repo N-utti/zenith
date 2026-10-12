@@ -7,8 +7,9 @@ ARCHITECTURE §6은 Ollama(사내 Mac mini)였으나 2026-09-04 결정으로 Cla
 
 import logging
 from collections.abc import AsyncIterator
+from dataclasses import dataclass
 from functools import lru_cache
-from typing import Protocol
+from typing import Any, Protocol
 
 import anthropic
 
@@ -16,7 +17,26 @@ from app.config import settings
 
 log = logging.getLogger("zenith.ai")
 
-ChatMessage = dict[str, str]  # {"role": "user" | "assistant", "content": str}
+ChatMessage = dict[
+    str, Any
+]  # {"role": "user" | "assistant", "content": str | [블록]} — 블록은 Anthropic 모양 그대로
+Tool = dict[str, Any]  # {name, description, input_schema} — Anthropic 도구 정의 모양 그대로
+
+
+@dataclass
+class ToolCall:
+    id: str
+    name: str
+    input: dict[str, Any]
+
+
+@dataclass
+class ToolCalls:
+    """턴 끝 — 모델이 도구를 불렀을 때 텍스트 뒤에 한 번 온다. `content` 는 그 턴의 원본 블록(thinking 포함)이라
+    라우터가 그대로 assistant 메시지로 되돌려 주고, `calls` 를 실행해 tool_result 로 잇는다."""
+
+    calls: list[ToolCall]
+    content: list[Any]
 
 
 class LLMError(Exception):
@@ -30,8 +50,14 @@ class LLMProvider(Protocol):
     def models(self) -> list[dict[str, object]]: ...
 
     def stream(
-        self, *, system: str, messages: list[ChatMessage], max_tokens: int | None = None
-    ) -> AsyncIterator[str]: ...
+        self,
+        *,
+        system: str,
+        messages: list[ChatMessage],
+        max_tokens: int | None = None,
+        tools: list[Tool] | None = None,
+        tool_choice: dict[str, Any] | None = None,
+    ) -> AsyncIterator[str | ToolCalls]: ...
 
 
 class ClaudeProvider:
@@ -52,14 +78,22 @@ class ClaudeProvider:
         return self._client
 
     async def stream(
-        self, *, system: str, messages: list[ChatMessage], max_tokens: int | None = None
-    ) -> AsyncIterator[str]:
+        self,
+        *,
+        system: str,
+        messages: list[ChatMessage],
+        max_tokens: int | None = None,
+        tools: list[Tool] | None = None,
+        tool_choice: dict[str, Any] | None = None,
+    ) -> AsyncIterator[str | ToolCalls]:
         try:
             async with self._client_or_create().beta.messages.stream(
                 model=self.model,
                 max_tokens=max_tokens or self.max_tokens,
                 system=system,
                 messages=messages,  # type: ignore[arg-type]
+                tools=tools or anthropic.NOT_GIVEN,  # type: ignore[arg-type]
+                tool_choice=tool_choice or anthropic.NOT_GIVEN,  # type: ignore[arg-type]
                 # 안전 분류기가 거부하면 서버가 대체 모델로 같은 요청을 재실행한다 (Opus 5 권장 설정).
                 betas=["server-side-fallback-2026-07-01"],
                 fallbacks="default",
@@ -81,6 +115,13 @@ class ClaudeProvider:
             raise LLMError("AI_CONFIG", "AI 설정 오류입니다.") from e
         if final.stop_reason == "refusal":
             raise LLMError("AI_REFUSED", "AI가 이 요청에는 답하지 않습니다.")
+        calls = [
+            ToolCall(id=b.id, name=b.name, input=dict(b.input))  # type: ignore[arg-type]
+            for b in final.content
+            if b.type == "tool_use"
+        ]
+        if calls:
+            yield ToolCalls(calls=calls, content=list(final.content))
 
 
 @lru_cache
