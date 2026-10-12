@@ -49,6 +49,35 @@ async def _doc(client: AsyncClient, folder_id, title: str = "기획서") -> dict
     return r.json()
 
 
+async def test_doc_ai_source_flag(client: AsyncClient, users: Users, app_db) -> None:
+    """「AI 근거로 쓰기」 — 기본 true, 만들 때 false(AI 답변 저장), PATCH 로 토글, null 은 422 (README 43)."""
+    root = await _root(app_db)
+    await login(client, "sujin@zenith.co.kr")
+    plain = await _doc(client, root.id)
+    assert plain["ai_source"] is True
+    r = await client.post(
+        "/api/docs",
+        json={"folder_id": str(root.id), "title": "AI 답변", "ai_source": False},
+        headers=csrf(client),
+    )
+    assert r.status_code == 201 and r.json()["ai_source"] is False
+    saved, made_at, made_by = r.json()["id"], r.json()["updated_at"], r.json()["updated_by"]
+    await login(client, "donghyun@zenith.co.kr")
+    r = await client.patch(f"/api/docs/{saved}", json={"ai_source": True}, headers=csrf(client))
+    assert r.status_code == 200 and r.json()["ai_source"] is True
+    # 스위치만 바꾼 건 내용 변경이 아니다 — 「이어서 작업」 순서·마지막 편집자가 안 바뀐다. 대신 감사에 남는다
+    assert r.json()["updated_at"] == made_at and r.json()["updated_by"] == made_by
+    logged = (
+        await app_db.execute(select(AuditEvent).where(AuditEvent.kind == "docs.ai_source"))
+    ).scalar_one()
+    assert logged.actor_id == users.lead.id and logged.detail == {"ai_source": True}
+    assert str(logged.target_id) == saved
+    r = await client.get(f"/api/docs/{saved}", headers=csrf(client))
+    assert r.json()["ai_source"] is True
+    r = await client.patch(f"/api/docs/{saved}", json={"ai_source": None}, headers=csrf(client))
+    assert r.status_code == 422
+
+
 async def test_docs_require_login(client: AsyncClient) -> None:
     assert (await client.get("/api/tree")).status_code == 401
     assert (await client.get("/api/trash")).status_code == 401
@@ -112,7 +141,15 @@ async def test_folders_and_tree(client: AsyncClient, users: Users, app_db) -> No
     assert [f["title"] for f in tree["folders"]] == ["회사 위키", "이동됨", "브랜드"]
     assert [d["title"] for d in tree["docs"]] == ["브랜드 가이드", "회사 소개"]  # 제목순
     assert tree["docs"][0]["updated_by"] == {"id": str(users.member.id), "name": "김수진"}
-    assert set(doc) == {"id", "folder_id", "title", "updated_at", "updated_by", "deleted_at"}
+    assert set(doc) == {
+        "id",
+        "folder_id",
+        "title",
+        "updated_at",
+        "updated_by",
+        "deleted_at",
+        "ai_source",
+    }
 
 
 async def test_doc_create_read_update(client: AsyncClient, users: Users, app_db) -> None:

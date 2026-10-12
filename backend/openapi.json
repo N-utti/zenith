@@ -952,7 +952,7 @@
         "tags": [
           "docs"
         ],
-        "summary": "제목·폴더 이동 (목록용 투영 — 본문 원천은 Y.Doc)",
+        "summary": "제목·폴더 이동·ai_source (목록용 투영 — 본문 원천은 Y.Doc)",
         "operationId": "update_doc_api_docs__id__patch",
         "parameters": [
           {
@@ -9401,6 +9401,11 @@
             "maxLength": 200,
             "minLength": 1,
             "title": "Title"
+          },
+          "ai_source": {
+            "type": "boolean",
+            "title": "Ai Source",
+            "default": true
           }
         },
         "type": "object",
@@ -9454,6 +9459,10 @@
             ],
             "title": "Deleted At"
           },
+          "ai_source": {
+            "type": "boolean",
+            "title": "Ai Source"
+          },
           "ydoc": {
             "anyOf": [
               {
@@ -9474,6 +9483,7 @@
           "updated_at",
           "updated_by",
           "deleted_at",
+          "ai_source",
           "ydoc"
         ],
         "title": "DocDetail"
@@ -9520,6 +9530,10 @@
               }
             ],
             "title": "Deleted At"
+          },
+          "ai_source": {
+            "type": "boolean",
+            "title": "Ai Source"
           }
         },
         "type": "object",
@@ -9529,7 +9543,8 @@
           "title",
           "updated_at",
           "updated_by",
-          "deleted_at"
+          "deleted_at",
+          "ai_source"
         ],
         "title": "DocOut"
       },
@@ -9559,6 +9574,17 @@
               }
             ],
             "title": "Folder Id"
+          },
+          "ai_source": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ai Source"
           }
         },
         "type": "object",

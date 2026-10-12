@@ -96,6 +96,7 @@ class DocOut(BaseModel):
     updated_at: datetime
     updated_by: Person | None
     deleted_at: datetime | None
+    ai_source: bool  # AI 어시스턴트가 이 문서를 근거로 써도 되는가 (README 43)
 
 
 class DocDetail(DocOut):
@@ -108,11 +109,14 @@ class DocCreateIn(BaseModel):
 
     folder_id: uuid.UUID
     title: NonBlank
+    # AI 답변을 「문서로 저장」할 때 프론트가 false 로 보낸다(자기 생성물 순환 방지)
+    ai_source: bool = True
 
 
 class DocPatchIn(BaseModel):
     title: NonBlank | None = None
     folder_id: uuid.UUID | None = None
+    ai_source: bool | None = None
 
 
 class TreeOut(BaseModel):
@@ -192,6 +196,7 @@ def _doc_out(doc: Document, editor: User | None) -> DocOut:
         updated_at=doc.updated_at,
         updated_by=Person.model_validate(editor) if editor else None,
         deleted_at=doc.deleted_at,
+        ai_source=doc.ai_source,
     )
 
 
@@ -400,7 +405,9 @@ async def create_doc(
     body: DocCreateIn, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)
 ) -> DocOut:
     await _require_folder(db, body.folder_id)
-    doc = Document(folder_id=body.folder_id, title=body.title, updated_by=user.id)
+    doc = Document(
+        folder_id=body.folder_id, title=body.title, updated_by=user.id, ai_source=body.ai_source
+    )
     db.add(doc)
     await db.commit()
     await db.refresh(doc)
@@ -418,11 +425,14 @@ async def get_doc(id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> DocDetai
 
 
 @router.patch(
-    "/docs/{id}", response_model=DocOut, summary="제목·폴더 이동 (목록용 투영 — 본문 원천은 Y.Doc)"
+    "/docs/{id}",
+    response_model=DocOut,
+    summary="제목·폴더 이동·ai_source (목록용 투영 — 본문 원천은 Y.Doc)",
 )
 async def update_doc(
     id: uuid.UUID,
     body: DocPatchIn,
+    request: Request,
     user: User = Depends(current_user),
     db: AsyncSession = Depends(get_db),
 ) -> DocOut:
@@ -437,11 +447,27 @@ async def update_doc(
         if value is None:
             raise ApiError(422, "VALIDATION", f"{key} 는 null 일 수 없습니다.")
         setattr(doc, key, value)
-    doc.updated_by = user.id
-    doc.updated_at = _now()  # 제목만 바뀌어도 "이어서 작업" 순서에 잡히게
+    if changes.keys() - {"ai_source"}:
+        doc.updated_by = user.id
+        doc.updated_at = (
+            _now()
+        )  # 제목만 바뀌어도 "이어서 작업" 순서에 잡히게. 스위치만은 내용 변경이 아니다
+    if "ai_source" in changes:
+        # 「AI 에 보내지 않을 문서」를 누가 다시 켰는지 추적할 수 있게(문서는 권한 구분이 없어 누구나 토글한다)
+        audit.record(
+            db,
+            "docs.ai_source",
+            request=request,
+            actor_id=user.id,
+            target_id=doc.id,
+            detail={"ai_source": changes["ai_source"]},
+        )
     await db.commit()
     await db.refresh(doc)
-    return _doc_out(doc, user)
+    editor = (
+        await db.get(User, doc.updated_by) if doc.updated_by else None
+    )  # 스위치만 바꿨으면 요청자가 아니다
+    return _doc_out(doc, editor)
 
 
 @router.delete(
