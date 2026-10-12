@@ -36,8 +36,9 @@ export const CRM_ENABLED = import.meta.env.DEV
 const CRM_NAV: NavItem[] = CRM_ENABLED ? [{ to: '/crm', label: 'CRM', icon: Building2 }] : []
 
 /**
- * 협업 공간(프로젝트 칸반보드)은 정본(01 PRD 범위·04 API)에 아직 없고 백엔드도 없다. 목 데이터로만
- * 돌아서 개발 빌드에서만 뜬다. 운영 빌드에서는 메뉴와 라우트를 같이 뺀다.
+ * 협업 공간(프로젝트 칸반보드)은 정본(01 PRD 범위·04 API)에 아직 없다. 개발 빌드에서만 뜬다. 운영
+ * 빌드에서는 메뉴와 라우트를 같이 뺀다. 백엔드는 들어왔지만(#362) 실서버에 붙여 본 적이 없다. 운영
+ * 빌드에서 여는 것은 그 확인 뒤에 정한다.
  */
 export const PROJECTS_ENABLED = import.meta.env.DEV
 

@@ -24,6 +24,7 @@ export const AUDIT_FILTERS = [
   { value: 'docs', label: '문서' },
   { value: 'files', label: '첨부 파일' },
   { value: 'crm', label: 'CRM' },
+  { value: 'projects', label: '협업 공간' },
 ]
 
 const CRM_EXPORT_LABEL: Record<string, string> = {
@@ -285,6 +286,17 @@ export function auditView(event: AuditEvent): AuditView {
         detail: text(detail, 'name') || undefined,
         tone: 'warning',
       }
+
+    // `tasks` 는 같이 지워진 업무 수다.
+    case 'projects.deleted': {
+      const tasks =
+        typeof detail?.tasks === 'number' && detail.tasks > 0 && `업무 ${detail.tasks}개`
+      return {
+        summary: '협업 공간 프로젝트 삭제',
+        detail: [text(detail, 'name'), tasks].filter(Boolean).join(' · ') || undefined,
+        tone: 'warning',
+      }
+    }
 
     // 이름은 기록에 없다(개인정보 삭제와 같은 이유).
     case 'crm.contact_deleted':

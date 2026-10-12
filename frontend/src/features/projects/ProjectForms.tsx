@@ -18,6 +18,7 @@ import {
   useUpdateTask,
 } from './api'
 import {
+  personName,
   PROJECT_DESCRIPTION_MAX,
   PROJECT_NAME_MAX,
   TASK_NOTE_MAX,
@@ -144,7 +145,7 @@ export function TaskFormModal({
     ...staff.map((p) => ({ value: p.id, label: p.name })),
     // 퇴사한 기존 담당자도 목록에 남겨야 그대로 저장된다.
     ...(task?.assignee && !staff.some((p) => p.id === task.assignee?.id)
-      ? [{ value: task.assignee.id, label: task.assignee.name }]
+      ? [{ value: task.assignee.id, label: personName(task.assignee) }]
       : []),
   ]
 

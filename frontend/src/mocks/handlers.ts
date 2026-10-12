@@ -2419,7 +2419,7 @@ data: ${JSON.stringify(data)}
   }),
 
   // ── 협업 공간: 프로젝트 칸반보드 ────────────────────────────
-  // 04 에 아직 없다. 프론트가 먼저 만든 모양이고 백엔드 계약은 이슈로 올린다.
+  // 04 에 아직 없다. 프론트가 먼저 만든 모양이고 백엔드가 그대로 따라 만들었다(#362).
   http.get(
     '/api/projects',
     authed((user) => HttpResponse.json({ items: listProjects(user) })),
