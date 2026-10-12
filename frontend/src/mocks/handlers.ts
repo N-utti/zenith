@@ -1619,7 +1619,7 @@ export const handlers = [
     authed(() => HttpResponse.json(AI_MODELS)),
   ),
 
-  // SSE: token → citations → done. 실제 서버(routers/ai.py)와 같은 프레임 모양.
+  // SSE: status → token → citations → done. 실제 서버(routers/ai.py)와 같은 프레임 모양.
   http.post('/api/ai/chat', async ({ request }) => {
     const user = authenticate()
     if (!user) return unauthorized()
@@ -1651,7 +1651,10 @@ data: ${JSON.stringify(data)}
     const encoder = new TextEncoder()
     const stream = new ReadableStream({
       async start(controller) {
-        await delay(600)
+        await delay(300)
+        // 서버는 문서를 찾는 동안 답변보다 먼저 진행 상황을 보낸다(백엔드 #366).
+        controller.enqueue(encoder.encode(frame('status', { text: '문서를 찾는 중' })))
+        await delay(900)
         // 공급자 실패 경로(routers/ai.py LLMError). error 뒤에는 done 이 오지 않고 스트림이 끝난다.
         if (message.includes('오류')) {
           controller.enqueue(encoder.encode(frame('token', { text: '답변을 시작하다가 ' })))

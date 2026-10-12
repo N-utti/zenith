@@ -125,7 +125,7 @@ function AnswerActions({
   )
 }
 
-function Generating() {
+function Generating({ status }: { status: string | null }) {
   return (
     <div className="flex gap-3">
       <span className="bg-accent-soft text-accent grid size-8 shrink-0 place-items-center rounded-lg">
@@ -141,7 +141,7 @@ function Generating() {
             />
           ))}
         </span>
-        <span className="text-subtle text-xs">AI가 생성 중…</span>
+        <span className="text-subtle text-xs">{status ? `${status}…` : 'AI가 생성 중…'}</span>
       </div>
     </div>
   )
@@ -150,6 +150,7 @@ function Generating() {
 export function Conversation({
   messages,
   generating,
+  status,
   streaming,
   focus,
   onCite,
@@ -158,6 +159,8 @@ export function Conversation({
   messages: AiMessage[]
   /** 질문은 갔는데 첫 토큰이 아직 안 왔다. */
   generating: boolean
+  /** 그동안 서버가 알려 준 진행 상황. 없으면 기본 문구. */
+  status: string | null
   /** 답변이 자라는 중. 마지막 말풍선의 액션은 다 받은 뒤에 보인다. */
   streaming: boolean
   /** 눌린 각주. 같은 답변의 같은 번호만 켜진다. */
@@ -206,7 +209,7 @@ export function Conversation({
           )
         })}
 
-        {generating && <Generating />}
+        {generating && <Generating status={status} />}
       </div>
     </div>
   )

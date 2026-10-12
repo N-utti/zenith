@@ -5,7 +5,7 @@ import { expect, test, vi } from 'vitest'
 import { useAsk } from './api'
 import { getThread, resetThread } from './store'
 
-/** 첫 토큰 전에 멈춰 있다가 `release()` 하면 흘린다. 답변 말풍선은 첫 이벤트에서 생긴다. */
+/** 첫 토큰 전에 멈춰 있다가 `release()` 하면 흘린다. 답변 말풍선은 답변의 첫 이벤트에서 생긴다. */
 let release: () => void = () => {}
 /** 끝까지 읽든 도중에 빠져나가든 스트림이 닫히면 켜진다. */
 const stream = vi.hoisted(() => ({ closed: false }))
@@ -14,6 +14,8 @@ vi.mock('@/lib/api', () => ({
   api: vi.fn(),
   async *apiEvents() {
     try {
+      // 서버는 문서를 찾는 동안 답변보다 먼저 진행 상황을 보낸다. 이것은 말풍선을 만들지 않는다.
+      yield { event: 'status', data: { text: '문서를 찾는 중' } }
       await new Promise<void>((resolve) => (release = resolve))
       yield { event: 'token', data: { text: '앞사람 답변' } }
       yield { event: 'done', data: { message_id: 'srv-1', session_id: 's-1' } }
@@ -44,6 +46,7 @@ test('답변이 오기 전에 대화가 비워지면 그 답변을 새 대화에
   })
   // 질문만 붙고 답변은 아직 첫 토큰을 기다리는 상태.
   expect(getThread().messages.map((m) => m.body)).toEqual(['질문'])
+  expect(getThread().status).toBe('문서를 찾는 중')
 
   resetThread()
   await act(async () => {
@@ -78,6 +81,7 @@ test('done 이 알려 준 서버 답변 id 를 답변에 붙인다', async () =>
   })
   // 여기서는 붙는 것까지만 본다. 평가가 이 id 로 나가는 연결은 `Conversation` 에 있다.
   expect(getThread().messages.at(-1)).toMatchObject({ role: 'assistant', serverId: 'srv-1' })
+  expect(getThread().status).toBeNull()
   resetThread()
   act(() => root.unmount())
 })

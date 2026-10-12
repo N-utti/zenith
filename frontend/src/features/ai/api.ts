@@ -1,7 +1,7 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { api, apiEvents } from '@/lib/api'
 import { uuid } from '@/lib/uuid'
-import { appendMessage, getSessionId, patchMessage } from './store'
+import { appendMessage, getSessionId, patchMessage, setStatus } from './store'
 import type { AiModel, Citation } from './types'
 
 /**
@@ -30,6 +30,7 @@ export function useAiModels() {
 
 /**
  * 04 §8 `POST /ai/chat`. 내 질문은 즉시 붙이고, 답변은 `token` 이 오는 대로 자라난다.
+ * 그보다 먼저 `status` 가 올 수 있다(서버가 문서를 찾는 중).
  * `citations` 는 본문이 끝난 뒤 한 번, `done` 으로 닫힌다. `error` 는 받은 데까지 남기고 사유를 단다.
  * `resend` 는 실패한 답변을 다시 받는 것이라 내 질문 말풍선을 또 붙이지 않는다.
  */
@@ -65,8 +66,15 @@ export function useAsk() {
           // 답변 도중 대화가 비워졌다(새 대화·다른 사람 로그인). 남은 토큰이 새 대화에 붙으면 안 된다.
           // 루프를 빠져나가면 스트림도 닫힌다.
           if (getSessionId() !== session) return
+          if (event === 'status') {
+            // 서버가 문서를 찾는 동안 보내는 진행 상황(백엔드 #366). 답변이 아니라 말풍선을 만들지 않고
+            // "생성 중" 자리의 문구만 바꾼다. 말풍선이 생긴 뒤에 오는 것은 그릴 자리가 없어 넘긴다.
+            const text = (data as { text?: unknown }).text
+            if (!started && typeof text === 'string') setStatus(text)
+            continue
+          }
           if (!started) {
-            // 첫 이벤트에서야 말풍선을 만든다. 그 전까지는 "생성 중" 표시가 자리를 지킨다.
+            // 답변의 첫 이벤트에서야 말풍선을 만든다. 그 전까지는 "생성 중" 표시가 자리를 지킨다.
             appendMessage({
               id: answerId,
               role: 'assistant',
@@ -97,6 +105,9 @@ export function useAsk() {
         if (started)
           patchMessage(answerId, (m) => ({ error: m.error ?? '연결이 끊겨 답변이 중단됐습니다.' }))
         throw error
+      } finally {
+        // 대화가 비워졌으면 이미 새 대화의 것이라 건드리지 않는다.
+        if (getSessionId() === session) setStatus(null)
       }
     },
   })
