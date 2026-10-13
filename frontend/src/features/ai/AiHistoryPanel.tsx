@@ -1,6 +1,7 @@
-import { FileText } from 'lucide-react'
+import { Folder } from 'lucide-react'
 import { formatRelative } from '@/lib/datetime'
-import { AI_SCOPES } from './catalog'
+import { useTree } from '@/features/docs/api'
+import { topFolders } from './scope'
 import type { AiMessage } from './types'
 
 /**
@@ -17,6 +18,8 @@ export function AiHistoryPanel({
   onPick: (question: string) => void
 }) {
   const recent = messages.filter((m) => m.role === 'user').slice(-5).reverse()
+  // 입력창의 지식 소스 드롭다운과 같은 목록(사이드바 트리의 최상위 폴더).
+  const folders = topFolders(useTree().data)
 
   return (
     <nav className="border-line bg-surface hidden w-60 shrink-0 flex-col overflow-y-auto border-r md:flex">
@@ -45,13 +48,13 @@ export function AiHistoryPanel({
           <h2 className="text-subtle mb-1.5 px-2.5 text-[11px] font-bold tracking-[0.08em]">
             지식 소스
           </h2>
-          {AI_SCOPES.filter((scope) => scope.id !== 'all').map((scope) => (
+          {folders.map((folder) => (
             <div
-              key={scope.id}
+              key={folder.id}
               className="text-muted flex items-center gap-2 rounded-md px-2.5 py-1.5 text-[13px]"
             >
-              <FileText className="size-3.5 shrink-0" />
-              <span className="truncate">{scope.label}</span>
+              <Folder className="size-3.5 shrink-0" />
+              <span className="truncate">{folder.title}</span>
             </div>
           ))}
           <p className="text-subtle mt-2 px-2.5 text-[11px] leading-relaxed">

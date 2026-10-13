@@ -3,7 +3,9 @@ import { Cpu, FileText, SendHorizontal } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Dropdown } from '@/components/ui/Dropdown'
 import { Textarea } from '@/components/ui/Textarea'
-import { AI_SCOPES, AI_TEMPLATES } from './catalog'
+import { useTree } from '@/features/docs/api'
+import { AI_TEMPLATES } from './catalog'
+import { SCOPE_ALL, topFolders } from './scope'
 import type { AiModel } from './types'
 
 export function AiComposer({
@@ -19,12 +21,15 @@ export function AiComposer({
   onSend: (prompt: string, scope: string | null) => void
 }) {
   const [text, setText] = useState(initialText)
-  const [scope, setScope] = useState(AI_SCOPES[0].id)
+  const folders = topFolders(useTree().data)
+  const [picked, setPicked] = useState(SCOPE_ALL)
+  // 고른 폴더가 목록에서 사라지면(지워짐, 서버 거절 뒤 트리를 다시 받음) 전체로 본다.
+  const scope = folders.some((folder) => folder.id === picked) ? picked : SCOPE_ALL
 
   const send = () => {
     const prompt = text.trim()
     if (!prompt || disabled) return
-    onSend(prompt, scope === 'all' ? null : scope)
+    onSend(prompt, scope === SCOPE_ALL ? null : scope)
     setText('')
   }
 
@@ -71,8 +76,11 @@ export function AiComposer({
             <Dropdown
               label="지식 소스:"
               value={scope}
-              onChange={setScope}
-              options={AI_SCOPES.map((s) => ({ value: s.id, label: s.label }))}
+              onChange={setPicked}
+              options={[
+                { value: SCOPE_ALL, label: '전체' },
+                ...folders.map((folder) => ({ value: folder.id, label: folder.title })),
+              ]}
             />
             <Button
               size="sm"
@@ -87,7 +95,10 @@ export function AiComposer({
         </div>
 
         <p className="text-subtle mt-2 text-center text-[11px]">
-          Enter 전송 · Shift+Enter 줄바꿈 · 답변은 사내 문서와 게시글을 근거로 만들어집니다
+          Enter 전송 · Shift+Enter 줄바꿈 ·{' '}
+          {scope === SCOPE_ALL
+            ? '답변은 사내 문서와 게시글을 근거로 만들어집니다'
+            : '답변은 고른 폴더의 문서만 근거로 만들어집니다'}
         </p>
       </div>
     </div>

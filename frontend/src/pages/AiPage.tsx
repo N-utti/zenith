@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react'
 import { useLocation } from 'react-router'
+import { useQueryClient } from '@tanstack/react-query'
 import { RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
@@ -9,8 +10,10 @@ import { AiHistoryPanel } from '@/features/ai/AiHistoryPanel'
 import { Conversation } from '@/features/ai/Conversation'
 import { SourcesPanel } from '@/features/ai/SourcesPanel'
 import { useAiModels, useAsk } from '@/features/ai/api'
+import { rejected } from '@/features/ai/scope'
 import type { AskState, CitationFocus } from '@/features/ai/types'
-import { removeMessage, resetThread, useThread } from '@/features/ai/store'
+import { patchMessage, removeMessage, resetThread, useThread } from '@/features/ai/store'
+import { docKeys } from '@/features/docs/api'
 
 /**
  * 무엇이 답하는지 밝힌다. ARCHITECTURE §6(2026-09-04): 1차 공급자는 Claude API 이고 호출은 서버가 한다.
@@ -57,9 +60,20 @@ export function AiPage() {
   // 질문은 붙었는데 첫 토큰이 아직 안 왔을 때만 "생성 중" 을 보여준다. 그 뒤로는 말풍선이 자란다.
   const generating = ask.isPending && messages.at(-1)?.role === 'user'
 
+  // 범위로 고른 폴더를 서버가 없다고 하면(422, 백엔드 #372) 트리가 낡은 것이다. 다시 받으면
+  // 입력창의 지식 소스가 그 폴더를 잃고 전체로 돌아간다(`AiComposer`).
+  const qc = useQueryClient()
+  const send = (vars: Parameters<typeof ask.mutate>[0]) =>
+    ask.mutate(vars, {
+      onError: (error) => {
+        if (vars.scope && rejected(error)) void qc.invalidateQueries({ queryKey: docKeys.tree })
+      },
+    })
+
   /**
    * 실패한 답변을 지우고 같은 질문·범위로 다시 받는다. 내 질문 말풍선은 그대로 둔다.
    * 질문은 요청 인자가 아니라 스레드에서 찾는다. 스레드는 화면을 떠나도 남지만 요청 인자는 리마운트에 사라진다.
+   * 서버가 그 범위를 거절했으면 같은 범위로는 몇 번을 물어도 422 라, 질문의 범위를 전체로 되돌려 묻는다.
    */
   const retry = () => {
     if (ask.isPending) return
@@ -68,7 +82,13 @@ export function AiPage() {
     if (!question) return
     setFocus(null)
     if (last?.role === 'assistant') removeMessage(last.id)
-    ask.mutate({ prompt: question.body, scope: question.scope ?? null, resend: true })
+    let scope = question.scope ?? null
+    if (scope && rejected(ask.error)) {
+      scope = null
+      patchMessage(question.id, { scope })
+      toast.info('고른 폴더를 찾을 수 없어 전체에서 다시 찾습니다.')
+    }
+    send({ prompt: question.body, scope, resend: true })
   }
 
   return (
@@ -129,7 +149,7 @@ export function AiPage() {
           disabled={ask.isPending}
           onSend={(prompt, scope) => {
             setFocus(null)
-            ask.mutate({ prompt, scope })
+            send({ prompt, scope })
           }}
         />
       </div>

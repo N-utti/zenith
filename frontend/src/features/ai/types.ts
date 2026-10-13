@@ -35,7 +35,10 @@ export interface AiMessage {
   /** 본문. assistant 답변은 `[[1]]` 형태의 각주 표식을 포함할 수 있다. 스트리밍 중에는 자라난다. */
   body: string
   createdAt: string
-  /** 내 질문에만. 보낼 때 고른 지식 소스. 실패한 답변을 다시 받을 때 같은 범위로 보낸다. */
+  /**
+   * 내 질문에만. 보낼 때 고른 지식 소스(폴더 id, 전체면 `null`). 실패한 답변을 다시 받을 때 같은 범위로 보낸다.
+   * 서버가 그 폴더를 없다고 거절하면 `null` 로 되돌린다(`AiPage` 의 `retry`).
+   */
   scope?: string | null
   citations?: Citation[]
   /** 스트림 도중 서버가 `event: error` 를 보냈을 때의 사유. 받은 데까지의 본문은 남긴다. */
@@ -59,9 +62,3 @@ export interface AiTemplate {
 
 /** ⌘K 팔레트가 `navigate('/ai', { state })` 로 실어 보내는 검색어. 컴포저에 채우기만 하고 보내지는 않는다. */
 export type AskState = { ask: string }
-
-/** `POST /ai/chat` 의 `scope`. 04 는 문자열 하나만 정했고 어휘는 아직 없다(PR 본문에 제안). */
-export interface AiScope {
-  id: string
-  label: string
-}

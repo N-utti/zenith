@@ -52,10 +52,14 @@ const ALL_CITATIONS: (Citation & { minRole?: 'lead' | 'exec' })[] = [
  * 목 답변. 실제로는 Claude 가 RAG 근거로 답한다.
  * 여기서는 "각주가 붙고 권한 밖 문서는 근거에서 빠진다"는 규약만 재현한다.
  * minRole 은 서버 안에서만 쓰는 판정 기준이라 응답에 싣지 않는다.
+ * 폴더로 범위를 좁힌 질문(`scoped`)은 게시글을 근거로 쓰지 않는다(백엔드 #372).
+ * 실제 서버는 그 폴더 아래 문서만 찾지만, 목은 어느 폴더를 골라도 문서 근거가 같다.
  */
-export function answer(user: User): { body: string; citations: Citation[] } {
+export function answer(user: User, scoped = false): { body: string; citations: Citation[] } {
   const citations = ALL_CITATIONS.filter(
-    (c) => !c.minRole || ROLE_RANK[user.role] >= ROLE_RANK[c.minRole],
+    (c) =>
+      (!c.minRole || ROLE_RANK[user.role] >= ROLE_RANK[c.minRole]) &&
+      !(scoped && c.type === 'post'),
   ).map(({ n, doc_id, type, to, title, quote, path }) => ({
     n,
     doc_id,
@@ -65,13 +69,14 @@ export function answer(user: User): { body: string; citations: Citation[] } {
     quote,
     path,
   }))
-  const marks = citations.map((c) => `[[${c.n}]]`)
+  // 빠진 근거의 각주는 달지 않는다. 자리(순서)가 아니라 번호로 찾아야 남은 각주가 밀리지 않는다.
+  const mark = (n: number) => (citations.some((c) => c.n === n) ? `[[${n}]]` : '')
   return {
     body:
-      `신규 입사자는 입사 첫날 사양에 맞춰 노트북을 지급받습니다. 개발 직군은 고사양, 그 외 직군은 표준 사양이 기본이며${marks[0] ?? ''}, ` +
-      `반납은 퇴사 시 총무팀에 하도록 규정되어 있습니다${marks[1] ?? ''}. ` +
-      `지급받은 장비로 2주 동안 협업툴 파일럿에 참여할 수 있고${marks[2] ?? ''}, 직군별 사양은 첨부된 사양표에 있습니다${marks[3] ?? ''}.` +
-      (marks[4] ? ` 내년 장비 예산은 인당 상향을 검토 중입니다${marks[4]}.` : ''),
+      `신규 입사자는 입사 첫날 사양에 맞춰 노트북을 지급받습니다. 개발 직군은 고사양, 그 외 직군은 표준 사양이 기본이며${mark(1)}, ` +
+      `반납은 퇴사 시 총무팀에 하도록 규정되어 있습니다${mark(2)}. ` +
+      `지급받은 장비로 2주 동안 협업툴 파일럿에 참여할 수 있고${mark(3)}, 직군별 사양은 첨부된 사양표에 있습니다${mark(4)}.` +
+      (mark(5) ? ` 내년 장비 예산은 인당 상향을 검토 중입니다${mark(5)}.` : ''),
     citations,
   }
 }
