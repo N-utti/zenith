@@ -30,7 +30,7 @@ from app.ai.provider import ChatMessage, LLMError, LLMProvider, ToolCalls, get_p
 from app.db import get_db, session_scope
 from app.deps import current_user
 from app.errors import ApiError
-from app.models import AiFeedback, AiMessage, AiSession, User
+from app.models import AiFeedback, AiMessage, AiSession, Folder, User
 from app.routers.docs import _get_doc
 from app.routers.search import Hit, find_hits
 
@@ -96,19 +96,23 @@ def _citation(n: int, hit: Hit) -> Citation:
     )
 
 
-async def _search(user: User, query: str, sources: list[Citation]) -> str:
+async def _search(
+    user: User, query: str, sources: list[Citation], folder_id: uuid.UUID | None
+) -> str:
     """도구 실행 — 질문자 권한으로 문서·일반 게시글을 찾아 번호 붙은 구절로 돌려준다.
-    같은 자료가 다른 검색에서 또 나오면 같은 번호(`sources` 가 이 답변의 근거 목록이자 번호표)."""
+    같은 자료가 다른 검색에서 또 나오면 같은 번호(`sources` 가 이 답변의 근거 목록이자 번호표).
+    `folder_id`(질문 범위, README 44)가 있으면 그 폴더 아래 문서만 — 게시글은 빠진다."""
     async with session_scope() as db:
         hits = await find_hits(
             db,
             user,
             query[:200],
-            {"doc", "post"},
+            {"doc"} if folder_id else {"doc", "post"},
             PASSAGES_PER_SEARCH,
             headline=PASSAGE_HEADLINE,
             post_roles=AI_POST_ROLES,
             docs_ai_source_only=True,  # 문서마다 켜고 끄는 「AI 근거로 쓰기」(README 43)
+            folder_id=folder_id,
         )
     if not hits:
         return "찾은 자료가 없습니다."
@@ -151,7 +155,21 @@ class ChatIn(BaseModel):
     message: Annotated[
         str, StringConstraints(strip_whitespace=True, min_length=1, max_length=HISTORY_MAX_CHARS)
     ]
+    # 질문 범위(README 44): 폴더 id 문자열 — 그 폴더(하위 포함)의 문서만 근거로 쓴다. 없으면 전체(문서+일반 게시글)
     scope: str | None = None
+
+
+async def _scope_folder(db: AsyncSession, scope: str | None) -> Folder | None:
+    """`scope` → 폴더. 없는 폴더 id 는 422(프론트가 범위를 전체로 되돌리고 다시 묻는다, 이슈 #370)."""
+    try:
+        folder_id = uuid.UUID(scope or "")
+    except ValueError:
+        # ponytail: 프론트의 옛 어휘(wiki·hr·exec)는 아직 날아온다 — 전체로 받는다. 프론트가 폴더 id 로 옮기면 422 로 조인다
+        return None
+    folder = await db.get(Folder, folder_id)
+    if folder is None:
+        raise ApiError(422, "VALIDATION", "없는 폴더입니다.")
+    return folder
 
 
 class ModelOut(BaseModel):
@@ -251,10 +269,23 @@ async def chat(
     provider: LLMProvider = Depends(get_provider),
 ) -> StreamingResponse:
     # ponytail: 근거는 핵심어 검색(find_hits)만 — 벡터(bge-m3 → pgvector, ARCHITECTURE §6)는 3단계에서 같은 도구 안에 합친다.
+    scope = await _scope_folder(
+        db, body.scope
+    )  # 세션 행을 쓰기 전에 — 422 면 DB 에 아무것도 안 남는다
     session_id = await _session(db, user, body.session_id, str(provider.models()[0]["name"]))
     messages = [*await _history(db, session_id), {"role": "user", "content": body.message}]
     await db.commit()  # 세션 행만 남긴다. 공급자를 기다리는 동안 커넥션은 풀에 돌아간다.
     asked_at = datetime.now(UTC)
+    # 범위는 이번 질문에만 — 같은 대화의 앞선 답은 그대로 맥락에 남는다(이미 본문에 풀어 쓰인 글이다).
+    # 폴더 이름은 시스템 프롬프트에 넣지 않는다(누구나 짓는 글이 지시 자리에 올라간다 — 보안 리뷰). 모델은 도구
+    # 결과의 「폴더 › 제목」 으로 어느 폴더인지 안다.
+    system = SYSTEM_PROMPT
+    if scope is not None:
+        system += (
+            " 이번 질문의 검색 범위는 사용자가 고른 폴더(하위 폴더 포함)의 문서만이고 게시글은 빠진다. "
+            "거기서 못 찾았으면 그 폴더에 없다고 말한다."
+        )
+    folder_id = scope.id if scope is not None else None
 
     async def events() -> AsyncIterator[str]:
         parts: list[str] = []
@@ -268,7 +299,7 @@ async def chat(
                     parts.append("\n\n")  # 도구 앞에 쓴 글과 다음 턴의 글 사이
                     yield sse("token", {"text": "\n\n"})
                 async for item in provider.stream(
-                    system=SYSTEM_PROMPT,
+                    system=system,
                     messages=messages,
                     tools=[SEARCH_TOOL],
                     tool_choice=tool_choice,
@@ -292,7 +323,7 @@ async def chat(
                             "is_error": True,
                         }
                     elif isinstance(query, str) and query.strip():
-                        result = {"content": await _search(user, query, sources)}
+                        result = {"content": await _search(user, query, sources, folder_id)}
                     else:
                         result = {
                             "content": "없는 도구이거나 query 가 비었습니다.",

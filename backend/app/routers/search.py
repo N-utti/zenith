@@ -87,10 +87,12 @@ async def find_hits(
     headline: str = HEADLINE_OPTS,
     post_roles: list[str] | None = None,
     docs_ai_source_only: bool = False,
+    folder_id: uuid.UUID | None = None,
 ) -> list[Hit]:
     """FTS + 최근성, 권한 필터는 SQL 안에서. ⌘K 와 AI 검색 도구(ai.py)가 같이 쓴다 — 스니펫은 ts_headline 원문
     (`**…**` 마커, 이스케이프 안 함). `post_roles` 는 내 등급 필터 위에 **더 좁히기만** 한다.
-    `docs_ai_source_only` 는 「AI 근거로 쓰기」가 켜진 문서만(README 43)."""
+    `docs_ai_source_only` 는 「AI 근거로 쓰기」가 켜진 문서만(README 43), `folder_id` 는 그 폴더와
+    하위 폴더(모든 깊이)의 문서만(README 44 — AI 질문 범위)."""
     tsq_text = _tsquery(q)
     if tsq_text is None:
         return []
@@ -98,6 +100,17 @@ async def find_hits(
     hits: list[tuple[float, Hit]] = []
 
     if "doc" in wanted:
+        doc_filters = [Document.deleted_at.is_(None)]
+        if docs_ai_source_only:
+            doc_filters.append(Document.ai_source.is_(True))
+        if folder_id is not None:
+            # 폴더 트리를 아래로 따라 내려간다 — 깊이 제한 없음. UNION(ALL 아님)이라 이미 나온 행을 버려서
+            # 폴더 고리(동시 이동 경합으로 생길 수 있다, docs._assert_no_cycle 주석)가 있어도 끝난다 — 보안 리뷰
+            subtree = select(Folder.id).where(Folder.id == folder_id).cte("subtree", recursive=True)
+            subtree = subtree.union(
+                select(Folder.id).join(subtree, Folder.parent_id == subtree.c.id)
+            )
+            doc_filters.append(Document.folder_id.in_(select(subtree.c.id)))
         body_tsv = func.coalesce(Document.tsv, func.to_tsvector("simple", ""))
         tsv = body_tsv.op("||")(func.to_tsvector("simple", Document.title))
         score = _score(func.ts_rank(tsv, tsq), Document.updated_at).label("score")
@@ -110,11 +123,7 @@ async def find_hits(
             )
             .options(*DOC_LIST_OPTS)  # 평문·tsv 는 SQL 식에서만 쓴다. 행으로는 안 가져온다
             .join(Folder, Folder.id == Document.folder_id)
-            .where(
-                Document.deleted_at.is_(None),
-                tsv.op("@@")(tsq),
-                *([Document.ai_source.is_(True)] if docs_ai_source_only else []),
-            )
+            .where(*doc_filters, tsv.op("@@")(tsq))
             .order_by(
                 score.desc(), Document.updated_at.desc(), Document.id
             )  # limit 경계가 흔들리지 않게

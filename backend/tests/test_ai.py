@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 
 from fastapi import FastAPI
 from httpx import AsyncClient
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 
 from app.ai.provider import LLMError, ToolCall, ToolCalls, get_provider
 from app.deps import current_user
@@ -61,10 +61,14 @@ def share_scope(monkeypatch, app_db) -> None:
     monkeypatch.setattr(ai, "session_scope", scope)
 
 
-async def _chat(client: AsyncClient, message: str, session_id: str | None = None):
+async def _chat(
+    client: AsyncClient, message: str, session_id: str | None = None, scope: str | None = None
+):
     body: dict[str, object] = {"message": message}
     if session_id:
         body["session_id"] = session_id
+    if scope:
+        body["scope"] = scope
     r = await client.post("/api/ai/chat", json=body, headers=csrf(client))
     assert r.status_code == 200, r.text
     assert r.headers["content-type"].startswith("text/event-stream")
@@ -267,6 +271,7 @@ class SearchingProvider(FakeProvider):
     turns: list[list[dict]] = []
     tools_seen: list[object] = []
     choices: list[object] = []
+    systems: list[str] = []
 
     @staticmethod
     def calls(*calls: ToolCall) -> ToolCalls:
@@ -288,6 +293,7 @@ class SearchingProvider(FakeProvider):
         SearchingProvider.turns.append(messages)
         SearchingProvider.tools_seen.append(tools)
         SearchingProvider.choices.append(tool_choice)
+        SearchingProvider.systems.append(system)
         last = messages[-1]["content"]
         got_results = isinstance(last, list) and last and last[0].get("type") == "tool_result"
         if not tool_choice and not got_results:
@@ -330,8 +336,27 @@ async def _knowledge(app_db, users: Users) -> dict:
     app_db.add(ws)
     await app_db.flush()
     root = Folder(ws_id=ws.id, parent_id=None, title="인사 규정")
-    app_db.add(root)
+    other = Folder(ws_id=ws.id, parent_id=None, title="총무")
+    app_db.add_all([root, other])
     await app_db.flush()
+    # 질문 범위(README 44) 확인용 — 하위 폴더의 문서는 범위에 들고, 다른 최상위 폴더의 문서는 빠진다
+    child = Folder(ws_id=ws.id, parent_id=root.id, title="세칙")
+    app_db.add(child)
+    await app_db.flush()
+    in_child = Document(
+        folder_id=child.id,
+        title="연차 이월 세칙",
+        text_cache="이월 연차는 상반기에 먼저 쓴다",
+        tsv=func.to_tsvector("simple", "이월 연차는 상반기에 먼저 쓴다"),
+        updated_by=users.member.id,
+    )
+    elsewhere = Document(
+        folder_id=other.id,
+        title="비품 신청",
+        text_cache="연차 이월 신청서 양식은 총무팀 서랍에",
+        tsv=func.to_tsvector("simple", "연차 이월 신청서 양식은 총무팀 서랍에"),
+        updated_by=users.member.id,
+    )
     text = "연차는 매년 15일이 생기고, 쓰지 않은 연차는 다음 해로 최대 5일까지 이월한다. 이월한 연차는 3월까지 쓴다."
     doc = Document(
         folder_id=root.id,
@@ -360,7 +385,7 @@ async def _knowledge(app_db, users: Users) -> dict:
     )
     notice = Board(name="전체공지", min_role="member")
     exec_board = Board(name="경영 보고", min_role="exec")
-    app_db.add_all([doc, trashed, from_ai, notice, exec_board])
+    app_db.add_all([doc, trashed, from_ai, in_child, elsewhere, notice, exec_board])
     await app_db.flush()
     app_db.add_all(
         [
@@ -379,7 +404,86 @@ async def _knowledge(app_db, users: Users) -> dict:
         ]
     )
     await app_db.commit()
-    return {"doc": doc, "notice": notice}
+    return {"doc": doc, "notice": notice, "root": root, "other": other}
+
+
+async def test_chat_scope_folder_limits_sources_to_its_subtree_and_drops_posts(
+    app: FastAPI, client: AsyncClient, users: Users, app_db, monkeypatch
+) -> None:
+    """scope = 폴더 id → 그 폴더와 하위 폴더의 문서만, 다른 최상위 폴더·게시글은 빠진다(이슈 #370, README 44)."""
+    app.dependency_overrides[get_provider] = SearchingProvider
+    SearchingProvider.turns, SearchingProvider.systems = [], []
+    share_scope(monkeypatch, app_db)
+    seeded = await _knowledge(app_db, users)
+    await login(client, "sujin@zenith.co.kr")
+    ev = await _chat(client, "연차 이월돼?", scope=str(seeded["root"].id))
+    assert ev[-1][0] == "done"
+    result = SearchingProvider.turns[1][-1]["content"][0]["content"]
+    assert "(문서) 인사 규정 › 휴가 규정: " in result
+    assert "(문서) 세칙 › 연차 이월 세칙: " in result  # 하위 폴더
+    assert "비품 신청" not in result and "(게시글)" not in result
+    assert "사용자가 고른 폴더(하위 폴더 포함)" in SearchingProvider.systems[0]
+    assert (
+        "인사 규정" not in SearchingProvider.systems[0]
+    )  # 폴더 이름(누구나 짓는 글)은 시스템 프롬프트에 안 넣는다
+
+    # 범위 없음 → 전체(다른 폴더 + 게시글), 시스템 프롬프트에 범위 문구 없음
+    SearchingProvider.turns, SearchingProvider.systems = [], []
+    await _chat(client, "연차 이월돼?")
+    result = SearchingProvider.turns[1][-1]["content"][0]["content"]
+    assert "비품 신청" in result and "(게시글) 전체공지" in result
+    assert "폴더(하위 폴더 포함)" not in SearchingProvider.systems[0]
+
+    # 하위 폴더 id 를 바로 보내도 된다(그 아래만)
+    SearchingProvider.turns = []
+    child_id = (await app_db.execute(select(Folder.id).where(Folder.title == "세칙"))).scalar_one()
+    await _chat(client, "연차 이월돼?", scope=str(child_id))
+    result = SearchingProvider.turns[1][-1]["content"][0]["content"]
+    assert "연차 이월 세칙" in result and "휴가 규정" not in result
+
+
+async def test_chat_scope_survives_folder_cycle(
+    app: FastAPI, client: AsyncClient, users: Users, app_db, monkeypatch
+) -> None:
+    """폴더 고리(동시 이동 경합으로 생길 수 있다)를 범위로 물어도 재귀 CTE 가 끝난다 — 보안 리뷰(UNION)."""
+    app.dependency_overrides[get_provider] = SearchingProvider
+    SearchingProvider.turns = []
+    share_scope(monkeypatch, app_db)
+    seeded = await _knowledge(app_db, users)
+    # 인사 규정 ⇄ 세칙 고리 — API 는 막으니 DB 에 바로 넣는다
+    child_id = (await app_db.execute(select(Folder.id).where(Folder.title == "세칙"))).scalar_one()
+    await app_db.execute(
+        update(Folder).where(Folder.id == seeded["root"].id).values(parent_id=child_id)
+    )
+    await app_db.commit()
+    await login(client, "sujin@zenith.co.kr")
+    ev = await asyncio.wait_for(_chat(client, "연차 이월돼?", scope=str(child_id)), timeout=10)
+    assert ev[-1][0] == "done"
+    result = SearchingProvider.turns[1][-1]["content"][0]["content"]
+    assert "연차 이월 세칙" in result and "휴가 규정" in result and "비품 신청" not in result
+
+
+async def test_chat_scope_unknown_folder_422_and_legacy_words_mean_all(
+    app: FastAPI, client: AsyncClient, users: Users, app_db, monkeypatch
+) -> None:
+    app.dependency_overrides[get_provider] = SearchingProvider
+    SearchingProvider.turns = []
+    share_scope(monkeypatch, app_db)
+    await _knowledge(app_db, users)
+    await login(client, "sujin@zenith.co.kr")
+    r = await client.post(
+        "/api/ai/chat",
+        json={"message": "연차?", "scope": str(uuid.uuid4())},
+        headers=csrf(client),
+    )
+    assert r.status_code == 422 and r.json()["code"] == "VALIDATION"
+    # 범위 검증이 세션 INSERT 보다 앞 — 테스트 세션은 롤백이 없으니 행이 생겼다면 여기서 드러난다
+    assert (await app_db.execute(select(func.count()).select_from(AiSession))).scalar() == 0
+    assert (await app_db.execute(select(func.count()).select_from(AiMessage))).scalar() == 0
+    # 프론트 옛 어휘는 전체로 — 프론트가 폴더 id 로 옮기기 전까지(ponytail)
+    await _chat(client, "연차 이월돼?", scope="hr")
+    result = SearchingProvider.turns[1][-1]["content"][0]["content"]
+    assert "(게시글) 전체공지" in result
 
 
 async def test_chat_searches_with_askers_permissions_and_cites(
@@ -387,7 +491,7 @@ async def test_chat_searches_with_askers_permissions_and_cites(
 ) -> None:
     """status → token → citations(본문에 쓴 번호만) → done. 도구 결과는 질문자 권한(휴지통·임원 게시판 제외)."""
     app.dependency_overrides[get_provider] = SearchingProvider
-    SearchingProvider.turns, SearchingProvider.tools_seen = [], []
+    SearchingProvider.turns, SearchingProvider.tools_seen, SearchingProvider.choices = [], [], []
     share_scope(monkeypatch, app_db)
     seeded = await _knowledge(app_db, users)
     await login(client, "sujin@zenith.co.kr")
