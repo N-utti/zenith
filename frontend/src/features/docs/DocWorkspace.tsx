@@ -2,16 +2,31 @@ import { hueOf } from '@/lib/avatar'
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { EditorContent, useEditor, type Editor } from '@tiptap/react'
 import DragHandle, { type DragHandleProps } from '@tiptap/extension-drag-handle-react'
-import { ChevronDown, GripVertical, MessageSquarePlus, Trash2, WifiOff, X } from 'lucide-react'
+import {
+  ChevronDown,
+  GripVertical,
+  MessageSquarePlus,
+  Sparkles,
+  Trash2,
+  WifiOff,
+  X,
+} from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router'
 import { Avatar } from '@/components/ui/Avatar'
 import { Spinner } from '@/components/ui/Spinner'
+import { useToast } from '@/components/ui/ToastContext'
 import { ApiError } from '@/lib/api'
 import { useCurrentUser } from '@/features/auth/AuthContext'
 import { cn } from '@/lib/cn'
 import { formatRelative } from '@/lib/datetime'
 import { useDragAutoScroll } from '@/lib/useDragAutoScroll'
-import { UNTITLED_DOC, useSaveVersion, useTouchDoc, useVersionSnapshot } from './api'
+import {
+  UNTITLED_DOC,
+  useSaveVersion,
+  useSetAiSource,
+  useTouchDoc,
+  useVersionSnapshot,
+} from './api'
 import { BlockComments } from './BlockComments'
 import { anchorBlock, flashBlock } from './blockId'
 import { CommentPanel } from './CommentPanel'
@@ -300,6 +315,42 @@ function BlockDragHandle({
   )
 }
 
+/** AI 가 이 문서를 근거로 써도 되는지. 꺼져 있으면 아이콘에 사선을 긋는다. */
+function AiSourceToggle({ docId, on }: { docId: string; on: boolean }) {
+  const { mutate, isPending } = useSetAiSource(docId)
+  const toast = useToast()
+  const label = on ? 'AI 근거로 쓰는 중' : 'AI 근거에서 빠짐'
+  return (
+    <button
+      type="button"
+      aria-pressed={on}
+      aria-label="AI 근거로 쓰기"
+      title={`${label}. 누르면 ${on ? '끕니다' : '켭니다'}`}
+      // 요청 중에 disabled 로 잠그면 키보드 초점이 버튼에서 빠진다. 두 번째 누름만 흘린다.
+      onClick={() =>
+        !isPending &&
+        mutate(!on, {
+          onSuccess: (doc) =>
+            toast.success(
+              doc.ai_source
+                ? 'AI 가 이 문서를 근거로 씁니다.'
+                : 'AI 가 이 문서를 근거로 쓰지 않습니다.',
+            ),
+          onError: (err) =>
+            toast.error(err instanceof ApiError ? err.message : '바꾸지 못했습니다.'),
+        })
+      }
+      className={cn(
+        'relative grid size-7 cursor-pointer place-items-center rounded transition-colors',
+        on ? 'text-accent' : 'text-subtle hover:text-fg',
+      )}
+    >
+      <Sparkles className="size-4" />
+      {!on && <span aria-hidden className="absolute h-px w-5 rotate-45 bg-current" />}
+    </button>
+  )
+}
+
 function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail }) {
   const user = useCurrentUser()
   const { doc, provider } = session
@@ -524,6 +575,7 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
             <DocWidthMenu doc={doc} />
           </div>
           {editor && <ExportMenu editor={editor} title={title || UNTITLED_DOC} />}
+          <AiSourceToggle docId={meta.id} on={meta.ai_source} />
           <button
             type="button"
             aria-label="문서를 휴지통으로"

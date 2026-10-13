@@ -398,7 +398,7 @@ export interface paths {
         delete: operations["delete_doc_api_docs__id__delete"];
         options?: never;
         head?: never;
-        /** 제목·폴더 이동 (목록용 투영 — 본문 원천은 Y.Doc) */
+        /** 제목·폴더 이동·ai_source (목록용 투영 — 본문 원천은 Y.Doc) */
         patch: operations["update_doc_api_docs__id__patch"];
         trace?: never;
     };
@@ -2893,6 +2893,11 @@ export interface components {
             folder_id: string;
             /** Title */
             title: string;
+            /**
+             * Ai Source
+             * @default true
+             */
+            ai_source: boolean;
         };
         /** DocDetail */
         DocDetail: {
@@ -2916,6 +2921,8 @@ export interface components {
             updated_by: components["schemas"]["Person"] | null;
             /** Deleted At */
             deleted_at: string | null;
+            /** Ai Source */
+            ai_source: boolean;
             /** Ydoc */
             ydoc: string | null;
         };
@@ -2941,6 +2948,8 @@ export interface components {
             updated_by: components["schemas"]["Person"] | null;
             /** Deleted At */
             deleted_at: string | null;
+            /** Ai Source */
+            ai_source: boolean;
         };
         /** DocPatchIn */
         DocPatchIn: {
@@ -2948,6 +2957,8 @@ export interface components {
             title?: string | null;
             /** Folder Id */
             folder_id?: string | null;
+            /** Ai Source */
+            ai_source?: boolean | null;
         };
         /** DraftIn */
         DraftIn: {

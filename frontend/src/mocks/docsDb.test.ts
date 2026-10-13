@@ -16,6 +16,7 @@ import {
   purgeDoc,
   removeComment,
   removeFolder,
+  touchDoc,
   trashDoc,
   untrashDoc,
 } from './docsDb'
@@ -206,4 +207,16 @@ it('폴더는 비어 있을 때만 지워진다. 휴지통에 든 문서도 그 
   purgeDoc(doc.id)
   expect(removeFolder(folder)).toBeNull()
   expect(docTree().folders.some((f) => f.id === folder.id)).toBe(false)
+})
+
+it('AI 근거 스위치만 바꾸면 수정 시각과 수정한 사람은 그대로다', () => {
+  const doc = createDoc(user, 'f-1', '스위치 시험')
+  expect(doc.ai_source).toBe(true)
+  const { updated_at, updated_by } = doc
+  const other = MOCK_USERS.find((u) => u.id !== user.id)!
+
+  const off = touchDoc(doc.id, other, { ai_source: false })
+  expect(off).toMatchObject({ ai_source: false, updated_at, updated_by })
+  // AI 답변을 저장한 문서는 끈 채로 생긴다.
+  expect(createDoc(user, 'f-1', 'AI 답변', false).ai_source).toBe(false)
 })

@@ -20,6 +20,7 @@ const doc = (
   updated_at: '2026-09-17T00:00:00Z',
   updated_by: null,
   deleted_at,
+  ai_source: true,
 })
 
 const data: DocTreeData = {

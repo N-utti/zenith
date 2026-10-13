@@ -41,6 +41,7 @@ export const DOCS: DocSummary[] = [
     updated_at: minutesAgo(40),
     updated_by: { id: 'u-2', name: '정성운' },
     deleted_at: null,
+    ai_source: true,
   },
   {
     id: 'd-1',
@@ -49,6 +50,7 @@ export const DOCS: DocSummary[] = [
     updated_at: minutesAgo(12),
     updated_by: { id: 'u-2', name: '정성운' },
     deleted_at: null,
+    ai_source: true,
   },
   {
     id: 'd-2',
@@ -57,6 +59,7 @@ export const DOCS: DocSummary[] = [
     updated_at: minutesAgo(95),
     updated_by: { id: 'u-1', name: '진수연' },
     deleted_at: null,
+    ai_source: true,
   },
   {
     id: 'd-3',
@@ -65,6 +68,7 @@ export const DOCS: DocSummary[] = [
     updated_at: minutesAgo(300),
     updated_by: { id: 'u-4', name: '장지윤' },
     deleted_at: null,
+    ai_source: true,
   },
   {
     id: 'd-4',
@@ -73,6 +77,7 @@ export const DOCS: DocSummary[] = [
     updated_at: minutesAgo(1500),
     updated_by: { id: 'u-7', name: '김혜리' },
     deleted_at: null,
+    ai_source: true,
   },
   {
     id: 'd-5',
@@ -81,6 +86,7 @@ export const DOCS: DocSummary[] = [
     updated_at: minutesAgo(2900),
     updated_by: { id: 'u-1', name: '진수연' },
     deleted_at: null,
+    ai_source: true,
   },
   {
     id: 'd-6',
@@ -89,6 +95,7 @@ export const DOCS: DocSummary[] = [
     updated_at: minutesAgo(60),
     updated_by: { id: 'u-8', name: '성예림' },
     deleted_at: null,
+    ai_source: true,
   },
   // 지난주들. 사이드바는 폴더마다 최근 5개만 펼친다(DocTree `PREVIEW_DOCS`). 넘치는 모양을 보려고 둔다.
   {
@@ -98,6 +105,7 @@ export const DOCS: DocSummary[] = [
     updated_at: minutesAgo(7 * 1440),
     updated_by: { id: 'u-8', name: '성예림' },
     deleted_at: null,
+    ai_source: true,
   },
   {
     id: 'd-8',
@@ -106,6 +114,7 @@ export const DOCS: DocSummary[] = [
     updated_at: minutesAgo(14 * 1440),
     updated_by: { id: 'u-8', name: '성예림' },
     deleted_at: null,
+    ai_source: true,
   },
   {
     id: 'd-9',
@@ -114,6 +123,7 @@ export const DOCS: DocSummary[] = [
     updated_at: minutesAgo(21 * 1440),
     updated_by: { id: 'u-8', name: '성예림' },
     deleted_at: null,
+    ai_source: true,
   },
   {
     id: 'd-10',
@@ -122,6 +132,7 @@ export const DOCS: DocSummary[] = [
     updated_at: minutesAgo(28 * 1440),
     updated_by: { id: 'u-8', name: '성예림' },
     deleted_at: null,
+    ai_source: true,
   },
   {
     id: 'd-11',
@@ -130,6 +141,7 @@ export const DOCS: DocSummary[] = [
     updated_at: minutesAgo(35 * 1440),
     updated_by: { id: 'u-8', name: '성예림' },
     deleted_at: null,
+    ai_source: true,
   },
 ]
 
@@ -385,7 +397,12 @@ export function purgeDoc(id: string): void {
   delete comments[id]
 }
 
-export function createDoc(user: User, folderId: string, title: string): DocSummary {
+export function createDoc(
+  user: User,
+  folderId: string,
+  title: string,
+  aiSource = true,
+): DocSummary {
   const doc: DocSummary = {
     // 새로고침해도 겹치지 않아야 한다. 브라우저 IndexedDB 가 문서 id 로 본문을 남기므로
     // 카운터를 쓰면 두 번째로 만든 문서에 이전 본문이 뜬다.
@@ -395,6 +412,7 @@ export function createDoc(user: User, folderId: string, title: string): DocSumma
     updated_at: new Date().toISOString(),
     updated_by: { id: user.id, name: user.name },
     deleted_at: null,
+    ai_source: aiSource,
   }
   DOCS.unshift(doc)
   return doc
@@ -404,10 +422,12 @@ export function createDoc(user: User, folderId: string, title: string): DocSumma
 export function touchDoc(
   id: string,
   user: User,
-  input: { title?: string; folder_id?: string },
+  input: { title?: string; folder_id?: string; ai_source?: boolean },
 ): DocSummary | undefined {
   const doc = findDoc(id)
   if (!doc) return undefined
+  // 「AI 근거로 쓰기」 스위치는 내용 변경이 아니다. 백엔드도 수정 시각과 수정한 사람을 그대로 둔다.
+  if (input.ai_source !== undefined) doc.ai_source = input.ai_source
   // 빈 본문으로 "이어서 작업" 순서를 흔들지 않는다. 백엔드도 아무것도 안 바꾸고 그대로 준다.
   if (input.title === undefined && input.folder_id === undefined) return doc
   if (input.title !== undefined) doc.title = input.title

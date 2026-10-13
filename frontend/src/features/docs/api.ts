@@ -97,12 +97,27 @@ export function useDoc(docId: string) {
 /** 빈 문서의 제목. 서버가 제목을 **요구하므로**(`DocCreateIn`) 안 보내면 422 다. */
 export const UNTITLED_DOC = '제목 없는 문서'
 
-/** 문서는 폴더 안에만 생긴다. 서버가 `folder_id` 와 `title` 을 둘 다 요구한다. */
+/**
+ * 문서는 폴더 안에만 생긴다. 서버가 `folder_id` 와 `title` 을 둘 다 요구한다.
+ *
+ * `ai_source` 는 AI 가 이 문서를 근거로 써도 되는지다. 안 보내면 서버가 켠다.
+ */
 export function useCreateDoc() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ folder_id, title = UNTITLED_DOC }: { folder_id: string; title?: string }) =>
-      api<DocSummary>('/docs', { method: 'POST', body: JSON.stringify({ folder_id, title }) }),
+    mutationFn: ({
+      folder_id,
+      title = UNTITLED_DOC,
+      ai_source,
+    }: {
+      folder_id: string
+      title?: string
+      ai_source?: boolean
+    }) =>
+      api<DocSummary>('/docs', {
+        method: 'POST',
+        body: JSON.stringify({ folder_id, title, ai_source }),
+      }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['documents'] })
       void qc.invalidateQueries({ queryKey: docKeys.tree })
@@ -128,6 +143,24 @@ export function useTouchDoc(docId: string) {
       void qc.invalidateQueries({ queryKey: docKeys.tree })
       // 홈의 "이어서 작업" 도 같은 문서를 본다.
       void qc.invalidateQueries({ queryKey: homeKeys.home })
+    },
+  })
+}
+
+/**
+ * AI 가 이 문서를 근거로 써도 되는지를 켜고 끈다. 로그인한 누구나 바꿀 수 있고 서버가 감사에 남긴다.
+ * 내용 변경이 아니라서 서버가 수정 시각을 올리지 않는다. 홈의 "이어서 작업" 은 그대로다.
+ */
+export function useSetAiSource(docId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (ai_source: boolean) =>
+      api<DocSummary>(`/docs/${docId}`, { method: 'PATCH', body: JSON.stringify({ ai_source }) }),
+    onSuccess: (doc) => {
+      qc.setQueryData(docKeys.detail(docId), (prev: DocDetail | undefined) =>
+        prev ? { ...prev, ...doc } : undefined,
+      )
+      void qc.invalidateQueries({ queryKey: docKeys.tree })
     },
   })
 }
