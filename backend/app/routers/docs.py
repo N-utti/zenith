@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import defer
 
 from app import audit
+from app.ai import embed
 from app.db import get_db, session_scope
 from app.deps import current_user
 from app.errors import ApiError
@@ -583,6 +584,7 @@ async def untrash_doc(
     doc.updated_at = _now()
     await db.commit()
     await db.refresh(doc)
+    embed.schedule(doc.id)  # 휴지통에 있는 동안 비워진 벡터 조각을 다시 채운다(README 45)
     return _doc_out(doc, user)
 
 

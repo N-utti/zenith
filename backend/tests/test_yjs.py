@@ -532,9 +532,12 @@ async def test_periodic_save_while_others_stay(
     app: FastAPI, users: Users, app_db, monkeypatch
 ) -> None:
     """SAVE_INTERVAL 마다, 그리고 한 명이 나갈 때 — 방이 살아 있어도 저장된다."""
+    from app.ai import embed
     from app.realtime import yjs as mod
 
     monkeypatch.setattr(mod, "SAVE_INTERVAL", timedelta(seconds=0))
+    scheduled: list[uuid.UUID] = []
+    monkeypatch.setattr(embed, "schedule", scheduled.append)  # 저장마다 벡터 색인 예약(README 45)
     async with ws_client(app) as client:
         await login(client, "sujin@zenith.co.kr")
         doc_id = await _doc_id(client, app_db)
@@ -555,6 +558,7 @@ async def test_periodic_save_while_others_stay(
             await app_db.refresh(row)
             assert row.text_cache == "첫 저장\n둘째"
             assert not next(iter(ROOMS.values())).dirty
+            assert scheduled and set(scheduled) == {uuid.UUID(doc_id)}
 
 
 async def test_empty_update_is_not_persisted(app: FastAPI, users: Users, app_db) -> None:

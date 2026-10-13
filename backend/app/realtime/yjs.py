@@ -41,6 +41,7 @@ from pycrdt import (
 )
 from sqlalchemy import func, update
 
+from app.ai import embed
 from app.db import session_scope
 from app.deps import _own_origin, authenticate, origin_allowed, ws_reject
 from app.errors import ApiError
@@ -198,6 +199,10 @@ async def save_room(room: Room) -> None:
     if gone:
         log.info("yjs 저장 건너뜀 %s: 문서가 지워졌다 — 방을 걷는다", room.doc_id)
         await close_room(room.doc_id)
+    else:
+        # 벡터 색인(README 45) — 디바운스 뒤 백그라운드. 임베딩이 꺼져 있으면 아무것도 안 한다.
+        # 저장은 이미 커밋됐다 — 여기서 실패해도 저장 실패로 보이지 않게 try 밖에서
+        embed.schedule(room.doc_id)
 
 
 async def _send(room: Room, conn: WebSocket, message: bytes) -> None:
