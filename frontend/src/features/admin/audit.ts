@@ -201,6 +201,12 @@ export function auditView(event: AuditEvent): AuditView {
     case 'boards.post_deleted':
       return { summary: '게시글 삭제', detail: text(detail, 'title'), tone: 'warning' }
 
+    case 'docs.ai_source':
+      return {
+        summary: detail?.ai_source === false ? 'AI 근거에서 문서 제외' : 'AI 근거로 문서 다시 사용',
+        tone: 'neutral',
+      }
+
     case 'docs.hard_deleted':
       return { summary: '문서 완전 삭제', detail: text(detail, 'title'), tone: 'warning' }
 

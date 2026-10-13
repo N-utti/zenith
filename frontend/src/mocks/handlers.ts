@@ -1875,7 +1875,9 @@ data: ${JSON.stringify(data)}
     const user = authenticate()
     if (!user) return unauthorized()
 
-    const body = await readJson<{ folder_id?: unknown; title?: unknown }>(request)
+    const body = await readJson<{ folder_id?: unknown; title?: unknown; ai_source?: unknown }>(
+      request,
+    )
     if (!body) return validationError('본문이 JSON 이 아닙니다.')
     // 백엔드 `DocCreateIn` 은 `folder_id` 와 `title` 을 둘 다 요구한다.
     if (typeof body.folder_id !== 'string' || !findFolder(body.folder_id)) {
@@ -1888,7 +1890,13 @@ data: ${JSON.stringify(data)}
     const title = body.title.trim()
     if (title.length > 200) return validationError('제목은 200자를 넘을 수 없습니다.')
 
-    return HttpResponse.json(createDoc(user, body.folder_id, title), { status: 201 })
+    // 안 보내면 켜짐이다. AI 답변을 문서로 저장할 때만 끈 채로 온다.
+    if (body.ai_source !== undefined && typeof body.ai_source !== 'boolean') {
+      return validationError('ai_source 는 불리언이어야 합니다.')
+    }
+    return HttpResponse.json(createDoc(user, body.folder_id, title, body.ai_source), {
+      status: 201,
+    })
   }),
 
   http.get('/api/docs/:docId', ({ params }) => {
@@ -1959,10 +1967,15 @@ data: ${JSON.stringify(data)}
   http.patch('/api/docs/:docId', async ({ request, params }) => {
     const user = authenticate()
     if (!user) return unauthorized()
-    const body = await readJson<{ title?: unknown; folder_id?: unknown }>(request)
+    const body = await readJson<{ title?: unknown; folder_id?: unknown; ai_source?: unknown }>(
+      request,
+    )
     if (!body) return validationError('본문이 JSON 이 아닙니다.')
-    for (const key of ['title', 'folder_id'] as const) {
+    for (const key of ['title', 'folder_id', 'ai_source'] as const) {
       if (body[key] === null) return validationError(`${key} 는 null 일 수 없습니다.`)
+    }
+    if (body.ai_source !== undefined && typeof body.ai_source !== 'boolean') {
+      return validationError('ai_source 는 불리언이어야 합니다.')
     }
     if (!aliveDoc(String(params.docId))) return notFound()
     if (body.folder_id !== undefined && !findFolder(String(body.folder_id))) {
@@ -1971,6 +1984,7 @@ data: ${JSON.stringify(data)}
     const doc = touchDoc(String(params.docId), user, {
       title: typeof body.title === 'string' ? body.title : undefined,
       folder_id: typeof body.folder_id === 'string' ? body.folder_id : undefined,
+      ai_source: typeof body.ai_source === 'boolean' ? body.ai_source : undefined,
     })
     return doc ? HttpResponse.json(doc) : notFound()
   }),

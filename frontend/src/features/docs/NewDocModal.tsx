@@ -39,7 +39,9 @@ export function NewDocModal({
 
   const createIn = (folderId: string) =>
     createDoc.mutate(
-      { folder_id: folderId },
+      // 초안이 있으면 AI 답변을 저장하는 것이다. 그 문서가 다시 AI 의 근거로 잡히면 AI 가 제 답을
+      // 근거로 삼는 순환이 생기므로 끈 채로 만든다(문서에서 다시 켤 수 있다).
+      { folder_id: folderId, ai_source: seed === undefined ? undefined : false },
       {
         onSuccess: (doc) => {
           onClose()

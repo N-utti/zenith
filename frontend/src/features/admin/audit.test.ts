@@ -113,6 +113,12 @@ describe('auditView', () => {
     expect(
       auditView(event({ kind: 'docs.folder_deleted', detail: { title: '회의록' } })),
     ).toMatchObject({ summary: '폴더 삭제', detail: '회의록' })
+    expect(auditView(event({ kind: 'docs.ai_source', detail: { ai_source: false } })).summary).toBe(
+      'AI 근거에서 문서 제외',
+    )
+    expect(auditView(event({ kind: 'docs.ai_source', detail: { ai_source: true } })).summary).toBe(
+      'AI 근거로 문서 다시 사용',
+    )
   })
 
   it('모르는 종류는 종류 이름을 그대로 보여 준다', () => {
