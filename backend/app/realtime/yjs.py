@@ -41,6 +41,7 @@ from pycrdt import (
 )
 from sqlalchemy import func, update
 
+from app.ai import embed
 from app.db import session_scope
 from app.deps import _own_origin, authenticate, origin_allowed, ws_reject
 from app.errors import ApiError
@@ -192,6 +193,9 @@ async def save_room(room: Room) -> None:
                 room.projected_title = title
             room.saved_at = datetime.now(UTC)
             gone = result.rowcount == 0
+            if not gone:
+                # 벡터 색인(README 45) — 디바운스 뒤 백그라운드. 임베딩이 꺼져 있으면 아무것도 안 한다
+                embed.schedule(room.doc_id)
         except Exception:
             room.dirty = True  # 실패했으니 다음 기회에 다시
             raise

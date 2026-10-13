@@ -13,6 +13,7 @@ ponytail: 문서는 `tsv || to_tsvector(title)` 식이라 있는 GIN(idx_documen
 느려지면 같은 식의 표현식 GIN, 또는 제목을 tsv 에 넣고 PATCH 가 tsv 를 같이 고친다.
 """
 
+import logging
 import re
 import uuid
 from datetime import datetime
@@ -24,6 +25,7 @@ from pydantic import BaseModel
 from sqlalchemy import ColumnElement, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.ai import embed
 from app.db import get_db
 from app.deps import current_user
 from app.errors import ApiError
@@ -33,6 +35,7 @@ from app.models import (
     Board,
     Channel,
     ChannelMember,
+    DocChunk,
     Document,
     Folder,
     Message,
@@ -40,6 +43,7 @@ from app.models import (
     User,
 )
 
+log = logging.getLogger("zenith.search")
 router = APIRouter(tags=["search"], dependencies=[Depends(current_user)])
 
 SearchType = Literal["doc", "chat", "post"]
@@ -48,6 +52,7 @@ ALL_TYPES: tuple[SearchType, ...] = ("doc", "chat", "post")
 # 않고, "foo-bar"·"foo,bar" 가 구문검색(<->)으로 접히지도 않는다(그냥 foo & bar).
 _TOKEN = re.compile(r"[^\W_]+")
 HEADLINE_OPTS = "MaxWords=24, MinWords=10, MaxFragments=1, StartSel=**, StopSel=**"
+RRF_K = 60  # 순위 융합 상수(Cormack 2009 의 기본값) — 작을수록 1등 쏠림
 
 
 class Hit(BaseModel):
@@ -88,16 +93,21 @@ async def find_hits(
     post_roles: list[str] | None = None,
     docs_ai_source_only: bool = False,
     folder_id: uuid.UUID | None = None,
+    vector: bool = False,
 ) -> list[Hit]:
     """FTS + 최근성, 권한 필터는 SQL 안에서. ⌘K 와 AI 검색 도구(ai.py)가 같이 쓴다 — 스니펫은 ts_headline 원문
     (`**…**` 마커, 이스케이프 안 함). `post_roles` 는 내 등급 필터 위에 **더 좁히기만** 한다.
     `docs_ai_source_only` 는 「AI 근거로 쓰기」가 켜진 문서만(README 43), `folder_id` 는 그 폴더와
-    하위 폴더(모든 깊이)의 문서만(README 44 — AI 질문 범위)."""
+    하위 폴더(모든 깊이)의 문서만(README 44 — AI 질문 범위).
+    `vector` 는 문서를 벡터(doc_chunks)로도 찾아 **RRF** 로 합친다(README 45, AI 만) — 임베딩이 꺼져 있거나
+    실패하면 FTS 만으로 돈다. 벡터로만 잡힌 문서의 스니펫은 청크 원문(`**` 마커 없음)."""
     tsq_text = _tsquery(q)
-    if tsq_text is None:
+    use_vector = vector and "doc" in wanted and embed.enabled()
+    if tsq_text is None and not use_vector:
         return []
-    tsq = func.to_tsquery("simple", tsq_text)
+    tsq = func.to_tsquery("simple", tsq_text or "")
     hits: list[tuple[float, Hit]] = []
+    vector_hits: list[Hit] = []
 
     if "doc" in wanted:
         doc_filters = [Document.deleted_at.is_(None)]
@@ -111,6 +121,8 @@ async def find_hits(
                 select(Folder.id).join(subtree, Folder.parent_id == subtree.c.id)
             )
             doc_filters.append(Document.folder_id.in_(select(subtree.c.id)))
+        if use_vector:
+            vector_hits = await _vector_hits(db, q, doc_filters, limit)
         body_tsv = func.coalesce(Document.tsv, func.to_tsvector("simple", ""))
         tsv = body_tsv.op("||")(func.to_tsvector("simple", Document.title))
         score = _score(func.ts_rank(tsv, tsq), Document.updated_at).label("score")
@@ -127,7 +139,7 @@ async def find_hits(
             .order_by(
                 score.desc(), Document.updated_at.desc(), Document.id
             )  # limit 경계가 흔들리지 않게
-            .limit(limit)
+            .limit(limit if tsq_text is not None else 0)  # 토큰이 없으면 FTS 는 0건, 벡터만
         )
         for doc, folder, score, snippet in rows:
             hits.append(
@@ -239,7 +251,64 @@ async def find_hits(
             )
 
     hits.sort(key=lambda h: (-h[0], -h[1].at.timestamp(), str(h[1].id)))  # 동점이면 최근 것이 위
+    if use_vector:
+        return _rrf([[hit for _, hit in hits], vector_hits], limit)
     return [hit for _, hit in hits[:limit]]
+
+
+async def _vector_hits(
+    db: AsyncSession, q: str, doc_filters: list[ColumnElement], limit: int
+) -> list[Hit]:
+    """질문을 임베딩 한 번 → doc_chunks 코사인 kNN, 같은 문서 필터(휴지통·ai_source·폴더)를 조인으로 건다.
+    한 문서는 가장 가까운 청크 하나로 접는다. 임베딩 실패는 빈 목록(FTS 로 계속)."""
+    try:
+        qvec = (await embed.embed([q]))[0]
+    except Exception:  # noqa: BLE001 — Ollama 가 죽었거나 모델이 없다. 답은 FTS 로 낸다
+        log.warning("질문 임베딩 실패 — 핵심어 검색만 씁니다", exc_info=True)
+        return []
+    dist = DocChunk.embedding.cosine_distance(qvec).label("dist")
+    # ponytail: 문서당 청크가 여럿이라 limit 의 몇 배를 가져와 접는다. 긴 문서가 상위를 독차지하면 DISTINCT ON 으로.
+    rows = await db.execute(
+        select(DocChunk.chunk_text, Document, Folder.title, dist)
+        .options(*DOC_LIST_OPTS)
+        .join(Document, Document.id == DocChunk.doc_id)
+        .join(Folder, Folder.id == Document.folder_id)
+        .where(*doc_filters, DocChunk.embedding.is_not(None))
+        .order_by(dist, DocChunk.id)
+        .limit(limit * 4)
+    )
+    out: list[Hit] = []
+    seen: set[uuid.UUID] = set()
+    for chunk_text, doc, folder, _ in rows:
+        if doc.id in seen:
+            continue
+        seen.add(doc.id)
+        out.append(
+            Hit(
+                type="doc",
+                id=doc.id,
+                title=doc.title,
+                sub=folder,
+                snippet=chunk_text,
+                to=f"/docs/{doc.id}",
+                at=doc.updated_at,
+            )
+        )
+        if len(out) == limit:
+            break
+    return out
+
+
+def _rrf(ranked: list[list[Hit]], limit: int) -> list[Hit]:
+    """Reciprocal Rank Fusion — 목록마다 1/(K+순위) 를 더해 합친다. 같은 자료(`to`)는 먼저 나온 목록의 스니펫
+    (FTS 의 `**` 강조)을 쓴다."""
+    fused: dict[str, tuple[float, Hit]] = {}
+    for hits in ranked:
+        for rank, hit in enumerate(hits, start=1):
+            score, kept = fused.get(hit.to, (0.0, hit))
+            fused[hit.to] = (score + 1.0 / (RRF_K + rank), kept)
+    ordered = sorted(fused.values(), key=lambda h: (-h[0], -h[1].at.timestamp(), str(h[1].id)))
+    return [hit for _, hit in ordered[:limit]]
 
 
 @router.get(

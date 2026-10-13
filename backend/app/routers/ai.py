@@ -49,8 +49,8 @@ SYSTEM_PROMPT = (
 SEARCH_TOOL = {
     "name": "search_knowledge",
     "description": (
-        "사내 위키 문서와 일반 게시판 글을 핵심어로 찾는다. 질문 문장이 아니라 핵심어 1~4개를 공백으로 나눠 "
-        "넣는다(예: '연차 이월'). 결과는 번호가 붙은 구절 목록이고, 답에서 그 구절을 근거로 쓸 때 [[번호]] 를 단다. "
+        "사내 위키 문서와 일반 게시판 글을 찾는다. 핵심어 1~4개를 공백으로 나눠 넣거나(예: '연차 이월') 짧은 "
+        "질문 한 문장을 넣는다. 결과는 번호가 붙은 구절 목록이고, 답에서 그 구절을 근거로 쓸 때 [[번호]] 를 단다. "
         "첫 검색에 없으면 다른 말로 한두 번 더 찾아본다."
     ),
     "input_schema": {
@@ -113,6 +113,7 @@ async def _search(
             post_roles=AI_POST_ROLES,
             docs_ai_source_only=True,  # 문서마다 켜고 끄는 「AI 근거로 쓰기」(README 43)
             folder_id=folder_id,
+            vector=True,  # 하이브리드(README 45) — 임베딩이 꺼져 있으면 FTS 만
         )
     if not hits:
         return "찾은 자료가 없습니다."
@@ -268,7 +269,6 @@ async def chat(
     db: AsyncSession = Depends(get_db),
     provider: LLMProvider = Depends(get_provider),
 ) -> StreamingResponse:
-    # ponytail: 근거는 핵심어 검색(find_hits)만 — 벡터(bge-m3 → pgvector, ARCHITECTURE §6)는 3단계에서 같은 도구 안에 합친다.
     scope = await _scope_folder(
         db, body.scope
     )  # 세션 행을 쓰기 전에 — 422 면 DB 에 아무것도 안 남는다

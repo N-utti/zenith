@@ -32,6 +32,10 @@ class Settings(BaseSettings):
     anthropic_api_key: str | None = None
     ai_model: str = "claude-opus-5"
     ai_max_tokens: int = 64000
+    # 벡터 검색(README 45) — Ollama 의 `/api/embed`(bge-m3). 비우면 색인·벡터 검색이 꺼지고 핵심어(FTS)만 쓴다
+    # (CI·개발 PC 는 꺼진 채로 돈다). compose 는 `http://ollama:11434`.
+    embed_url: str | None = None
+    embed_model: str = "bge-m3"
 
     cors_origins: list[str] = []
 
