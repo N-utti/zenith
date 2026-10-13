@@ -1623,9 +1623,10 @@ export const handlers = [
   http.post('/api/ai/chat', async ({ request }) => {
     const user = authenticate()
     if (!user) return unauthorized()
-    const { message, session_id } = (await request.json()) as {
+    const { message, session_id, scope } = (await request.json()) as {
       message?: string
       session_id?: string
+      scope?: string | null
     }
     if (!message?.trim()) {
       // 실제 서버(errors.py)의 422 detail 은 Pydantic 오류 배열이다. 문자열이 아니다.
@@ -1643,7 +1644,12 @@ export const handlers = [
         { status: 422 },
       )
     }
-    const { body, citations } = answer(user)
+    // 범위는 폴더 id 다(백엔드 #372). 없는 폴더는 422 이고 이때 detail 은 문자열이다.
+    // 실제 서버는 UUID 로 안 읽히는 값을 전체로 받지만, 목의 폴더 id(`f-1`)는 UUID 가 아니라 목록에 있는지로 가른다.
+    if (scope && !docTree().folders.some((folder) => folder.id === scope)) {
+      return HttpResponse.json({ detail: '없는 폴더입니다.', code: 'VALIDATION' }, { status: 422 })
+    }
+    const { body, citations } = answer(user, Boolean(scope))
     const frame = (event: string, data: unknown) => `event: ${event}
 data: ${JSON.stringify(data)}
 
