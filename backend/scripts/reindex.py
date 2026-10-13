@@ -26,12 +26,19 @@ async def main(missing_only: bool) -> None:
         stmt = stmt.where(~exists().where(DocChunk.doc_id == Document.id))
     async with session_scope() as db:
         ids = list(await db.scalars(stmt))
-    total = 0
+    total = failed = 0
     for i, doc_id in enumerate(ids, start=1):
-        n = await embed.reindex(doc_id)
+        try:
+            n = await embed.reindex(doc_id)
+        except Exception as e:  # noqa: BLE001 — 한 문서가 막혀도 나머지는 계속
+            failed += 1
+            print(f"[{i}/{len(ids)}] {doc_id} 실패: {e!r}", file=sys.stderr)
+            continue
         total += n
         print(f"[{i}/{len(ids)}] {doc_id} 청크 {n}")
-    print(f"문서 {len(ids)}건, 청크 {total}개")
+    print(f"문서 {len(ids)}건, 청크 {total}개, 실패 {failed}건")
+    if failed:
+        print("실패분은 --missing 으로 다시 돌린다.", file=sys.stderr)
 
 
 if __name__ == "__main__":

@@ -12,7 +12,7 @@
 | `db` | `pgvector/pgvector:pg16` | 문서·채팅·권한 + 벡터(RAG) |
 | `redis` | `redis:7-alpine` | presence · 안 읽음 · WS 팬아웃 (아직 코드가 안 씀) |
 | `minio` | `ghcr.io/n-utti/zenith-minio:RELEASE…` | 채팅 첨부(`app/storage.py`). 조직 레지스트리의 미러 — 아래 "MinIO 이미지" |
-| `ollama` | `ollama/ollama:0.12.3` | 임베딩(bge-m3)만 — AI 근거 벡터 검색(backend/README 45). 설치 때 `docker compose exec ollama ollama pull bge-m3` 한 번(약 1.2GB, 인터넷). 모델이 없으면 api 는 핵심어 검색으로만 답한다 |
+| `ollama` | `ollama/ollama:0.12.3` | 임베딩(bge-m3)만 — AI 근거 벡터 검색(backend/README 45). 설치 때 `docker compose exec ollama ollama pull bge-m3:567m` 한 번(약 1.2GB, 인터넷) → `uv run python scripts/reindex.py`. 모델이 없거나 느리면 api 는 핵심어 검색으로만 답한다. CPU 2·메모리 3GB 상한 |
 | `backup` | `pgvector/pgvector:pg16` | 24시간마다 `pg_dump -Fc` → `ZENITH_BACKUP_DIR`(기본 `./backups`), 14일 지난 덤프 삭제 |
 
 ```sh

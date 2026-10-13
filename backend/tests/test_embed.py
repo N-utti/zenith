@@ -4,6 +4,7 @@ import asyncio
 import math
 import zlib
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 
 import httpx
 import pytest
@@ -15,6 +16,7 @@ from app.ai import embed
 from app.ai.provider import get_provider
 from app.config import settings
 from app.models import EMBEDDING_DIM, DocChunk, Document
+from app.routers import search
 from app.routers.search import find_hits
 
 from .conftest import Users, login
@@ -32,10 +34,11 @@ def fake_vector(text: str) -> list[float]:
 
 
 @pytest.fixture
-def fake_embedding(monkeypatch, app_db):
-    """임베딩을 켜고(가짜 벡터) 색인이 테스트 세션을 쓰게 한다."""
+async def fake_embedding(monkeypatch, app_db):
+    """임베딩을 켜고(가짜 벡터) 색인이 테스트 세션을 쓰게 한다. 가짜 벡터는 서로 멀어서(코사인 거리 0.8~1)
+    거리 상한을 사실상 끈다 — 상한 자체는 test_distance_cap 이 본다."""
 
-    async def fake_embed(texts: list[str]) -> list[list[float]]:
+    async def fake_embed(texts: list[str], **_) -> list[list[float]]:
         return [fake_vector(t) for t in texts]
 
     @asynccontextmanager
@@ -45,6 +48,11 @@ def fake_embedding(monkeypatch, app_db):
     monkeypatch.setattr(settings, "embed_url", "http://fake:11434")
     monkeypatch.setattr(embed, "embed", fake_embed)
     monkeypatch.setattr(embed, "session_scope", scope)
+    monkeypatch.setattr(search, "MAX_COSINE_DIST", 2.0)
+    yield
+    for task in list(embed._running):  # 앞 테스트가 남긴 태스크가 다음 테스트로 새지 않게
+        task.cancel()
+    embed._pending.clear()
 
 
 def test_chunks_overlap_and_skip_blank() -> None:
@@ -65,7 +73,7 @@ async def test_embed_posts_to_ollama_and_checks_shape(monkeypatch) -> None:
 
         body = json.loads(request.content)
         seen.append({"url": str(request.url), **body})
-        dim = EMBEDDING_DIM if body["model"] == "bge-m3" else 3
+        dim = EMBEDDING_DIM if body["model"] == "bge-m3:567m" else 3
         return httpx.Response(200, json={"embeddings": [[0.1] * dim for _ in body["input"]]})
 
     monkeypatch.setattr(settings, "embed_url", "http://ollama:11434")
@@ -74,7 +82,7 @@ async def test_embed_posts_to_ollama_and_checks_shape(monkeypatch) -> None:
     vectors = await embed.embed(["가", "나"])
     assert len(vectors) == 2 and len(vectors[0]) == EMBEDDING_DIM
     assert seen[0]["url"] == "http://ollama:11434/api/embed"
-    assert seen[0]["input"] == ["가", "나"] and seen[0]["model"] == "bge-m3"
+    assert seen[0]["input"] == ["가", "나"] and seen[0]["model"] == "bge-m3:567m"
     monkeypatch.setattr(settings, "embed_model", "other")  # 차원이 다른 모델 → 저장 전에 거른다
     with pytest.raises(ValueError):
         await embed.embed(["가"])
@@ -151,6 +159,108 @@ async def test_hybrid_search_finds_by_vector_and_keeps_filters(
     assert "**연차는**" in hit.snippet  # FTS 와 벡터 둘 다 잡음 → FTS 강조 스니펫
     assert len({h.to for h in both}) == len(both)  # 같은 문서가 두 번 나오지 않는다
     assert len(await find_hits(app_db, me, "연차", {"doc"}, 2, vector=True)) == 2  # limit 지킴
+    # 토큰이 없는 질문(기호만)은 FTS 를 건너뛰고 벡터만 — 꺼져 있으면 예전처럼 빈 목록
+    assert await find_hits(app_db, me, "?!", {"doc", "post"}, 6, vector=True) != []
+    assert await find_hits(app_db, me, "?!", {"doc", "post"}, 6) == []
+    # 게시글은 FTS 만
+    assert await find_hits(app_db, me, "연차휴가", {"post"}, 6, vector=True) == []
+
+
+async def test_distance_cap_drops_unrelated(
+    users: Users, app_db, fake_embedding, monkeypatch
+) -> None:
+    """kNN 은 멀어도 limit 를 채운다 — 상한 밖은 버린다. 가짜 벡터로는 조각 원문과 같은 질문만 가깝다(거리 0)."""
+    seeded = await _knowledge(app_db, users)
+    await _index_all(app_db)
+    monkeypatch.setattr(search, "MAX_COSINE_DIST", 0.5)
+    me = users.member
+    assert await find_hits(app_db, me, "?!", {"doc"}, 6, vector=True) == []
+    assert await find_hits(app_db, me, "연차휴가", {"doc"}, 6, vector=True) == []
+    text = (await app_db.get(Document, seeded["doc"].id)).text_cache
+    hits = await find_hits(app_db, me, text, {"doc"}, 6, vector=True)
+    assert [h.title for h in hits][:1] == ["휴가 규정"]
+
+
+async def test_trashed_doc_with_leftover_chunks_is_filtered(
+    users: Users, app_db, fake_embedding
+) -> None:
+    """휴지통으로 가도 청크는 남는다 — 조인 필터가 거른다(보안 리뷰 L1)."""
+    seeded = await _knowledge(app_db, users)
+    doc = seeded["doc"]
+    await embed.reindex(doc.id)
+    doc.deleted_at = datetime.now(UTC)
+    await app_db.flush()
+    hits = await find_hits(app_db, users.member, "연차휴가", {"doc"}, 6, vector=True)
+    assert doc.id not in {h.id for h in hits}
+    assert (await app_db.scalar(select(DocChunk).where(DocChunk.doc_id == doc.id))) is not None
+
+
+async def test_index_failure_drops_old_chunks_and_logs(
+    users: Users, app_db, fake_embedding, monkeypatch, caplog
+) -> None:
+    """임베딩이 실패하면 옛 청크를 지운다(지운 글이 근거로 남지 않게) — 예약 경로는 로그만 남기고 끝난다."""
+    seeded = await _knowledge(app_db, users)
+    doc = seeded["doc"]
+    await embed.reindex(doc.id)
+
+    async def broken(texts, **_):
+        raise httpx.ConnectError("ollama down")
+
+    monkeypatch.setattr(embed, "embed", broken)
+    doc.text_cache = "비밀번호를 지운 새 본문"  # 본문이 바뀌어야 임베딩을 부른다
+    await app_db.flush()
+    with pytest.raises(httpx.ConnectError):
+        await embed.reindex(doc.id)
+    assert (await app_db.scalar(select(DocChunk).where(DocChunk.doc_id == doc.id))) is None
+    monkeypatch.setattr(embed, "DEBOUNCE_S", 0.01)
+    embed.schedule(doc.id)
+    await embed._pending[doc.id]
+    assert not embed._pending and "벡터 색인 실패" in caplog.text
+
+
+async def test_unchanged_text_skips_embedding(
+    users: Users, app_db, fake_embedding, monkeypatch
+) -> None:
+    seeded = await _knowledge(app_db, users)
+    assert await embed.reindex(seeded["doc"].id) == 1
+    calls = []
+
+    async def counting(texts, **_):
+        calls.append(texts)
+        return [fake_vector(t) for t in texts]
+
+    monkeypatch.setattr(embed, "embed", counting)
+    assert await embed.reindex(seeded["doc"].id) == 1
+    assert calls == []  # 본문이 같다 — Ollama 를 부르지 않는다
+
+
+async def test_running_index_is_not_cancelled_by_new_save(
+    users: Users, app_db, fake_embedding, monkeypatch
+) -> None:
+    """색인 중에 또 저장되면 끊지 않고 끝낸 뒤 새 예약이 뒤에 선다(한 번에 하나)."""
+    seeded = await _knowledge(app_db, users)
+    doc_id = seeded["doc"].id
+    gate = asyncio.Event()
+    calls: list[int] = []
+
+    async def slow(texts, **_):
+        calls.append(len(texts))
+        await gate.wait()
+        return [fake_vector(t) for t in texts]
+
+    monkeypatch.setattr(embed, "embed", slow)
+    monkeypatch.setattr(embed, "DEBOUNCE_S", 0.01)
+    embed.schedule(doc_id)
+    first = embed._pending[doc_id]
+    await asyncio.sleep(0.05)  # 디바운스를 지나 임베딩 대기 중
+    assert not embed._pending and calls == [1]
+    embed.schedule(doc_id)  # 두 번째 저장 — 첫째를 끊지 않는다
+    second = embed._pending[doc_id]
+    gate.set()
+    await first
+    await second
+    assert not first.cancelled() and calls == [1]  # 둘째는 본문이 같아 임베딩을 건너뛴다
+    assert (await app_db.scalar(select(DocChunk).where(DocChunk.doc_id == doc_id))) is not None
 
 
 async def test_vector_failure_falls_back_to_fts(
@@ -158,7 +268,7 @@ async def test_vector_failure_falls_back_to_fts(
 ) -> None:
     await _knowledge(app_db, users)
 
-    async def broken(texts):
+    async def broken(texts, **_):
         raise httpx.ConnectError("ollama down")
 
     monkeypatch.setattr(embed, "embed", broken)
@@ -201,11 +311,11 @@ async def test_schedule_debounces_and_indexes(
 
     monkeypatch.setattr(embed, "reindex", counting)
     embed.schedule(seeded["doc"].id)
+    first = embed._pending[seeded["doc"].id]
     embed.schedule(seeded["doc"].id)  # 디바운스 안의 둘째 예약은 첫째를 대신한다
     task = embed._pending[seeded["doc"].id]
     await task
-    await asyncio.sleep(0)
-    assert calls == [seeded["doc"].id] and not embed._pending
+    assert first.cancelled() and calls == [seeded["doc"].id] and not embed._pending
     assert (
         await app_db.scalar(select(DocChunk).where(DocChunk.doc_id == seeded["doc"].id))
     ) is not None

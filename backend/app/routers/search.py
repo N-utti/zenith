@@ -53,6 +53,9 @@ ALL_TYPES: tuple[SearchType, ...] = ("doc", "chat", "post")
 _TOKEN = re.compile(r"[^\W_]+")
 HEADLINE_OPTS = "MaxWords=24, MinWords=10, MaxFragments=1, StartSel=**, StopSel=**"
 RRF_K = 60  # 순위 융합 상수(Cormack 2009 의 기본값) — 작을수록 1등 쏠림
+# ponytail: kNN 은 거리가 멀어도 limit 를 채운다 — 이 상한 밖은 「관련 없음」으로 버린다(무관한 문서가 근거로
+# Claude API 에 나가지 않게, 보안 리뷰). bge-m3 코사인 거리 임시값 — 실제 규정 문서 질문 시험지로 다시 잰다(README 45 라)
+MAX_COSINE_DIST = 0.5
 
 
 class Hit(BaseModel):
@@ -105,7 +108,7 @@ async def find_hits(
     use_vector = vector and "doc" in wanted and embed.enabled()
     if tsq_text is None and not use_vector:
         return []
-    tsq = func.to_tsquery("simple", tsq_text or "")
+    tsq = func.to_tsquery("simple", tsq_text or "")  # None 이면 chat·post 는 0건(벡터만 돈다)
     hits: list[tuple[float, Hit]] = []
     vector_hits: list[Hit] = []
 
@@ -126,7 +129,7 @@ async def find_hits(
         body_tsv = func.coalesce(Document.tsv, func.to_tsvector("simple", ""))
         tsv = body_tsv.op("||")(func.to_tsvector("simple", Document.title))
         score = _score(func.ts_rank(tsv, tsq), Document.updated_at).label("score")
-        rows = await db.execute(
+        stmt = (
             select(
                 Document,
                 Folder.title,
@@ -139,8 +142,9 @@ async def find_hits(
             .order_by(
                 score.desc(), Document.updated_at.desc(), Document.id
             )  # limit 경계가 흔들리지 않게
-            .limit(limit if tsq_text is not None else 0)  # 토큰이 없으면 FTS 는 0건, 벡터만
+            .limit(limit)
         )
+        rows = await db.execute(stmt) if tsq_text is not None else []  # 토큰이 없으면 벡터만
         for doc, folder, score, snippet in rows:
             hits.append(
                 (
@@ -262,7 +266,7 @@ async def _vector_hits(
     """질문을 임베딩 한 번 → doc_chunks 코사인 kNN, 같은 문서 필터(휴지통·ai_source·폴더)를 조인으로 건다.
     한 문서는 가장 가까운 청크 하나로 접는다. 임베딩 실패는 빈 목록(FTS 로 계속)."""
     try:
-        qvec = (await embed.embed([q]))[0]
+        qvec = (await embed.embed([q], timeout=embed.QUERY_TIMEOUT_S))[0]
     except Exception:  # noqa: BLE001 — Ollama 가 죽었거나 모델이 없다. 답은 FTS 로 낸다
         log.warning("질문 임베딩 실패 — 핵심어 검색만 씁니다", exc_info=True)
         return []
@@ -273,7 +277,7 @@ async def _vector_hits(
         .options(*DOC_LIST_OPTS)
         .join(Document, Document.id == DocChunk.doc_id)
         .join(Folder, Folder.id == Document.folder_id)
-        .where(*doc_filters, DocChunk.embedding.is_not(None))
+        .where(*doc_filters, DocChunk.embedding.is_not(None), dist < MAX_COSINE_DIST)
         .order_by(dist, DocChunk.id)
         .limit(limit * 4)
     )
