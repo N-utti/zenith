@@ -9,7 +9,7 @@ import { useToast } from '@/components/ui/ToastContext'
 import { ApiError } from '@/lib/api'
 import { formatDateTime, formatRelative } from '@/lib/datetime'
 import { useCancelLeave, useLeaveBalance, useLeaveTypes, useMyLeaves } from './api'
-import { expiringSoon } from './leaveBalance'
+import { leavePromotion } from './leaveBalance'
 import { LeaveRequestModal } from './LeaveRequestModal'
 import { Stat } from './Stat'
 import { LEAVE_STATUS_LABEL, REQUEST_STATUS_TONE } from './types'
@@ -24,6 +24,10 @@ export function LeaveSection() {
   const [open, setOpen] = useState(false)
   // 04 는 목록을 `{items}` 로 감싼다고 못 박지 않았다. 배열이 그냥 오면 빈 목록으로 버틴다.
   const items = leaves.data?.items ?? []
+  // 연차 관리 탭(임원)이 2차 통보·소멸 예정으로 올리는 때부터 본인에게도 경고한다.
+  // 1차 촉구 열흘은 회사가 할 일이지 소멸이 임박했다는 신호가 아니라서 뺀다.
+  const promotion = balance.data ? leavePromotion(balance.data) : null
+  const expiring = !!promotion?.urgent && promotion.stage !== 'first'
   const typeName = (code: string) => types.data?.items.find((t) => t.code === code)?.name ?? code
 
   const onCancel = (id: string) => {
@@ -58,12 +62,8 @@ export function LeaveSection() {
                 <Plus className="size-4" />
                 휴가 신청
               </Button>
-              <p
-                className={
-                  expiringSoon(balance.data) ? 'text-warning text-xs' : 'text-subtle text-xs'
-                }
-              >
-                {expiringSoon(balance.data) ? '소멸 예정: ' : '소멸일: '}
+              <p className={expiring ? 'text-warning text-xs' : 'text-subtle text-xs'}>
+                {expiring ? '소멸 예정: ' : '소멸일: '}
                 {balance.data.expires_on}
               </p>
             </div>
