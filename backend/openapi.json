@@ -3295,6 +3295,47 @@
         }
       }
     },
+    "/api/ai/check": {
+      "post": {
+        "tags": [
+          "ai"
+        ],
+        "summary": "{doc_id | text} → {claims[]} 팩트체크 — 주장마다 일치·불일치·확인 불가 + 근거 카드(규정 전문·검색)",
+        "operationId": "check_api_ai_check_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CheckIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/attendance/me": {
       "get": {
         "tags": [
@@ -8132,6 +8173,156 @@
           "message"
         ],
         "title": "ChatIn"
+      },
+      "CheckIn": {
+        "properties": {
+          "doc_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Doc Id"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 50000,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          }
+        },
+        "type": "object",
+        "title": "CheckIn",
+        "description": "`doc_id`(저장된 문서) 또는 `text`(편집 중인 본문·선택 구간) 중 하나."
+      },
+      "CheckOut": {
+        "properties": {
+          "claims": {
+            "items": {
+              "$ref": "#/components/schemas/Claim"
+            },
+            "type": "array",
+            "title": "Claims"
+          }
+        },
+        "type": "object",
+        "required": [
+          "claims"
+        ],
+        "title": "CheckOut"
+      },
+      "Citation": {
+        "properties": {
+          "n": {
+            "type": "integer",
+            "title": "N"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "doc",
+              "post"
+            ],
+            "title": "Type"
+          },
+          "to": {
+            "type": "string",
+            "title": "To"
+          },
+          "doc_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Doc Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "quote": {
+            "type": "string",
+            "title": "Quote"
+          },
+          "path": {
+            "type": "string",
+            "title": "Path"
+          }
+        },
+        "type": "object",
+        "required": [
+          "n",
+          "type",
+          "to",
+          "title",
+          "quote",
+          "path"
+        ],
+        "title": "Citation",
+        "description": "`event: citations` 항목 — 프론트 `features/ai/types.ts` Citation. 번호는 본문의 [[n]] 과 짝.\n`quote`·`title` 은 HTML 이스케이프하지 않은 원문 — 그리는 쪽은 텍스트 노드로만(⌘K 스니펫과 다르다)."
+      },
+      "Claim": {
+        "properties": {
+          "n": {
+            "type": "integer",
+            "title": "N"
+          },
+          "claim": {
+            "type": "string",
+            "title": "Claim"
+          },
+          "span": {
+            "type": "string",
+            "title": "Span"
+          },
+          "verdict": {
+            "type": "string",
+            "enum": [
+              "match",
+              "mismatch",
+              "unverified"
+            ],
+            "title": "Verdict"
+          },
+          "note": {
+            "type": "string",
+            "title": "Note"
+          },
+          "citations": {
+            "items": {
+              "$ref": "#/components/schemas/Citation"
+            },
+            "type": "array",
+            "title": "Citations"
+          }
+        },
+        "type": "object",
+        "required": [
+          "n",
+          "claim",
+          "span",
+          "verdict",
+          "note",
+          "citations"
+        ],
+        "title": "Claim",
+        "description": "`claim`·`span`·`note` 는 모델이 낸 이스케이프하지 않은 원문 — 텍스트 노드로만 그리고, `span` 은 평문 검색\n(indexOf 류)으로만 찾는다(RegExp·innerHTML 금지, 보안 리뷰)."
       },
       "CloseIn": {
         "properties": {
