@@ -711,7 +711,7 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
                       rowMenu={!coarsePointer}
                     />
                     <EditorContent editor={editor} className="mt-4" />
-                    <InlineAiPopover editor={editor} docId={meta.id} />
+                    <InlineAiPopover editor={editor} docId={meta.id} onJump={jumpToText} />
                   </>
                 ) : (
                   <Spinner className="mt-6" />

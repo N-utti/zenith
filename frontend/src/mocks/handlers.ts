@@ -23,7 +23,15 @@ import {
   setMockSession,
   userFromCookie,
 } from './db'
-import { AI_MODELS, answer, checkClaims, DOC_ACTIONS, docActionDraft, docAnswer } from './aiDb'
+import {
+  AI_MODELS,
+  answer,
+  checkClaims,
+  DOC_ACTIONS,
+  docActionCitations,
+  docActionDraft,
+  docAnswer,
+} from './aiDb'
 import {
   BOARD_DEFS,
   addPostComment,
@@ -1755,9 +1763,14 @@ data: ${JSON.stringify(data)}
     }
     const doc = doc_id ? findDoc(doc_id) : undefined
     if (!doc) return notFound()
+    const act = action as (typeof DOC_ACTIONS)[number]
+    // 근거 동작만 스위치를 본다(백엔드 #385). 빈 본문·8,000자 초과 422 는 목이 본문을 몰라 재현하지 않는다.
+    if ((act === 'cite' || act === 'conform') && !doc.ai_source)
+      return validationError('AI 근거로 쓰기가 꺼진 문서입니다.')
     await delay(700)
     return HttpResponse.json({
-      draft: docActionDraft(action as (typeof DOC_ACTIONS)[number], doc.title),
+      draft: docActionDraft(act, doc.title),
+      citations: docActionCitations(act),
     })
   }),
 
