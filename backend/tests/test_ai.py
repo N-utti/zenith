@@ -747,7 +747,7 @@ async def test_doc_action_reads_doc_text(
         headers=csrf(client),
     )
     assert r.status_code == 200, r.text
-    assert r.json() == {"draft": EchoProvider.reply}
+    assert r.json() == {"draft": EchoProvider.reply, "citations": []}  # citations 는 48 의 추가 칸
     prompt = EchoProvider.seen[0]["content"]
     assert "주간 회의" in prompt and "배포는 금요일" in prompt and "요약" in prompt
     assert EchoProvider.max_tokens == 4096
