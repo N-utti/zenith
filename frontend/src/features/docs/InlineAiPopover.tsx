@@ -2,13 +2,17 @@ import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import type { Editor } from '@tiptap/react'
 import { Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
+import { ExcludedNote, SourceCard } from '@/features/ai/SourcesPanel'
 import { ApiError, api } from '@/lib/api'
+import type { Schema } from '@/types'
 import { OPEN_INLINE_AI_EVENT } from './editorBlocks'
+import { changedSentences, citedSentences, type DraftItem, replaceSentence } from './groundedDraft'
 import { parseMarkdownTable, tableToHtml, textToHtml } from './markdownTable'
 import { blocksToHtml, type DocTemplate, TEMPLATE_BLOCKS } from './templateBlocks'
 
 /** 04 §8 `POST /ai/doc-action` 의 `action`. 자유 프롬프트는 계약에 없다. */
-type DocAction = 'summarize' | 'continue' | 'polish' | 'translate' | 'table'
+type DocAction = Schema<'DocActionIn'>['action']
+type Citation = Schema<'Citation'>
 
 const TEMPLATES: { id: DocTemplate; label: string }[] = [
   { id: 'minutes', label: '회의록' },
@@ -23,6 +27,17 @@ const QUICK_ACTIONS: { id: DocAction; label: string }[] = [
   { id: 'table', label: '표로 정리' },
   { id: 'translate', label: '번역' },
 ]
+
+/**
+ * 근거 동작(백엔드 #385). 규정 전문·사내 자료를 근거로 대고 각주 카드(`citations`)를 준다.
+ * 초안이 문서 전체를 다시 쓴 평문이라 삽입하지 않고 문장 단위로 보여 준다(groundedDraft.ts).
+ */
+const GROUNDED_ACTIONS: { id: 'cite' | 'conform'; label: string }[] = [
+  { id: 'cite', label: '근거 달기' },
+  { id: 'conform', label: '규정에 맞게 고치기' },
+]
+const isGrounded = (action: DocAction): action is 'cite' | 'conform' =>
+  action === 'cite' || action === 'conform'
 
 /** 커서 자리에 띄우되 화면 밖으로 나가지 않게 가둔다. */
 function anchorAt(editor: Editor): { top: number; left: number } {
@@ -43,12 +58,31 @@ function anchorAt(editor: Editor): { top: number; left: number } {
  * 여기서는 문서 id 와 동작만 보낸다(04 §8 `/ai/doc-action`). 위키 RAG 가 아니라서
  * 근거 문서 패널이 없고, 대신 그 사실을 한 줄로 밝힌다.
  */
-export function InlineAiPopover({ editor, docId }: { editor: Editor; docId: string }) {
+export function InlineAiPopover({
+  editor,
+  docId,
+  onJump,
+}: {
+  editor: Editor
+  docId: string
+  /** 본문에서 그 글을 찾아 간다. 못 찾으면 `false`(DocWorkspace 의 `jumpToText`). */
+  onJump: (text: string) => boolean
+}) {
   const [open, setOpen] = useState(false)
   const [pos, setPos] = useState({ top: 0, left: 0 })
   const [draft, setDraft] = useState<string | null>(null)
   /** 템플릿 블록. 초안(`draft`)과 달리 블록 배열이라 편집기 노드로 바꿔 넣는다. */
   const [blocks, setBlocks] = useState<string[] | null>(null)
+  /** 근거 동작의 결과. 삽입 대신 문장 목록으로 보여 준다. */
+  const [grounded, setGrounded] = useState<{
+    action: 'cite' | 'conform'
+    items: DraftItem[]
+    citations: Citation[]
+  } | null>(null)
+  /** 바꾼 묶음의 순번과, 바꾸지 못한 묶음과 그 까닭. */
+  const [applied, setApplied] = useState<number[]>([])
+  const [notice, setNotice] = useState<{ index: number; kind: 'missing' | 'manual' } | null>(null)
+  const groundedLabelId = useId()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   /** 다시 생성이 무엇을 다시 부를지. 동작과 템플릿이 서로 다른 경로다. */
@@ -58,6 +92,8 @@ export function InlineAiPopover({ editor, docId }: { editor: Editor; docId: stri
   const ref = useRef<HTMLDivElement>(null)
   const firstChipRef = useRef<HTMLButtonElement>(null)
   const applyRef = useRef<HTMLButtonElement>(null)
+  /** 근거 결과의 머리 문구. 결과가 뜨면 여기로 초점을 옮긴다(다시 생성에 두면 Enter 한 번에 결과를 잃는다). */
+  const groundedHeadRef = useRef<HTMLParagraphElement>(null)
   // 요청 세대. 닫은 뒤 도착한 응답이 다음에 연 팝오버에 새어 들지 않게 한다.
   const reqId = useRef(0)
   // 팝오버를 연 시점의 커서. 생성을 기다리는 동안 선택이 흔들려도 삽입 위치는 고정한다.
@@ -68,6 +104,7 @@ export function InlineAiPopover({ editor, docId }: { editor: Editor; docId: stri
     setOpen(false)
     setDraft(null)
     setBlocks(null)
+    setGrounded(null)
     setError(null)
     setBusy(false)
     insertAt.current = null
@@ -81,6 +118,7 @@ export function InlineAiPopover({ editor, docId }: { editor: Editor; docId: stri
       // 초안과 템플릿은 늘 같이 지운다. 하나만 지우면 지난 결과가 다음 팝오버에 남는다.
       setDraft(null)
       setBlocks(null)
+      setGrounded(null)
       setError(null)
       setOpen(true)
     }
@@ -122,17 +160,33 @@ export function InlineAiPopover({ editor, docId }: { editor: Editor; docId: stri
   /** 두 경로가 요청·응답만 다르고 나머지(세대 관리·오류·바쁨)는 같다. */
   const run = async (
     what: { action: DocAction } | { template: DocTemplate },
-    fetcher: () => Promise<{ draft?: string; blocks?: string[] }>,
+    fetcher: () => Promise<{ draft?: string; blocks?: string[]; citations?: Citation[] }>,
   ) => {
     const id = ++reqId.current
     setBusy(true)
     setError(null)
     setDraft(null)
     setBlocks(null)
+    setGrounded(null)
+    setApplied([])
+    setNotice(null)
     setLast(what)
     try {
       const result = await fetcher()
       if (reqId.current !== id) return
+      if ('action' in what && isGrounded(what.action)) {
+        // 서버는 마지막 저장본을 읽는다. 저장 전 고친 글은 결과와 달라 보여 바뀐 문장으로 섞일 수 있다.
+        // 그래서 고치기는 근거 번호가 붙은 묶음만 남긴다. 서버 계약상 고친 문장에는 늘 각주가 붙고, 번호 없는
+        // 차이는 저장 전 편집(남의 편집 포함)이나 평문 변환 차이라 바꾸면 그 편집을 되돌리게 된다.
+        const items =
+          what.action === 'cite'
+            ? citedSentences(result.draft ?? '')
+            : changedSentences(editor.getText(), result.draft ?? '').filter(
+                (item) => item.refs.length > 0,
+              )
+        setGrounded({ action: what.action, items, citations: result.citations ?? [] })
+        return
+      }
       setDraft(result.draft ?? null)
       setBlocks(result.blocks ?? null)
     } catch (err) {
@@ -150,7 +204,7 @@ export function InlineAiPopover({ editor, docId }: { editor: Editor; docId: stri
   const generate = (action: DocAction) =>
     run({ action }, () =>
       // block_id 는 보내지 않는다. 블록 id 는 댓글 단 블록에만 있다(blockId.ts). 서버는 문서 전체를 본다.
-      api<{ draft: string }>('/ai/doc-action', {
+      api<Schema<'DocActionOut'>>('/ai/doc-action', {
         method: 'POST',
         body: JSON.stringify({ doc_id: docId, action }),
       }),
@@ -165,8 +219,23 @@ export function InlineAiPopover({ editor, docId }: { editor: Editor; docId: stri
 
   // 생성 중엔 칩이 전부 비활성이라 포커스가 body 로 떨어진다. 초안이 뜨면 "삽입" 으로 되돌린다.
   useEffect(() => {
-    if (draft || blocks) applyRef.current?.focus()
-  }, [draft, blocks])
+    if (grounded) groundedHeadRef.current?.focus()
+    else if (draft || blocks) applyRef.current?.focus()
+  }, [draft, blocks, grounded])
+
+  const replace = (index: number, item: DraftItem) => {
+    const result = replaceSentence(editor, item)
+    if (result !== 'done') {
+      setNotice({ index, kind: result })
+      return
+    }
+    setNotice(null)
+    setApplied((list) => [...list, index])
+    // 누른 버튼이 사라져 초점이 문서 맨 위로 떨어진다. 그 자리의 완료 문구로 옮긴다.
+    requestAnimationFrame(() =>
+      ref.current?.querySelector<HTMLElement>(`[data-done="${index}"]`)?.focus(),
+    )
+  }
 
   // "표로 정리" 초안은 마크다운 표로 온다. 미리보기도 삽입도 실제 표로(05 SCR-03, FR-AI-09).
   const table = draft ? parseMarkdownTable(draft) : null
@@ -231,6 +300,28 @@ export function InlineAiPopover({ editor, docId }: { editor: Editor; docId: stri
         ))}
       </div>
 
+      {/* 근거 동작은 이 문서 본문이 아니라 규정·사내 자료를 근거로 댄다. 근거가 달라 줄을 나눈다. */}
+      <div
+        role="group"
+        aria-labelledby={groundedLabelId}
+        className="border-line flex flex-wrap items-center gap-2 border-b px-4 py-3"
+      >
+        <span id={groundedLabelId} className="text-subtle text-[11px] font-bold">
+          규정 근거
+        </span>
+        {GROUNDED_ACTIONS.map((action) => (
+          <button
+            key={action.id}
+            type="button"
+            disabled={busy}
+            onClick={() => void generate(action.id)}
+            className="bg-sunken text-muted hover:text-fg cursor-pointer rounded-full px-3 py-1.5 text-xs transition-colors disabled:opacity-50"
+          >
+            {action.label}
+          </button>
+        ))}
+      </div>
+
       {/* 템플릿은 문서를 안 보고 형식만 만든다. 위 동작들과 근거가 달라 줄을 나눈다. */}
       <div
         role="group"
@@ -272,6 +363,126 @@ export function InlineAiPopover({ editor, docId }: { editor: Editor; docId: stri
         <p role="alert" className="text-danger bg-danger/10 px-4 py-3 text-xs">
           {error}
         </p>
+      )}
+
+      {grounded && !busy && (
+        <>
+          <div className="bg-canvas px-4 py-3.5">
+            {/* 공동 편집 문서라 본문에 숨긴 지시가 결과를 비틀 수 있다(백엔드 #385). 카드로 확인하게 한다. */}
+            <p
+              ref={groundedHeadRef}
+              tabIndex={-1}
+              role="status"
+              className="text-subtle mb-3 text-[11px] leading-relaxed outline-none"
+            >
+              {grounded.action === 'cite'
+                ? 'AI 판정입니다. 근거 카드를 직접 확인하세요. 본문은 바꾸지 않습니다.'
+                : 'AI 가 고친 문장입니다. 바꾸기 전에 근거 카드를 확인하세요. 서버는 마지막 저장본을 읽어 방금 고친 글은 반영되지 않았을 수 있습니다.'}
+            </p>
+            {grounded.items.length === 0 ? (
+              <p className="text-subtle py-4 text-center text-xs">
+                {grounded.action === 'cite'
+                  ? '근거로 확인되는 문장을 찾지 못했습니다.'
+                  : '규정과 어긋나는 문장을 찾지 못했습니다.'}
+              </p>
+            ) : (
+              <ul className="space-y-3">
+                {grounded.items.map((item, index) => (
+                  <li key={index} className="border-line bg-surface rounded-xl border p-3">
+                    {/* 원문 문장. 누르면 본문의 그 자리로 간다. 결과 쪽에만 있는 문장(추가)은 갈 곳이 없다. */}
+                    {item.before && !applied.includes(index) ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setNotice(onJump(item.before) ? null : { index, kind: 'missing' })
+                        }
+                        className={`cursor-pointer text-left text-[13px] leading-snug hover:underline ${
+                          grounded.action === 'conform' ? 'text-muted line-through' : 'text-fg'
+                        }`}
+                      >
+                        {item.before}
+                      </button>
+                    ) : (
+                      grounded.action === 'conform' &&
+                      item.before && (
+                        <p className="text-subtle text-[13px] leading-snug line-through">
+                          {item.before}
+                        </p>
+                      )
+                    )}
+                    {grounded.action === 'conform' && (
+                      <p className="text-fg mt-1.5 text-[13px] leading-snug">
+                        {item.after || '(문장 삭제)'}
+                      </p>
+                    )}
+                    {notice?.index === index && (
+                      <p role="status" className="text-subtle mt-1.5 text-[11px]">
+                        {notice.kind === 'missing'
+                          ? '본문에서 이 문장을 찾지 못했습니다. 두 문단에 걸쳤거나 그 사이에 고쳐졌을 수 있습니다.'
+                          : '같은 글이 여러 군데 있거나 파일 같은 것이 섞여 있어 자동으로 바꾸지 않았습니다. 문장을 눌러 그 자리에서 직접 고쳐 주세요.'}
+                      </p>
+                    )}
+                    {item.refs.length > 0 && (
+                      <ul className="mt-2.5 space-y-2">
+                        {grounded.citations
+                          .filter((source) => item.refs.includes(source.n))
+                          .map((source) => (
+                            <li key={source.n}>
+                              <SourceCard source={source} />
+                            </li>
+                          ))}
+                      </ul>
+                    )}
+                    {/* 원문과 결과가 둘 다 있을 때만 바꾼다. 문장 추가·삭제는 손으로. */}
+                    {grounded.action === 'conform' &&
+                      item.before &&
+                      item.after &&
+                      (applied.includes(index) ? (
+                        <p
+                          data-done={index}
+                          tabIndex={-1}
+                          role="status"
+                          className="text-success mt-2.5 text-xs outline-none"
+                        >
+                          본문을 바꿨습니다. 본문에서 Ctrl+Z 로 되돌릴 수 있습니다.
+                        </p>
+                      ) : (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          className="mt-2.5"
+                          onClick={() => replace(index, item)}
+                        >
+                          바꾸기
+                        </Button>
+                      ))}
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="mt-3">
+              <ExcludedNote />
+            </div>
+          </div>
+
+          <div className="border-line flex items-center gap-2 border-t px-4 py-3">
+            <Button
+              ref={applyRef}
+              variant="secondary"
+              size="sm"
+              onClick={() => void generate(grounded.action)}
+            >
+              다시 생성
+            </Button>
+            <button
+              type="button"
+              onClick={close}
+              className="text-subtle hover:text-fg ml-auto cursor-pointer text-xs transition-colors"
+            >
+              닫기 (Esc)
+            </button>
+          </div>
+        </>
       )}
 
       {(draft !== null || html !== null) && !busy && (

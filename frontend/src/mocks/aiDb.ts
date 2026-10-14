@@ -105,7 +105,15 @@ export function docAnswer(doc: { id: string; title: string }): {
   }
 }
 
-export const DOC_ACTIONS = ['summarize', 'continue', 'polish', 'translate', 'table'] as const
+export const DOC_ACTIONS = [
+  'summarize',
+  'continue',
+  'polish',
+  'translate',
+  'table',
+  'cite',
+  'conform',
+] as const
 
 /**
  * 문서 안 인라인 AI(04 §8 `/ai/doc-action`). 위키 RAG 가 아니라 **그 문서 본문**을 근거로 쓴다.
@@ -123,7 +131,28 @@ export function docActionDraft(action: (typeof DOC_ACTIONS)[number], title: stri
       return '| 항목 | 내용 | 담당 |\n| --- | --- | --- |\n| 정리 대상 | 위 본문 | 미정 |'
     case 'translate':
       return `[EN] ${title}`
+    // 근거 동작(백엔드 #385)은 문서 전체를 다시 쓴다. 목은 본문을 몰라 문장 하나로 모양만 낸다.
+    // 그래서 고치기 결과는 화면에서 원문 전체가 바뀐 한 묶음으로 보이고 바꾸기 버튼은 본문을 못 찾는다.
+    case 'cite':
+      return `「${title}」은 사내 규정을 따릅니다.[[1]]`
+    case 'conform':
+      return `수습 기간은 3개월입니다.[[1]]`
   }
+}
+
+/** 근거 동작의 각주 카드. 다른 다섯 동작은 빈 목록이다(`DocActionOut.citations`). */
+export function docActionCitations(action: (typeof DOC_ACTIONS)[number]): Citation[] {
+  if (action !== 'cite' && action !== 'conform') return []
+  return [
+    {
+      n: 1,
+      doc_id: null,
+      type: 'doc',
+      title: '취업규칙',
+      quote: '제10조(수습) 신규 입사자의 수습 기간은 3개월로 한다.',
+      path: '취업규칙 · 제10조',
+    },
+  ]
 }
 
 /**
