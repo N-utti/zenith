@@ -48,7 +48,7 @@ export type BoardPost = Omit<Schema<'PostOut'>, 'min_role'> & {
  * 있어 받을 때마다 멤버십을 다시 재듯, 게시판 경로 밑에 두어야 서버가 게시판 등급으로 판정할 수
  * 있다. 공용 `/files` 는 로그인이면 누구나 읽어서 등급 게시판에는 쓸 수 없다.
  */
-export type PostAttachment = Schema<'AttachmentOut'>
+export type PostAttachment = Schema<'app__routers__channels__AttachmentOut'>
 
 /** `attachments` 는 붙인 파일이고 없으면 빈 목록이다. */
 export type BoardPostDetail = BoardPost & Pick<Schema<'PostDetail'>, 'body' | 'attachments'>

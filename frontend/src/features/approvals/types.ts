@@ -125,7 +125,7 @@ export interface GeneralSubject {
  * 밑에 있어 내려받을 때마다 멤버십을 다시 재듯, 문서 경로 밑에 두어야 서버가 결재 열람 권한으로
  * 판정할 수 있다. 공용 `/files` 는 로그인이면 누구나 읽는다(`backend/README.md` 16(g)).
  */
-export type ApprovalAttachment = Schema<'AttachmentOut'>
+export type ApprovalAttachment = Schema<'app__routers__channels__AttachmentOut'>
 
 export interface ApprovalListItem {
   id: string
