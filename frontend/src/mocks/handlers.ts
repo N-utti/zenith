@@ -23,7 +23,7 @@ import {
   setMockSession,
   userFromCookie,
 } from './db'
-import { AI_MODELS, answer, DOC_ACTIONS, docActionDraft } from './aiDb'
+import { AI_MODELS, answer, DOC_ACTIONS, docActionDraft, docAnswer } from './aiDb'
 import {
   BOARD_DEFS,
   addPostComment,
@@ -1644,12 +1644,26 @@ export const handlers = [
         { status: 422 },
       )
     }
+    // `doc:<문서 id>` 는 그 문서 하나를 놓고 묻는다(백엔드 #380). 없음·휴지통·근거 꺼짐은 422 이고 detail 은 문자열이다.
+    const askedDoc = scope?.startsWith('doc:') ? aliveDoc(scope.slice(4)) : undefined
+    if (scope?.startsWith('doc:')) {
+      if (!askedDoc)
+        return HttpResponse.json(
+          { detail: '없는 문서입니다.', code: 'VALIDATION' },
+          { status: 422 },
+        )
+      if (!askedDoc.ai_source)
+        return HttpResponse.json(
+          { detail: 'AI 근거로 쓰기가 꺼진 문서입니다.', code: 'VALIDATION' },
+          { status: 422 },
+        )
+    }
     // 범위는 폴더 id 다(백엔드 #372). 없는 폴더는 422 이고 이때 detail 은 문자열이다.
     // 실제 서버는 UUID 로 안 읽히는 값을 전체로 받지만, 목의 폴더 id(`f-1`)는 UUID 가 아니라 목록에 있는지로 가른다.
-    if (scope && !docTree().folders.some((folder) => folder.id === scope)) {
+    else if (scope && !docTree().folders.some((folder) => folder.id === scope)) {
       return HttpResponse.json({ detail: '없는 폴더입니다.', code: 'VALIDATION' }, { status: 422 })
     }
-    const { body, citations } = answer(user, Boolean(scope))
+    const { body, citations } = askedDoc ? docAnswer(askedDoc) : answer(user, Boolean(scope))
     const frame = (event: string, data: unknown) => `event: ${event}
 data: ${JSON.stringify(data)}
 

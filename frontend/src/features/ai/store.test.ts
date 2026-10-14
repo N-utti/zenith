@@ -1,5 +1,5 @@
 import { beforeEach, expect, it } from 'vitest'
-import { appendMessage, getThread, removeMessage, resetThread } from './store'
+import { appendMessage, createThreadStore, getThread, removeMessage, resetThread } from './store'
 
 beforeEach(() => resetThread())
 
@@ -17,4 +17,13 @@ it('resetThread 는 새 세션 id 를 만든다', () => {
   const before = getThread().sessionId
   resetThread()
   expect(getThread().sessionId).not.toBe(before)
+})
+
+it('따로 만든 대화(문서 질문창)는 /ai 의 대화와 섞이지 않는다', () => {
+  const doc = createThreadStore()
+  doc.appendMessage({ id: 'd', role: 'user', body: '이 문서', scope: 'doc:x', createdAt: '' })
+  expect(getThread().messages).toEqual([])
+  expect(doc.getSessionId()).not.toBe(getThread().sessionId)
+  resetThread()
+  expect(doc.getThread().messages.map((m) => m.id)).toEqual(['d'])
 })

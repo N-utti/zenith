@@ -36,7 +36,8 @@ export interface AiMessage {
   body: string
   createdAt: string
   /**
-   * 내 질문에만. 보낼 때 고른 지식 소스(폴더 id, 전체면 `null`). 실패한 답변을 다시 받을 때 같은 범위로 보낸다.
+   * 내 질문에만. 보낼 때 고른 지식 소스(폴더 id, 전체면 `null`, 문서 질문창은 `doc:<문서 id>`).
+   * 실패한 답변을 다시 받을 때 같은 범위로 보낸다.
    * 서버가 그 폴더를 없다고 거절하면 `null` 로 되돌린다(`AiPage` 의 `retry`).
    */
   scope?: string | null

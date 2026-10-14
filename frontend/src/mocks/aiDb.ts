@@ -81,6 +81,30 @@ export function answer(user: User, scoped = false): { body: string; citations: C
   }
 }
 
+/**
+ * 문서 하나를 놓고 물었을 때(`scope: "doc:<id>"`, 백엔드 #380). 서버는 그 본문 앞 1,000자를 근거 카드로 준다.
+ * 본문(Y.Doc)은 브라우저에만 있어 목은 제목으로 모양만 재현한다.
+ */
+export function docAnswer(doc: { id: string; title: string }): {
+  body: string
+  citations: Citation[]
+} {
+  return {
+    body: `${doc.title} 문서를 기준으로 답합니다. 본문에 따르면 질문하신 내용은 이 문서의 앞부분에 정리되어 있습니다[[1]].`,
+    citations: [
+      {
+        n: 1,
+        doc_id: doc.id,
+        type: 'doc',
+        to: `/docs/${doc.id}`,
+        title: doc.title,
+        quote: `${doc.title} 문서의 본문 앞부분(목). 실제 서버는 본문 앞 1,000자를 보냅니다.`,
+        path: doc.title,
+      },
+    ],
+  }
+}
+
 export const DOC_ACTIONS = ['summarize', 'continue', 'polish', 'translate', 'table'] as const
 
 /**
