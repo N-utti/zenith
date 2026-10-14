@@ -62,9 +62,15 @@ def share_scope(monkeypatch, app_db) -> None:
 
 
 async def _chat(
-    client: AsyncClient, message: str, session_id: str | None = None, scope: str | None = None
+    client: AsyncClient,
+    message: str,
+    session_id: str | None = None,
+    scope: str | None = None,
+    docs: list[str] | None = None,
 ):
     body: dict[str, object] = {"message": message}
+    if docs:
+        body["docs"] = docs
     if session_id:
         body["session_id"] = session_id
     if scope:
