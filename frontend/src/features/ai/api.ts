@@ -65,7 +65,14 @@ export function useAsk(store: ThreadStore = aiThread) {
       const answerId = uuid()
       const session = getSessionId()
       let started = false
-      const body: Schema<'ChatIn'> = { session_id: session, message: prompt, scope, docs }
+      // 첨부 읽기(백엔드 #396)는 화면이 아직 없어 빈 목록이다.
+      const body: Schema<'ChatIn'> = {
+        session_id: session,
+        message: prompt,
+        scope,
+        docs,
+        attachments: [],
+      }
       const events = apiEvents('/ai/chat', { method: 'POST', body: JSON.stringify(body) })
       try {
         for await (const { event, data } of events) {

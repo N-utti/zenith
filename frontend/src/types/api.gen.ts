@@ -1012,6 +1012,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ai/attachments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** AI 첨부 올리기 — txt·md·csv·docx·xlsx·pdf·hwpx 10MB, 평문을 뽑아 둔다(7일 보관) → {id, name, size, content_type, chars} */
+        post: operations["upload_ai_attachment_api_ai_attachments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ai/attachments/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** AI 첨부 원본 내려받기 — 올린 사람만(아니면 404), no-store */
+        get: operations["download_ai_attachment_api_ai_attachments__id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/attendance/me": {
         parameters: {
             query?: never;
@@ -2171,7 +2205,7 @@ export interface components {
             /** Amount */
             amount: number | null;
             related: components["schemas"]["Related"] | null;
-            subject: components["schemas"]["Subject"];
+            subject: components["schemas"]["Subject-Output"];
             /** Steps */
             steps: components["schemas"]["StepOut"][];
             /** Closed At */
@@ -2324,7 +2358,7 @@ export interface components {
          * AttachmentOut
          * @description 업로드 응답이자 messages.attachments[] 항목(03 §2.3 JSONB).
          */
-        AttachmentOut: {
+        "AttachmentOut-Input": {
             /** Url */
             url: string;
             /** Name */
@@ -2386,6 +2420,11 @@ export interface components {
         Body_import_orgs_api_crm_orgs_import_post: {
             /** File */
             file?: string | null;
+        };
+        /** Body_upload_ai_attachment_api_ai_attachments_post */
+        Body_upload_ai_attachment_api_ai_attachments_post: {
+            /** File */
+            file: string;
         };
         /** Body_upload_attachment_api_approvals__id__attachments_post */
         Body_upload_attachment_api_approvals__id__attachments_post: {
@@ -2461,6 +2500,11 @@ export interface components {
              * @default []
              */
             docs: string[];
+            /**
+             * Attachments
+             * @default []
+             */
+            attachments: string[];
         };
         /**
          * CheckIn
@@ -2494,7 +2538,7 @@ export interface components {
              * Type
              * @enum {string}
              */
-            type: "doc" | "post" | "web";
+            type: "doc" | "post" | "web" | "file";
             /** To */
             to: string;
             /** Doc Id */
@@ -3062,7 +3106,7 @@ export interface components {
             type_code: "general";
             /** Title */
             title: string;
-            subject: components["schemas"]["Subject"];
+            subject: components["schemas"]["Subject-Input"];
             /** References */
             references?: string[] | null;
         };
@@ -3668,7 +3712,7 @@ export interface components {
             /** Doc Ref */
             doc_ref: string | null;
             /** Attachments */
-            attachments: components["schemas"]["AttachmentOut"][] | null;
+            attachments: components["schemas"]["app__routers__channels__AttachmentOut"][] | null;
             /**
              * Created At
              * Format: date-time
@@ -4026,7 +4070,7 @@ export interface components {
             /** Body */
             body: string;
             /** Attachments */
-            attachments?: components["schemas"]["AttachmentOut"][] | null;
+            attachments?: components["schemas"]["AttachmentOut-Input"][] | null;
         };
         /** PostDetail */
         PostDetail: {
@@ -4057,7 +4101,7 @@ export interface components {
             /** Body */
             body: string;
             /** Attachments */
-            attachments: components["schemas"]["AttachmentOut"][];
+            attachments: components["schemas"]["app__routers__channels__AttachmentOut"][];
         };
         /** PostOut */
         PostOut: {
@@ -4100,7 +4144,7 @@ export interface components {
             /** Body */
             body?: string | null;
             /** Attachments */
-            attachments?: components["schemas"]["AttachmentOut"][] | null;
+            attachments?: components["schemas"]["AttachmentOut-Input"][] | null;
         };
         /** Preferences */
         Preferences: {
@@ -4276,7 +4320,7 @@ export interface components {
          * Subject
          * @description 일반 기안 본문(13 §4.1 approval_forms). 근태 4종은 서버가 요약을 `body` 에 쓴다.
          */
-        Subject: {
+        "Subject-Input": {
             /**
              * Body
              * @default
@@ -4286,7 +4330,24 @@ export interface components {
             amount?: number | null;
             related?: components["schemas"]["Related"] | null;
             /** Attachments */
-            attachments?: components["schemas"]["AttachmentOut"][] | null;
+            attachments?: components["schemas"]["AttachmentOut-Input"][] | null;
+            extra?: components["schemas"]["Extra"] | null;
+        };
+        /**
+         * Subject
+         * @description 일반 기안 본문(13 §4.1 approval_forms). 근태 4종은 서버가 요약을 `body` 에 쓴다.
+         */
+        "Subject-Output": {
+            /**
+             * Body
+             * @default
+             */
+            body: string;
+            /** Amount */
+            amount?: number | null;
+            related?: components["schemas"]["Related"] | null;
+            /** Attachments */
+            attachments?: components["schemas"]["app__routers__channels__AttachmentOut"][] | null;
             extra?: components["schemas"]["Extra"] | null;
         };
         /** Summary */
@@ -4596,12 +4657,42 @@ export interface components {
             /** Snapshot */
             snapshot: string;
         };
+        /** AttachmentOut */
+        app__routers__ai__AttachmentOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Size */
+            size: number;
+            /** Content Type */
+            content_type: string;
+            /** Chars */
+            chars: number;
+        };
         /** ReopenIn */
         app__routers__attendance__ReopenIn: {
             /** Month */
             month: string;
             /** Reason */
             reason?: string | null;
+        };
+        /**
+         * AttachmentOut
+         * @description 업로드 응답이자 messages.attachments[] 항목(03 §2.3 JSONB).
+         */
+        app__routers__channels__AttachmentOut: {
+            /** Url */
+            url: string;
+            /** Name */
+            name: string;
+            /** Size */
+            size: number;
+            /** Content Type */
+            content_type?: string | null;
         };
         /** ReopenIn */
         app__routers__crm__ReopenIn: {
@@ -6444,7 +6535,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AttachmentOut"];
+                    "application/json": components["schemas"]["app__routers__channels__AttachmentOut"];
                 };
             };
             /** @description Validation Error */
@@ -6696,7 +6787,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AttachmentOut"];
+                    "application/json": components["schemas"]["app__routers__channels__AttachmentOut"];
                 };
             };
             /** @description Validation Error */
@@ -7136,6 +7227,71 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CheckOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_ai_attachment_api_ai_attachments_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_ai_attachment_api_ai_attachments_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["app__routers__ai__AttachmentOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_ai_attachment_api_ai_attachments__id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                    "application/octet-stream": unknown;
                 };
             };
             /** @description Validation Error */
@@ -8231,7 +8387,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AttachmentOut"];
+                    "application/json": components["schemas"]["app__routers__channels__AttachmentOut"];
                 };
             };
             /** @description Validation Error */
