@@ -4,7 +4,7 @@ import { Table, TableEmpty, TBody, TD, TH, THead, TR } from '@/components/ui/Tab
 import { ApiError } from '@/lib/api'
 import { ROLE_LABEL } from '@/types'
 import { useAllLeaveBalances } from './api'
-import { EXPIRING_WINDOW_DAYS, expiringSoon } from './leaveBalance'
+import { leavePromotion, SECOND_NOTICE_WARN_DAYS, type LeavePromotion } from './leaveBalance'
 import { Stat } from './Stat'
 import type { LeaveBalanceRow } from './types'
 
@@ -13,16 +13,28 @@ const GRANT_BASIS_LABEL: Record<LeaveBalanceRow['grant_basis'], string> = {
   fiscal_year: '회계연도',
 }
 
+const STAGE_LABEL: Record<LeavePromotion['stage'], string> = {
+  first: '1차 촉구',
+  second: '2차 통보',
+  expiring: '소멸 예정',
+}
+
 /**
  * 연차 관리(임원): 전 직원의 부여·사용·잔여·소멸일 한 표(FR-ATT-22·23).
- * 소멸 60일 안에 잔여가 남은 사람은 사용촉진 대상으로 위에 모아 표시한다. 부여 조정·정책 설정은 없다.
+ * 사용촉진 기한(1차 촉구·2차 통보)이 가깝거나 지난 사람을 위에 모으고 그 기한을 같이 보인다.
+ * 시점만 알린다. 통지 발송과 그 기록, 부여 조정·정책 설정은 없다.
  */
 export function LeaveAdminSection() {
   const balances = useAllLeaveBalances()
-  const rows = [...(balances.data?.items ?? [])]
+  const rows = (balances.data?.items ?? []).map((row) => ({
+    ...row,
+    promotion: leavePromotion(row),
+  }))
   // 사용촉진 대상이 먼저, 그다음은 잔여가 많은 순. 챙겨야 할 사람이 위에 오게.
   rows.sort(
-    (a, b) => Number(expiringSoon(b)) - Number(expiringSoon(a)) || b.remaining - a.remaining,
+    (a, b) =>
+      Number(b.promotion?.urgent ?? false) - Number(a.promotion?.urgent ?? false) ||
+      b.remaining - a.remaining,
   )
   const total = rows.reduce(
     (acc, r) => ({
@@ -32,7 +44,7 @@ export function LeaveAdminSection() {
     }),
     { granted: 0, used: 0, remaining: 0 },
   )
-  const expiring = rows.filter((row) => expiringSoon(row)).length
+  const urgent = rows.filter((row) => row.promotion?.urgent).length
 
   return (
     <div className="space-y-4">
@@ -46,9 +58,9 @@ export function LeaveAdminSection() {
             <Stat label="잔여" value={total.remaining} strong />
             <Stat
               label="사용촉진 대상"
-              value={expiring}
+              value={urgent}
               unit="명"
-              hint={`소멸 ${EXPIRING_WINDOW_DAYS}일 안, 잔여 있음`}
+              hint={`촉진 기한 ${SECOND_NOTICE_WARN_DAYS}일 안이거나 지남`}
             />
           </dl>
         </Card>
@@ -63,13 +75,14 @@ export function LeaveAdminSection() {
             <TH className="text-right">사용</TH>
             <TH className="text-right">잔여</TH>
             <TH>소멸일</TH>
+            <TH>촉진 기한</TH>
             <TH>기준</TH>
           </tr>
         </THead>
         <TBody>
-          {balances.isPending && <TableEmpty colSpan={7}>불러오는 중</TableEmpty>}
+          {balances.isPending && <TableEmpty colSpan={8}>불러오는 중</TableEmpty>}
           {balances.isError && (
-            <TableEmpty colSpan={7}>
+            <TableEmpty colSpan={8}>
               {/* 403 이면 서버 문구("임원만")가 그대로 온다. */}
               {balances.error instanceof ApiError
                 ? balances.error.message
@@ -77,15 +90,15 @@ export function LeaveAdminSection() {
             </TableEmpty>
           )}
           {balances.data && rows.length === 0 && (
-            <TableEmpty colSpan={7}>직원이 없습니다.</TableEmpty>
+            <TableEmpty colSpan={8}>직원이 없습니다.</TableEmpty>
           )}
           {rows.map((row) => (
             <TR key={row.user.id}>
               <TD className="whitespace-nowrap">
                 {row.user.name}
-                {expiringSoon(row) && (
+                {row.promotion?.urgent && (
                   <Badge tone="warning" className="ml-2">
-                    사용촉진
+                    {STAGE_LABEL[row.promotion.stage]}
                   </Badge>
                 )}
               </TD>
@@ -98,10 +111,22 @@ export function LeaveAdminSection() {
               <TD className="text-right font-medium tabular-nums">{row.remaining}</TD>
               <TD
                 className={
-                  expiringSoon(row) ? 'text-warning whitespace-nowrap' : 'whitespace-nowrap'
+                  row.promotion?.stage === 'expiring'
+                    ? 'text-warning whitespace-nowrap'
+                    : 'whitespace-nowrap'
                 }
               >
                 {row.expires_on}
+              </TD>
+              {/* 2차 기한이 지나면 남은 기한이 없다. 소멸일이 대신 강조된다. */}
+              <TD
+                className={
+                  row.promotion?.urgent && row.promotion.stage !== 'expiring'
+                    ? 'text-warning whitespace-nowrap'
+                    : 'whitespace-nowrap'
+                }
+              >
+                {row.promotion && row.promotion.stage !== 'expiring' ? row.promotion.due : '-'}
               </TD>
               <TD className="text-muted">{GRANT_BASIS_LABEL[row.grant_basis]}</TD>
             </TR>
