@@ -21,6 +21,21 @@ export function cellStatus(
 }
 
 /**
+ * 그 날이 쉬는 날(주말·휴일)인가. 모르면 `null`.
+ * 주말은 날짜로 안다. 평일에 걸린 휴일은 그 달 근태에 행이 없거나(휴일 목록은 임원만 읽는다),
+ * 휴일근로가 승인돼 `day_kind` 가 `workday` 가 아닌 행으로 안다. 날짜가 비었거나 평일인데
+ * 그 달 근태를 아직 못 읽었으면 모른다.
+ */
+export function isDayOff(iso: string, days: AttendanceDay[] | undefined): boolean | null {
+  if (!iso) return null
+  const weekday = new Date(`${iso}T00:00:00`).getDay()
+  if (weekday === 0 || weekday === 6) return true
+  if (!days) return null
+  const row = days.find((d) => d.work_date === iso)
+  return row ? row.day_kind !== 'workday' : days.length > 0
+}
+
+/**
  * 05 상태 색상 규약: 휴가·반차 파랑(accent) / 재택·외근·출장 청록(info) / 휴일 연회색 / 결근 빨강.
  * 정상은 칠하지 않는다. 평일의 기본값이 정상이라(10 §1.2) 색을 주면 달력 전체가 회색이 된다.
  * 내 근태 캘린더와 전사 근태 그리드가 같이 쓴다. 칩 색은 `Badge` 의 accent·danger, 홈 캘린더의 휴가 칩과 같다.

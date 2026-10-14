@@ -10,9 +10,9 @@ import { Textarea } from '@/components/ui/Textarea'
 import { useToast } from '@/components/ui/ToastContext'
 import { ApiError } from '@/lib/api'
 import { toISODate } from '@/lib/datetime'
-import { useRequestArrangement, useRequestOvertime } from './api'
-import { formatMinutes } from './attendanceDays'
-import { overtimeMinutes } from './overtimeMinutes'
+import { useMyAttendance, useRequestArrangement, useRequestOvertime } from './api'
+import { formatMinutes, isDayOff } from './attendanceDays'
+import { OVERTIME_MAX_MINUTES, overtimeMinutes, overtimeSpan } from './overtimeMinutes'
 import type { ArrangementKind } from './types'
 
 /** 폼에서 고르는 종류. 재택·외근·출장은 각각 한 항목이고 연장·정정이 뒤에 온다. */
@@ -56,11 +56,35 @@ export function ExceptionRequestModal({ onClose }: { onClose: () => void }) {
   const startTimeError = kind === 'overtime' && !startTime ? '시각을 입력해 주세요.' : null
   const endTimeError = kind === 'overtime' && !endTime ? '시각을 입력해 주세요.' : null
   const timeError = startTimeError ?? endTimeError
-  const preview = kind === 'overtime' && !timeError ? overtimeMinutes(startTime, endTime) : null
+  // 쉬는 날에 일한 것은 전 구간이 휴일근로다(근로기준법 56조 2항).
+  const attendance = useMyAttendance((start || today).slice(0, 7))
+  const dayOff = isDayOff(start, attendance.data?.days)
+  // 쉬는 날인지 모르면(달력을 못 읽은 평일) 미리보기를 내지 않고 막지도 않는다. 서버가 판정한다.
+  const preview =
+    kind === 'overtime' && !timeError && dayOff !== null
+      ? overtimeMinutes(startTime, endTime, dayOff)
+      : null
   const noOvertime = !!preview && preview.minutes === 0
+  const tooLong =
+    kind === 'overtime' && !timeError && overtimeSpan(startTime, endTime) > OVERTIME_MAX_MINUTES
+  const previewText = tooLong
+    ? '하루 12시간까지 신청할 수 있습니다.'
+    : !preview
+      ? null
+      : noOvertime
+        ? dayOff
+          ? '일한 구간이 없습니다.'
+          : '18:00 이후 구간이 없습니다.'
+        : `${dayOff ? '휴일근로' : '연장'} ${formatMinutes(preview.minutes)}${preview.night_minutes > 0 ? ` (야간 ${formatMinutes(preview.night_minutes)} 포함)` : ''}`
   const pending = arrangement.isPending || overtime.isPending
   const canSubmit =
-    !startError && !endError && !timeError && !noOvertime && reason.trim().length > 0 && !pending
+    !startError &&
+    !endError &&
+    !timeError &&
+    !noOvertime &&
+    !tooLong &&
+    reason.trim().length > 0 &&
+    !pending
 
   const close = () => {
     setError(null)
@@ -98,7 +122,7 @@ export function ExceptionRequestModal({ onClose }: { onClose: () => void }) {
 
   const description = isArrangement
     ? '사전 등록입니다. 승인되면 정상 근무로 집계됩니다.'
-    : '소정 종업(18:00) 이후 구간만 인정됩니다. 승인된 신고분만 집계에 들어갑니다.'
+    : '근무일은 소정 종업(18:00) 이후 구간만, 주말·휴일은 일한 시간 전부가 인정됩니다. 승인된 신고분만 집계에 들어갑니다.'
 
   if (tripId) {
     return (
@@ -209,14 +233,12 @@ export function ExceptionRequestModal({ onClose }: { onClose: () => void }) {
         </div>
 
         {/* 연장근로는 승인 전에 몇 분으로 잡히는지 보인다. 확정값은 서버가 준다(10 §5.3). */}
-        {preview && (
+        {previewText && (
           <p
             aria-live="polite"
-            className={noOvertime ? 'text-danger text-sm' : 'text-muted text-sm'}
+            className={noOvertime || tooLong ? 'text-danger text-sm' : 'text-muted text-sm'}
           >
-            {noOvertime
-              ? '18:00 이후 구간이 없습니다.'
-              : `연장 ${formatMinutes(preview.minutes)}${preview.night_minutes > 0 ? ` (야간 ${formatMinutes(preview.night_minutes)} 포함)` : ''}`}
+            {previewText}
           </p>
         )}
 
