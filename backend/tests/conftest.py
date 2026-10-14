@@ -226,3 +226,10 @@ def minio_bucket(monkeypatch) -> Iterator[str]:
     if client.bucket_exists(bucket):
         for obj in list(client.list_objects(bucket, recursive=True)):
             client.remove_object(bucket, obj.object_name)
+
+
+@pytest.fixture(autouse=True)
+def _embedding_off(monkeypatch):
+    """개발 PC 의 .env 에 EMBED_URL 이 있어도 테스트는 실제 Ollama 를 부르지 않는다 — 켜는 테스트는 test_embed 의
+    fake_embedding 이 이 뒤에 덮어쓴다."""
+    monkeypatch.setattr(settings, "embed_url", None)

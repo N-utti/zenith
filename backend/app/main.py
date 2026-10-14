@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse
 
 from app import metrics
+from app.ai import embed
 from app.config import settings
 from app.deps import csrf_guard
 from app.errors import install_error_handlers
@@ -37,12 +38,14 @@ MAX_BODY_BYTES = (
 async def lifespan(app: FastAPI):
     # 휴지통 30일 비우기(04 §3). 테스트의 ASGITransport 는 lifespan 을 돌리지 않는다 — purge_trash 를 직접 부른다.
     task = asyncio.create_task(docs.purge_loop())
+    warm = asyncio.create_task(embed.warmup())  # 벡터가 켜져 있으면 bge-m3 를 미리 올린다
     try:
         yield
     finally:
         task.cancel()
+        warm.cancel()
         with contextlib.suppress(asyncio.CancelledError):
-            await task  # 돌던 배치의 세션 정리까지 기다린다
+            await asyncio.gather(task, warm)  # 돌던 배치의 세션 정리·워밍업 연결 정리까지 기다린다
 
 
 def create_app() -> FastAPI:

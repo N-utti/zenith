@@ -252,8 +252,10 @@ async def test_running_index_is_not_cancelled_by_new_save(
     monkeypatch.setattr(embed, "DEBOUNCE_S", 0.01)
     embed.schedule(doc_id)
     first = embed._pending[doc_id]
-    await asyncio.sleep(0.05)  # 디바운스를 지나 임베딩 대기 중
-    assert not embed._pending and calls == [1]
+    deadline = asyncio.get_running_loop().time() + 5
+    while not calls and asyncio.get_running_loop().time() < deadline:  # 고정 sleep 은 전체 실행 부하에서 깨졌다
+        await asyncio.sleep(0.01)
+    assert not embed._pending and calls == [1]  # 디바운스를 지나 임베딩 대기 중
     embed.schedule(doc_id)  # 두 번째 저장 — 첫째를 끊지 않는다
     second = embed._pending[doc_id]
     gate.set()
@@ -319,3 +321,26 @@ async def test_schedule_debounces_and_indexes(
     assert (
         await app_db.scalar(select(DocChunk).where(DocChunk.doc_id == seeded["doc"].id))
     ) is not None
+
+
+async def test_reindex_sends_batches_and_fails_closed_midway(
+    users: Users, app_db, fake_embedding, monkeypatch
+) -> None:
+    """17조각 이상이면 EMBED_BATCH 씩 나눠 보낸다. 둘째 묶음이 실패하면 청크는 0개(옛 것도 지움), 예외는 다시 던진다."""
+    seeded = await _knowledge(app_db, users)
+    doc = seeded["doc"]
+    doc.text_cache = "가나다라마바사 아자차카타파하. " * 700  # 500자 조각 20개쯤
+    await app_db.commit()
+    sizes: list[int] = []
+
+    async def second_batch_breaks(texts, **_):
+        sizes.append(len(texts))
+        if len(sizes) == 2:
+            raise httpx.ConnectError("ollama down")
+        return [fake_vector(t) for t in texts]
+
+    monkeypatch.setattr(embed, "embed", second_batch_breaks)
+    with pytest.raises(httpx.ConnectError):
+        await embed.reindex(doc.id)
+    assert len(sizes) == 2 and all(n <= embed.EMBED_BATCH for n in sizes) and sizes[0] == embed.EMBED_BATCH
+    assert (await app_db.scalar(select(DocChunk).where(DocChunk.doc_id == doc.id))) is None

@@ -21,14 +21,25 @@ log = logging.getLogger("zenith.ai")
 # ponytail: 글자 수로 자르고 앞뒤를 겹친다. 문단 경계·토큰 수 기준은 검색 품질이 아쉬울 때(실제 규정 문서로 재 본 뒤).
 CHUNK_CHARS = 500
 CHUNK_OVERLAP = 100
-MAX_CHUNKS = 400  # 문서당 상한(20만 자) — 그 뒤는 색인되지 않는다. 한 번에 400개 임베딩은 bge-m3 CPU 로 수십 초
+MAX_CHUNKS = 400  # 문서당 상한(20만 자) — 그 뒤는 색인되지 않는다. 2 CPU 에서 500자 조각당 약 3초(10-14 실측)
+EMBED_BATCH = 16  # 한 호출에 보내는 조각 수 — 타임아웃은 묶음마다. 42조각을 한 번에 보내면 120초를 넘겼다
 DEBOUNCE_S = 5.0  # 저장이 잇따르면(30초 주기 저장·퇴장 저장) 마지막 것만 색인
-EMBED_TIMEOUT_S = 120.0  # 색인(최대 400조각)
+EMBED_TIMEOUT_S = 120.0  # 색인 — 묶음(EMBED_BATCH 조각)당. ponytail: 400조각이면 최악 25묶음×120초 동안 _index_lock 을 쥔다, 문서가 커지면 묶음 병렬화
 QUERY_TIMEOUT_S = (
     8.0  # 질문 1건 — 넘으면 FTS 만으로 답한다(Ollama 가 색인으로 바쁠 때 답변이 멈추지 않게)
 )
 # 테스트가 끼우는 전송 계층(httpx.MockTransport). None 이면 실제 네트워크.
 transport: httpx.AsyncBaseTransport | None = None
+
+
+async def warmup() -> None:
+    """기동 때 모델을 메모리에 올린다 — 콜드 로드가 질문 임베딩 8초 상한을 넘겨 첫 질문이 FTS 로만 답하던 것(10-14)."""
+    if not enabled():
+        return
+    try:
+        await embed(["warmup"], timeout=EMBED_TIMEOUT_S)
+    except Exception as e:  # noqa: BLE001 — 실패해도 서비스는 돈다(검색이 FTS 로 폴백)
+        log.warning("임베딩 워밍업 실패: %r", e)
 
 
 def enabled() -> bool:
@@ -97,7 +108,9 @@ async def reindex(doc_id: uuid.UUID) -> int:
         return len(pieces)
     failure: Exception | None = None
     try:
-        vectors = await embed(pieces)
+        vectors = []
+        for i in range(0, len(pieces), EMBED_BATCH):
+            vectors += await embed(pieces[i : i + EMBED_BATCH])
     except Exception as e:  # noqa: BLE001 — 옛 청크를 지운 뒤 다시 던진다
         vectors, failure = [], e
     async with session_scope() as db:

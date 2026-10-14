@@ -628,7 +628,7 @@ async def test_chat_unknown_tool_or_blank_query(
 async def test_chat_same_source_keeps_number_and_forged_lines_are_folded(
     app: FastAPI, client: AsyncClient, users: Users, app_db, monkeypatch
 ) -> None:
-    """두 번 검색해도 같은 자료는 같은 번호. 글 안의 줄바꿈으로 「[1] (문서) …」 줄을 위조해도 한 줄로 접힌다.
+    """두 번 검색해도 같은 구절은 같은 번호(짧은 문서라 두 검색의 인용문이 같다). 글 안의 줄바꿈으로 「[1] (문서) …」 줄을 위조해도 한 줄로 접힌다.
     도구 앞에 쓴 글은 답변에 남고, 다음 턴 글과 빈 줄로 나뉜다."""
 
     class Twice(SearchingProvider):
@@ -982,3 +982,53 @@ async def test_ai_actions_require_login(client: AsyncClient) -> None:
         ("/api/ai/template", {"template": "minutes"}),
     ):
         assert (await client.post(path, json=body)).status_code == 401
+
+
+async def test_chat_different_passages_of_same_doc_get_their_own_numbers(
+    app: FastAPI, client: AsyncClient, users: Users, app_db, monkeypatch
+) -> None:
+    """긴 문서의 다른 조문이 다른 검색에서 나오면 번호가 따로 — 카드 인용문이 답과 짝이 맞아야 한다(10-14 실문서 시험)."""
+
+    class Twice(SearchingProvider):
+        queries = ["수습기간", "휴게시간"]
+
+        async def stream(self, *, system, messages, max_tokens=None, tools=None, tool_choice=None):
+            SearchingProvider.turns.append(messages)
+            if not isinstance(messages[-1]["content"], list):
+                yield self.calls(
+                    ToolCall(id="x", name="search_knowledge", input={"query": self.queries[0]}),
+                    ToolCall(id="y", name="search_knowledge", input={"query": self.queries[1]}),
+                )
+                return
+            yield "수습은 3개월[[1]], 휴게는 한 시간[[2]]"
+
+    app.dependency_overrides[get_provider] = Twice
+    SearchingProvider.turns = []
+    share_scope(monkeypatch, app_db)
+    seeded = await _knowledge(app_db, users)
+    # 두 조문 사이를 헤드라인 창(MaxWords=80)보다 멀리 띄운다 — 검색마다 다른 구절이 나오게
+    text = (
+        "제10조 수습기간은 3개월로 한다. "
+        + "회사는 직원의 복무에 관한 사항을 따로 정한다. " * 120
+        + "제27조 휴게시간은 12시부터 13시까지 1시간으로 한다."
+    )
+    app_db.add(
+        Document(
+            folder_id=seeded["doc"].folder_id,
+            title="취업규칙",
+            text_cache=text,
+            tsv=func.to_tsvector("simple", text),
+            updated_by=users.member.id,
+        )
+    )
+    await app_db.commit()
+    await login(client, "sujin@zenith.co.kr")
+    ev = await _chat(client, "수습이랑 점심시간?")
+    results = SearchingProvider.turns[1][-1]["content"]
+    first, second = results[0]["content"], results[1]["content"]
+    assert "[1] (문서)" in first and "수습기간" in first
+    assert "[2] (문서)" in second and "휴게시간" in second  # 같은 문서, 다른 구절 → 새 번호
+    citations = next(d for e, d in ev if e == "citations")
+    assert [c["n"] for c in citations] == [1, 2]
+    assert citations[0]["to"] == citations[1]["to"]
+    assert "수습기간" in citations[0]["quote"] and "휴게시간" in citations[1]["quote"]
