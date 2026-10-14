@@ -28,11 +28,13 @@ import {
   useVersionSnapshot,
 } from './api'
 import { BlockComments } from './BlockComments'
-import { anchorBlock, flashBlock } from './blockId'
+import { anchorBlock, flashBlock, flashElement } from './blockId'
 import { CommentPanel } from './CommentPanel'
 import { DocAskPanel } from './DocAskPanel'
+import { DocCheckPanel } from './DocCheckPanel'
 import { DocBreadcrumb } from './DocBreadcrumb'
 import { DocWidthMenu } from './DocWidthMenu'
+import { findText } from './findText'
 import { tableBleedRef } from './tableBleed'
 import { EditorBubbleMenu } from './EditorBubbleMenu'
 import { ExportMenu } from './ExportMenu'
@@ -132,6 +134,7 @@ function DocSidebar({
     { key: 'comments', label: '댓글' },
     { key: 'versions', label: '버전 기록' },
     { key: 'ask', label: 'AI 질문' },
+    { key: 'check', label: '팩트체크' },
   ]
 
   return (
@@ -162,7 +165,7 @@ function DocSidebar({
               // 좁은 폭에서 접혀 있으면 고른 탭이라도 밑줄을 뺀다. 밑줄이 있으면 이미 펼친 것처럼 보여
               // 눌러야 열린다는 걸 모른다. 데스크톱(lg)은 늘 펼쳐져 있어 밑줄을 둔다.
               className={cn(
-                '-mb-px cursor-pointer border-b-2 px-4 py-3 text-sm font-medium transition-colors',
+                '-mb-px cursor-pointer border-b-2 px-3 py-3 text-sm font-medium whitespace-nowrap transition-colors',
                 tab !== key
                   ? 'text-muted hover:text-fg border-transparent'
                   : open
@@ -182,7 +185,7 @@ function DocSidebar({
           type="button"
           aria-expanded={open}
           aria-controls="doc-side-panel"
-          aria-label="댓글·버전 기록·AI 질문 패널"
+          aria-label="댓글·버전 기록·AI 질문·팩트체크 패널"
           onClick={() => {
             if (open) onCollapse()
             onOpenChange(!open)
@@ -207,7 +210,7 @@ function DocSidebar({
   )
 }
 
-type SidebarTab = 'comments' | 'versions' | 'ask'
+type SidebarTab = 'comments' | 'versions' | 'ask' | 'check'
 
 /**
  * 손가락으로 쓰는 기기인지.
@@ -553,6 +556,36 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
     [editor],
   )
 
+  /** 마지막으로 간 팩트체크 발췌와 자리. 같은 주장을 다시 누르면 그 뒤의 자리로 넘어간다. */
+  const lastJump = useRef<{ text: string; from: number } | null>(null)
+  /**
+   * 팩트체크 주장의 원문 발췌로 간다. 같은 글이 여러 번 나오면 누를 때마다 다음 자리로, 끝이면 처음으로.
+   * 그 글을 골라 두고 그 블록을 잠깐 밝힌다. 미리보기가 본문을 가리고 있으면 `jumpToBlock` 처럼 닫는다.
+   * 터치 기기는 편집기에 초점을 주지 않는다. 화상 키보드가 올라와 본문을 가린다.
+   */
+  const jumpToText = useCallback(
+    (text: string) => {
+      if (!editor) return false
+      const { doc } = editor.state
+      const last = lastJump.current
+      const range =
+        (last?.text === text && findText(doc, text, last.from + 1)) || findText(doc, text)
+      if (!range) return false
+      lastJump.current = { text, from: range.from }
+      setPreview(null)
+      requestAnimationFrame(() => {
+        const chain = editor.chain()
+        if (!coarsePointer) chain.focus()
+        chain.setTextSelection(range).scrollIntoView().run()
+        const { node } = editor.view.domAtPos(range.from)
+        const el = node instanceof HTMLElement ? node : node.parentElement
+        if (el) flashElement(el)
+      })
+      return true
+    },
+    [editor, coarsePointer],
+  )
+
   const restore = () => {
     if (!editor || !preview) return
     // 되감기가 아니라 새 편집이다. 그래야 접속 중인 다른 사람과도 같은
@@ -701,7 +734,7 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
         >
           {tab === 'comments' ? (
             <CommentPanel docId={meta.id} editor={editor} onJump={jumpToBlock} />
-          ) : tab === 'ask' ? null : (
+          ) : tab === 'ask' || tab === 'check' ? null : (
             <>
               {previewError && (
                 <p
@@ -722,6 +755,9 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
           {/* 다른 탭을 보는 동안에도 숨긴 채 둔다. 받던 답변의 요청 상태와 쓰던 질문이 탭을 옮겨도 남는다. */}
           <div hidden={tab !== 'ask'} className="flex min-h-0 flex-1 flex-col">
             <DocAskPanel docId={meta.id} aiSource={meta.ai_source} />
+          </div>
+          <div hidden={tab !== 'check'} className="flex min-h-0 flex-1 flex-col">
+            <DocCheckPanel editor={editor} aiSource={meta.ai_source} onJump={jumpToText} />
           </div>
         </DocSidebar>
       </div>

@@ -23,7 +23,7 @@ import {
   setMockSession,
   userFromCookie,
 } from './db'
-import { AI_MODELS, answer, DOC_ACTIONS, docActionDraft, docAnswer } from './aiDb'
+import { AI_MODELS, answer, checkClaims, DOC_ACTIONS, docActionDraft, docAnswer } from './aiDb'
 import {
   BOARD_DEFS,
   addPostComment,
@@ -1759,6 +1759,51 @@ data: ${JSON.stringify(data)}
     return HttpResponse.json({
       draft: docActionDraft(action as (typeof DOC_ACTIONS)[number], doc.title),
     })
+  }),
+
+  // 팩트체크(백엔드 #382). 문서 id 와 글 중 정확히 하나. 응답은 스트림이 아니라 한 번에 온다.
+  http.post('/api/ai/check', async ({ request }) => {
+    if (!authenticate()) return unauthorized()
+    const { doc_id, text } = (await request.json()) as {
+      doc_id?: string | null
+      text?: string | null
+    }
+    // 둘 다·둘 다 없음은 라우터가 문자열로, 빈 글·길이 초과는 스키마 검증이라 배열로 거절한다.
+    if (Boolean(doc_id) === (text != null)) {
+      return validationError('doc_id 와 text 중 하나만 보냅니다.')
+    }
+    if (text != null && (!text.trim() || text.length > 50000)) {
+      return HttpResponse.json(
+        {
+          detail: [
+            {
+              loc: ['body', 'text'],
+              msg: 'String should have 1 to 50000 characters',
+              type: 'string_too_long',
+            },
+          ],
+          code: 'VALIDATION',
+        },
+        { status: 422 },
+      )
+    }
+    // 문서 id 의 거절(없음·휴지통·근거 꺼짐)은 detail 이 문자열이다. 404 가 아니다.
+    const doc = doc_id ? aliveDoc(doc_id) : undefined
+    if (doc_id && !doc) return validationError('없는 문서입니다.')
+    if (doc && !doc.ai_source) return validationError('AI 근거로 쓰기가 꺼진 문서입니다.')
+    await delay(1200)
+    // 모델 출력이 정해진 모양이 아니었을 때(실제 서버 routers/ai.py). 본문에 '오류'를 넣으면 본다.
+    if (text?.includes('오류')) {
+      return HttpResponse.json(
+        {
+          detail: 'AI 가 검사 결과를 정해진 모양으로 내지 않았습니다. 다시 시도해 주세요.',
+          code: 'AI_FORMAT',
+        },
+        { status: 503 },
+      )
+    }
+    // 본문(Y.Doc)은 브라우저에만 있어 문서 id 로 오면 제목만 안다.
+    return HttpResponse.json(checkClaims(text ?? doc!.title))
   }),
 
   http.patch('/api/me/todos/:taskId', async ({ request, params }) => {

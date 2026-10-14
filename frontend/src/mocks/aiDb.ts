@@ -125,3 +125,61 @@ export function docActionDraft(action: (typeof DOC_ACTIONS)[number], title: stri
       return `[EN] ${title}`
   }
 }
+
+/**
+ * 팩트체크(`POST /ai/check`, 백엔드 #382). 실제로는 Claude 가 글의 주장을 뽑아 근거와 대조한다.
+ * 목은 판정 세 가지의 모양만 재현한다: 앞 두 문장을 일치·불일치로, 원문 발췌가 없는 확인 불가 하나.
+ * 원문 발췌(`span`)는 보낸 글에서 그대로 자른 것이라 화면이 본문에서 찾을 수 있다.
+ */
+export function checkClaims(text: string) {
+  const sentences = text
+    .split(/\n+|(?<=[.?!])\s+/)
+    .map((s) => s.trim().slice(0, 120))
+    .filter(Boolean)
+  const cite = (c: Citation) => ({
+    n: 1,
+    doc_id: c.doc_id,
+    type: 'doc' as const,
+    to: `/docs/${c.doc_id}`,
+    title: c.title,
+    quote: c.quote,
+    path: c.path,
+  })
+  const claims: {
+    n: number
+    claim: string
+    span: string
+    verdict: 'match' | 'mismatch' | 'unverified'
+    note: string
+    citations: ReturnType<typeof cite>[]
+  }[] = []
+  if (sentences[0]) {
+    claims.push({
+      n: claims.length + 1,
+      claim: sentences[0],
+      span: sentences[0],
+      verdict: 'match',
+      note: '규정의 지급 기준과 같습니다.',
+      citations: [cite(ALL_CITATIONS[0])],
+    })
+  }
+  if (sentences[1]) {
+    claims.push({
+      n: claims.length + 1,
+      claim: sentences[1],
+      span: sentences[1],
+      verdict: 'mismatch',
+      note: '규정은 반납처를 총무팀으로 정합니다. 글의 내용과 다릅니다.',
+      citations: [cite(ALL_CITATIONS[1])],
+    })
+  }
+  claims.push({
+    n: claims.length + 1,
+    claim: '지급 장비의 사양은 해마다 바뀐다.',
+    span: '',
+    verdict: 'unverified',
+    note: '근거 번호가 없어 확인 불가로 둔다. 사내 자료에서 사양 변경 주기를 찾지 못했습니다.',
+    citations: [],
+  })
+  return { claims }
+}
