@@ -67,10 +67,13 @@ async def _chat(
     session_id: str | None = None,
     scope: str | None = None,
     docs: list[str] | None = None,
+    attachments: list[str] | None = None,
 ):
     body: dict[str, object] = {"message": message}
     if docs:
         body["docs"] = docs
+    if attachments:
+        body["attachments"] = attachments
     if session_id:
         body["session_id"] = session_id
     if scope:
