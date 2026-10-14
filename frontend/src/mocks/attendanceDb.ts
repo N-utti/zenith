@@ -12,7 +12,11 @@ import type {
   OvertimeInput,
   RequestStatus,
 } from '@/features/attendance/types'
-import { overtimeMinutes } from '@/features/attendance/overtimeMinutes'
+import {
+  OVERTIME_MAX_MINUTES,
+  overtimeMinutes,
+  overtimeSpan,
+} from '@/features/attendance/overtimeMinutes'
 import { toISODate } from '@/lib/datetime'
 import type { User } from '@/types'
 import { DEMO_ACCOUNTS } from './accounts'
@@ -20,6 +24,12 @@ import { MOCK_USERS } from './db'
 import { ISO_DATE, LEAVE_TYPES, listLeaves } from './leavesDb'
 import { isClosedRange, MONTH_CLOSED } from './closingsDb'
 import { isHoliday } from './holidaysDb'
+
+/** 주말·휴일. 서버는 이런 날의 신고를 전 구간 휴일근로로 센다. */
+function isDayOff(iso: string): boolean {
+  const weekday = new Date(`${iso}T00:00:00`).getDay()
+  return weekday === 0 || weekday === 6 || isHoliday(iso)
+}
 
 /** 오늘에서 n일 뒤의 평일. `leavesDb.workday` 와 같은 규칙. */
 function workday(offset: number): string {
@@ -161,7 +171,7 @@ function overtime(
     work_date: date,
     start_time: start,
     end_time: end,
-    ...overtimeMinutes(start, end),
+    ...overtimeMinutes(start, end, isDayOff(date)),
     reason,
     status,
     created_at: daysAgo(3),
@@ -204,7 +214,9 @@ export function createOvertime(user: User, input: OvertimeInput): { item: Overti
   if (!TIME.test(input.start_time) || !TIME.test(input.end_time))
     return invalid('시각이 올바르지 않습니다.')
   if (!input.reason?.trim()) return invalid('사유를 입력해 주세요.')
-  if (overtimeMinutes(input.start_time, input.end_time).minutes === 0) {
+  if (overtimeSpan(input.start_time, input.end_time) > OVERTIME_MAX_MINUTES)
+    return invalid('연장근로는 하루 12시간까지 신청할 수 있습니다.')
+  if (overtimeMinutes(input.start_time, input.end_time, isDayOff(input.work_date)).minutes === 0) {
     return invalid('소정 종업 시각(18:00) 이후 구간이 없습니다.')
   }
   if (isClosedRange(input.work_date)) return MONTH_CLOSED
