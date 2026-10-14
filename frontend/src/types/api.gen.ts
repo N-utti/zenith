@@ -2952,12 +2952,17 @@ export interface components {
              * Action
              * @enum {string}
              */
-            action: "summarize" | "continue" | "polish" | "translate" | "table";
+            action: "summarize" | "continue" | "polish" | "translate" | "table" | "cite" | "conform";
         };
         /** DocActionOut */
         DocActionOut: {
             /** Draft */
             draft: string;
+            /**
+             * Citations
+             * @default []
+             */
+            citations: components["schemas"]["Citation"][];
         };
         /**
          * DocCreateIn
@@ -4388,6 +4393,8 @@ export interface components {
             template: "minutes" | "weekly" | "notice";
             /** Context */
             context?: string | null;
+            /** Example Doc Id */
+            example_doc_id?: string | null;
         };
         /** TemplateOut */
         TemplateOut: {
