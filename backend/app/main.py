@@ -39,13 +39,15 @@ async def lifespan(app: FastAPI):
     # 휴지통 30일 비우기(04 §3). 테스트의 ASGITransport 는 lifespan 을 돌리지 않는다 — purge_trash 를 직접 부른다.
     task = asyncio.create_task(docs.purge_loop())
     warm = asyncio.create_task(embed.warmup())  # 벡터가 켜져 있으면 bge-m3 를 미리 올린다
+    attach = asyncio.create_task(ai.purge_attachments_loop())  # AI 첨부 7일 정리(README 51)
     try:
         yield
     finally:
         task.cancel()
         warm.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await asyncio.gather(task, warm)  # 돌던 배치의 세션 정리·워밍업 연결 정리까지 기다린다
+        attach.cancel()
+        # 돌던 배치의 세션 정리·워밍업 연결 정리까지 셋 다 기다린다 — return_exceptions 없으면 첫 취소에서 끝난다(리뷰)
+        await asyncio.gather(task, warm, attach, return_exceptions=True)
 
 
 def create_app() -> FastAPI:

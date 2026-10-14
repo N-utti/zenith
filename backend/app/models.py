@@ -466,6 +466,26 @@ class AiMessage(Base):
     )  # 03 에 없던 칸 — 대화 순서 (2026-10-12, README 41)
 
 
+class AiAttachment(Base):
+    """AI 첨부(README 51, 03 에 없는 표) — 올린 사람만 쓴다. 평문은 서버가 뽑아 둔 것(최대 20만 자), 원본은 MinIO
+    `ai/{user_id}/{id}/{name}`. 7일 뒤 `ai.purge_attachments_loop` 가 둘 다 지운다."""
+
+    __tablename__ = "ai_attachments"
+    __table_args__ = (Index("idx_ai_attachments_user", "user_id", "created_at"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True
+    )  # 앱이 만든다(저장 키와 같다)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    size: Mapped[int] = mapped_column(Integer, nullable=False)
+    content_type: Mapped[str] = mapped_column(Text, nullable=False)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=sql_text("now()")
+    )
+
+
 class AiFeedback(Base):
     """`POST /ai/feedback`(README 37). `message_id` 는 문자열 — 대화 저장(README 41) 전 프론트는 자기가 만든 답변 id 를
     보냈고, 저장 뒤에는 `done` 이 준 서버 id 를 보낸다(그때는 ai_messages.feedback 에도 적는다)."""

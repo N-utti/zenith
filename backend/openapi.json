@@ -2359,7 +2359,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AttachmentOut"
+                  "$ref": "#/components/schemas/app__routers__channels__AttachmentOut"
                 }
               }
             }
@@ -2741,7 +2741,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AttachmentOut"
+                  "$ref": "#/components/schemas/app__routers__channels__AttachmentOut"
                 }
               }
             }
@@ -3321,6 +3321,89 @@
                   "$ref": "#/components/schemas/CheckOut"
                 }
               }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ai/attachments": {
+      "post": {
+        "tags": [
+          "ai"
+        ],
+        "summary": "AI 첨부 올리기 — txt·md·csv·docx·xlsx·pdf·hwpx 10MB, 평문을 뽑아 둔다(7일 보관) → {id, name, size, content_type, chars}",
+        "operationId": "upload_ai_attachment_api_ai_attachments_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_ai_attachment_api_ai_attachments_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/app__routers__ai__AttachmentOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ai/attachments/{id}": {
+      "get": {
+        "tags": [
+          "ai"
+        ],
+        "summary": "AI 첨부 원본 내려받기 — 올린 사람만(아니면 404), no-store",
+        "operationId": "download_ai_attachment_api_ai_attachments__id__get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              },
+              "application/octet-stream": {}
             }
           },
           "422": {
@@ -5022,7 +5105,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AttachmentOut"
+                  "$ref": "#/components/schemas/app__routers__channels__AttachmentOut"
                 }
               }
             }
@@ -7373,7 +7456,7 @@
             ]
           },
           "subject": {
-            "$ref": "#/components/schemas/Subject"
+            "$ref": "#/components/schemas/Subject-Output"
           },
           "steps": {
             "items": {
@@ -7717,7 +7800,7 @@
         ],
         "title": "ArrangementOut"
       },
-      "AttachmentOut": {
+      "AttachmentOut-Input": {
         "properties": {
           "url": {
             "type": "string",
@@ -7921,6 +8004,20 @@
         },
         "type": "object",
         "title": "Body_import_orgs_api_crm_orgs_import_post"
+      },
+      "Body_upload_ai_attachment_api_ai_attachments_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_ai_attachment_api_ai_attachments_post"
       },
       "Body_upload_attachment_api_approvals__id__attachments_post": {
         "properties": {
@@ -8176,6 +8273,16 @@
             "maxItems": 20,
             "title": "Docs",
             "default": []
+          },
+          "attachments": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "maxItems": 12,
+            "title": "Attachments",
+            "default": []
           }
         },
         "type": "object",
@@ -8248,7 +8355,8 @@
             "enum": [
               "doc",
               "post",
-              "web"
+              "web",
+              "file"
             ],
             "title": "Type"
           },
@@ -9821,7 +9929,7 @@
             "title": "Title"
           },
           "subject": {
-            "$ref": "#/components/schemas/Subject"
+            "$ref": "#/components/schemas/Subject-Input"
           },
           "references": {
             "anyOf": [
@@ -11371,7 +11479,7 @@
             "anyOf": [
               {
                 "items": {
-                  "$ref": "#/components/schemas/AttachmentOut"
+                  "$ref": "#/components/schemas/app__routers__channels__AttachmentOut"
                 },
                 "type": "array"
               },
@@ -12330,7 +12438,7 @@
             "anyOf": [
               {
                 "items": {
-                  "$ref": "#/components/schemas/AttachmentOut"
+                  "$ref": "#/components/schemas/AttachmentOut-Input"
                 },
                 "type": "array",
                 "maxItems": 10
@@ -12398,7 +12506,7 @@
           },
           "attachments": {
             "items": {
-              "$ref": "#/components/schemas/AttachmentOut"
+              "$ref": "#/components/schemas/app__routers__channels__AttachmentOut"
             },
             "type": "array",
             "title": "Attachments"
@@ -12536,7 +12644,7 @@
             "anyOf": [
               {
                 "items": {
-                  "$ref": "#/components/schemas/AttachmentOut"
+                  "$ref": "#/components/schemas/AttachmentOut-Input"
                 },
                 "type": "array",
                 "maxItems": 10
@@ -12975,7 +13083,7 @@
         ],
         "title": "StepOut"
       },
-      "Subject": {
+      "Subject-Input": {
         "properties": {
           "body": {
             "type": "string",
@@ -13010,7 +13118,68 @@
             "anyOf": [
               {
                 "items": {
-                  "$ref": "#/components/schemas/AttachmentOut"
+                  "$ref": "#/components/schemas/AttachmentOut-Input"
+                },
+                "type": "array",
+                "maxItems": 10
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attachments"
+          },
+          "extra": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Extra"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "title": "Subject",
+        "description": "일반 기안 본문(13 §4.1 approval_forms). 근태 4종은 서버가 요약을 `body` 에 쓴다."
+      },
+      "Subject-Output": {
+        "properties": {
+          "body": {
+            "type": "string",
+            "maxLength": 20000,
+            "title": "Body",
+            "default": ""
+          },
+          "amount": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 10000000000000.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount"
+          },
+          "related": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Related"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "attachments": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/app__routers__channels__AttachmentOut"
                 },
                 "type": "array",
                 "maxItems": 10
@@ -13954,6 +14123,40 @@
         ],
         "title": "VersionOut"
       },
+      "app__routers__ai__AttachmentOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "size": {
+            "type": "integer",
+            "title": "Size"
+          },
+          "content_type": {
+            "type": "string",
+            "title": "Content Type"
+          },
+          "chars": {
+            "type": "integer",
+            "title": "Chars"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "size",
+          "content_type",
+          "chars"
+        ],
+        "title": "AttachmentOut"
+      },
       "app__routers__attendance__ReopenIn": {
         "properties": {
           "month": {
@@ -13979,6 +14182,48 @@
           "month"
         ],
         "title": "ReopenIn"
+      },
+      "app__routers__channels__AttachmentOut": {
+        "properties": {
+          "url": {
+            "type": "string",
+            "maxLength": 2000,
+            "title": "Url"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "size": {
+            "type": "integer",
+            "maximum": 10485760.0,
+            "minimum": 0.0,
+            "title": "Size"
+          },
+          "content_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100,
+                "pattern": "^[\\w.+-]+/[\\w.+-]+$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "url",
+          "name",
+          "size"
+        ],
+        "title": "AttachmentOut",
+        "description": "업로드 응답이자 messages.attachments[] 항목(03 §2.3 JSONB)."
       },
       "app__routers__crm__ReopenIn": {
         "properties": {
