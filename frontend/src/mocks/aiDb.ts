@@ -84,26 +84,27 @@ export function answer(user: User, scoped = false): { body: string; citations: C
 }
 
 /**
- * 문서 하나를 놓고 물었을 때(`scope: "doc:<id>"`, 백엔드 #380). 서버는 그 본문 앞 1,000자를 근거 카드로 준다.
- * 본문(Y.Doc)은 브라우저에만 있어 목은 제목으로 모양만 재현한다.
+ * 문서를 놓고 물었을 때(`scope: "doc:<id>"` 백엔드 #380, 참고 문서 `docs` #394). 서버는 고른 순서대로
+ * 문서마다 본문 앞 1,000자를 근거 카드로 준다. 본문(Y.Doc)은 브라우저에만 있어 목은 제목으로 모양만 재현한다.
  */
-export function docAnswer(doc: { id: string; title: string }): {
+export function docAnswer(docs: { id: string; title: string }[]): {
   body: string
   citations: Citation[]
 } {
+  const titles = docs.map((doc) => doc.title).join(', ')
   return {
-    body: `${doc.title} 문서를 기준으로 답합니다. 본문에 따르면 질문하신 내용은 이 문서의 앞부분에 정리되어 있습니다[[1]].`,
-    citations: [
-      {
-        n: 1,
-        doc_id: doc.id,
-        type: 'doc',
-        to: `/docs/${doc.id}`,
-        title: doc.title,
-        quote: `${doc.title} 문서의 본문 앞부분(목). 실제 서버는 본문 앞 1,000자를 보냅니다.`,
-        path: doc.title,
-      },
-    ],
+    body:
+      `${titles} 문서를 기준으로 답합니다. ` +
+      docs.map((doc, i) => `${doc.title}의 앞부분에 관련 내용이 있습니다[[${i + 1}]].`).join(' '),
+    citations: docs.map((doc, i) => ({
+      n: i + 1,
+      doc_id: doc.id,
+      type: 'doc',
+      to: `/docs/${doc.id}`,
+      title: doc.title,
+      quote: `${doc.title} 문서의 본문 앞부분(목). 실제 서버는 본문 앞 1,000자를 보냅니다.`,
+      path: doc.title,
+    })),
   }
 }
 
