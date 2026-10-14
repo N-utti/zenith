@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.ai import chat_command
 from app.db import get_db
 from app.deps import current_user
 from app.models import User
@@ -44,5 +45,9 @@ async def list_people(db: AsyncSession = Depends(get_db)) -> Items[PersonOut]:
     # 경로도 같이 좁혀야 한다 — 안 그러면 좁힌 멤버십이 여기로 그대로 샌다.
     # 비활성도 준다: 감춰도 `/channels` members[] 와의 차집합으로 드러나므로 숨기는 대신 명시한다.
     # 세 칸만 — 로그인하면 누구나 부르는 경로라 비밀번호 해시까지 메모리로 끌어올 이유가 없다.
-    rows = await db.execute(select(User.id, User.name, User.active).order_by(User.name))
+    rows = await db.execute(
+        select(User.id, User.name, User.active)
+        .where(User.email != chat_command.AI_EMAIL)  # AI 시스템 계정(README 52)은 사람 목록에 없다
+        .order_by(User.name)
+    )
     return Items(items=[PersonOut.model_validate(r) for r in rows])
