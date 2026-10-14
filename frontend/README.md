@@ -136,8 +136,8 @@ PR 본문에 흩어져 있던 것을 한곳에 모았다. 위는 **없어서 못
 
 문서 안 AI(`POST /ai/doc-action`)와 답변 평가(`POST /ai/feedback`)의 백엔드가 들어왔다(#317). 프론트가
 부르던 모양 그대로다. 너무 잦은 요청(429 `AI_THROTTLED`, 분당 20회)·시간 초과(503 `AI_TIMEOUT`)·빈 답(503
-`AI_EMPTY`)에는 서버 문구를 그대로 띄운다. **AI 가 낸 초안은 이스케이프해서 문단으로 넣는다**
-(`features/docs/markdownTable.ts` 의 `textToHtml`). 전에는 그대로 넣어 편집기가 HTML 로 읽었고, 초안에 든
+`AI_EMPTY`)에는 서버 문구를 그대로 띄운다. **AI 가 낸 초안은 마크다운으로 읽되 태그는 글자로 넣는다**
+(`features/ai/markdownToHtml.ts`, #393. 굵게·목록·표는 서식이 되고 그림은 대체 글만 남는다). 전에는 그대로 넣어 편집기가 HTML 로 읽었고, 초안에 든
 `<img src="https://…">` 가 바깥 주소를 부르는 그림 블록이 되었다. 표 초안과 고정 서식은 전부터
 이스케이프했다. `POST /ai/template` 은 서버에 생겼지만 화면은 여전히 고정 서식을 쓴다.
 

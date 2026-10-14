@@ -35,28 +35,11 @@ export function parseMarkdownTable(text: string): string[][] | null {
  * 텍스트 자리에만 넣으므로 따옴표는 안 바꾼다. 속성 자리에 쓰게 되면 그때 추가.
  *
  * **`&` 를 먼저 바꾼다.** 안 그러면 `&lt;` 로 들어온 글자가 `<` 로 되살아나 태그가 된다.
- * 이 함수는 편집기에 심는 HTML 의 유일한 방어선이라 한 벌만 둔다(템플릿도 이걸 쓴다).
+ * 손으로 HTML 을 이어 붙이는 곳(표·템플릿)은 이 함수 한 벌만 쓴다. AI 마크다운 초안은 손으로 잇지
+ * 않고 `markdownToHtml` 이 DOM 직렬화로 이스케이프한다.
  */
 export function escapeHtml(text: string): string {
   return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-}
-
-/**
- * 글을 편집기에 넣을 HTML 로 바꾼다. 빈 줄로 문단을, 줄바꿈으로 `<br>` 을 만들고 글자는 전부
- * 이스케이프한다.
- *
- * **AI 초안을 그대로 넣으면 안 된다.** 편집기는 넣는 문자열을 HTML 로 읽는다. AI 가 낸
- * `<img src="https://…">` 는 그림 블록이 되어 바깥 주소를 부르고(문서 내용을 주소에 실어 밖으로
- * 보낼 수 있다), 다른 태그는 문서 구조를 바꾼다. 백엔드가 짚은 것이다(#319).
- */
-export function textToHtml(text: string): string {
-  return text
-    .replace(/\r/g, '')
-    .split(/\n{2,}/)
-    .map((p) => p.trim())
-    .filter(Boolean)
-    .map((p) => `<p>${escapeHtml(p).replace(/\n/g, '<br>')}</p>`)
-    .join('')
 }
 
 /** tiptap 표 확장이 그대로 읽는 HTML. 첫 행은 머리글 셀. */
