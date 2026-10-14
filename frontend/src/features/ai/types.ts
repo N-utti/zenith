@@ -41,6 +41,11 @@ export interface AiMessage {
    * 서버가 그 폴더를 없다고 거절하면 `null` 로 되돌린다(`AiPage` 의 `retry`).
    */
   scope?: string | null
+  /**
+   * 내 질문에만. 같이 보낸 참고 문서 id(백엔드 #394). 서버는 대화에 남기지 않아 질문마다 실어 보낸다.
+   * 다시 받을 때 같은 문서로 보내고, 서버가 그중 하나라도 거절하면 비운다(`AiPage` 의 `retry`).
+   */
+  docs?: string[]
   citations?: Citation[]
   /** 스트림 도중 서버가 `event: error` 를 보냈을 때의 사유. 받은 데까지의 본문은 남긴다. */
   error?: string

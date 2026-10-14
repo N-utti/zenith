@@ -12,12 +12,13 @@ import { getThread, resetThread } from './store'
 let release: () => void = () => {}
 const gate = () => new Promise<void>((resolve) => (release = resolve))
 /** 끝까지 읽든 도중에 빠져나가든 스트림이 닫히면 켜진다. */
-const stream = vi.hoisted(() => ({ closed: false }))
+const stream = vi.hoisted(() => ({ closed: false, body: '' }))
 vi.mock('@/lib/api', () => ({
   ApiError: class extends Error {},
   api: vi.fn(),
-  async *apiEvents() {
+  async *apiEvents(_path: string, init: { body: string }) {
     stream.closed = false
+    stream.body = init.body
     try {
       // 서버는 문서를 찾는 동안 답변보다 먼저 진행 상황을 보낸다. 이것은 말풍선을 만들지 않는다.
       yield { event: 'status', data: { text: '문서를 찾는 중' } }
@@ -113,6 +114,39 @@ test('done 이 알려 준 서버 답변 id 를 답변에 붙인다', async () =>
     serverId: 'srv-1',
   })
   expect(getThread().status).toBeNull()
+  resetThread()
+  act(() => root.unmount())
+})
+
+test('참고 문서를 요청에 싣고 질문 말풍선에 남긴다(다시 받을 때 같은 문서로)', async () => {
+  let ask: ReturnType<typeof useAsk> | undefined
+  function Grab() {
+    ask = useAsk()
+    return null
+  }
+  const root = createRoot(document.createElement('div'))
+  act(() =>
+    root.render(
+      createElement(QueryClientProvider, { client: new QueryClient() }, createElement(Grab)),
+    ),
+  )
+
+  let done: Promise<unknown> = Promise.resolve()
+  await act(async () => {
+    done = ask!.mutateAsync({ prompt: '질문', scope: 'f-1', docs: ['d-1', 'd-2'] })
+  })
+  expect(JSON.parse(stream.body)).toMatchObject({ scope: 'f-1', docs: ['d-1', 'd-2'] })
+  expect(getThread().messages[0]).toMatchObject({ role: 'user', docs: ['d-1', 'd-2'] })
+
+  for (let i = 0; i < 3; i++) {
+    await act(async () => {
+      release()
+      await new Promise((resolve) => setTimeout(resolve))
+    })
+  }
+  await act(async () => {
+    await done
+  })
   resetThread()
   act(() => root.unmount())
 })

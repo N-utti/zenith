@@ -10,7 +10,7 @@ import { AiHistoryPanel } from '@/features/ai/AiHistoryPanel'
 import { Conversation } from '@/features/ai/Conversation'
 import { SourcesPanel } from '@/features/ai/SourcesPanel'
 import { useAiModels, useAsk } from '@/features/ai/api'
-import { rejected } from '@/features/ai/scope'
+import { dropOnRetry, rejected } from '@/features/ai/scope'
 import type { AskState, CitationFocus } from '@/features/ai/types'
 import { patchMessage, removeMessage, resetThread, useThread } from '@/features/ai/store'
 import { docKeys } from '@/features/docs/api'
@@ -60,13 +60,14 @@ export function AiPage() {
   // 질문은 붙었는데 첫 토큰이 아직 안 왔을 때만 "생성 중" 을 보여준다. 그 뒤로는 말풍선이 자란다.
   const generating = ask.isPending && messages.at(-1)?.role === 'user'
 
-  // 범위로 고른 폴더를 서버가 없다고 하면(422, 백엔드 #372) 트리가 낡은 것이다. 다시 받으면
-  // 입력창의 지식 소스가 그 폴더를 잃고 전체로 돌아간다(`AiComposer`).
+  // 범위로 고른 폴더나 참고 문서를 서버가 거절하면(422, 백엔드 #372·#394) 트리가 낡은 것이다. 다시 받으면
+  // 입력창이 그 폴더·문서를 잃는다(지식 소스는 전체로, 칩은 빠짐. `AiComposer`).
   const qc = useQueryClient()
   const send = (vars: Parameters<typeof ask.mutate>[0]) =>
     ask.mutate(vars, {
       onError: (error) => {
-        if (vars.scope && rejected(error)) void qc.invalidateQueries({ queryKey: docKeys.tree })
+        if ((vars.scope || vars.docs?.length) && rejected(error))
+          void qc.invalidateQueries({ queryKey: docKeys.tree })
       },
     })
 
@@ -74,6 +75,7 @@ export function AiPage() {
    * 실패한 답변을 지우고 같은 질문·범위로 다시 받는다. 내 질문 말풍선은 그대로 둔다.
    * 질문은 요청 인자가 아니라 스레드에서 찾는다. 스레드는 화면을 떠나도 남지만 요청 인자는 리마운트에 사라진다.
    * 서버가 그 범위를 거절했으면 같은 범위로는 몇 번을 물어도 422 라, 질문의 범위를 전체로 되돌려 묻는다.
+   * 참고 문서를 거절했으면(없음·휴지통·근거 꺼짐) 참고 문서를 빼고 묻는다. 둘은 거절 문구로만 갈린다.
    */
   const retry = () => {
     if (ask.isPending) return
@@ -83,12 +85,18 @@ export function AiPage() {
     setFocus(null)
     if (last?.role === 'assistant') removeMessage(last.id)
     let scope = question.scope ?? null
-    if (scope && rejected(ask.error)) {
+    let docs = question.docs ?? []
+    const drop = dropOnRetry(scope, docs, ask.error)
+    if (drop === 'scope') {
       scope = null
       patchMessage(question.id, { scope })
       toast.info('고른 폴더를 찾을 수 없어 전체에서 다시 찾습니다.')
+    } else if (drop === 'docs') {
+      docs = []
+      patchMessage(question.id, { docs })
+      toast.info('쓸 수 없는 참고 문서가 있어 참고 문서 없이 다시 찾습니다.')
     }
-    send({ prompt: question.body, scope, resend: true })
+    send({ prompt: question.body, scope, docs, resend: true })
   }
 
   return (
@@ -147,9 +155,9 @@ export function AiPage() {
           models={models ?? []}
           initialText={seed.text}
           disabled={ask.isPending}
-          onSend={(prompt, scope) => {
+          onSend={(prompt, scope, docs) => {
             setFocus(null)
-            send({ prompt, scope })
+            send({ prompt, scope, docs })
           }}
         />
       </div>

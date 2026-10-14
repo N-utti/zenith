@@ -2,6 +2,7 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { api, apiEvents } from '@/lib/api'
 import { markOnboarding } from '@/features/home/onboarding'
 import { uuid } from '@/lib/uuid'
+import type { Schema } from '@/types'
 import { aiThread, type ThreadStore } from './store'
 import type { AiModel, Citation } from './types'
 
@@ -42,10 +43,13 @@ export function useAsk(store: ThreadStore = aiThread) {
     mutationFn: async ({
       prompt,
       scope,
+      docs = [],
       resend = false,
     }: {
       prompt: string
       scope: string | null
+      /** 본문 전체를 근거로 넣을 문서 id(백엔드 #394). 폴더 범위와 같이 보낼 수 있다. */
+      docs?: string[]
       resend?: boolean
     }) => {
       if (!resend) {
@@ -54,16 +58,15 @@ export function useAsk(store: ThreadStore = aiThread) {
           role: 'user',
           body: prompt,
           scope,
+          docs,
           createdAt: new Date().toISOString(),
         })
       }
       const answerId = uuid()
       const session = getSessionId()
       let started = false
-      const events = apiEvents('/ai/chat', {
-        method: 'POST',
-        body: JSON.stringify({ session_id: session, message: prompt, scope }),
-      })
+      const body: Schema<'ChatIn'> = { session_id: session, message: prompt, scope, docs }
+      const events = apiEvents('/ai/chat', { method: 'POST', body: JSON.stringify(body) })
       try {
         for await (const { event, data } of events) {
           // 답변 도중 대화가 비워졌다(새 대화·다른 사람 로그인). 남은 토큰이 새 대화에 붙으면 안 된다.

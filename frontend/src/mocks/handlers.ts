@@ -1631,10 +1631,16 @@ export const handlers = [
   http.post('/api/ai/chat', async ({ request }) => {
     const user = authenticate()
     if (!user) return unauthorized()
-    const { message, session_id, scope } = (await request.json()) as {
+    const {
+      message,
+      session_id,
+      scope,
+      docs = [],
+    } = (await request.json()) as {
       message?: string
       session_id?: string
       scope?: string | null
+      docs?: string[]
     }
     if (!message?.trim()) {
       // 실제 서버(errors.py)의 422 detail 은 Pydantic 오류 배열이다. 문자열이 아니다.
@@ -1652,26 +1658,33 @@ export const handlers = [
         { status: 422 },
       )
     }
-    // `doc:<문서 id>` 는 그 문서 하나를 놓고 묻는다(백엔드 #380). 없음·휴지통·근거 꺼짐은 422 이고 detail 은 문자열이다.
-    const askedDoc = scope?.startsWith('doc:') ? aliveDoc(scope.slice(4)) : undefined
-    if (scope?.startsWith('doc:')) {
-      if (!askedDoc)
-        return HttpResponse.json(
-          { detail: '없는 문서입니다.', code: 'VALIDATION' },
-          { status: 422 },
-        )
-      if (!askedDoc.ai_source)
-        return HttpResponse.json(
-          { detail: 'AI 근거로 쓰기가 꺼진 문서입니다.', code: 'VALIDATION' },
-          { status: 422 },
-        )
-    }
-    // 범위는 폴더 id 다(백엔드 #372). 없는 폴더는 422 이고 이때 detail 은 문자열이다.
+    const folder = scope?.startsWith('doc:') ? null : (scope ?? null)
+    // 서버와 같은 순서: 폴더, 개수, 문서.
+    // 범위는 폴더 id 다(백엔드 #372). 참고 문서와 같이 올 수 있다. 없는 폴더는 422 이고 이때 detail 은 문자열이다.
     // 실제 서버는 UUID 로 안 읽히는 값을 전체로 받지만, 목의 폴더 id(`f-1`)는 UUID 가 아니라 목록에 있는지로 가른다.
-    else if (scope && !docTree().folders.some((folder) => folder.id === scope)) {
+    if (folder && !docTree().folders.some((each) => each.id === folder)) {
       return HttpResponse.json({ detail: '없는 폴더입니다.', code: 'VALIDATION' }, { status: 422 })
     }
-    const { body, citations } = askedDoc ? docAnswer(askedDoc) : answer(user, Boolean(scope))
+    // 참고 문서(백엔드 #394). `doc:<문서 id>` 범위(#380)는 그 문서 하나짜리 별칭이라 앞에 붙여 합친다(중복 제거).
+    // 5개를 넘거나, 하나라도 없음·휴지통·근거 꺼짐이면 422 이고 detail 은 문자열이다.
+    const refIds = [...new Set([...(scope?.startsWith('doc:') ? [scope.slice(4)] : []), ...docs])]
+    if (refIds.length > 5)
+      return HttpResponse.json(
+        { detail: '참고 문서는 5개까지입니다.', code: 'VALIDATION' },
+        { status: 422 },
+      )
+    const refDocs = refIds.map(aliveDoc)
+    if (refDocs.some((doc) => !doc))
+      return HttpResponse.json({ detail: '없는 문서입니다.', code: 'VALIDATION' }, { status: 422 })
+    if (refDocs.some((doc) => !doc!.ai_source))
+      return HttpResponse.json(
+        { detail: 'AI 근거로 쓰기가 꺼진 문서입니다.', code: 'VALIDATION' },
+        { status: 422 },
+      )
+    // ponytail: 참고 문서가 있으면 그 카드만 1번부터 낸다. 실제 서버는 규정 카드 다음 번호로 매기고
+    // 폴더·전체 검색 카드를 뒤에 이어 붙인다.
+    const { body, citations } =
+      refDocs.length > 0 ? docAnswer(refDocs.map((doc) => doc!)) : answer(user, Boolean(folder))
     const frame = (event: string, data: unknown) => `event: ${event}
 data: ${JSON.stringify(data)}
 
