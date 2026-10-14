@@ -2,6 +2,7 @@ import { useEffect, useEffectEvent, useRef, useState, type FormEvent } from 'rea
 import { Paperclip, Send, X } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
+import { markOnboarding } from '@/features/home/onboarding'
 import { MentionTextarea } from '@/features/people/MentionTextarea'
 import { ApiError } from '@/lib/api'
 import { cn } from '@/lib/cn'
@@ -147,6 +148,7 @@ export function Composer({
       attachments: files.length > 0 ? files : undefined,
     })
     if (!sent) return setTriedOffline(true)
+    markOnboarding('chat')
 
     // 보낸 뒤에 비운다. 못 보냈을 때 입력창을 되살릴 일이 없다.
     setError(null)

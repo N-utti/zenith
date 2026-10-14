@@ -6,6 +6,7 @@ import { AnnouncementsCard } from '@/features/home/AnnouncementsCard'
 import { CalendarCard } from '@/features/home/CalendarCard'
 import { ContinueWorkCard } from '@/features/home/ContinueWorkCard'
 import { MentionsCard } from '@/features/home/MentionsCard'
+import { OnboardingCard } from '@/features/home/OnboardingCard'
 import { TodayTasksCard } from '@/features/home/TodayTasksCard'
 import { UnreadChatCard } from '@/features/home/UnreadChatCard'
 import { useHome } from '@/features/home/api'
@@ -59,6 +60,8 @@ export function HomePage() {
           </Button>
         </div>
       </div>
+
+      <OnboardingCard />
 
       {/* 1단(모바일)일 때만 순서를 다시 세운다. 오늘 할 일이 맨 위(폰에서는 확인하고 체크하는 일이
           먼저다), 그 아래는 05 SCR-07 순서(이어서 작업 → 멘션 → 안 읽은 메시지 → 공지), 05 에 없는

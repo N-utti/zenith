@@ -3,6 +3,7 @@ import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-quer
 import { resetThread } from '@/features/ai/store'
 import { clearDrafts } from '@/features/chat/drafts'
 import { claimDocCaches, disownDocCaches } from '@/features/docs/localCache'
+import { setOnboardingOwner } from '@/features/home/onboarding'
 import { api, ApiError } from '@/lib/api'
 import { clearNotifications } from '@/lib/desktop'
 import type { User } from '@/types'
@@ -57,6 +58,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     retry: (failureCount, error) => !(error instanceof ApiError) && failureCount < 2,
     staleTime: Infinity,
   })
+
+  // 시작하기 진행 상태는 사람마다 따로다. 로그인한 사람이 바뀌면 그 사람 것으로 갈아 끼운다.
+  useEffect(() => setOnboardingOwner(data?.id ?? null), [data])
 
   useEffect(() => {
     if (!tabs) return

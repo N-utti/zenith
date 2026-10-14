@@ -1,5 +1,6 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { api, apiEvents } from '@/lib/api'
+import { markOnboarding } from '@/features/home/onboarding'
 import { uuid } from '@/lib/uuid'
 import { appendMessage, getSessionId, patchMessage, setStatus } from './store'
 import type { AiModel, Citation } from './types'
@@ -99,6 +100,8 @@ export function useAsk() {
           } else if (event === 'done') {
             const serverId = (data as { message_id?: unknown }).message_id
             if (typeof serverId === 'string') patchMessage(answerId, { serverId })
+            // 답을 끝까지 받은 때만 친다. 화면을 떠나도 이 루프는 끝까지 돈다.
+            markOnboarding('ai')
             return
           }
         }

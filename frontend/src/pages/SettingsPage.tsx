@@ -12,6 +12,7 @@ import { Spinner } from '@/components/ui/Spinner'
 import { useToast } from '@/components/ui/ToastContext'
 import { DelegationSection } from '@/features/approvals/DelegationSection'
 import { useCurrentUser } from '@/features/auth/AuthContext'
+import { markOnboarding } from '@/features/home/onboarding'
 import {
   START_PAGES,
   usePreferences,
@@ -72,6 +73,7 @@ function PasswordSection() {
       setConfirm(SEED)
       // 서버가 이 세션만 남기고 나머지를 끊는다(backend/README §1 확장). 다른 기기에서 놀라지 않게 알린다.
       toast.success('비밀번호를 바꿨습니다. 다른 기기의 로그인은 모두 해제됩니다.')
+      markOnboarding('password')
     } catch (err) {
       if (err instanceof ApiError && err.code === 'PASSWORD_MISMATCH') setCurrentError(err.message)
       else toast.error(err instanceof ApiError ? err.message : '비밀번호를 바꾸지 못했습니다.')
@@ -155,6 +157,7 @@ function PreferencesSection() {
 
   const save = (patch: PreferencesPatch) =>
     update.mutate(patch, {
+      onSuccess: () => markOnboarding('preferences'),
       onError: (err) =>
         toast.error(err instanceof ApiError ? err.message : '설정을 저장하지 못했습니다.'),
     })
