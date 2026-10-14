@@ -42,6 +42,7 @@ from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import audit
+from app.ai import chat_command
 from app.db import session_scope
 from app.deps import _own_origin, authenticate, origin_allowed, ws_reject
 from app.errors import ApiError
@@ -369,6 +370,21 @@ async def _handle(ws: WebSocket, user: User, op: AnyOp) -> None:
                 events.append(
                     ([uid], {"ev": "unread", "channel_id": op.channel_id, "count": count})
                 )
+            # `/ai 질문`(README 52) — 내 글을 저장·방송한 뒤 백그라운드로 답을 만든다. 이 메시지와 그 첨부만 보낸다
+            if (question := chat_command.parse(op.body)) is not None:
+                if chat_command.allowed(user.id):
+                    chat_command.spawn(op.channel_id, user.id, question, attachments)
+                else:  # 내 글은 이미 올라갔다 — 봇 답만 안 만든다
+                    await _send(
+                        ws,
+                        _dumps(
+                            _error(
+                                "AI_THROTTLED",
+                                "AI 요청이 너무 잦습니다. 잠시 후 다시 시도해 주세요.",
+                                channel_id=op.channel_id,
+                            )
+                        ),
+                    )
         elif isinstance(op, EditOp | DelOp):
             # 쓴 사람만(#264). 없는 메시지·다른 채널의 id 는 NOT_FOUND, 남의 것은 FORBIDDEN + 감사(멤버 아님과 같은 취급)
             # 행 잠금 — 두 탭에서 고치기와 지우기가 겹치면 늦은 쪽이 0행에 닿아 StaleDataError 로 소켓이 닫힌다
@@ -378,7 +394,12 @@ async def _handle(ws: WebSocket, user: User, op: AnyOp) -> None:
                     ws, _dumps(_error("NOT_FOUND", "없는 메시지입니다.", channel_id=op.channel_id))
                 )
                 return
-            if message.author_id != user.id:
+            if message.author_id != user.id and not (
+                isinstance(op, DelOp)
+                and user.role == "exec"
+                and (author := await db.get(User, message.author_id)) is not None
+                and chat_command.is_bot(author)
+            ):  # 임원은 봇 글을 지울 수 있다(잘못된 답 회수, README 52)
                 # 멤버 아님 거부와 키를 가른다 — 멤버가 된 뒤 남의 글을 건드린 것도 한 번은 남게
                 if (op.channel_id, f"{op.op}:author") not in ws.state.denied:
                     ws.state.denied.add((op.channel_id, f"{op.op}:author"))

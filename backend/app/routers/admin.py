@@ -14,6 +14,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import audit
+from app.ai import chat_command
 from app.config import settings
 from app.db import get_db
 from app.deps import require_role
@@ -231,6 +232,8 @@ async def create_user(
     db: AsyncSession = Depends(get_db),
 ) -> User:
     email = body.email.strip().lower()
+    if email == chat_command.AI_EMAIL:  # AI 시스템 계정(README 52)은 사람이 만들 수 없다
+        raise ApiError(409, "CONFLICT", "예약된 이메일입니다.")
     if (await db.execute(select(User.id).where(User.email == email))).scalar_one_or_none():
         raise ApiError(409, "CONFLICT", "이미 있는 이메일입니다.")
     await _require_team(db, body.team_id)
@@ -277,6 +280,11 @@ async def update_user(
     user = await db.get(User, user_id)
     if user is None:
         raise ApiError(404, "NOT_FOUND", "없는 계정입니다.")
+    if user.email == chat_command.AI_EMAIL:
+        # 활성화·비밀번호·이름 변경으로 「AI 어시스턴트」를 사칭할 수 있다(README 52) — 거부하고 감사
+        audit.record(db, "admin.bot_denied", request=request, actor_id=actor.id, target_id=user.id)
+        await db.commit()
+        raise ApiError(403, "FORBIDDEN", "AI 시스템 계정은 수정할 수 없습니다.")
     changes = body.model_dump(exclude_unset=True)
     if user.id == actor.id and ({"active", "role"} & changes.keys()):
         raise ApiError(400, "ADMIN_SELF", "자기 자신의 등급·활성 상태는 바꿀 수 없습니다.")
