@@ -8200,6 +8200,11 @@
               }
             ],
             "title": "Text"
+          },
+          "web": {
+            "type": "boolean",
+            "title": "Web",
+            "default": false
           }
         },
         "type": "object",
@@ -8232,7 +8237,8 @@
             "type": "string",
             "enum": [
               "doc",
-              "post"
+              "post",
+              "web"
             ],
             "title": "Type"
           },

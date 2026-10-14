@@ -42,6 +42,9 @@ class Settings(BaseSettings):
     ai_rules_max_chars: int = (
         150_000  # ≈9만 토큰 — ai_max_tokens(64k)와 합쳐 문맥 창(20만) 안(보안 리뷰)
     )
+    # 팩트체커 웹 검색(README 49) — 배포 스위치. 켜도 요청이 `web: true` 를 보낼 때만 Claude 서버측 web_search 를 붙인다.
+    # 검사 대상 글이 검색어가 되어 웹에 닿는다(사내망 밖) — 루트 README 가드레일 참조.
+    ai_web_search: bool = False
     ai_doc_max_chars: int = 50_000  # `doc:` 범위 문서 본문 상한 — 넘으면 앞만 넣고 모델에게 알린다
 
     cors_origins: list[str] = []

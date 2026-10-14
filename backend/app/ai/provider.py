@@ -7,7 +7,7 @@ ARCHITECTURE §6은 Ollama(사내 Mac mini)였으나 2026-09-04 결정으로 Cla
 
 import logging
 from collections.abc import AsyncIterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import Any, Protocol
 
@@ -37,6 +37,10 @@ class ToolCalls:
 
     calls: list[ToolCall]
     content: list[Any]
+    # 서버측 web_search(README 49)가 이 턴에서 실제로 돌려준 결과 URL — 라우터는 이 안의 URL 만 웹 카드로 받는다
+    web_urls: list[str] = field(default_factory=list)
+    # stop_reason == pause_turn — 서버측 도구가 턴을 끊었다. 라우터는 content 를 assistant 턴으로 붙이고 한 번 더 부른다
+    paused: bool = False
 
 
 class LLMError(Exception):
@@ -121,8 +125,19 @@ class ClaudeProvider:
             for b in final.content
             if b.type == "tool_use"
         ]
-        if calls:
-            yield ToolCalls(calls=calls, content=list(final.content))
+        web_urls = [
+            r.url
+            for b in final.content
+            if getattr(b, "type", "") == "web_search_tool_result"
+            and isinstance(getattr(b, "content", None), list)
+            for r in b.content
+            if getattr(r, "type", "") == "web_search_result" and getattr(r, "url", None)
+        ]
+        paused = final.stop_reason == "pause_turn"
+        if calls or paused or web_urls:
+            yield ToolCalls(
+                calls=calls, content=list(final.content), web_urls=web_urls, paused=paused
+            )
 
 
 @lru_cache

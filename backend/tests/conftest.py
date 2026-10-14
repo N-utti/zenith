@@ -230,7 +230,8 @@ def minio_bucket(monkeypatch) -> Iterator[str]:
 
 @pytest.fixture(autouse=True)
 def _embedding_off(monkeypatch):
-    """개발 PC 의 .env 에 EMBED_URL·AI_RULES_FOLDER 가 있어도 테스트는 실제 Ollama 를 부르거나 규정을 넣지 않는다 — 켜는 테스트는 test_embed 의
+    """개발 PC 의 .env 에 EMBED_URL·AI_RULES_FOLDER·AI_WEB_SEARCH 가 있어도 테스트는 실제 Ollama 를 부르거나 규정을 넣지 않는다 — 켜는 테스트는 test_embed 의
     fake_embedding 이 이 뒤에 덮어쓴다."""
     monkeypatch.setattr(settings, "embed_url", None)
     monkeypatch.setattr(settings, "ai_rules_folder", None)  # 규정 폴더(README 46)도 — 켜는 테스트가 직접 넣는다
+    monkeypatch.setattr(settings, "ai_web_search", False)  # 웹 검색(README 49)도 — 켜는 테스트가 직접 켠다
