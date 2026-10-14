@@ -118,7 +118,7 @@ test('done 이 알려 준 서버 답변 id 를 답변에 붙인다', async () =>
   act(() => root.unmount())
 })
 
-test('참고 문서를 요청에 싣고 질문 말풍선에 남긴다(다시 받을 때 같은 문서로)', async () => {
+test('참고 문서와 첨부를 요청에 싣고 질문 말풍선에 남긴다(다시 받을 때 같은 것으로)', async () => {
   let ask: ReturnType<typeof useAsk> | undefined
   function Grab() {
     ask = useAsk()
@@ -133,10 +133,23 @@ test('참고 문서를 요청에 싣고 질문 말풍선에 남긴다(다시 받
 
   let done: Promise<unknown> = Promise.resolve()
   await act(async () => {
-    done = ask!.mutateAsync({ prompt: '질문', scope: 'f-1', docs: ['d-1', 'd-2'] })
+    done = ask!.mutateAsync({
+      prompt: '질문',
+      scope: 'f-1',
+      docs: ['d-1', 'd-2'],
+      attachments: ['a-1'],
+    })
   })
-  expect(JSON.parse(stream.body)).toMatchObject({ scope: 'f-1', docs: ['d-1', 'd-2'] })
-  expect(getThread().messages[0]).toMatchObject({ role: 'user', docs: ['d-1', 'd-2'] })
+  expect(JSON.parse(stream.body)).toMatchObject({
+    scope: 'f-1',
+    docs: ['d-1', 'd-2'],
+    attachments: ['a-1'],
+  })
+  expect(getThread().messages[0]).toMatchObject({
+    role: 'user',
+    docs: ['d-1', 'd-2'],
+    attachments: ['a-1'],
+  })
 
   for (let i = 0; i < 3; i++) {
     await act(async () => {

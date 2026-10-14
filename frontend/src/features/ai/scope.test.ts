@@ -35,3 +35,15 @@ it('dropOnRetry 는 폴더와 참고 문서 중 거절된 쪽만 뺀다', () => 
   expect(dropOnRetry('f-1', ['d-1'], new ApiError(422, '', schema))).toBeNull()
   expect(dropOnRetry('f-1', ['d-1'], new Error('연결 실패'))).toBeNull()
 })
+
+it('dropOnRetry 는 첨부 거절이면 첨부만 뺀다. 참고 문서·폴더는 그대로', () => {
+  const no = (detail: string) => new ApiError(422, detail, { detail, code: 'VALIDATION' })
+  expect(dropOnRetry('f-1', ['d-1'], no('없는 첨부입니다.'), ['a-1'])).toBe('attachments')
+  expect(dropOnRetry(null, ['d-1'], no('첨부는 3개까지입니다.'), ['a-1'])).toBe('attachments')
+  // 첨부를 안 보냈으면 그 문구는 첨부 탓일 수 없다. 기존 규칙대로.
+  expect(dropOnRetry(null, ['d-1'], no('없는 첨부입니다.'))).toBe('docs')
+  // 문서 거절은 첨부가 있어도 문서를 뺀다.
+  expect(dropOnRetry(null, ['d-1'], no('없는 문서입니다.'), ['a-1'])).toBe('docs')
+  // 첨부만 보냈는데 문구가 바뀌었으면 첨부 탓이다. 같은 422 를 되풀이하지 않는다.
+  expect(dropOnRetry(null, [], no('다른 문구'), ['a-1'])).toBe('attachments')
+})

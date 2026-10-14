@@ -29,19 +29,31 @@ export function rejected(error: unknown): boolean {
 /** 한 질문에 붙일 수 있는 참고 문서 수(백엔드 #394 `MAX_REF_DOCS`). 넘기면 422 다. */
 export const MAX_REF_DOCS = 5
 
+/** 한 질문에 붙일 수 있는 첨부 수(백엔드 #396 `MAX_ATTACHMENTS`). 넘기면 422 다. */
+export const MAX_ATTACHMENTS = 3
+
 /**
- * 거절된 질문을 다시 보낼 때 뺄 것(같은 요청은 몇 번을 보내도 422 다). 폴더와 참고 문서를 같이 보내면
- * 어느 쪽 거절인지 문구로만 갈린다. 폴더 거절 문구는 서버(`routers/ai.py` 의 `_scope_folder`)와 글자까지 같아야 한다.
- * 참고 문서가 없으면 문자열 거절은 폴더 탓뿐이라 문구가 바뀌어도 풀린다. 둘 다 있는데 문구가 바뀌었으면
- * 참고 문서를 먼저 빼고, 다음 거절에서 폴더를 뺀다.
+ * 거절된 질문을 다시 보낼 때 뺄 것(같은 요청은 몇 번을 보내도 422 다). 폴더·참고 문서·첨부를 같이 보내면
+ * 어느 쪽 거절인지 문구로만 갈린다. 문구는 서버(`routers/ai.py` 의 `_scope_folder`·`chat`·
+ * `_attachments_source`)와 글자까지 같아야 한다.
+ * 첨부 거절(7일 지나 지워짐)은 문구로 먼저 가른다. 나머지는 참고 문서가 없으면 문자열 거절은 폴더 탓뿐이라
+ * 문구가 바뀌어도 풀린다. 폴더와 참고 문서가 다 있는데 문구가 바뀌었으면 참고 문서를 먼저 빼고, 다음 거절에서
+ * 폴더를 뺀다. 둘 다 없으면 첨부 탓이다.
  */
 export function dropOnRetry(
   scope: string | null,
   docs: string[],
   error: unknown,
-): 'scope' | 'docs' | null {
+  attachments: string[] = [],
+): 'scope' | 'docs' | 'attachments' | null {
   if (!rejected(error)) return null
-  const folder = ((error as ApiError).body as { detail: unknown }).detail === '없는 폴더입니다.'
-  if (scope && (docs.length === 0 || folder)) return 'scope'
-  return docs.length > 0 ? 'docs' : null
+  const detail = ((error as ApiError).body as { detail: unknown }).detail
+  if (
+    attachments.length > 0 &&
+    (detail === '없는 첨부입니다.' || detail === `첨부는 ${MAX_ATTACHMENTS}개까지입니다.`)
+  )
+    return 'attachments'
+  if (scope && (docs.length === 0 || detail === '없는 폴더입니다.')) return 'scope'
+  if (docs.length > 0) return 'docs'
+  return attachments.length > 0 ? 'attachments' : null
 }
