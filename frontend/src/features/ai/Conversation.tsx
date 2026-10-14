@@ -155,6 +155,7 @@ export function Conversation({
   focus,
   onCite,
   onRetry,
+  inlineSources = false,
 }: {
   messages: AiMessage[]
   /** 질문은 갔는데 첫 토큰이 아직 안 왔다. */
@@ -168,6 +169,8 @@ export function Conversation({
   onCite: (focus: Omit<CitationFocus, 'tick'>) => void
   /** 마지막 답변이 실패했을 때 같은 질문을 다시 보낸다(05 공통 규칙 "생성 실패, 다시 시도"). */
   onRetry: () => void
+  /** 근거 카드를 답변 아래에 늘 펼친다. 옆에 근거 패널이 없는 곳(문서 질문창)에서 켠다. */
+  inlineSources?: boolean
 }) {
   const scrollerRef = useRef<HTMLDivElement>(null)
 
@@ -205,6 +208,7 @@ export function Conversation({
               growing={streaming && last}
               onCite={onCite}
               onRetry={last ? onRetry : undefined}
+              inlineSources={inlineSources}
             />
           )
         })}
@@ -234,6 +238,7 @@ const Answer = memo(function Answer({
   growing,
   onCite,
   onRetry,
+  inlineSources,
 }: {
   message: AiMessage
   /** 이 답변을 부른 질문. 문서로 저장할 때 제목이 된다. */
@@ -247,6 +252,7 @@ const Answer = memo(function Answer({
   onCite: (focus: Omit<CitationFocus, 'tick'>) => void
   /** 마지막 답변에만 온다. 실패했을 때 같은 질문을 다시 보낸다. */
   onRetry: (() => void) | undefined
+  inlineSources: boolean
 }) {
   return (
     <div className="flex gap-3">
@@ -283,7 +289,7 @@ const Answer = memo(function Answer({
 
         {/* lg 미만에는 우측 근거 패널이 없다. 따라갈 수 없는 각주를 남기지 않는다. */}
         {(message.citations?.length ?? 0) > 0 && (
-          <div className="mt-3 lg:hidden">
+          <div className={cn('mt-3', !inlineSources && 'lg:hidden')}>
             <p className="text-subtle mb-2 text-[11px] font-bold">
               근거 {message.citations?.length}
             </p>

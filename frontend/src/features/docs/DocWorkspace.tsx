@@ -30,6 +30,7 @@ import {
 import { BlockComments } from './BlockComments'
 import { anchorBlock, flashBlock } from './blockId'
 import { CommentPanel } from './CommentPanel'
+import { DocAskPanel } from './DocAskPanel'
 import { DocBreadcrumb } from './DocBreadcrumb'
 import { DocWidthMenu } from './DocWidthMenu'
 import { tableBleedRef } from './tableBleed'
@@ -104,7 +105,7 @@ function PresenceBar({ session }: { session: CollabSession }) {
 }
 
 /**
- * 댓글과 버전 기록이 같은 자리를 나눠 쓴다.
+ * 댓글과 버전 기록, 이 문서에 대한 AI 질문이 같은 자리를 나눠 쓴다.
  *
  * 데스크톱에서는 본문 오른쪽 320px 에 늘 펼쳐져 있다. 모바일에서는 본문 아래로 내려오는데,
  * 늘 펼쳐 두면 본문이 화면의 1/3 로 줄어든다. 그래서 좁은 폭에서는 탭 줄만 남기고 접어 두고,
@@ -130,6 +131,7 @@ function DocSidebar({
   const TABS: { key: SidebarTab; label: string }[] = [
     { key: 'comments', label: '댓글' },
     { key: 'versions', label: '버전 기록' },
+    { key: 'ask', label: 'AI 질문' },
   ]
 
   return (
@@ -180,7 +182,7 @@ function DocSidebar({
           type="button"
           aria-expanded={open}
           aria-controls="doc-side-panel"
-          aria-label="댓글·버전 기록 패널"
+          aria-label="댓글·버전 기록·AI 질문 패널"
           onClick={() => {
             if (open) onCollapse()
             onOpenChange(!open)
@@ -205,7 +207,7 @@ function DocSidebar({
   )
 }
 
-type SidebarTab = 'comments' | 'versions'
+type SidebarTab = 'comments' | 'versions' | 'ask'
 
 /**
  * 손가락으로 쓰는 기기인지.
@@ -699,7 +701,7 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
         >
           {tab === 'comments' ? (
             <CommentPanel docId={meta.id} editor={editor} onJump={jumpToBlock} />
-          ) : (
+          ) : tab === 'ask' ? null : (
             <>
               {previewError && (
                 <p
@@ -717,6 +719,10 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
               />
             </>
           )}
+          {/* 다른 탭을 보는 동안에도 숨긴 채 둔다. 받던 답변의 요청 상태와 쓰던 질문이 탭을 옮겨도 남는다. */}
+          <div hidden={tab !== 'ask'} className="flex min-h-0 flex-1 flex-col">
+            <DocAskPanel docId={meta.id} aiSource={meta.ai_source} />
+          </div>
         </DocSidebar>
       </div>
     </div>

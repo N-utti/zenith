@@ -2,7 +2,7 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { api, apiEvents } from '@/lib/api'
 import { markOnboarding } from '@/features/home/onboarding'
 import { uuid } from '@/lib/uuid'
-import { appendMessage, getSessionId, patchMessage, setStatus } from './store'
+import { aiThread, type ThreadStore } from './store'
 import type { AiModel, Citation } from './types'
 
 /**
@@ -34,8 +34,10 @@ export function useAiModels() {
  * 그보다 먼저 `status` 가 올 수 있다(서버가 문서를 찾는 중).
  * `citations` 는 본문이 끝난 뒤 한 번, `done` 으로 닫힌다. `error` 는 받은 데까지 남기고 사유를 단다.
  * `resend` 는 실패한 답변을 다시 받는 것이라 내 질문 말풍선을 또 붙이지 않는다.
+ * 대화는 `store` 에 쌓는다. 기본은 `/ai` 의 대화이고, 문서 질문창은 문서마다 따로 준다.
  */
-export function useAsk() {
+export function useAsk(store: ThreadStore = aiThread) {
+  const { appendMessage, getSessionId, patchMessage, setStatus } = store
   return useMutation({
     mutationFn: async ({
       prompt,
