@@ -8,6 +8,8 @@ interface Props {
    * 끄면 셸까지 죽은 상황이라 새로고침만 남는다.
    */
   inline?: boolean
+  /** 실패하면 기본 오류 화면 대신 이것을 그린다. 부품 하나만 감쌀 때(AI 답변 본문 등). */
+  fallback?: ReactNode
 }
 
 /**
@@ -31,6 +33,7 @@ export class ErrorBoundary extends Component<Props, { error: Error | null }> {
   render() {
     const { error } = this.state
     if (!error) return this.props.children
+    if (this.props.fallback !== undefined) return this.props.fallback
 
     return (
       <div className="grid h-full place-items-center px-4 py-20 text-center">

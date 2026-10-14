@@ -1,48 +1,15 @@
-import { Fragment, memo, useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import { Check, Copy, FilePlus2, RefreshCw, Sparkles, ThumbsUp } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { copyText } from '@/lib/clipboard'
 import { useToast } from '@/components/ui/ToastContext'
 import { NewDocModal } from '@/features/docs/NewDocModal'
+import type { DocSeedState } from '@/features/docs/types'
+import { AiMarkdown } from './AiMarkdown'
 import { useFeedback } from './api'
 import { answerToSeed } from './saveAsDoc'
 import { ExcludedNote, SourceCard } from './SourcesPanel'
 import type { AiMessage, CitationFocus } from './types'
-
-/**
- * 본문의 `[[1]]` 표식을 각주로 바꾼다. 근거 목록에 있는 번호는 버튼이 되어 누르면 같은 번호의
- * 근거 카드가 켜진다(05 SCR-06). 근거가 아직 안 왔거나(스트리밍 중) 없는 번호는 배지로만 둔다.
- */
-function withCitations(message: AiMessage, activeN: number | null, onCite: (n: number) => void) {
-  const badge = 'ml-0.5 rounded px-1 py-0.5 align-super text-[11px] font-bold'
-  return message.body.split(/(\[\[\d+\]\])/g).map((part, i) => {
-    const match = /^\[\[(\d+)\]\]$/.exec(part)
-    if (!match) return <Fragment key={i}>{part}</Fragment>
-    const n = Number(match[1])
-    if (!message.citations?.some((c) => c.n === n)) {
-      return (
-        <sup key={i} className={cn(badge, 'bg-sunken text-muted')}>
-          {n}
-        </sup>
-      )
-    }
-    return (
-      <button
-        key={i}
-        type="button"
-        onClick={() => onCite(n)}
-        aria-label={`근거 ${n} 보기`}
-        className={cn(
-          badge,
-          'cursor-pointer transition-colors',
-          n === activeN ? 'bg-accent-soft text-accent' : 'bg-sunken text-muted hover:text-fg',
-        )}
-      >
-        {n}
-      </button>
-    )
-  })
-}
 
 function AnswerActions({
   id,
@@ -57,7 +24,8 @@ function AnswerActions({
   const [copied, setCopied] = useState(false)
   const [helpful, setHelpful] = useState(false)
   const feedback = useFeedback()
-  const [picking, setPicking] = useState(false)
+  /** 고를 폴더 창에 넘길 초안. 누를 때 만든다(`answerToSeed` 는 렌더 중에 못 부른다). */
+  const [seed, setSeed] = useState<DocSeedState | null>(null)
   const toast = useToast()
 
   /** 켤 때만 1 을 보낸다. -1 은 "도움 안 됨" 이지 철회가 아니라, 끄기는 화면 표시만 되돌린다. */
@@ -110,17 +78,11 @@ function AnswerActions({
         {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
         {copied ? '복사됨' : '복사'}
       </button>
-      <button type="button" onClick={() => setPicking(true)} className={item}>
+      <button type="button" onClick={() => setSeed(answerToSeed(body, question))} className={item}>
         <FilePlus2 className="size-3.5" />
         문서로 저장
       </button>
-      {picking && (
-        <NewDocModal
-          title="문서로 저장"
-          seed={answerToSeed(body, question)}
-          onClose={() => setPicking(false)}
-        />
-      )}
+      {seed && <NewDocModal title="문서로 저장" seed={seed} onClose={() => setSeed(null)} />}
     </div>
   )
 }
@@ -261,9 +223,15 @@ const Answer = memo(function Answer({
       </span>
       <div className="min-w-0 flex-1">
         <p className="text-fg text-[13px] font-semibold">AI 어시스턴트</p>
-        <p className="text-fg mt-1.5 text-sm leading-[1.75]">
-          {withCitations(message, focusN, (n) => onCite({ messageId: message.id, n }))}
-        </p>
+        <AiMarkdown
+          text={message.body}
+          className="mt-1.5 text-sm leading-[1.75]"
+          cite={{
+            has: (n) => message.citations?.some((c) => c.n === n) ?? false,
+            activeN: focusN,
+            onCite: (n) => onCite({ messageId: message.id, n }),
+          }}
+        />
         {message.error && (
           <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
             <p className="text-danger">{message.error}</p>

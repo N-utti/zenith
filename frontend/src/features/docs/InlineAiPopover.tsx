@@ -2,12 +2,14 @@ import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import type { Editor } from '@tiptap/react'
 import { Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
+import { AiMarkdown } from '@/features/ai/AiMarkdown'
+import { markdownToHtml } from '@/features/ai/markdownToHtml'
 import { ExcludedNote, SourceCard } from '@/features/ai/SourcesPanel'
 import { ApiError, api } from '@/lib/api'
 import type { Schema } from '@/types'
 import { OPEN_INLINE_AI_EVENT } from './editorBlocks'
 import { changedSentences, citedSentences, type DraftItem, replaceSentence } from './groundedDraft'
-import { parseMarkdownTable, tableToHtml, textToHtml } from './markdownTable'
+import { parseMarkdownTable, tableToHtml } from './markdownTable'
 import { blocksToHtml, type DocTemplate, TEMPLATE_BLOCKS } from './templateBlocks'
 
 /** 04 §8 `POST /ai/doc-action` 의 `action`. 자유 프롬프트는 계약에 없다. */
@@ -247,8 +249,8 @@ export function InlineAiPopover({
   /** 삽입: 커서 자리에 / 아래에 추가: 커서가 든 최상위 블록 다음에. */
   const apply = (mode: 'inline' | 'below') => {
     if (draft === null && html === null) return
-    // 초안 글은 이스케이프해서 문단으로 넣는다(`textToHtml`). 그대로 넣으면 편집기가 HTML 로 읽는다.
-    const content = html ?? (table ? tableToHtml(table) : textToHtml(draft ?? ''))
+    // 초안은 마크다운으로 읽어 넣는다(`markdownToHtml`, #393). 글 그대로 넣으면 편집기가 HTML 로 읽는다.
+    const content = html ?? (table ? tableToHtml(table) : markdownToHtml(draft ?? ''))
     // 응답을 기다리는 동안 남의 편집으로 문서가 줄면 저장해 둔 좌표가 밖으로 나간다. 문서 끝으로 가둔다.
     // ponytail: 상대 좌표(Y.RelativePosition)로 들면 정확해진다. 어긋난 삽입이 문제가 되면 그때.
     const at = Math.min(
@@ -528,7 +530,7 @@ export function InlineAiPopover({
                 </table>
               </div>
             ) : (
-              <p className="text-fg text-sm leading-[1.75] whitespace-pre-wrap">{draft}</p>
+              <AiMarkdown text={draft ?? ''} className="text-sm leading-[1.75]" />
             )}
             <p className="text-subtle mt-2.5 flex items-center gap-1.5 text-[11px]">
               <span className="bg-success size-1.5 rounded-full" />

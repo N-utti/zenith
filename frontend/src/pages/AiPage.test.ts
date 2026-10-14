@@ -25,6 +25,7 @@ let root: Root | undefined
 afterEach(() => {
   // 대화는 모듈 상태다. 화면을 먼저 내려야 비울 때 살아 있는 화면이 따라 그려지지 않는다.
   act(() => root?.unmount())
+  document.body.replaceChildren()
   resetThread()
   drawn.mockClear()
 })
@@ -37,7 +38,8 @@ test('답변이 자라는 동안 지난 답변은 다시 그리지 않고, 각�
   appendMessage({
     id: 'a1',
     role: 'assistant',
-    body: '15일입니다.[[1]]',
+    // 마크다운으로 그린다(#393). 느낌표 바로 뒤 각주도 그림 문법이 되지 않고 버튼이 된다.
+    body: '**15일**입니다![[1]]',
     createdAt: '',
     citations: [source(1)],
   })
@@ -54,6 +56,8 @@ test('답변이 자라는 동안 지난 답변은 다시 그리지 않고, 각�
   const qc = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: false } } })
   qc.setQueryData(['ai', 'models'], [])
   const container = document.createElement('div')
+  // 각주 버튼의 초점을 보려면 문서에 붙어 있어야 한다.
+  document.body.append(container)
   root = createRoot(container)
   act(() =>
     root?.render(
@@ -75,13 +79,17 @@ test('답변이 자라는 동안 지난 답변은 다시 그리지 않고, 각�
     )[answer]
     expect(button).toBeDefined()
     drawn.mockClear()
+    button.focus()
     act(() => button.click())
+    // 눌린 버튼이 새로 만들어지지 않는다. 다시 만들어지면 초점이 문서 맨 위로 떨어진다.
+    expect(document.activeElement).toBe(button)
   }
 
   // 답변 조각 하나(`useAsk` 가 `token` 마다 하는 일). 자라는 답변의 카드만 다시 그려진다.
   drawn.mockClear()
   act(() => patchMessage('a2', (m) => ({ body: m.body + '네, ' })))
-  expect(container.textContent).toContain('네, ')
+  expect(container.textContent).toContain('네,') // 마크다운은 문단 끝 공백을 걷는다
+  expect(container.querySelector('strong')?.textContent).toBe('15일')
   expect(drawn.mock.calls).toEqual([[1, undefined]])
 
   // 지난 답변의 각주를 누르면 그 답변의 카드만 켜진다(클릭 일련번호 1). 마지막 답변은 화면이
