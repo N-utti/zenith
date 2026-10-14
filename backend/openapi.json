@@ -3419,6 +3419,59 @@
         }
       }
     },
+    "/api/ai/attachments/{id}/edit": {
+      "post": {
+        "tags": [
+          "ai"
+        ],
+        "summary": "{instruction} → 첨부(xlsx·docx)를 편집 연산으로 고친 새 첨부 + 변경 내역. 원본은 그대로",
+        "operationId": "edit_ai_attachment_api_ai_attachments__id__edit_post",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EditIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EditOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/attendance/me": {
       "get": {
         "tags": [
@@ -8087,6 +8140,29 @@
         ],
         "title": "Body_upload_file_api_files_post"
       },
+      "ChangeOut": {
+        "properties": {
+          "where": {
+            "type": "string",
+            "title": "Where"
+          },
+          "before": {
+            "type": "string",
+            "title": "Before"
+          },
+          "after": {
+            "type": "string",
+            "title": "After"
+          }
+        },
+        "type": "object",
+        "required": [
+          "where",
+          "before",
+          "after"
+        ],
+        "title": "ChangeOut"
+      },
       "ChannelCreateIn": {
         "properties": {
           "name": {
@@ -9977,6 +10053,41 @@
         },
         "type": "object",
         "title": "DropIn"
+      },
+      "EditIn": {
+        "properties": {
+          "instruction": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Instruction"
+          }
+        },
+        "type": "object",
+        "required": [
+          "instruction"
+        ],
+        "title": "EditIn"
+      },
+      "EditOut": {
+        "properties": {
+          "result": {
+            "$ref": "#/components/schemas/app__routers__ai__AttachmentOut"
+          },
+          "changes": {
+            "items": {
+              "$ref": "#/components/schemas/ChangeOut"
+            },
+            "type": "array",
+            "title": "Changes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "result",
+          "changes"
+        ],
+        "title": "EditOut"
       },
       "EventCreateIn": {
         "properties": {
