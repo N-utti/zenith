@@ -1777,9 +1777,10 @@ data: ${JSON.stringify(data)}
   // 팩트체크(백엔드 #382). 문서 id 와 글 중 정확히 하나. 응답은 스트림이 아니라 한 번에 온다.
   http.post('/api/ai/check', async ({ request }) => {
     if (!authenticate()) return unauthorized()
-    const { doc_id, text } = (await request.json()) as {
+    const { doc_id, text, web } = (await request.json()) as {
       doc_id?: string | null
       text?: string | null
+      web?: boolean
     }
     // 둘 다·둘 다 없음은 라우터가 문자열로, 빈 글·길이 초과는 스키마 검증이라 배열로 거절한다.
     if (Boolean(doc_id) === (text != null)) {
@@ -1816,7 +1817,10 @@ data: ${JSON.stringify(data)}
       )
     }
     // 본문(Y.Doc)은 브라우저에만 있어 문서 id 로 오면 제목만 안다.
-    return HttpResponse.json(checkClaims(text ?? doc!.title))
+    // 웹도 찾기(백엔드 #388). 목은 서버 배포 스위치가 켜진 것으로 본다. 꺼져 있으면 실제 서버는
+    // 422 「웹 검색이 꺼져 있습니다.」. 본문에 '웹꺼짐'을 넣으면 그 거절을 본다.
+    if (web && text?.includes('웹꺼짐')) return validationError('웹 검색이 꺼져 있습니다.')
+    return HttpResponse.json(checkClaims(text ?? doc!.title, web))
   }),
 
   http.patch('/api/me/todos/:taskId', async ({ request, params }) => {

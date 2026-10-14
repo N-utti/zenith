@@ -2466,6 +2466,11 @@ export interface components {
             doc_id?: string | null;
             /** Text */
             text?: string | null;
+            /**
+             * Web
+             * @default false
+             */
+            web: boolean;
         };
         /** CheckOut */
         CheckOut: {
@@ -2484,7 +2489,7 @@ export interface components {
              * Type
              * @enum {string}
              */
-            type: "doc" | "post";
+            type: "doc" | "post" | "web";
             /** To */
             to: string;
             /** Doc Id */

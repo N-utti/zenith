@@ -4,12 +4,16 @@ import { useMutation } from '@tanstack/react-query'
 import { ScanSearch } from 'lucide-react'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
+import { Checkbox } from '@/components/ui/Checkbox'
 import { ExcludedNote, SourceCard } from '@/features/ai/SourcesPanel'
-import { api } from '@/lib/api'
+import { ApiError, api } from '@/lib/api'
 import type { Schema } from '@/types'
 
 type Claim = Schema<'Claim'>
 type CheckResult = Schema<'CheckOut'> & { truncated: boolean }
+
+/** 서버 웹 검색 스위치가 꺼졌을 때의 422 문구(백엔드 #388). 따로 가를 코드가 없어 문구로 본다. */
+const WEB_OFF = '웹 검색이 꺼져 있습니다.'
 
 /** 서버 상한(`CheckIn.text`). 넘으면 앞부분만 보낸다. */
 const MAX_TEXT = 50000
@@ -48,23 +52,35 @@ export function DocCheckPanel({
 }) {
   // 다시 검사하는 동안(최대 2분)과 실패했을 때도 앞 결과를 남긴다. `check.data` 는 새 요청에서 비워진다.
   const [result, setResult] = useState<CheckResult | null>(null)
+  /**
+   * 웹도 찾기(백엔드 #388). 켜면 검사할 글과 그 검사에 쓰인 사내 자료가 외부 검색어의 재료가 되어 사내망 밖에
+   * 닿을 수 있다. 그래서 기본은 끄고, 검사가 끝나면 다시 꺼서 검사마다 고르게 한다.
+   * 서버 배포 스위치가 꺼져 있으면 422 문구가 그대로 뜨고 체크도 끈다(스위치 상태를 알려 주는 API 는 없다).
+   */
+  const [web, setWeb] = useState(false)
   const check = useMutation({
-    mutationFn: async (): Promise<CheckResult> => {
+    mutationFn: async (web: boolean): Promise<CheckResult> => {
       const text = editor?.getText().trim() ?? ''
       if (!text) throw new Error('본문이 비어 있습니다.')
       const out = await api<Schema<'CheckOut'>>('/ai/check', {
         method: 'POST',
-        body: JSON.stringify({ text: text.slice(0, cutAt(text)) }),
+        body: JSON.stringify({ text: text.slice(0, cutAt(text)), web }),
       })
       return { ...out, truncated: text.length > MAX_TEXT }
     },
-    onSuccess: setResult,
+    onSuccess: (out) => {
+      setResult(out)
+      setWeb(false)
+    },
+    onError: (err, web) => {
+      if (web && err instanceof ApiError && err.message === WEB_OFF) setWeb(false)
+    },
   })
   /** 본문에서 찾지 못한 주장의 번호. 그 카드에 안내를 단다. */
   const [missing, setMissing] = useState<number | null>(null)
   const run = () => {
     setMissing(null)
-    check.mutate()
+    check.mutate(web)
   }
 
   return (
@@ -145,15 +161,25 @@ export function DocCheckPanel({
 
       <div className="border-line shrink-0 border-t p-3">
         {aiSource ? (
-          <Button
-            className="w-full"
-            onClick={run}
-            disabled={!editor || check.isPending}
-            aria-busy={check.isPending}
-          >
-            <ScanSearch className="size-4" />
-            {check.isPending ? '검사 중' : result ? '다시 검사' : '이 문서 검사'}
-          </Button>
+          <>
+            <Checkbox
+              className="mb-2.5"
+              checked={web}
+              onChange={(e) => setWeb(e.target.checked)}
+              disabled={check.isPending}
+              label="웹도 찾기"
+              description="검사할 글과 함께 찾은 사내 자료 일부가 외부 검색어에 쓰일 수 있습니다. 사내 자료로 확인되지 않는 법령·통계를 찾을 때만 켜세요. 검사가 끝나면 다시 꺼집니다."
+            />
+            <Button
+              className="w-full"
+              onClick={run}
+              disabled={!editor || check.isPending}
+              aria-busy={check.isPending}
+            >
+              <ScanSearch className="size-4" />
+              {check.isPending ? '검사 중' : result ? '다시 검사' : '이 문서 검사'}
+            </Button>
+          </>
         ) : (
           <p className="text-subtle text-center text-xs leading-relaxed">
             이 문서는 AI 근거로 쓰기가 꺼져 있어 검사할 수 없습니다.

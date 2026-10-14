@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from 'vitest'
-import { clearNotifications, restrictImageSources } from './desktop'
+import { clearNotifications, installExternalLinkHandler, restrictImageSources } from './desktop'
 
 const server = vi.hoisted(() => ({ origin: '' }))
 vi.mock('./serverOrigin', () => ({ serverOrigin: () => server.origin }))
@@ -44,4 +44,32 @@ test('서버 주소가 주소가 아니면 서버를 빼서 닫힌 쪽으로 둔
   server.origin = '*'
   restrictImageSources()
   expect(policy()?.getAttribute('content')).toBe("img-src 'self' data:")
+})
+
+test('데스크톱 앱이면 바깥 링크의 왼쪽 클릭과 휠 클릭을 기본 브라우저로 넘기고, 오른쪽 클릭은 두지 않는다', () => {
+  const invoke = vi.fn(() => Promise.resolve())
+  window.__TAURI__ = { core: { invoke } }
+  const off = installExternalLinkHandler()
+  const link = document.createElement('a')
+  link.href = 'https://www.korea.kr/news/1'
+  document.body.append(link)
+  try {
+    for (const [type, button] of [
+      ['click', 0],
+      ['auxclick', 1],
+      ['auxclick', 2],
+    ] as const) {
+      const event = new MouseEvent(type, { bubbles: true, cancelable: true, button })
+      link.dispatchEvent(event)
+      expect(event.defaultPrevented).toBe(button !== 2)
+    }
+    expect(invoke).toHaveBeenCalledTimes(2)
+    expect(invoke).toHaveBeenCalledWith('plugin:opener|open_url', {
+      url: 'https://www.korea.kr/news/1',
+      with: null,
+    })
+  } finally {
+    off()
+    link.remove()
+  }
 })

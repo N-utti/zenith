@@ -18,7 +18,7 @@ export interface Citation {
    * `to` 는 통합검색의 `Hit` 과 같은 앱 안 경로다. 첨부 파일(`file`)은 아직 주지 않는다
    * (2026-09-30 결정의 남은 단계). 둘 다 없으면 문서로 본다(`source.ts`).
    */
-  type?: 'doc' | 'post' | 'file'
+  type?: 'doc' | 'post' | 'file' | 'web'
   to?: string
   title: string
   /** 답변의 근거가 된 구절. 문서 본문에서 그대로 따온다. */

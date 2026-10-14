@@ -160,7 +160,7 @@ export function docActionCitations(action: (typeof DOC_ACTIONS)[number]): Citati
  * 목은 판정 세 가지의 모양만 재현한다: 앞 두 문장을 일치·불일치로, 원문 발췌가 없는 확인 불가 하나.
  * 원문 발췌(`span`)는 보낸 글에서 그대로 자른 것이라 화면이 본문에서 찾을 수 있다.
  */
-export function checkClaims(text: string) {
+export function checkClaims(text: string, web = false) {
   const sentences = text
     .split(/\n+|(?<=[.?!])\s+/)
     .map((s) => s.trim().slice(0, 120))
@@ -180,7 +180,7 @@ export function checkClaims(text: string) {
     span: string
     verdict: 'match' | 'mismatch' | 'unverified'
     note: string
-    citations: ReturnType<typeof cite>[]
+    citations: Citation[]
   }[] = []
   if (sentences[0]) {
     claims.push({
@@ -202,13 +202,34 @@ export function checkClaims(text: string) {
       citations: [cite(ALL_CITATIONS[1])],
     })
   }
-  claims.push({
-    n: claims.length + 1,
-    claim: '지급 장비의 사양은 해마다 바뀐다.',
-    span: '',
-    verdict: 'unverified',
-    note: '근거 번호가 없어 확인 불가로 둔다. 사내 자료에서 사양 변경 주기를 찾지 못했습니다.',
-    citations: [],
-  })
+  // 웹도 찾기(백엔드 #388)를 켜면 사내 자료로 못 찾던 주장이 웹 출처로 확인된다. 웹 카드의 `to` 는 바깥 절대 주소다.
+  claims.push(
+    web
+      ? {
+          n: claims.length + 1,
+          claim: '지급 장비의 사양은 해마다 바뀐다.',
+          span: '',
+          verdict: 'match',
+          note: '공개된 정부 조달 기준에서 같은 내용을 찾았습니다.',
+          citations: [
+            {
+              n: 3,
+              type: 'web',
+              to: 'https://www.korea.kr/news/policyNewsView.do?newsId=1',
+              title: '공공기관 업무용 장비 조달 기준',
+              quote: '업무용 장비 사양 기준은 매년 고시한다.',
+              path: 'www.korea.kr',
+            },
+          ],
+        }
+      : {
+          n: claims.length + 1,
+          claim: '지급 장비의 사양은 해마다 바뀐다.',
+          span: '',
+          verdict: 'unverified',
+          note: '근거 번호가 없어 확인 불가로 둔다. 사내 자료에서 사양 변경 주기를 찾지 못했습니다.',
+          citations: [],
+        },
+  )
   return { claims }
 }
