@@ -9555,7 +9555,9 @@
               "continue",
               "polish",
               "translate",
-              "table"
+              "table",
+              "cite",
+              "conform"
             ],
             "title": "Action"
           }
@@ -9572,6 +9574,14 @@
           "draft": {
             "type": "string",
             "title": "Draft"
+          },
+          "citations": {
+            "items": {
+              "$ref": "#/components/schemas/Citation"
+            },
+            "type": "array",
+            "title": "Citations",
+            "default": []
           }
         },
         "type": "object",
@@ -13330,6 +13340,18 @@
               }
             ],
             "title": "Context"
+          },
+          "example_doc_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Example Doc Id"
           }
         },
         "type": "object",
