@@ -3,6 +3,9 @@ import type { Schema } from '@/types'
 /** 04 §8 `GET /ai/models` 항목. Ollama 태그 모양을 유지한다(Claude 는 size 가 null). */
 export type AiModel = Schema<'ModelOut'>
 
+/** `POST /ai/attachments` 응답(백엔드 #396). `chars` 는 서버가 뽑은 평문 글자 수다. */
+export type AiAttachment = Schema<'app__routers__ai__AttachmentOut'>
+
 /**
  * 04 §8 `event: citations` 항목. 번호(`n`)는 본문의 `[[n]]` 표식과 짝을 이룬다(§8.1).
  *
@@ -15,8 +18,8 @@ export interface Citation {
   doc_id?: string | null
   /**
    * 근거의 종류와 눌렀을 때 갈 자리. 서버는 문서(`doc`)와 일반 게시글(`post`)을 준다(백엔드 #366).
-   * `to` 는 통합검색의 `Hit` 과 같은 앱 안 경로다. 첨부 파일(`file`)은 아직 주지 않는다
-   * (2026-09-30 결정의 남은 단계). 둘 다 없으면 문서로 본다(`source.ts`).
+   * `to` 는 통합검색의 `Hit` 과 같은 앱 안 경로다. 질문에 올린 첨부(`file`, 백엔드 #396)는 `to` 가
+   * 원본 내려받기 주소(`/api/ai/attachments/{id}`)다. 둘 다 없으면 문서로 본다(`source.ts`).
    */
   type?: 'doc' | 'post' | 'file' | 'web'
   to?: string
@@ -46,6 +49,11 @@ export interface AiMessage {
    * 다시 받을 때 같은 문서로 보내고, 서버가 그중 하나라도 거절하면 비운다(`AiPage` 의 `retry`).
    */
   docs?: string[]
+  /**
+   * 내 질문에만. 같이 보낸 첨부 id(백엔드 #396). 참고 문서처럼 대화에 안 남아 질문마다 실어 보낸다.
+   * 서버가 거절하면(7일 지나 지워짐) 비우고 다시 받는다(`AiPage` 의 `retry`).
+   */
+  attachments?: string[]
   citations?: Citation[]
   /** 스트림 도중 서버가 `event: error` 를 보냈을 때의 사유. 받은 데까지의 본문은 남긴다. */
   error?: string

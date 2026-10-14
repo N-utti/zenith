@@ -62,11 +62,15 @@ export function AiPage() {
 
   // 범위로 고른 폴더나 참고 문서를 서버가 거절하면(422, 백엔드 #372·#394) 트리가 낡은 것이다. 다시 받으면
   // 입력창이 그 폴더·문서를 잃는다(지식 소스는 전체로, 칩은 빠짐. `AiComposer`).
+  // 첨부를 거절하면(백엔드 #396, 7일 지나 지워짐) 트리와 무관하다. 입력창의 첨부 칩을 비운다.
   const qc = useQueryClient()
+  const [dropAttachments, setDropAttachments] = useState(0)
   const send = (vars: Parameters<typeof ask.mutate>[0]) =>
     ask.mutate(vars, {
       onError: (error) => {
-        if ((vars.scope || vars.docs?.length) && rejected(error))
+        const drop = dropOnRetry(vars.scope, vars.docs ?? [], error, vars.attachments)
+        if (drop === 'attachments') setDropAttachments((n) => n + 1)
+        else if ((vars.scope || vars.docs?.length) && rejected(error))
           void qc.invalidateQueries({ queryKey: docKeys.tree })
       },
     })
@@ -75,7 +79,8 @@ export function AiPage() {
    * 실패한 답변을 지우고 같은 질문·범위로 다시 받는다. 내 질문 말풍선은 그대로 둔다.
    * 질문은 요청 인자가 아니라 스레드에서 찾는다. 스레드는 화면을 떠나도 남지만 요청 인자는 리마운트에 사라진다.
    * 서버가 그 범위를 거절했으면 같은 범위로는 몇 번을 물어도 422 라, 질문의 범위를 전체로 되돌려 묻는다.
-   * 참고 문서를 거절했으면(없음·휴지통·근거 꺼짐) 참고 문서를 빼고 묻는다. 둘은 거절 문구로만 갈린다.
+   * 참고 문서를 거절했으면(없음·휴지통·근거 꺼짐) 참고 문서를 빼고 묻는다. 첨부(7일 지나 지워짐)도 같다.
+   * 셋은 거절 문구로만 갈린다.
    */
   const retry = () => {
     if (ask.isPending) return
@@ -86,8 +91,13 @@ export function AiPage() {
     if (last?.role === 'assistant') removeMessage(last.id)
     let scope = question.scope ?? null
     let docs = question.docs ?? []
-    const drop = dropOnRetry(scope, docs, ask.error)
-    if (drop === 'scope') {
+    let attachments = question.attachments ?? []
+    const drop = dropOnRetry(scope, docs, ask.error, attachments)
+    if (drop === 'attachments') {
+      attachments = []
+      patchMessage(question.id, { attachments })
+      toast.info('쓸 수 없는 첨부가 있어 첨부 없이 다시 찾습니다.')
+    } else if (drop === 'scope') {
       scope = null
       patchMessage(question.id, { scope })
       toast.info('고른 폴더를 찾을 수 없어 전체에서 다시 찾습니다.')
@@ -96,7 +106,7 @@ export function AiPage() {
       patchMessage(question.id, { docs })
       toast.info('쓸 수 없는 참고 문서가 있어 참고 문서 없이 다시 찾습니다.')
     }
-    send({ prompt: question.body, scope, docs, resend: true })
+    send({ prompt: question.body, scope, docs, attachments, resend: true })
   }
 
   return (
@@ -155,9 +165,10 @@ export function AiPage() {
           models={models ?? []}
           initialText={seed.text}
           disabled={ask.isPending}
-          onSend={(prompt, scope, docs) => {
+          dropAttachments={dropAttachments}
+          onSend={(prompt, scope, docs, attachments) => {
             setFocus(null)
-            send({ prompt, scope, docs })
+            send({ prompt, scope, docs, attachments })
           }}
         />
       </div>

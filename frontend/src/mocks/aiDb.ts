@@ -20,7 +20,7 @@ const ALL_CITATIONS: (Citation & { minRole?: 'lead' | 'exec' })[] = [
     quote: '퇴사 시 지급 장비는 총무팀에 반납한다.',
     path: '회사 위키 · 온보딩/오프보딩',
   },
-  // 게시글 근거는 실제 서버가 이 모양으로 준다(백엔드 #366). 그 아래 첨부 파일은 아직 주지 않는다.
+  // 게시글 근거는 실제 서버가 이 모양으로 준다(백엔드 #366). 첨부 근거는 질문에 첨부를 올렸을 때만 온다(`fileCitations`).
   {
     n: 3,
     type: 'post',
@@ -31,15 +31,6 @@ const ALL_CITATIONS: (Citation & { minRole?: 'lead' | 'exec' })[] = [
   },
   {
     n: 4,
-    type: 'file',
-    doc_id: 'd-1',
-    to: '/docs/d-1',
-    title: '장비 사양표.xlsx',
-    quote: '개발 직군: 메모리 32GB 이상, 저장 장치 1TB.',
-    path: '비품·장비 지급 규정 · 첨부',
-  },
-  {
-    n: 5,
     doc_id: 'd-2',
     title: '2027 장비 예산 계획',
     quote: '내년 장비 교체 예산은 전사 기준 인당 상향을 검토한다.',
@@ -77,8 +68,8 @@ export function answer(user: User, scoped = false): { body: string; citations: C
       `신규 입사자는 **입사 첫날** 사양에 맞춰 노트북을 지급받습니다.\n\n` +
       `- **개발 직군**: 고사양\n- **그 외 직군**: 표준 사양${mark(1)}\n\n` +
       `반납은 퇴사 시 총무팀에 하도록 규정되어 있습니다${mark(2)}.\n` +
-      `지급받은 장비로 2주 동안 협업툴 파일럿에 참여할 수 있고${mark(3)}, 직군별 사양은 첨부된 사양표에 있습니다${mark(4)}.` +
-      (mark(5) ? ` 내년 장비 예산은 인당 상향을 검토 중입니다${mark(5)}.` : ''),
+      `지급받은 장비로 2주 동안 협업툴 파일럿에 참여할 수 있습니다${mark(3)}.` +
+      (mark(4) ? ` 내년 장비 예산은 인당 상향을 검토 중입니다${mark(4)}.` : ''),
     citations,
   }
 }
@@ -106,6 +97,25 @@ export function docAnswer(docs: { id: string; title: string }[]): {
       path: doc.title,
     })),
   }
+}
+
+/**
+ * 질문에 올린 첨부의 근거 카드(백엔드 #396). 실제 서버는 규정·참고 문서 다음 번호로 매기고, 발췌는 평문 앞 200자다.
+ * 원본 주소(`to`)는 올린 사람만 내려받는다.
+ */
+export function fileCitations(
+  files: { id: string; name: string; text: string }[],
+  from: number,
+): Citation[] {
+  return files.map((file, i) => ({
+    n: from + i,
+    doc_id: null,
+    type: 'file',
+    to: `/api/ai/attachments/${file.id}`,
+    title: file.name,
+    quote: file.text.slice(0, 200),
+    path: '첨부',
+  }))
 }
 
 export const DOC_ACTIONS = [

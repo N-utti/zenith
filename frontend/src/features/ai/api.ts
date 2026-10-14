@@ -4,7 +4,7 @@ import { markOnboarding } from '@/features/home/onboarding'
 import { uuid } from '@/lib/uuid'
 import type { Schema } from '@/types'
 import { aiThread, type ThreadStore } from './store'
-import type { AiModel, Citation } from './types'
+import type { AiAttachment, AiModel, Citation } from './types'
 
 /**
  * 04 §8 `POST /ai/feedback {message_id, value: 1|-1}`. 응답은 204(백엔드 #317).
@@ -19,6 +19,16 @@ export function useFeedback() {
         body: JSON.stringify({ message_id: messageId, value }),
       }),
   })
+}
+
+/**
+ * 질문에 붙일 파일을 올린다(백엔드 #396). 서버가 평문을 뽑아 7일 둔다. 캐시할 것이 없어 react-query 를 거치지 않는다.
+ * 형식·크기·보관 한도 거절은 422 이고 사유는 문자열이다.
+ */
+export function uploadAiAttachment(file: File) {
+  const form = new FormData()
+  form.append('file', file)
+  return api<AiAttachment>('/ai/attachments', { method: 'POST', body: form })
 }
 
 export function useAiModels() {
@@ -44,12 +54,15 @@ export function useAsk(store: ThreadStore = aiThread) {
       prompt,
       scope,
       docs = [],
+      attachments = [],
       resend = false,
     }: {
       prompt: string
       scope: string | null
       /** 본문 전체를 근거로 넣을 문서 id(백엔드 #394). 폴더 범위와 같이 보낼 수 있다. */
       docs?: string[]
+      /** `uploadAiAttachment` 로 올린 첨부 id(백엔드 #396). */
+      attachments?: string[]
       resend?: boolean
     }) => {
       if (!resend) {
@@ -59,19 +72,19 @@ export function useAsk(store: ThreadStore = aiThread) {
           body: prompt,
           scope,
           docs,
+          attachments,
           createdAt: new Date().toISOString(),
         })
       }
       const answerId = uuid()
       const session = getSessionId()
       let started = false
-      // 첨부 읽기(백엔드 #396)는 화면이 아직 없어 빈 목록이다.
       const body: Schema<'ChatIn'> = {
         session_id: session,
         message: prompt,
         scope,
         docs,
-        attachments: [],
+        attachments,
       }
       const events = apiEvents('/ai/chat', { method: 'POST', body: JSON.stringify(body) })
       try {

@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest'
-import { SOURCE_KINDS, sourceKind, sourceTo, webLink } from './source'
+import { SOURCE_KINDS, fileLink, sourceKind, sourceTo, webLink } from './source'
 import type { Citation } from './types'
 
 const base = { n: 1, title: '휴가 규정', quote: '인용', path: '인사' }
@@ -62,4 +62,22 @@ test('웹 출처라도 http·https 가 아니거나 사용자 정보로 위장�
     expect(webLink({ ...base, type: 'web', to })).toBeNull()
   }
   expect(webLink({ ...base, type: 'doc', to: 'https://www.korea.kr/' })).toBeNull()
+})
+
+test('첨부 근거는 앱 안으로 이동하지 않고 원본 주소만 내려받는다', () => {
+  const file: Citation = {
+    ...base,
+    type: 'file',
+    doc_id: null,
+    to: '/api/ai/attachments/0b8f2c1e-7d4a-4c1b-9f3e-2a6d5c8b1e70',
+    path: '첨부',
+  }
+  expect(sourceKind(file)).toBe(SOURCE_KINDS.file)
+  // 라우터로 보내면 없는 화면이 뜬다.
+  expect(sourceTo(file)).toBeNull()
+  expect(fileLink(file)).toBe(file.to)
+  // 다른 API 나 바깥 주소는 받지 않는다.
+  for (const to of ['/api/auth/logout', '/api/ai/attachments/../x', 'https://evil.example/a'])
+    expect(fileLink({ ...file, to })).toBeNull()
+  expect(fileLink({ ...base, type: 'doc', to: file.to })).toBeNull()
 })

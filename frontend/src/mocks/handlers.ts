@@ -31,6 +31,7 @@ import {
   docActionCitations,
   docActionDraft,
   docAnswer,
+  fileCitations,
 } from './aiDb'
 import {
   BOARD_DEFS,
@@ -195,6 +196,10 @@ const RANGE_MAX_DAYS = 366
 
 /** 사내망 파일 업로드 상한. 실제 서버(FastAPI)도 같은 값을 강제해야 한다. */
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+
+/** AI 질문 첨부(백엔드 #396). 서버가 읽는 형식과 올린 파일. 메모리에만 둔다. */
+const AI_ATTACH_EXTS = ['txt', 'md', 'csv', 'docx', 'xlsx', 'pdf', 'hwpx']
+const AI_ATTACHMENTS = new Map<string, { owner: string; name: string; blob: File; text: string }>()
 
 const unauthorized = () =>
   HttpResponse.json({ detail: '로그인이 필요합니다.', code: 'AUTH_REQUIRED' }, { status: 401 })
@@ -1627,6 +1632,50 @@ export const handlers = [
     authed(() => HttpResponse.json(AI_MODELS)),
   ),
 
+  // 질문 첨부(백엔드 #396). 실제 서버는 평문을 뽑아 7일 두고, 올린 사람만 쓰고 내려받는다.
+  // 목은 새로 고치면 비워진다. 그 뒤 같은 첨부로 다시 물으면 7일 지난 것처럼 422 가 된다.
+  http.post('/api/ai/attachments', async ({ request }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    const file = (await request.formData()).get('file')
+    if (!(file instanceof File)) return validationError('파일이 없습니다.')
+    if (file.size > MAX_UPLOAD_BYTES) return validationError('10MB 이하 파일만 올릴 수 있습니다.')
+    if (file.size === 0) return validationError('빈 파일입니다.')
+    const ext = file.name.slice(file.name.lastIndexOf('.') + 1).toLowerCase()
+    if (!AI_ATTACH_EXTS.includes(ext))
+      return validationError('지원하지 않는 파일 형식입니다(txt·md·csv·docx·xlsx·pdf·hwpx).')
+    // ponytail: 글자 파일만 실제로 읽는다. 문서 형식은 본문을 뽑지 않고 크기로 글자 수를 흉내 낸다.
+    const text = ['txt', 'md', 'csv'].includes(ext)
+      ? (await file.text()).trim()
+      : `${file.name} 의 본문(목). 실제 서버는 이 자리에 파일에서 뽑은 글을 넣습니다.`.repeat(
+          Math.max(1, Math.round(file.size / 2000)),
+        )
+    if (!text) return validationError('읽을 글자가 없는 파일입니다.')
+    const id = crypto.randomUUID()
+    AI_ATTACHMENTS.set(id, { owner: user.id, name: file.name, blob: file, text })
+    await delay(400)
+    return HttpResponse.json(
+      {
+        id,
+        name: file.name,
+        size: file.size,
+        content_type: file.type || 'application/octet-stream',
+        chars: text.length,
+      },
+      { status: 201 },
+    )
+  }),
+
+  http.get('/api/ai/attachments/:id', ({ params }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    const file = AI_ATTACHMENTS.get(String(params.id))
+    if (!file || file.owner !== user.id) return notFound('없는 첨부입니다.')
+    return new HttpResponse(file.blob, {
+      headers: { 'Content-Type': 'application/octet-stream' },
+    })
+  }),
+
   // SSE: status → token → citations → done. 실제 서버(routers/ai.py)와 같은 프레임 모양.
   http.post('/api/ai/chat', async ({ request }) => {
     const user = authenticate()
@@ -1636,11 +1685,13 @@ export const handlers = [
       session_id,
       scope,
       docs = [],
+      attachments = [],
     } = (await request.json()) as {
       message?: string
       session_id?: string
       scope?: string | null
       docs?: string[]
+      attachments?: string[]
     }
     if (!message?.trim()) {
       // 실제 서버(errors.py)의 422 detail 은 Pydantic 오류 배열이다. 문자열이 아니다.
@@ -1659,7 +1710,7 @@ export const handlers = [
       )
     }
     const folder = scope?.startsWith('doc:') ? null : (scope ?? null)
-    // 서버와 같은 순서: 폴더, 개수, 문서.
+    // 서버와 같은 순서: 폴더, 문서 개수, 첨부 개수, 문서, 첨부.
     // 범위는 폴더 id 다(백엔드 #372). 참고 문서와 같이 올 수 있다. 없는 폴더는 422 이고 이때 detail 은 문자열이다.
     // 실제 서버는 UUID 로 안 읽히는 값을 전체로 받지만, 목의 폴더 id(`f-1`)는 UUID 가 아니라 목록에 있는지로 가른다.
     if (folder && !docTree().folders.some((each) => each.id === folder)) {
@@ -1673,6 +1724,8 @@ export const handlers = [
         { detail: '참고 문서는 5개까지입니다.', code: 'VALIDATION' },
         { status: 422 },
       )
+    const attachIds = [...new Set(attachments)]
+    if (attachIds.length > 3) return validationError('첨부는 3개까지입니다.')
     const refDocs = refIds.map(aliveDoc)
     if (refDocs.some((doc) => !doc))
       return HttpResponse.json({ detail: '없는 문서입니다.', code: 'VALIDATION' }, { status: 422 })
@@ -1681,10 +1734,21 @@ export const handlers = [
         { detail: 'AI 근거로 쓰기가 꺼진 문서입니다.', code: 'VALIDATION' },
         { status: 422 },
       )
-    // ponytail: 참고 문서가 있으면 그 카드만 1번부터 낸다. 실제 서버는 규정 카드 다음 번호로 매기고
-    // 폴더·전체 검색 카드를 뒤에 이어 붙인다.
-    const { body, citations } =
+    const files = attachIds.map((id) => AI_ATTACHMENTS.get(id))
+    if (files.some((file) => !file || file.owner !== user.id))
+      return validationError('없는 첨부입니다.')
+    // ponytail: 참고 문서가 있으면 그 카드만 1번부터 낸다. 실제 서버는 규정·참고 문서·첨부 순으로 먼저
+    // 번호를 매기고 폴더·전체 검색 카드를 뒤에 이어 붙인다. 목은 첨부 카드를 맨 뒤에 붙여 번호가 다르다.
+    const answered =
       refDocs.length > 0 ? docAnswer(refDocs.map((doc) => doc!)) : answer(user, Boolean(folder))
+    const attached = fileCitations(
+      attachIds.map((id, i) => ({ id, ...files[i]! })),
+      Math.max(0, ...answered.citations.map((c) => c.n)) + 1,
+    )
+    const body =
+      answered.body +
+      attached.map((c) => ` 첨부한 ${c.title} 의 내용도 참고했습니다[[${c.n}]].`).join('')
+    const citations = [...answered.citations, ...attached]
     const frame = (event: string, data: unknown) => `event: ${event}
 data: ${JSON.stringify(data)}
 

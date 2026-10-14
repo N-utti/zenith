@@ -1,8 +1,11 @@
 import { useEffect, useRef } from 'react'
 import { Link } from 'react-router'
-import { ExternalLink, ShieldCheck } from 'lucide-react'
+import { Download, ExternalLink, ShieldCheck } from 'lucide-react'
+import { useToast } from '@/components/ui/ToastContext'
+import { ApiError } from '@/lib/api'
 import { cn } from '@/lib/cn'
-import { sourceKind, sourceTo, webLink } from './source'
+import { downloadFromApi } from '@/lib/download'
+import { fileLink, sourceKind, sourceTo, webLink } from './source'
 import type { AiMessage, Citation, CitationFocus } from './types'
 
 export function SourceCard({
@@ -14,10 +17,12 @@ export function SourceCard({
   activeTick?: number
 }) {
   const active = activeTick !== undefined
-  const ref = useRef<HTMLAnchorElement & HTMLDivElement>(null)
+  const ref = useRef<HTMLAnchorElement & HTMLDivElement & HTMLButtonElement>(null)
   const kind = sourceKind(source)
   const to = sourceTo(source)
   const web = webLink(source)
+  const file = fileLink(source)
+  const toast = useToast()
   // 각주를 누르면 그 카드로 스크롤하고 포커스를 옮긴다(키보드·스크린리더도 이동을 안다).
   // 숨겨진(display:none) 카드에서는 아무 일도 없다.
   useEffect(() => {
@@ -28,7 +33,11 @@ export function SourceCard({
 
   const className = cn(
     'bg-surface block rounded-xl border p-3.5 transition-colors',
-    active ? 'border-accent' : to || web ? 'border-line hover:border-line-strong' : 'border-line',
+    active
+      ? 'border-accent'
+      : to || web || file
+        ? 'border-line hover:border-line-strong'
+        : 'border-line',
   )
   const body = (
     <>
@@ -61,7 +70,15 @@ export function SourceCard({
           <span className="sr-only">(새 창)</span>
         </p>
       ) : (
-        <p className="text-subtle mt-2 text-[10.5px]">{source.path}</p>
+        <p className="text-subtle mt-2 flex items-center gap-1 text-[10.5px]">
+          {source.path}
+          {file && (
+            <>
+              <Download className="size-3" aria-hidden />
+              <span className="sr-only">(내려받기)</span>
+            </>
+          )}
+        </p>
       )}
     </>
   )
@@ -79,6 +96,29 @@ export function SourceCard({
       >
         {body}
       </a>
+    )
+  }
+
+  // 질문에 올린 첨부는 원본을 내려받는다. 링크로 따라가게 두지 않는 이유는 `downloadFromApi`.
+  // 올린 지 7일이 지나면 서버가 지워 404 다.
+  if (file) {
+    const download = async () => {
+      try {
+        await downloadFromApi(file, source.title || '첨부')
+      } catch (cause) {
+        toast.error(cause instanceof ApiError ? cause.message : '첨부를 내려받지 못했습니다.')
+      }
+    }
+    return (
+      <button
+        ref={ref}
+        type="button"
+        onClick={() => void download()}
+        aria-current={active || undefined}
+        className={cn(className, 'w-full cursor-pointer text-left')}
+      >
+        {body}
+      </button>
     )
   }
 

@@ -25,7 +25,8 @@ export function sourceKind(source: Citation) {
  */
 export function sourceTo(source: Citation): string | null {
   const { to, doc_id } = source
-  if (source.type === 'web') return null
+  // 웹은 바깥 주소(`webLink`), 첨부는 내려받을 파일(`fileLink`)이라 앱 라우터로 보내지 않는다.
+  if (source.type === 'web' || source.type === 'file') return null
   if (to && to.startsWith('/') && !to.startsWith('//') && !/[\\\s]/.test(to)) return to
   return doc_id ? `/docs/${doc_id}` : null
 }
@@ -45,4 +46,13 @@ export function webLink(source: Citation): { href: string; host: string } | null
   }
   if (!/^https?:$/.test(url.protocol) || url.username || url.password) return null
   return { href: url.href, host: url.host }
+}
+
+/**
+ * 질문에 올린 첨부(백엔드 #396)의 원본 주소. 앱이 받아 저장시킨다(`downloadFromApi`).
+ * 이 꼴이 아니면 받지 않는다. 다른 API 를 대신 부르게 두지 않는다.
+ */
+export function fileLink(source: Citation): string | null {
+  if (source.type !== 'file' || !source.to) return null
+  return /^\/api\/ai\/attachments\/[\w-]+$/.test(source.to) ? source.to : null
 }
