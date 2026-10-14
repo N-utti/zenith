@@ -995,6 +995,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ai/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** {doc_id | text} → {claims[]} 팩트체크 — 주장마다 일치·불일치·확인 불가 + 근거 카드(규정 전문·검색) */
+        post: operations["check_api_ai_check_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/attendance/me": {
         parameters: {
             query?: never;
@@ -2439,6 +2456,67 @@ export interface components {
             message: string;
             /** Scope */
             scope?: string | null;
+        };
+        /**
+         * CheckIn
+         * @description `doc_id`(저장된 문서) 또는 `text`(편집 중인 본문·선택 구간) 중 하나.
+         */
+        CheckIn: {
+            /** Doc Id */
+            doc_id?: string | null;
+            /** Text */
+            text?: string | null;
+        };
+        /** CheckOut */
+        CheckOut: {
+            /** Claims */
+            claims: components["schemas"]["Claim"][];
+        };
+        /**
+         * Citation
+         * @description `event: citations` 항목 — 프론트 `features/ai/types.ts` Citation. 번호는 본문의 [[n]] 과 짝.
+         *     `quote`·`title` 은 HTML 이스케이프하지 않은 원문 — 그리는 쪽은 텍스트 노드로만(⌘K 스니펫과 다르다).
+         */
+        Citation: {
+            /** N */
+            n: number;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "doc" | "post";
+            /** To */
+            to: string;
+            /** Doc Id */
+            doc_id?: string | null;
+            /** Title */
+            title: string;
+            /** Quote */
+            quote: string;
+            /** Path */
+            path: string;
+        };
+        /**
+         * Claim
+         * @description `claim`·`span`·`note` 는 모델이 낸 이스케이프하지 않은 원문 — 텍스트 노드로만 그리고, `span` 은 평문 검색
+         *     (indexOf 류)으로만 찾는다(RegExp·innerHTML 금지, 보안 리뷰).
+         */
+        Claim: {
+            /** N */
+            n: number;
+            /** Claim */
+            claim: string;
+            /** Span */
+            span: string;
+            /**
+             * Verdict
+             * @enum {string}
+             */
+            verdict: "match" | "mismatch" | "unverified";
+            /** Note */
+            note: string;
+            /** Citations */
+            citations: components["schemas"]["Citation"][];
         };
         /** CloseIn */
         CloseIn: {
@@ -7008,6 +7086,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TemplateOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    check_api_ai_check_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CheckIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckOut"];
                 };
             };
             /** @description Validation Error */
