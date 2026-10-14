@@ -52,7 +52,8 @@ class LLMProvider(Protocol):
     def stream(
         self,
         *,
-        system: str,
+        system: str
+        | list[dict[str, Any]],  # 블록 목록이면 그대로 전달(규정 블록의 cache_control, README 46)
         messages: list[ChatMessage],
         max_tokens: int | None = None,
         tools: list[Tool] | None = None,
@@ -80,7 +81,7 @@ class ClaudeProvider:
     async def stream(
         self,
         *,
-        system: str,
+        system: str | list[dict[str, Any]],
         messages: list[ChatMessage],
         max_tokens: int | None = None,
         tools: list[Tool] | None = None,
@@ -90,7 +91,7 @@ class ClaudeProvider:
             async with self._client_or_create().beta.messages.stream(
                 model=self.model,
                 max_tokens=max_tokens or self.max_tokens,
-                system=system,
+                system=system,  # type: ignore[arg-type]
                 messages=messages,  # type: ignore[arg-type]
                 tools=tools or anthropic.NOT_GIVEN,  # type: ignore[arg-type]
                 tool_choice=tool_choice or anthropic.NOT_GIVEN,  # type: ignore[arg-type]
