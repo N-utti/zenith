@@ -60,7 +60,8 @@ export function installExternalLinkHandler(): () => void {
   if (!tauri) return () => {}
 
   const onClick = (event: MouseEvent) => {
-    if (event.defaultPrevented || event.button !== 0) return
+    // 휠 클릭은 click 이 아니라 auxclick 으로 온다. 같이 넘기지 않으면 주소창 없는 새 창에서 열린다.
+    if (event.defaultPrevented || (event.button !== 0 && event.button !== 1)) return
 
     const target = event.target
     const anchor = target instanceof Element ? target.closest('a[href]') : null
@@ -76,7 +77,11 @@ export function installExternalLinkHandler(): () => void {
   }
 
   document.addEventListener('click', onClick)
-  return () => document.removeEventListener('click', onClick)
+  document.addEventListener('auxclick', onClick)
+  return () => {
+    document.removeEventListener('click', onClick)
+    document.removeEventListener('auxclick', onClick)
+  }
 }
 
 /**

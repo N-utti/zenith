@@ -1,8 +1,8 @@
 import { useEffect, useRef } from 'react'
 import { Link } from 'react-router'
-import { ShieldCheck } from 'lucide-react'
+import { ExternalLink, ShieldCheck } from 'lucide-react'
 import { cn } from '@/lib/cn'
-import { sourceKind, sourceTo } from './source'
+import { sourceKind, sourceTo, webLink } from './source'
 import type { AiMessage, Citation, CitationFocus } from './types'
 
 export function SourceCard({
@@ -17,6 +17,7 @@ export function SourceCard({
   const ref = useRef<HTMLAnchorElement & HTMLDivElement>(null)
   const kind = sourceKind(source)
   const to = sourceTo(source)
+  const web = webLink(source)
   // 각주를 누르면 그 카드로 스크롤하고 포커스를 옮긴다(키보드·스크린리더도 이동을 안다).
   // 숨겨진(display:none) 카드에서는 아무 일도 없다.
   useEffect(() => {
@@ -27,7 +28,7 @@ export function SourceCard({
 
   const className = cn(
     'bg-surface block rounded-xl border p-3.5 transition-colors',
-    active ? 'border-accent' : to ? 'border-line hover:border-line-strong' : 'border-line',
+    active ? 'border-accent' : to || web ? 'border-line hover:border-line-strong' : 'border-line',
   )
   const body = (
     <>
@@ -44,12 +45,42 @@ export function SourceCard({
           {source.title}
         </span>
         <kind.icon className="text-subtle size-3.5 shrink-0" aria-hidden />
-        <span className="sr-only">{kind.label}</span>
+        {/* 웹 카드의 제목은 웹 내용을 읽은 모델이 정한다. 사내 근거로 착각하지 않게 종류를 눈에 보이게 둔다. */}
+        {web ? (
+          <span className="text-subtle shrink-0 text-[11px]">{kind.label}</span>
+        ) : (
+          <span className="sr-only">{kind.label}</span>
+        )}
       </div>
       <p className="text-muted mt-2 text-xs leading-relaxed">&ldquo;{source.quote}&rdquo;</p>
-      <p className="text-subtle mt-2 text-[10.5px]">{source.path}</p>
+      {web ? (
+        // 바깥으로 나가는 링크다. 어디로 가는지 호스트를 크게 보인다.
+        <p className="text-muted mt-2 flex items-center gap-1 text-xs font-semibold">
+          {web.host}
+          <ExternalLink className="size-3" aria-hidden />
+          <span className="sr-only">(새 창)</span>
+        </p>
+      ) : (
+        <p className="text-subtle mt-2 text-[10.5px]">{source.path}</p>
+      )}
     </>
   )
+
+  // 웹 출처는 새 창으로. 데스크톱 앱에서는 `installExternalLinkHandler` 가 기본 브라우저로 넘긴다.
+  if (web) {
+    return (
+      <a
+        ref={ref}
+        href={web.href}
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-current={active || undefined}
+        className={className}
+      >
+        {body}
+      </a>
+    )
+  }
 
   // 갈 곳을 모르는 근거는 링크로 그리지 않는다. 각주를 눌렀을 때 초점은 그대로 받는다.
   if (!to) {
