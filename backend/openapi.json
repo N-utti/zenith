@@ -8402,7 +8402,7 @@
         },
         "type": "object",
         "title": "CheckIn",
-        "description": "`doc_id`(저장된 문서) 또는 `text`(편집 중인 본문·선택 구간) 중 하나."
+        "description": "`doc_id`(저장된 문서) 또는 `text`(편집 중인 본문·선택 구간). 둘 다 주면 `text` 를 검사하고 `doc_id` 는 그 글이\n속한 문서 — 근거 검색에서 뺀다(자기 문서를 근거로 들면 늘 「일치」, 이슈 #410)."
       },
       "CheckOut": {
         "properties": {

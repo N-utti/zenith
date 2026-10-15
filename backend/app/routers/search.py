@@ -99,6 +99,8 @@ async def find_hits(
     docs_ai_source_only: bool = False,
     folder_id: uuid.UUID | None = None,
     vector: bool = False,
+    exclude_doc: uuid.UUID
+    | None = None,  # 팩트체크가 검사 대상 문서 자신을 근거로 들지 않게(이슈 #410)
 ) -> list[Hit]:
     """FTS + 최근성, 권한 필터는 SQL 안에서. ⌘K 와 AI 검색 도구(ai.py)가 같이 쓴다 — 스니펫은 ts_headline 원문
     (`**…**` 마커, 이스케이프 안 함). `post_roles` 는 내 등급 필터 위에 **더 좁히기만** 한다.
@@ -116,6 +118,8 @@ async def find_hits(
 
     if "doc" in wanted:
         doc_filters = [Document.deleted_at.is_(None)]
+        if exclude_doc is not None:
+            doc_filters.append(Document.id != exclude_doc)
         if docs_ai_source_only:
             doc_filters.append(Document.ai_source.is_(True))
         if folder_id is not None:

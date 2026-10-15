@@ -138,14 +138,60 @@ async def test_check_doc_id_reads_document_and_respects_switch(
         assert status == 422 and out["detail"] == detail, bad
 
 
+async def test_check_excludes_the_checked_document_from_evidence(
+    app: FastAPI, client: AsyncClient, users: Users, app_db, monkeypatch
+) -> None:
+    """이슈 #410: 검사 대상 문서 자신은 근거 후보에서 빠진다 — doc_id 만 줄 때, text+doc_id 로 줄 때 둘 다."""
+
+    class SelfSearch(Checking):
+        wrap = "{}"
+
+        async def stream(self, *, system, messages, max_tokens=None, tools=None, tool_choice=None):
+            SearchingProvider.turns.append(messages)
+            last = messages[-1]["content"]
+            if not (isinstance(last, list) and last and last[0].get("type") == "tool_result"):
+                yield self.calls(ToolCall(id="x", name="search_knowledge", input={"query": "이월"}))
+                return
+            SelfSearch.tool_result = last[0]["content"]
+            yield self.reply
+
+    _reset(app, SelfSearch)
+    share_scope(monkeypatch, app_db)
+    seeded = await _knowledge(app_db, users)
+    doc = seeded["doc"]
+    await login(client, "sujin@zenith.co.kr")
+    # 제외 없이 찾으면 자기 문서가 잡힌다(전제 확인)
+    SelfSearch.tool_result = ""
+    status, out = await _check(client, text="연차 이월은 최대 5일")
+    assert status == 200
+    assert "› 휴가 규정:" in SelfSearch.tool_result  # 검색 결과 줄은 「(문서) 폴더 › 제목: 구절」
+    # doc_id 만: 본문은 문서에서 읽고, 근거에서 자기 문서는 빠진다
+    SelfSearch.tool_result = ""
+    status, out = await _check(client, doc_id=str(doc.id))
+    assert status == 200 and out["claims"]
+    assert "› 휴가 규정:" not in SelfSearch.tool_result and "이월" in SelfSearch.tool_result
+    assert all(c["doc_id"] != str(doc.id) for cl in out["claims"] for c in cl["citations"])
+    # text + doc_id: 편집 중인 본문을 검사하고 doc_id 는 제외용
+    SelfSearch.tool_result = ""
+    status, out = await _check(client, text="편집 중: 연차 이월은 최대 5일", doc_id=str(doc.id))
+    assert status == 200
+    assert "편집 중: 연차 이월은" in SearchingProvider.turns[-2][0]["content"][0]["text"]
+    assert "› 휴가 규정:" not in SelfSearch.tool_result and "이월" in SelfSearch.tool_result
+    # text 가 있으면 ai_source=false 문서도 제외용으로 받는다(스위치는 근거 여부지 읽기 허가가 아니다)
+    off = await app_db.scalar(select(Document).where(Document.title == "AI 가 정리한 연차 이월"))
+    status, out = await _check(client, text="x", doc_id=str(off.id))
+    assert status == 200
+    status, out = await _check(client, text="x", doc_id="00000000-0000-0000-0000-000000000000")
+    assert status == 422 and out["detail"] == "없는 문서입니다."
+
+
 async def test_check_requires_exactly_one_input(
     app: FastAPI, client: AsyncClient, users: Users, app_db, monkeypatch
 ) -> None:
     _reset(app, Checking)
     await login(client, "sujin@zenith.co.kr")
-    for body in ({}, {"doc_id": "00000000-0000-0000-0000-000000000000", "text": "x"}):
-        status, out = await _check(client, **body)
-        assert status == 422 and out["detail"] == "doc_id 와 text 중 하나만 보냅니다.", body
+    status, out = await _check(client)
+    assert status == 422 and out["detail"] == "doc_id 와 text 중 하나는 보냅니다."
     assert SearchingProvider.systems == []
 
 
