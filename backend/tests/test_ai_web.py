@@ -118,7 +118,7 @@ async def test_web_off_by_default_and_switch_required(
     assert status == 422 and out["detail"] == "웹 검색이 꺼져 있습니다."
     status, out = await _check(client, text=TEXT)  # web 없음 — 웹 도구도, 웹 카드도 없다
     assert status == 200, out
-    assert Webby.tools_seen[-1] == [ai.SEARCH_TOOL]
+    assert Webby.tools_seen[-1] == [ai.SEARCH_TOOL, ai.READ_TOOL]
     assert ai.CHECK_WEB_PROMPT not in SearchingProvider.systems[-1][-1]["text"]
     assert (
         out["claims"][1]["verdict"] == "unverified" and out["claims"][1]["citations"] == []
@@ -139,7 +139,7 @@ async def test_web_on_adds_tool_prompt_cards_and_audit(
     await login(client, "sujin@zenith.co.kr")
     status, out = await _check(client, text=TEXT, web=True)
     assert status == 200, out
-    assert Webby.tools_seen[-1] == [ai.SEARCH_TOOL, ai.WEB_TOOL]
+    assert Webby.tools_seen[-1] == [ai.SEARCH_TOOL, ai.WEB_TOOL]  # 웹이 켜지면 read_document 는 없다(README 54)
     assert SearchingProvider.systems[-1][-1]["text"].endswith(ai.CHECK_WEB_PROMPT)
     c = out["claims"]
     assert c[0]["citations"][0]["type"] == "doc"
