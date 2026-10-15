@@ -7,7 +7,7 @@ import type {
   Folder,
 } from '@/features/docs/types'
 import type { RecentDoc } from '@/features/home/types'
-import type { User } from '@/types'
+import { ROLE_RANK, type User } from '@/types'
 import { uuid } from '@/lib/uuid'
 import { demoSnapshots } from './demoVersions'
 
@@ -318,9 +318,44 @@ function folderPath(folderId: string): string[] {
   return names
 }
 
-/** 사이드바 트리 한 벌. 휴지통에 든 문서는 빼고 준다. */
-export function docTree(): DocTreeData {
-  return { folders: [...FOLDERS], docs: DOCS.filter((doc) => !doc.deleted_at) }
+/** 폴더와 그 조상들. 고리가 있어도 끝난다. */
+function* withAncestors(folderId: string): Generator<Folder> {
+  const seen = new Set<string>()
+  let current = findFolder(folderId)
+  while (current && !seen.has(current.id)) {
+    seen.add(current.id)
+    yield current
+    current = current.parent_id ? findFolder(current.parent_id) : undefined
+  }
+}
+
+/**
+ * 이 폴더를 볼 수 있는가(백엔드 #421 `acl.py`). 폴더와 모든 조상 각각에서 등급이 기준 이상이거나
+ * 지정한 사람이어야 한다. 임원은 등급이 가장 높아 전부 본다.
+ */
+export function canViewFolder(user: Pick<User, 'id' | 'role'>, folderId: string): boolean {
+  for (const folder of withAncestors(folderId)) {
+    const byRole = (ROLE_RANK[user.role] ?? 0) >= (ROLE_RANK[folder.min_role] ?? 99)
+    if (!byRole && !folder.allowed_users.includes(user.id)) return false
+  }
+  return true
+}
+
+/** 「전원 열람」이 아닌 폴더(자기나 조상에 등급·사람 지정). 이런 폴더를 오가는 이동은 임원만. */
+export function isRestricted(folderId: string): boolean {
+  for (const folder of withAncestors(folderId)) {
+    if (folder.min_role !== 'member' || folder.allowed_users.length) return true
+  }
+  return false
+}
+
+/** 사이드바 트리 한 벌. 휴지통에 든 문서는 빼고, 사람을 주면 그 사람이 볼 수 있는 것만 준다. */
+export function docTree(user?: Pick<User, 'id' | 'role'>): DocTreeData {
+  const visible = (folderId: string) => !user || canViewFolder(user, folderId)
+  return {
+    folders: FOLDERS.filter((folder) => visible(folder.id)),
+    docs: DOCS.filter((doc) => !doc.deleted_at && visible(doc.folder_id)),
+  }
 }
 
 export function findFolder(id: string): Folder | undefined {
@@ -347,9 +382,19 @@ export function createFolder(input: {
 
 export function updateFolder(
   folder: Folder,
-  input: { title?: string; parent_id?: string | null; sort?: number },
+  input: {
+    title?: string
+    parent_id?: string | null
+    sort?: number
+    min_role?: Folder['min_role']
+    allowed_users?: string[]
+  },
 ): Folder {
   if (input.title !== undefined) folder.title = input.title
+  if (input.min_role !== undefined) folder.min_role = input.min_role
+  // 서버는 문자열 순으로 정렬해 준다.
+  if (input.allowed_users !== undefined)
+    folder.allowed_users = [...new Set(input.allowed_users)].sort()
   if (input.parent_id !== undefined) folder.parent_id = input.parent_id
   if (input.sort !== undefined) folder.sort = input.sort
   return folder

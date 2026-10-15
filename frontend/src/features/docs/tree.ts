@@ -178,3 +178,22 @@ export function folderAccessLabel(folder: Folder): string | null {
   const role = MIN_ROLE_LABEL[folder.min_role] ?? folder.min_role
   return `열람: ${role}${people ? ` + 지정한 ${people}명` : ''}`
 }
+
+/**
+ * 열람 권한 창에서 고친 것 중 서버에 보낼 칸만. 안 바뀌었으면 `null`.
+ *
+ * 「전원」이면 사람 지정을 비운다. 등급이 전원이면 지정한 사람은 열람에 아무 뜻이 없고, 서버는 그
+ * 폴더를 제한 폴더로 쳐서 이동만 임원으로 막는다. 사람 지정은 전체 교체라 화면 명단에 없는 사람
+ * (비활성 계정, 나)도 `picked` 에 그대로 실려 와야 지워지지 않는다.
+ */
+export function folderAccessChange(
+  folder: Folder,
+  minRole: Folder['min_role'],
+  picked: string[],
+): { min_role?: Folder['min_role']; allowed_users?: string[] } | null {
+  const people = minRole === 'member' ? [] : [...new Set(picked)].sort()
+  const change: { min_role?: Folder['min_role']; allowed_users?: string[] } = {}
+  if (minRole !== folder.min_role) change.min_role = minRole
+  if (people.join() !== [...folder.allowed_users].sort().join()) change.allowed_users = people
+  return Object.keys(change).length ? change : null
+}

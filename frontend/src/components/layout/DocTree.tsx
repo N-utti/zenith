@@ -25,6 +25,8 @@ import { ApiError } from '@/lib/api'
 import { copyText } from '@/lib/clipboard'
 import { isDesktopShell } from '@/lib/desktop'
 import { serverOrigin } from '@/lib/serverOrigin'
+import { useCurrentUser } from '@/features/auth/AuthContext'
+import { FolderAccessModal } from '@/features/docs/FolderAccessModal'
 import { FolderNameModal } from '@/features/docs/FolderNameModal'
 import { MoveNodeModal } from '@/features/docs/MoveNodeModal'
 import { TrashDocModal } from '@/features/docs/TrashDocModal'
@@ -373,6 +375,9 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
   )
   /** 메뉴에서 고른 뒤 열리는 대화상자. 옮길 폴더 고르기와 휴지통 확인. */
   const [moving, setMoving] = useState<TreeItem | null>(null)
+  // 열람 권한 창을 연 폴더 id(백엔드 #421). 임원만 메뉴가 보인다. 실제 차단은 서버 403.
+  const [accessId, setAccessId] = useState<string | null>(null)
+  const isExec = useCurrentUser().role === 'exec'
   const [trashing, setTrashing] = useState<{ id: string; title: string } | null>(null)
 
   /** 지금 트리에서 그 문서·폴더. 그사이 지워졌거나 옮겨져 사라졌으면 없다. */
@@ -576,6 +581,8 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
   // 나타날 때 메뉴와 창이 옛 자리에 저절로 다시 뜬다.
   if (data && menu && !menuTarget) setMenu(null)
   if (data && moving && !movingTarget) setMoving(null)
+  const accessFolder = accessId ? data?.folders.find((f) => f.id === accessId) : undefined
+  if (data && accessId && !accessFolder) setAccessId(null)
 
   if (isPending) {
     return (
@@ -682,6 +689,13 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
                 label="다른 폴더로 옮기기"
                 onSelect={() => setMoving(menu.item)}
               />
+              {isExec && (
+                <ContextMenuItem
+                  icon={Lock}
+                  label="열람 권한"
+                  onSelect={() => setAccessId(menu.item.id)}
+                />
+              )}
               <hr className="border-line my-1" />
               {/* 빈 폴더만 지운다. 안에 든 것이 있으면 흐리게 두고 이유를 적는다. 휴지통에 든
                   문서는 트리에 없어 여기서는 모른다. 그 경우는 서버가 거절하고 이유를 준다. */}
@@ -751,6 +765,10 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
           }}
           onClose={() => setMoving(null)}
         />
+      )}
+
+      {accessFolder && (
+        <FolderAccessModal folder={accessFolder} onClose={() => setAccessId(null)} />
       )}
 
       {trashing && (
