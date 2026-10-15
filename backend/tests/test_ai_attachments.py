@@ -400,7 +400,9 @@ async def test_chat_creates_spreadsheet_as_attachment(
                     ),
                 )
                 return
-            yield "만들었습니다[[1]]."
+            # 도구 결과가 준 링크를 답에 그대로(팩트체커 호출에선 도구가 없어 오류 문구만 온다 — 링크 없음)
+            _, _, link = last[1]["content"].partition("넣습니다: ")
+            yield f"만들었습니다. {link}"
 
     _reset(app, Maker)
     share_scope(monkeypatch, app_db)
@@ -419,15 +421,15 @@ async def test_chat_creates_spreadsheet_as_attachment(
         results["bad"]["is_error"] is True and "표 모양이 틀렸습니다" in results["bad"]["content"]
     )
     assert "is_error" not in results["ok"] and results["ok"]["content"].startswith(
-        "[1] 《월별 이익_정리 가가"
+        "《월별 이익_정리 가가"
     )
     assert results["again"]["is_error"] is True and "하나만" in results["again"]["content"]
     citations = next(d for e, d in ev if e == "citations")
-    assert (
-        len(citations) == 1 and citations[0]["type"] == "file" and citations[0]["path"] == "AI 생성"
-    )
+    assert citations == []  # 근거 카드가 아니라 답 본문의 링크
     att = await app_db.scalar(select(AiAttachment).where(AiAttachment.user_id == users.member.id))
-    assert att is not None and citations[0]["to"] == f"/api/ai/attachments/{att.id}"
+    assert att is not None
+    answer = "".join(d["text"] for e, d in ev if e == "token")
+    assert f"](/api/ai/attachments/{att.id})" in answer and "[📎 월별 이익_정리 가가" in answer
     assert att.name.endswith(".xlsx") and len(att.name.encode()) <= 155
     assert att.name.startswith("월별 이익_정리 가가") and att.content_type == ai.XLSX_TYPE
     # 다음 질문에서 첨부로 읽힌다 — 수식 셀은 엑셀이 계산한 적이 없어 평문에선 빈칸(openpyxl 은 캐시 값을 안 만든다)
