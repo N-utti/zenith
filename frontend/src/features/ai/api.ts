@@ -4,7 +4,7 @@ import { markOnboarding } from '@/features/home/onboarding'
 import { uuid } from '@/lib/uuid'
 import type { Schema } from '@/types'
 import { aiThread, type ThreadStore } from './store'
-import type { AiAttachment, AiModel, Citation } from './types'
+import type { AiAttachment, AiEditResult, AiModel, Citation } from './types'
 
 /**
  * 04 §8 `POST /ai/feedback {message_id, value: 1|-1}`. 응답은 204(백엔드 #317).
@@ -29,6 +29,17 @@ export function uploadAiAttachment(file: File) {
   const form = new FormData()
   form.append('file', file)
   return api<AiAttachment>('/ai/attachments', { method: 'POST', body: form })
+}
+
+/**
+ * 올린 xlsx·docx 첨부를 지시대로 고친 새 첨부를 만든다(백엔드 #401). 원본은 그대로다.
+ * 거절 사유(422·503·429)는 전부 서버 문구로 온다.
+ */
+export function editAiAttachment(id: string, instruction: string) {
+  return api<AiEditResult>(`/ai/attachments/${id}/edit`, {
+    method: 'POST',
+    body: JSON.stringify({ instruction }),
+  })
 }
 
 export function useAiModels() {

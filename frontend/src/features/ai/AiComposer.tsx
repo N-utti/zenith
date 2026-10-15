@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { Cpu, FilePlus, FileText, Loader2, Paperclip, SendHorizontal, X } from 'lucide-react'
+import { Cpu, FilePlus, FileText, Loader2, Paperclip, SendHorizontal, Wand2, X } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Dropdown } from '@/components/ui/Dropdown'
 import { Textarea } from '@/components/ui/Textarea'
@@ -7,6 +7,8 @@ import { useToast } from '@/components/ui/ToastContext'
 import { useTree } from '@/features/docs/api'
 import { ApiError } from '@/lib/api'
 import { uploadAiAttachment } from './api'
+import { canEdit } from './attachEdit'
+import { AttachmentEditor } from './AttachmentEditor'
 import { AI_TEMPLATES } from './catalog'
 import { RefDocPicker } from './RefDocPicker'
 import { MAX_ATTACHMENTS, MAX_REF_DOCS, SCOPE_ALL, topFolders } from './scope'
@@ -58,6 +60,7 @@ export function AiComposer({
     setAttachments([])
   }
   const fileInput = useRef<HTMLInputElement>(null)
+  const [editing, setEditing] = useState<AiAttachment | null>(null)
   const room = MAX_ATTACHMENTS - attachments.length - uploading
 
   const attach = (files: File[]) => {
@@ -149,6 +152,17 @@ export function AiComposer({
                   <span className="truncate">{file.name}</span>
                   {/* 서버가 뽑은 글자 수. 길면 앞부분만 읽힌다. */}
                   <span className="text-subtle shrink-0">{file.chars.toLocaleString()}자</span>
+                  {canEdit(file.name) && (
+                    <button
+                      type="button"
+                      onClick={() => setEditing(file)}
+                      aria-label={`${file.name} AI로 고치기`}
+                      title="AI로 고치기"
+                      className="text-subtle hover:bg-surface-hover hover:text-fg grid size-5 shrink-0 cursor-pointer place-items-center rounded-full transition-colors"
+                    >
+                      <Wand2 className="size-3" />
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() =>
@@ -275,6 +289,7 @@ export function AiComposer({
             onChange={setPickedDocs}
           />
         )}
+        {editing && <AttachmentEditor file={editing} onClose={() => setEditing(null)} />}
       </div>
     </div>
   )

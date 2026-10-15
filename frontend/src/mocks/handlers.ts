@@ -1676,6 +1676,54 @@ export const handlers = [
     })
   }),
 
+  // AI 로 첨부 고치기(백엔드 #401). 실제 서버는 고친 새 파일을 만들고 원본은 둔다.
+  // ponytail: 목은 파일을 고치지 않고 원본을 새 이름으로 복사하고, 변경 내역은 형식별 고정값이다.
+  // 지시에 「실패」가 들어 있으면 503 으로 다시 시도 흐름을 본다.
+  http.post('/api/ai/attachments/:id/edit', async ({ params, request }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    const file = AI_ATTACHMENTS.get(String(params.id))
+    if (!file || file.owner !== user.id) return notFound('없는 첨부입니다.')
+    const ext = file.name.slice(file.name.lastIndexOf('.') + 1).toLowerCase()
+    if (ext !== 'xlsx' && ext !== 'docx') return validationError('xlsx·docx 만 고칠 수 있습니다.')
+    const { instruction = '' } = (await request.json()) as { instruction?: string }
+    if (!instruction.trim()) return validationError('고칠 내용을 적어 주세요.')
+    await delay(1200)
+    if (instruction.includes('실패'))
+      return HttpResponse.json(
+        {
+          detail: 'AI 가 수정 내용을 정해진 모양으로 내지 않았습니다. 다시 시도해 주세요.',
+          code: 'AI_FORMAT',
+        },
+        { status: 503 },
+      )
+    const id = crypto.randomUUID()
+    const name = `${file.name.slice(0, file.name.lastIndexOf('.'))} (AI 수정).${ext}`
+    AI_ATTACHMENTS.set(id, { ...file, name })
+    return HttpResponse.json({
+      result: {
+        id,
+        name,
+        size: file.blob.size,
+        content_type: file.blob.type || 'application/octet-stream',
+        chars: file.text.length,
+      },
+      changes:
+        ext === 'xlsx'
+          ? [
+              { where: '매출!B7', before: '1200', after: '=SUM(B2:B6)' },
+              { where: '매출!A7', before: '합', after: '3월 합계' },
+            ]
+          : [
+              {
+                where: '문단 3',
+                before: '회의는 10월 15일에 열립니다.',
+                after: '회의는 10월 20일에 열립니다.',
+              },
+            ],
+    })
+  }),
+
   // SSE: status → token → citations → done. 실제 서버(routers/ai.py)와 같은 프레임 모양.
   http.post('/api/ai/chat', async ({ request }) => {
     const user = authenticate()
