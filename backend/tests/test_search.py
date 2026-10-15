@@ -43,6 +43,7 @@ async def _seed(app_db, users: Users) -> dict:
         doc("휴지통 문서", "로드맵 이야기지만 지워졌다", deleted_at=now),
         doc("오래된 메모", "로드맵 초안", updated_at=now - timedelta(days=60)),
         doc("제목만 일치", "본문에는 다른 말", updated_at=now),
+        doc("09.30 기습 미팅 요약본", "매매 - 115억, 버전 v1.2.3, 2026-10-15 회의", updated_at=now),
     ]
     docs[3].title = "로드맵 제목"
     general = Channel(ws_id=ws.id, name="일반", is_dm=False)
@@ -205,3 +206,23 @@ async def test_tsv_is_generated_by_the_db(client: AsyncClient, users: Users, app
     await app_db.flush()
     assert "tsv" in inspect(post).unloaded and "tsv" in inspect(message).unloaded
     assert post.id is not None and message.id is not None  # id 는 여전히 돌아온다
+
+
+async def test_dotted_and_hyphenated_tokens_are_kept(
+    client: AsyncClient, users: Users, app_db
+) -> None:
+    """라이브 테스트 2026-10-15: "09.30" 을 "09"·"30" 으로 쪼개면 "30:*" 가 못 찾아 제목 전체 검색이 0건이었다.
+    Postgres 파서가 한 lexeme 으로 두는 날짜·버전은 쿼리에도 통째로 넘긴다."""
+    await _seed(app_db, users)
+    await login(client, "jaeho@zenith.co.kr")
+    for q in ("09.30 기습 미팅 요약본", "v1.2.3", "2026-10-15 회의", "09.30"):
+        r = await client.get("/api/search", params={"q": q, "types": "doc"})
+        assert r.status_code == 200, r.text
+        assert [h["title"] for h in r.json()] == ["09.30 기습 미팅 요약본"], q
+    # tsquery 문법 글자는 여전히 토큰이 아니고, 글자 사이 `-` 는 그대로 AND 다(위 "로드맵,회의-내일")
+    from app.routers.search import _tsquery
+
+    assert (
+        _tsquery("-09.30. & !x | y:* 회의-내일 v1.2.3")
+        == "09.30:* & x:* & y:* & 회의:* & 내일:* & v1.2.3:*"
+    )
