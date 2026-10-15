@@ -49,8 +49,10 @@ router = APIRouter(tags=["search"], dependencies=[Depends(current_user)])
 SearchType = Literal["doc", "chat", "post"]
 ALL_TYPES: tuple[SearchType, ...] = ("doc", "chat", "post")
 # 글자·숫자 덩어리만 토큰이다 — tsquery 연산자·구두점·제어문자(NUL 은 드라이버에서 터진다)가 쿼리 문법이 되지
-# 않고, "foo-bar"·"foo,bar" 가 구문검색(<->)으로 접히지도 않는다(그냥 foo & bar).
-_TOKEN = re.compile(r"[^\W_]+")
+# 않고, "foo-bar"·"foo,bar" 는 그냥 foo & bar 다. 예외 둘(라이브 테스트 2026-10-15): 숫자 사이의 `.`·`-`("09.30"·"1.2.3"·
+# "2026-10-15")와 글자 사이의 `.`("v1.2.3"·"zenith.local")은 Postgres 파서가 한 lexeme(또는 구문)으로 두기 때문에
+# 쪼개 보내면 "30:*" 같은 조각이 아무것도 못 찾아 AND 전체가 0건이 된다 — 같은 파서가 쿼리도 읽으니 통째로 넘긴다.
+_TOKEN = re.compile(r"\d+(?:[.-]\d+)+|[^\W_]+(?:\.[^\W_]+)*")
 HEADLINE_OPTS = "MaxWords=24, MinWords=10, MaxFragments=1, StartSel=**, StopSel=**"
 RRF_K = 60  # 순위 융합 상수(Cormack 2009 의 기본값) — 작을수록 1등 쏠림
 # ponytail: kNN 은 거리가 멀어도 limit 를 채운다 — 이 상한 밖은 「관련 없음」으로 버린다(무관한 문서가 근거로
