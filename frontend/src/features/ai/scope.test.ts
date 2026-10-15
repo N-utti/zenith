@@ -3,7 +3,14 @@ import { ApiError } from '@/lib/api'
 import { dropOnRetry, rejected, topFolders } from './scope'
 
 it('topFolders 는 부모가 없는 폴더만 남긴다. 트리가 아직 없으면 빈 목록', () => {
-  const folder = (id: string, parent_id: string | null) => ({ id, parent_id, title: id, sort: 0 })
+  const folder = (id: string, parent_id: string | null) => ({
+    id,
+    parent_id,
+    title: id,
+    sort: 0,
+    min_role: 'member' as const,
+    allowed_users: [],
+  })
   const tree = { folders: [folder('a', null), folder('b', 'a'), folder('c', null)], docs: [] }
   expect(topFolders(tree).map((f) => f.id)).toEqual(['a', 'c'])
   expect(topFolders(undefined)).toEqual([])

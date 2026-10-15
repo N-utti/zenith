@@ -3241,6 +3241,14 @@ export interface components {
              * @default 0
              */
             sort: number;
+            /**
+             * Min Role
+             * @default member
+             * @enum {string}
+             */
+            min_role: "member" | "lead" | "exec";
+            /** Allowed Users */
+            allowed_users?: string[];
         };
         /** FolderOut */
         FolderOut: {
@@ -3255,6 +3263,13 @@ export interface components {
             title: string;
             /** Sort */
             sort: number;
+            /**
+             * Min Role
+             * @enum {string}
+             */
+            min_role: "member" | "lead" | "exec";
+            /** Allowed Users */
+            allowed_users: string[];
         };
         /** FolderPatchIn */
         FolderPatchIn: {
@@ -3264,6 +3279,10 @@ export interface components {
             parent_id?: string | null;
             /** Sort */
             sort?: number | null;
+            /** Min Role */
+            min_role?: ("member" | "lead" | "exec") | null;
+            /** Allowed Users */
+            allowed_users?: string[] | null;
         };
         /** ForceCloseIn */
         ForceCloseIn: {
