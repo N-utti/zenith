@@ -38,7 +38,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import audit, storage
-from app.ai import edit, extract
+from app.ai import edit, extract, make
 from app.ai.provider import ChatMessage, LLMError, LLMProvider, ToolCalls, get_provider
 from app.config import settings
 from app.db import get_db, session_scope
@@ -137,6 +137,38 @@ READ_TOOL = {
         "required": ["n"],
     },
 }
+# 파일 만들기(README 55) — 「엑셀로 만들어 줘」. 모델이 낸 표를 서버가 xlsx 로 써서 7일 첨부(README 51)로 저장하고
+# 파일 카드(내려받기)로 돌려준다. /ai/chat 에만 준다 — 팩트체크·cite 에는 뜻이 없고, 채팅 /ai 는 카드가 없어 내려받을
+# 자리가 없다(봇 글에 첨부로 싣는 건 다음). 한 답변에 MAKES_PER_ANSWER 번.
+MAKE_TOOL = {
+    "name": "create_spreadsheet",
+    "description": (
+        "표를 엑셀(xlsx) 파일로 만든다. 사용자가 파일·엑셀로 달라고 할 때만 쓴다. 첫 행은 머리글. 값은 문자열·숫자·"
+        "불리언·null 이고 '=' 로 시작하면 수식(셀 참조·숫자·SUM/AVERAGE/IF/ROUND 같은 계산 함수만, 문자열·외부 참조 없이, "
+        "예: '=B2-C2'). 만든 뒤 답에는 결과 번호로 [[n]] 각주를 달아 내려받기 카드를 보여 주고, 같은 표를 글로 다시 그리지 "
+        "않는다."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "name": {"type": "string", "description": "파일 이름(확장자 없이)"},
+            "sheets": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "title": {"type": "string"},
+                        "rows": {"type": "array", "items": {"type": "array"}},
+                    },
+                    "required": ["rows"],
+                },
+            },
+        },
+        "required": ["name", "sheets"],
+    },
+}
+MAKES_PER_ANSWER = 1
+XLSX_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 MAX_CALLS_PER_ROUND = 3  # 한 턴의 병렬 호출 상한 — 넘는 호출은 is_error 로 돌려준다(비용·DB 부하)
 # AI 근거 구절은 ⌘K 스니펫보다 길게 — 모델이 읽고 인용할 만큼
 PASSAGE_HEADLINE = (
@@ -262,6 +294,100 @@ async def _read(
         f"[{cite.n}] 《{_body(_oneline(row[0]))}》 전문:\n<문서>\n{_body(text)}\n</문서>{note}"
     )
     return {"content": content}, len(text)
+
+
+async def _make(user: User, inp: dict, sources: list[Citation]) -> dict[str, object]:
+    """create_spreadsheet 실행 — 표를 xlsx 로 써서 질문자의 AI 첨부(README 51: 올린 사람만·7일·보관 한도)로 저장하고
+    파일 카드 번호를 돌려준다. 모양·상한 위반과 저장 실패는 is_error 로 — 파일 하나 때문에 답변 전체가 죽지 않게."""
+    raw = inp.get("name")
+    stem = re.sub(r"\.xlsx$", "", raw.strip(), flags=re.I) if isinstance(raw, str) else ""
+    # 줄기만 safe_name 에 넣고 확장자는 뒤에 — safe_name 의 200바이트 자르기에 한글 이름의 .xlsx 가 잘리지 않게(리뷰)
+    stem = storage.safe_name(stem).encode()[:150].decode("utf-8", "ignore").strip(". ") or "표"
+    name = stem + ".xlsx"
+    try:
+        async with (
+            _extract_slots
+        ):  # 업로드·수정과 같은 가드(동시 2건·60초) — 기본 실행기 스레드를 다 쓰지 않게
+            data = await asyncio.wait_for(
+                asyncio.to_thread(make.build_xlsx, inp.get("sheets")), ATTACH_EXTRACT_TIMEOUT_S
+            )
+            if len(data) > ATTACH_MAX_BYTES:
+                return {"content": "파일이 너무 큽니다 — 표를 줄여 주세요.", "is_error": True}
+            try:
+                # 다음 질문에서 첨부로 다시 읽을 수 있게 평문도 — 수식 셀은 캐시 값이 없어 빈칸
+                text = await asyncio.wait_for(
+                    asyncio.to_thread(extract.extract, name, data), ATTACH_EXTRACT_TIMEOUT_S
+                )
+            except (extract.Unsupported, extract.Empty, TimeoutError) as e:
+                log.warning("AI 생성 파일 평문 추출 실패 %s: %r", name, e)
+                text = ""
+    except make.BadSpec as e:
+        return {"content": f"표 모양이 틀렸습니다: {e}", "is_error": True}
+    except Exception as e:  # noqa: BLE001 — openpyxl 의 그 밖의 예외·시간 초과도 도구 오류로 접는다
+        log.warning("AI 생성 파일 만들기 실패: %r", e)
+        return {
+            "content": "파일을 만들지 못했습니다 — 표를 단순하게 해 다시 시도합니다.",
+            "is_error": True,
+        }
+    att = AiAttachment(
+        id=uuid.uuid4(),
+        user_id=user.id,
+        name=name,
+        size=len(data),
+        content_type=XLSX_TYPE,
+        text=text,
+    )
+    try:
+        async with session_scope() as db:
+            used = await db.scalar(
+                select(func.coalesce(func.sum(AiAttachment.size), 0)).where(
+                    AiAttachment.user_id == user.id
+                )
+            )
+            if used + len(data) > ATTACH_QUOTA_BYTES:
+                return {
+                    "content": "첨부 보관 한도를 넘어 파일을 만들 수 없습니다(7일 뒤 비워집니다).",
+                    "is_error": True,
+                }
+            await storage.put(f"ai/{user.id}/{att.id}/{name}", data, XLSX_TYPE)
+            db.add(att)
+            audit.record(
+                db,
+                "ai.file_create",
+                actor_id=user.id,
+                target_id=att.id,
+                detail={
+                    "ext": "xlsx",
+                    "size": len(data),
+                    "sha": hashlib.sha256(data).hexdigest()[:16],
+                },
+            )
+            try:
+                await db.commit()
+            except Exception:
+                await storage.remove_prefix(f"ai/{user.id}/{att.id}/")
+                raise
+    except Exception as e:  # noqa: BLE001 — MinIO·DB 오류는 이 도구만 실패로(답변·검색 근거는 살린다, 리뷰)
+        log.exception("AI 생성 파일 저장 실패: %r", e)
+        return {
+            "content": "파일을 저장하지 못했습니다. 잠시 뒤 다시 시도해 주세요.",
+            "is_error": True,
+        }
+    n = len(sources) + 1
+    sources.append(
+        Citation(
+            n=n,
+            type="file",
+            to=f"/api/ai/attachments/{att.id}",
+            doc_id=None,
+            title=name,
+            quote=text[:200],
+            path="AI 생성",
+        )
+    )
+    return {
+        "content": f"[{n}] 《{_body(name)}》 파일을 만들었습니다({len(data):,}바이트). 답에 [[{n}]] 을 답니다."
+    }
 
 
 _CITE_RE = re.compile(r"\[\[(\d+)\]\]")
@@ -520,6 +646,7 @@ async def _turns(
     extra_tools: list[dict[str, object]] | None = None,
     web_urls: set[str] | None = None,  # 서버측 web_search 가 실제로 돌려준 URL 을 모은다(README 49)
     exclude_doc: uuid.UUID | None = None,  # 검색에서 뺄 문서(팩트체크의 검사 대상, #410)
+    make_files: bool = False,  # create_spreadsheet 를 준다(README 55) — /ai/chat 만
 ) -> AsyncIterator[tuple[str, str]]:
     """도구 라운드(README 42) — 모델 턴을 받고, search_knowledge 호출을 질문자 권한으로 실행해 결과를 되돌리기를
     최대 MAX_TOOL_ROUNDS 번. 글 토큰은 `parts` 에 쌓고 ('token', 글)·('status', 글) 로 흘린다. `/ai/chat`(SSE)과
@@ -528,6 +655,8 @@ async def _turns(
     # 지금 sources 에 있는 문서 카드는 전부 블록(규정·참고 문서)에서 온 것 — 전문이 이미 프롬프트에 있다
     read_ids: set[uuid.UUID] = {c.doc_id for c in sources if c.type == "doc" and c.doc_id}
     read_tool = [] if web_urls is not None else [READ_TOOL]  # 웹 검색이 켜진 요청엔 전문 읽기 없음
+    make_tool = [MAKE_TOOL] if make_files else []
+    makes_left = MAKES_PER_ANSWER
     for round_ in range(MAX_TOOL_ROUNDS + 1):
         # 도구 정의는 늘 보낸다(앞 턴에 tool_use 블록이 있으면 API 가 요구) — 마지막 라운드는 부르지 못하게만
         tool_choice = {"type": "none"} if round_ == MAX_TOOL_ROUNDS else None
@@ -539,7 +668,7 @@ async def _turns(
             system=system,
             messages=messages,
             max_tokens=max_tokens,
-            tools=[SEARCH_TOOL, *read_tool, *(extra_tools or [])],
+            tools=[SEARCH_TOOL, *read_tool, *make_tool, *(extra_tools or [])],
             tool_choice=tool_choice,
         ):
             if isinstance(item, ToolCalls):
@@ -560,13 +689,28 @@ async def _turns(
         results = []
         for i, call in enumerate(turn_end.calls):
             is_read = call.name == READ_TOOL["name"]
-            yield ("status", "문서를 읽는 중" if is_read else "문서를 찾는 중")
+            is_make = make_files and call.name == MAKE_TOOL["name"]
+            yield (
+                "status",
+                "파일을 만드는 중"
+                if is_make
+                else "문서를 읽는 중"
+                if is_read
+                else "문서를 찾는 중",
+            )
             query = call.input.get("query") if call.name == SEARCH_TOOL["name"] else None
             if i >= MAX_CALLS_PER_ROUND:
                 result = {
                     "content": f"한 번에 {MAX_CALLS_PER_ROUND}개까지만 찾습니다.",
                     "is_error": True,
                 }
+            elif is_make:
+                if makes_left <= 0:
+                    result = {"content": "파일은 한 답변에 하나만 만듭니다.", "is_error": True}
+                else:
+                    result = await _make(user, call.input, sources)
+                    if not result.get("is_error"):
+                        makes_left -= 1
             elif is_read:
                 result, used = await _read(
                     call.input.get("n"), sources, read_ids, read_budget, exclude_doc
@@ -755,7 +899,7 @@ async def chat(
             # 클라이언트가 끊기면 GeneratorExit 이 여기서 나는데, aclosing 이 없으면 안쪽 제너레이터(SDK 스트림·도구
             # 세션)가 GC 까지 열린 채 남는다(보안 리뷰)
             async with aclosing(
-                _turns(provider, system, messages, user, sources, folder_id, parts)
+                _turns(provider, system, messages, user, sources, folder_id, parts, make_files=True)
             ) as turns:
                 async for kind, text in turns:
                     yield sse(kind, {"text": text})

