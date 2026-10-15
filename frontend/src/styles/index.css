@@ -68,6 +68,10 @@
 }
 
 :root {
+  /* index.html 의 color-scheme 메타(light dark)는 운영체제 테마를 따른다. 앱 테마는 사용자가
+     고르므로 여기서 못 박는다. 비워 두면 윈도가 다크일 때 밝은 테마의 날짜 칸에 흰 달력 아이콘이
+     박힌다. 다크는 아래 .dark 가 덮고, 인쇄는 늘 밝게 남는다. */
+  color-scheme: light;
   --zenith-canvas: oklch(0.985 0.002 265);
   --zenith-surface: oklch(1 0 0);
   --zenith-surface-hover: oklch(0.965 0.004 265);
@@ -85,7 +89,9 @@
   --zenith-accent-soft: oklch(0.95 0.03 265);
 
   --zenith-success: oklch(0.58 0.14 155);
-  --zenith-warning: oklch(0.71 0.15 75);
+  /* 흰 바탕 대비 4.0:1. 아이콘 기준(3:1)은 넘고 작은 글자 기준(4.5:1)에는 조금 못 미친다.
+     success·info 와 같은 선이다. 글자 기준까지 올리려면 셋을 같이 내린다. */
+  --zenith-warning: oklch(0.6 0.12 75);
   --zenith-danger: oklch(0.57 0.2 25);
   /* 재택·외근·출장 (10 근태 설계서 §10 상태 색 규약의 "청록").
      accent(265)와 success(155) 사이 200에 두어 셋이 서로 구분된다.
@@ -96,6 +102,9 @@
 /* 어두운 색은 화면에서만. 인쇄(문서 PDF 내보내기)는 어두운 테마에서도 흰 종이에 짙은 글자로 나간다. */
 @media screen {
   .dark {
+    /* 브라우저가 직접 그리는 부품(날짜·시간 칸의 달력·시계 아이콘, 검색칸 지우기 X, 날짜 고르는
+       팝업)도 어둡게 그리라고 알린다. 없으면 어두운 바탕에 검은 아이콘이 박힌다. */
+    color-scheme: dark;
     --zenith-canvas: oklch(0.18 0.008 265);
     --zenith-surface: oklch(0.22 0.01 265);
     --zenith-surface-hover: oklch(0.26 0.012 265);

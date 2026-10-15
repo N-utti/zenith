@@ -266,7 +266,7 @@ export function ToolMenu({
         )}
       >
         {trigger}
-        <ChevronDown className="size-3 opacity-60" />
+        <ChevronDown className="size-3" />
       </button>
 
       {open &&
