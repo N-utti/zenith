@@ -10,6 +10,7 @@ import { approvalsKey } from '@/features/approvals/api'
 import { homeKeys } from '@/features/home/keys'
 import { notificationKeys } from '@/features/notifications/api'
 import { noticeToast } from '@/features/notifications/view'
+import { AI_NAME, isAiCommand } from './aiCommand'
 import { chatKeys } from './api'
 import {
   appendMessage,
@@ -26,6 +27,8 @@ import type { ChatAttachment, ChatChannel, ChatEvent, ChatMessage } from './type
 const TYPING_TTL_MS = 3000
 /** 키를 칠 때마다 보내지 않는다. */
 const TYPING_THROTTLE_MS = 2000
+/** `/ai` 를 보낸 뒤 봇 답을 기다리는 표시의 상한. 서버의 답 제한 시간(120초)과 같다. 답 없이 끝나는 길(채널을 나감)이 있다. */
+const AI_REPLY_TTL_MS = 120_000
 /** 다시 붙는 간격. 연달아 실패하면 두 배씩 늘려 상한에서 멈춘다. */
 const RECONNECT_MS = 2000
 const RECONNECT_MAX_MS = 10_000
@@ -118,6 +121,47 @@ export function useChatSocket(): ChatSocket {
   const lastTypingSentRef = useRef(0)
   const typingTimersRef = useRef(new Map<string, number>())
 
+  const hideTyping = useCallback((channelId: string, name: string) => {
+    const timers = typingTimersRef.current
+    const key = `${channelId}:${name}`
+    window.clearTimeout(timers.get(key))
+    timers.delete(key)
+    setTypingByChannel((current) =>
+      current[channelId]?.includes(name)
+        ? { ...current, [channelId]: current[channelId].filter((n) => n !== name) }
+        : current,
+    )
+  }, [])
+
+  /**
+   * 모든 채널의 AI 답 기다림 표시를 끈다. 끊긴 사이 온 봇 답은 과거 메시지로 다시 받는데, 거기엔 봇 표시가 없어
+   * (이슈 #403) 표시를 끌 계기가 사라진다. 아직 안 온 답은 표시 없이 나타나지만 상한까지 헛표시를 남기는 것보다 낫다.
+   */
+  const hideAiEverywhere = useCallback(() => {
+    for (const key of typingTimersRef.current.keys()) {
+      if (key.endsWith(`:${AI_NAME}`)) hideTyping(key.slice(0, -AI_NAME.length - 1), AI_NAME)
+    }
+  }, [hideTyping])
+
+  /** 타이핑 줄에 이름을 `ttl` 동안 띄운다. 다시 오면 시간을 처음부터 잰다. */
+  const showTyping = useCallback(
+    (channelId: string, name: string, ttl: number) => {
+      setTypingByChannel((current) => {
+        const names = current[channelId] ?? []
+        if (names.includes(name)) return current
+        return { ...current, [channelId]: [...names, name] }
+      })
+      const timers = typingTimersRef.current
+      const key = `${channelId}:${name}`
+      window.clearTimeout(timers.get(key))
+      timers.set(
+        key,
+        window.setTimeout(() => hideTyping(channelId, name), ttl),
+      )
+    },
+    [hideTyping],
+  )
+
   useEffect(() => {
     let closed = false
     let reconnectTimer: number | undefined
@@ -149,6 +193,7 @@ export function useChatSocket(): ChatSocket {
           void qc.invalidateQueries({ queryKey: chatKeys.channels })
           void qc.invalidateQueries({ queryKey: homeKeys.home })
           void qc.invalidateQueries({ queryKey: notificationKeys.list })
+          hideAiEverywhere()
         }
         reconnectedRef.current = true
       }
@@ -211,6 +256,8 @@ export function useChatSocket(): ChatSocket {
           // 홈은 여기서 안 받는다. `msg` 뒤에는 늘 `unread` 가 따라오고(서버가 멤버마다 자기
           // 숫자를 보낸다) 그쪽이 홈을 다시 받는다. 둘 다 하면 메시지 한 통에 홈을 두 번 받는다.
           notifyIncoming(qc, message, user.id)
+          // 봇 답이 오면 기다리는 표시를 끈다. 같은 채널에 둘이 물었으면 먼저 온 답에 꺼진다.
+          if (message.author.is_bot) hideTyping(message.channel_id, AI_NAME)
           return
         }
 
@@ -223,6 +270,7 @@ export function useChatSocket(): ChatSocket {
          */
         const staleMentions = (home: boolean) => {
           void qc.invalidateQueries({ queryKey: notificationKeys.list })
+          hideAiEverywhere()
           if (home) void qc.invalidateQueries({ queryKey: homeKeys.home })
         }
 
@@ -270,6 +318,7 @@ export function useChatSocket(): ChatSocket {
           void qc.invalidateQueries({ queryKey: homeKeys.home })
           // 채널이 지워졌으면 그 채널의 멘션 알림도 서버에서 사라진다. 안 받으면 죽은 링크가 남는다.
           void qc.invalidateQueries({ queryKey: notificationKeys.list })
+          hideAiEverywhere()
           return
         }
 
@@ -277,31 +326,16 @@ export function useChatSocket(): ChatSocket {
           // 되돌아가 고칠 입력이 없는 실패라 토스트다(`ui/Toast.tsx`). 소켓이 닫혀서
           // 못 보낸 경우는 sendMessage 가 false 로 알리고 Composer 가 입력 옆에 낸다.
           toast.error(errorText(event))
+          // 그 채널에 보낸 것이 거절됐다(`/ai` 를 너무 자주 보냄 등). 봇 답은 오지 않는다.
+          // ponytail: 코드를 가리지 않아 같은 채널의 다른 거절(남의 글 고치기 등)에도 꺼지고, 채널이 안 붙는
+          // 형식 오류에는 상한까지 남는다. 앞 질문을 기다리는 중 다음 `/ai` 가 거절돼도 꺼진다.
+          if (event.channel_id) hideTyping(event.channel_id, AI_NAME)
           return
         }
 
         if (event.ev === 'typing') {
           if (event.user_id === user.id) return
-          const { channel_id: channelId, name } = event
-
-          setTypingByChannel((current) => {
-            const names = current[channelId] ?? []
-            if (names.includes(name)) return current
-            return { ...current, [channelId]: [...names, name] }
-          })
-
-          const key = `${channelId}:${name}`
-          window.clearTimeout(typingTimers.get(key))
-          typingTimers.set(
-            key,
-            window.setTimeout(() => {
-              setTypingByChannel((current) => ({
-                ...current,
-                [channelId]: (current[channelId] ?? []).filter((n) => n !== name),
-              }))
-              typingTimers.delete(key)
-            }, TYPING_TTL_MS),
-          )
+          showTyping(event.channel_id, event.name, TYPING_TTL_MS)
           return
         }
 
@@ -309,6 +343,7 @@ export function useChatSocket(): ChatSocket {
           // 목록에 직접 꽂지 않고 다시 받는다. 새 글 알림은 서버가 응답을 만들 때 등급을 다시
           // 판정해 제목을 가리는데(`_mask_post_notices`), 소켓으로 온 payload 는 그 판정 전이다.
           void qc.invalidateQueries({ queryKey: notificationKeys.list })
+          hideAiEverywhere()
           // 채팅 멘션이면 홈은 같은 메시지의 `unread` 가 이미 다시 받는다.
           if (!event.payload?.channel_id) void qc.invalidateQueries({ queryKey: homeKeys.home })
           // 결재 알림이면 열려 있는 결재함과 문서도 낡았다(내 차례가 왔거나 결과가 났다).
@@ -344,7 +379,7 @@ export function useChatSocket(): ChatSocket {
     }
     // toast 는 `ui/Toast.tsx` 의 모듈 상수라 렌더마다 바뀌지 않는다. 바뀌게 되면 이 effect 가
     // 매 렌더 다시 돌아 소켓이 끊겼다 붙는다. 그 파일에서 api 를 렌더 안으로 옮기면 안 된다.
-  }, [user.id, qc, toast])
+  }, [user.id, qc, toast, showTyping, hideTyping, hideAiEverywhere])
 
   /**
    * 프레임 하나를 던진다. 닫혀 있으면 안 보내고 false. 응답은 없다(단방향).
@@ -362,10 +397,15 @@ export function useChatSocket(): ChatSocket {
   }, [])
 
   const sendMessage = useCallback<ChatSocket['sendMessage']>(
-    (channelId, { body, attachments }) =>
+    (channelId, { body, attachments }) => {
       // attachments 가 undefined 면 JSON 에서 키가 빠진다. 서버 기본값이 None 이라 그대로 맞다.
-      sendOp({ op: 'msg', channel_id: channelId, body, attachments }),
-    [sendOp],
+      const sent = sendOp({ op: 'msg', channel_id: channelId, body, attachments })
+      // 내 글이 돌아올 때가 아니라 보낼 때 켠다. 서버는 거절(`AI_THROTTLED`)을 내 글을 뿌리기 전에 보내서,
+      // 돌아올 때 켜면 거절에 꺼진 뒤 다시 켜져 상한까지 남는다.
+      if (sent && isAiCommand(body)) showTyping(channelId, AI_NAME, AI_REPLY_TTL_MS)
+      return sent
+    },
+    [sendOp, showTyping],
   )
 
   const sendRead = useCallback<ChatSocket['sendRead']>(
