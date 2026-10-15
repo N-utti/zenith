@@ -20,7 +20,7 @@ from urllib.parse import unquote
 
 from sqlalchemy import select
 
-from app import audit, storage
+from app import acl, audit, storage
 from app.ai import extract
 from app.config import settings
 from app.db import session_scope
@@ -118,7 +118,9 @@ def _body(text: str) -> str:
     return ai_router._body(text)
 
 
-async def run(user: User, name: str, inp: dict, *, budget: int, via: str) -> dict[str, object]:
+async def run(
+    user: User, name: str, inp: dict, *, budget: int, via: str, acl_user: User | None = None
+) -> dict[str, object]:
     """도구 하나를 질문자 권한으로 실행한다. 예외는 오류 문구로 — 도구 하나 때문에 답변이 죽지 않게.
     `budget` 은 이 답변에 남은 글자 예산(read_document 와 공유) — 결과를 그 안으로 자른다. `via` 는 감사용 경로."""
     fn = {
@@ -132,7 +134,11 @@ async def run(user: User, name: str, inp: dict, *, budget: int, via: str) -> dic
         return _err("이 답변의 자료 읽기 한도를 다 썼습니다.")
     try:
         async with session_scope() as db:
-            result = await fn(db, user, inp if isinstance(inp, dict) else {}, via)
+            args = inp if isinstance(inp, dict) else {}
+            if name == "read_file":  # 문서 파일의 폴더 판정 주체(채팅 /ai 는 봇 — README 57)
+                result = await _read_file(db, user, args, via, acl_user=acl_user or user)
+            else:
+                result = await fn(db, user, args, via)
     except ApiError as e:
         return _err(e.detail)
     except Exception as e:  # noqa: BLE001
@@ -330,7 +336,9 @@ async def _archive(db, user: User, inp: dict, via: str) -> dict[str, object]:
     return _ok("\n".join(lines))
 
 
-async def _read_file(db, user: User, inp: dict, via: str) -> dict[str, object]:
+async def _read_file(
+    db, user: User, inp: dict, via: str, *, acl_user: User | None = None
+) -> dict[str, object]:
     from app.routers import ai as ai_router
     from app.routers.channels import attachment_key, attachment_url
 
@@ -366,7 +374,11 @@ async def _read_file(db, user: User, inp: dict, via: str) -> dict[str, object]:
                 and row.doc_id is not None
                 and await db.scalar(
                     select(Document.id).where(
-                        Document.id == row.doc_id, Document.deleted_at.is_(None)
+                        Document.id == row.doc_id,
+                        Document.deleted_at.is_(None),
+                        Document.folder_id.in_(
+                            acl.visible_folder_ids(acl_user or user)
+                        ),  # README 57
                     )
                 )
             )

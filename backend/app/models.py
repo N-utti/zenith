@@ -135,6 +135,22 @@ class Folder(Base):
     parent_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("folders.id"))  # NULL=루트
     title: Mapped[str] = mapped_column(Text, nullable=False)
     sort: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    # 열람 최소 등급(README 57) — 게시판 min_role 과 같은 서열. 조상 폴더가 막히면 그 아래도 안 보인다(app/acl.py)
+    min_role: Mapped[str] = mapped_column(Text, nullable=False, server_default="member")
+
+
+class FolderMember(Base):
+    """폴더 사람 지정(README 57) — 등급과 무관하게 이 사람에게 연다. 폴더·사람이 지워지면 같이 지워진다(CASCADE)."""
+
+    __tablename__ = "folder_members"
+
+    folder_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("folders.id", ondelete="CASCADE"), primary_key=True
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    created_at: Mapped[datetime] = created_at_col()
 
 
 class Document(Base):

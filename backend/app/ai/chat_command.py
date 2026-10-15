@@ -201,7 +201,9 @@ async def reply(
                 )
                 return
             sources: list = []
-            rules_block = await ai_router._rules_sources(db, sources)
+            rules_block = await ai_router._rules_sources(
+                db, bot, sources
+            )  # 문서 판정은 봇(전원 열람만, README 57)
             audit.record(
                 db,
                 "ai.chat_command",
@@ -253,6 +255,8 @@ async def reply(
                     maker=maker,
                     # 답이 채널 전원에게 보인다 — 채널 멤버가 원래 받을 수 있는 자료실·파일 읽기만(보안 리뷰 HIGH)
                     with_data=ai_router.data_tools.CHANNEL_SAFE,
+                    # 답은 채널 전원이 본다 — 문서·규정·파일 본문의 열람 판정은 봇(등급 member·사람 지정 없음)으로
+                    acl_user=bot,
                     data_via="chat_command",
                 ):
                     if kind == "status":

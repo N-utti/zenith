@@ -391,3 +391,47 @@ async def test_chat_command_gets_only_channel_safe_tools(
     names = [t["name"] for t in SearchingProvider.tools_seen[0]]
     assert "archive" in names and "read_file" in names
     assert "attendance" not in names and "approvals" not in names and "approval_detail" not in names
+
+
+async def test_command_grounds_only_on_public_folders(
+    app: FastAPI, users: Users, app_db, monkeypatch
+) -> None:
+    """README 57: 채팅 /ai 의 문서 판정 주체는 봇 — 팀장이 물어도 등급 폴더 문서는 근거에 안 들어간다(채널 전원이 보니까)."""
+    from sqlalchemy import func
+
+    from app.models import Document, Folder, Workspace
+
+    class Salary(SearchingProvider):
+        queries = ["연봉"]
+        answer = "찾았다[[1]]."
+
+    monkeypatch.setattr(chat_command, "get_provider", lambda: Salary())
+    SearchingProvider.turns = []
+    ws = Workspace(name="제니스")
+    app_db.add(ws)
+    await app_db.flush()
+    public = Folder(ws_id=ws.id, parent_id=None, title="위키")
+    leads = Folder(ws_id=ws.id, parent_id=None, title="팀장방", min_role="lead")
+    app_db.add_all([public, leads])
+    await app_db.flush()
+    for folder, title in ((public, "연봉 협상 일정"), (leads, "연봉 테이블")):
+        app_db.add(
+            Document(
+                folder_id=folder.id,
+                title=title,
+                text_cache=title,
+                tsv=func.to_tsvector("simple", title),
+                updated_by=users.lead.id,
+            )
+        )
+    await app_db.flush()
+    channel = await make_channel(app_db, [users.member, users.lead])
+    async with ws_client(app) as a:
+        await login(a, "donghyun@zenith.co.kr")  # 팀장이 묻는다
+        async with aconnect_ws(WS, a) as a_ws:
+            await send(a_ws, op="msg", channel_id=str(channel.id), body="/ai 연봉 자료")
+            await recv_until(a_ws, "msg")
+            bot = await recv_until(a_ws, "msg", timeout=8.0)
+    result = SearchingProvider.turns[-1][-1]["content"][0]["content"]
+    assert "연봉 협상 일정" in result and "연봉 테이블" not in result
+    assert "연봉 테이블" not in bot["message"]["body"]

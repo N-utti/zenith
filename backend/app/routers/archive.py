@@ -20,6 +20,7 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app import acl
 from app.db import get_db
 from app.deps import current_user
 from app.models import Channel, ChannelMember, Document, Message, StoredFile, User
@@ -37,7 +38,9 @@ class ArchiveFile(BaseModel):
     source_title: str  # 채널 이름(DM 은 상대 이름) 또는 문서 제목
     uploaded_by: Person
     created_at: datetime  # 채팅은 그 메시지의 시각
-    scope: Literal["all", "members"]  # all = 로그인한 전원, members = 그 채널 멤버만(비공개·DM)
+    scope: Literal[
+        "all", "members"
+    ]  # all = 로그인한 전원, members = 그 채널 멤버만(비공개·DM) 또는 등급 폴더의 문서
 
 
 @router.get(
@@ -92,16 +95,17 @@ async def list_archive(
                     scope="members" if channel.is_dm or channel.is_private else "all",
                 )
             )
-    # 문서 — 기록부에 doc_id 가 있고 문서가 살아 있는 것. 문서에 열람 등급이 없어 전원(scope all)
+    # 문서 — 기록부에 doc_id 가 있고 문서가 살아 있는 것, 그리고 내가 볼 수 있는 폴더의 것(README 57)
     doc_rows = await db.execute(
-        select(StoredFile, User, Document.title)
+        select(StoredFile, User, Document.title, Document.folder_id)
         .join(User, User.id == StoredFile.uploader_id)
         .join(Document, Document.id == StoredFile.doc_id)
-        .where(Document.deleted_at.is_(None))
+        .where(Document.deleted_at.is_(None), Document.folder_id.in_(acl.visible_folder_ids(user)))
         .order_by(StoredFile.created_at.desc(), StoredFile.id.desc())
         .limit(limit)
     )
-    for f, uploader, title in doc_rows:
+    restricted = set(await db.scalars(acl.restricted_folder_ids()))  # 조상 등급까지(README 57)
+    for f, uploader, title, folder_id in doc_rows:
         items.append(
             ArchiveFile(
                 url=f"/api/files/{f.id}",
@@ -112,7 +116,7 @@ async def list_archive(
                 source_title=title,
                 uploaded_by=Person.model_validate(uploader),
                 created_at=f.created_at,
-                scope="all",
+                scope="members" if folder_id in restricted else "all",
             )
         )
     items.sort(key=lambda i: i.created_at, reverse=True)
