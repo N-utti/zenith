@@ -88,7 +88,11 @@ async def test_list_channels(client: AsyncClient, users: Users, app_db) -> None:
     general, dm, quiet = items
     assert quiet["unread"] == 0 and quiet["last_message"] is None
     assert general["unread"] == 7 and general["last_message"]["body"] == "글 6"
-    assert general["last_message"]["author"] == {"id": str(users.lead.id), "name": "박동현"}
+    assert general["last_message"]["author"] == {
+        "id": str(users.lead.id),
+        "name": "박동현",
+        "is_bot": False,
+    }
     assert {m["name"] for m in general["members"]} == {"김수진", "박동현"}
     assert dm["is_dm"] and dm["unread"] == 1 and dm["last_message"]["body"] == "DM"
     home = (await client.get("/api/me/home")).json()

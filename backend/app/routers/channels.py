@@ -31,6 +31,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
 from app import audit, storage
+from app.ai import chat_command
 from app.db import get_db
 from app.deps import current_user
 from app.errors import ApiError
@@ -145,6 +146,7 @@ class Person(BaseModel):
 
     id: uuid.UUID
     name: str
+    is_bot: bool = False  # 「AI 어시스턴트」 봇 글(README 52) — 프론트는 이름이 아니라 이걸로 가린다(이슈 #403)
 
 
 class MessageOut(BaseModel):
@@ -229,7 +231,7 @@ def _message_out(m: Message, author: User) -> MessageOut:
     return MessageOut(
         id=m.id,
         channel_id=m.channel_id,
-        author=Person.model_validate(author),
+        author=Person(id=author.id, name=author.name, is_bot=chat_command.is_bot(author)),
         body=m.body,
         doc_ref=m.doc_ref,
         attachments=m.attachments,

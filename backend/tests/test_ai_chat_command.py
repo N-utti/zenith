@@ -104,6 +104,15 @@ async def test_command_posts_bot_reply_to_channel(
     assert "채팅방의 다른 대화는 모른다" in SearchingProvider.systems[0][-1]["text"]
     bot_user = await app_db.scalar(select(User).where(User.email == chat_command.AI_EMAIL))
     assert bot_user is not None and bot_user.active is False and bot_user.name == "AI 어시스턴트"
+    # 이슈 #403: 새로고침 뒤 과거 메시지 조회·채널 목록의 last_message 에도 봇 표시가 실린다
+    async with ws_client(app) as c:
+        await login(c, "sujin@zenith.co.kr")
+        page = (await c.get(f"/api/channels/{channel.id}/messages")).json()
+        assert [i["author"]["is_bot"] for i in page["items"]] == [False, True]
+        listed = next(
+            x for x in (await c.get("/api/channels")).json()["items"] if x["id"] == str(channel.id)
+        )
+        assert listed["last_message"]["author"]["is_bot"] is True
     rows = (await app_db.execute(select(Message).order_by(Message.created_at))).scalars().all()
     assert [m.author_id for m in rows] == [users.member.id, bot_user.id]
     ev = await app_db.scalar(select(AuditEvent).where(AuditEvent.kind == "ai.chat_command"))
