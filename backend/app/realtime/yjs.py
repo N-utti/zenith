@@ -41,6 +41,7 @@ from pycrdt import (
 )
 from sqlalchemy import func, update
 
+from app import acl, audit
 from app.ai import embed
 from app.db import session_scope
 from app.deps import _own_origin, authenticate, origin_allowed, ws_reject
@@ -320,6 +321,20 @@ async def yjs_endpoint(websocket: WebSocket, doc_id: uuid.UUID) -> None:
     try:
         async with session_scope() as db:
             user, _session = await authenticate(websocket.cookies, db)
+            allowed = await acl.can_view_doc(db, user, doc_id)  # 폴더 열람 권한(README 57)
+            if not allowed:
+                audit.record(
+                    db,
+                    "acl.denied",
+                    actor_id=user.id,
+                    target_id=doc_id,
+                    detail={"path": "/api/yjs"},
+                )
+                await db.commit()
+        if not allowed:
+            log.info("yjs 거부 %s: FORBIDDEN", doc_id)
+            await ws_reject(websocket, 4403)
+            return
         room = await _open_room(doc_id)
     except ApiError as e:
         log.info("yjs 거부 %s: %s", doc_id, e.code)
@@ -357,11 +372,17 @@ async def yjs_endpoint(websocket: WebSocket, doc_id: uuid.UUID) -> None:
                     async with session_scope() as db:
                         # 회수됐으면 ApiError → 아래서 닫힌다. exp 는 안 본다(deps.authenticate 참조)
                         await authenticate(websocket.cookies, db, verify_exp=False)
+                        # 등급·사람 지정을 바꿔 권한을 회수해도 열린 소켓이 1분 안에 닫히게(README 57, 보안 리뷰)
+                        allowed = await acl.can_view_doc(db, user, doc_id)
                 except ApiError:
                     raise
                 except Exception as e:  # noqa: BLE001 — DB 가 잠깐 끊김. 핸드셰이크와 같은 1013 으로(#340)
                     log.warning("yjs 재검증 실패 %s: %s %s", doc_id, type(e).__name__, e)
                     await websocket.close(code=1013)
+                    break
+                if not allowed:
+                    log.info("yjs 권한 회수 %s: FORBIDDEN", doc_id)
+                    await websocket.close(code=4403)
                     break
                 checked_at = datetime.now(UTC)
             if not message:

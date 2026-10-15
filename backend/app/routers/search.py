@@ -25,6 +25,7 @@ from pydantic import BaseModel
 from sqlalchemy import ColumnElement, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app import acl
 from app.ai import embed
 from app.db import get_db
 from app.deps import current_user
@@ -117,7 +118,11 @@ async def find_hits(
     vector_hits: list[Hit] = []
 
     if "doc" in wanted:
-        doc_filters = [Document.deleted_at.is_(None)]
+        # 폴더 열람 권한(README 57) — ⌘K·AI 검색 도구 둘 다 여기서 걸러진다
+        doc_filters = [
+            Document.deleted_at.is_(None),
+            Document.folder_id.in_(acl.visible_folder_ids(user)),
+        ]
         if exclude_doc is not None:
             doc_filters.append(Document.id != exclude_doc)
         if docs_ai_source_only:

@@ -41,7 +41,7 @@ from pydantic import (
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app import audit
+from app import acl, audit
 from app.ai import chat_command
 from app.db import session_scope
 from app.deps import _own_origin, authenticate, origin_allowed, ws_reject
@@ -248,7 +248,12 @@ async def _handle(ws: WebSocket, user: User, op: AnyOp) -> None:
         if isinstance(op, MsgOp):
             if op.doc_ref is not None:
                 doc = await db.get(Document, op.doc_ref)
-                if doc is None or doc.deleted_at is not None:
+                # 못 보는 문서도 「없는 문서」 — 카드로 붙여 존재를 알아내지 못하게(README 57)
+                if (
+                    doc is None
+                    or doc.deleted_at is not None
+                    or not await acl.can_view_folder(db, user, doc.folder_id)
+                ):
                     await _send(
                         ws,
                         _dumps(

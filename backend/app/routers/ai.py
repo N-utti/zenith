@@ -38,7 +38,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app import audit, storage
+from app import acl, audit, storage
 from app.ai import data_tools, edit, extract, make
 from app.ai.provider import ChatMessage, LLMError, LLMProvider, ToolCalls, get_provider
 from app.config import settings
@@ -255,6 +255,7 @@ def _oneline(s: str) -> str:
 
 
 async def _read(
+    user: User,
     n: object,
     sources: list[Citation],
     read_ids: set[uuid.UUID],
@@ -279,6 +280,7 @@ async def _read(
                     Document.id == cite.doc_id,
                     Document.deleted_at.is_(None),
                     Document.ai_source.is_(True),
+                    Document.folder_id.in_(acl.visible_folder_ids(user)),  # README 57
                 )
             )
         ).first()
@@ -432,7 +434,7 @@ class ChatIn(BaseModel):
     attachments: Annotated[list[uuid.UUID], Field(max_length=MAX_ATTACHMENTS * 4)] = []
 
 
-async def _scope_folder(db: AsyncSession, scope: str | None) -> Folder | None:
+async def _scope_folder(db: AsyncSession, user: User, scope: str | None) -> Folder | None:
     """`scope` → 폴더. 없는 폴더 id 는 422(프론트가 범위를 전체로 되돌리고 다시 묻는다, 이슈 #370)."""
     try:
         folder_id = uuid.UUID(scope or "")
@@ -440,7 +442,9 @@ async def _scope_folder(db: AsyncSession, scope: str | None) -> Folder | None:
         # ponytail: 프론트의 옛 어휘(wiki·hr·exec)는 아직 날아온다 — 전체로 받는다. 프론트가 폴더 id 로 옮기면 422 로 조인다
         return None
     folder = await db.get(Folder, folder_id)
-    if folder is None:
+    if folder is None or not await acl.can_view_folder(
+        db, user, folder_id
+    ):  # 못 보는 폴더도 「없는 폴더」
         raise ApiError(422, "VALIDATION", "없는 폴더입니다.")
     return folder
 
@@ -468,7 +472,7 @@ def _articles(text: str) -> list[str]:
     return out
 
 
-async def _rules_sources(db: AsyncSession, sources: list[Citation]) -> str | None:
+async def _rules_sources(db: AsyncSession, user: User, sources: list[Citation]) -> str | None:
     """규정 폴더(설정)의 「AI 근거로 쓰기」 문서 전문을 조문마다 번호 붙여 한 블록으로(README 46). `sources` 에 번호표를 미리
     채운다 — 검색 도구는 그 뒤 번호부터. 폴더가 없거나 전문 합이 상한을 넘으면 None(검색만으로 답한다)."""
     if not settings.ai_rules_folder:
@@ -490,6 +494,9 @@ async def _rules_sources(db: AsyncSession, sources: list[Citation]) -> str | Non
                 Document.folder_id.in_(select(subtree.c.id)),
                 Document.deleted_at.is_(None),
                 Document.ai_source.is_(True),
+                Document.folder_id.in_(
+                    acl.visible_folder_ids(user)
+                ),  # 못 보는 규정은 안 넣는다(README 57)
             )
             .order_by(Document.title, Document.id)
         )
@@ -526,7 +533,7 @@ async def _rules_sources(db: AsyncSession, sources: list[Citation]) -> str | Non
 
 
 async def _docs_source(
-    db: AsyncSession, doc_ids: list[uuid.UUID], sources: list[Citation]
+    db: AsyncSession, user: User, doc_ids: list[uuid.UUID], sources: list[Citation]
 ) -> str | None:
     """참고 문서(README 46·50) — 살아 있는 문서 본문을 문서마다 번호 하나로 한 `<문서>` 블록에(고른 순서). 없거나
     휴지통이면 422, 「AI 근거로 쓰기」가 꺼진 문서도 422(README 43 의 스위치가 유일한 제외 수단 — 보안 리뷰).
@@ -542,7 +549,11 @@ async def _docs_source(
                 Document.id, Document.title, Document.text_cache, Folder.title, Document.ai_source
             )
             .join(Folder, Folder.id == Document.folder_id)
-            .where(Document.id.in_(doc_ids), Document.deleted_at.is_(None))
+            .where(
+                Document.id.in_(doc_ids),
+                Document.deleted_at.is_(None),
+                Document.folder_id.in_(acl.visible_folder_ids(user)),  # README 57
+            )
         )
     ).all()
     by_id = {r[0]: r for r in rows}
@@ -658,6 +669,8 @@ async def _turns(
     exclude_doc: uuid.UUID | None = None,  # 검색에서 뺄 문서(팩트체크의 검사 대상, #410)
     maker: Maker
     | None = None,  # create_spreadsheet 를 준다(README 55) — /ai/chat 과 채팅 /ai 가 각자의 저장소로
+    acl_user: User
+    | None = None,  # 문서 열람 판정 주체 — 채팅 /ai 는 봇(전원 열람 폴더만, README 57)
     with_data: frozenset[
         str
     ] = frozenset(),  # 열람 도구 이름(README 56) — /ai/chat 은 전부, 채팅 /ai 는 CHANNEL_SAFE
@@ -675,6 +688,7 @@ async def _turns(
         t for t in data_tools.TOOLS if t["name"] in with_data
     ]  # 열람 도구(README 56) — /ai/chat 은 전부, 채팅 /ai 는 CHANNEL_SAFE
     makes_left = MAKES_PER_ANSWER
+    doc_user = acl_user or user  # 문서·규정·파일 본문은 이 사람 기준으로 거른다
     for round_ in range(MAX_TOOL_ROUNDS + 1):
         # 도구 정의는 늘 보낸다(앞 턴에 tool_use 블록이 있으면 API 가 요구) — 마지막 라운드는 부르지 못하게만
         tool_choice = {"type": "none"} if round_ == MAX_TOOL_ROUNDS else None
@@ -734,17 +748,19 @@ async def _turns(
                         makes_left -= 1
             elif is_data:
                 result = await data_tools.run(
-                    user, call.name, call.input, budget=read_budget, via=data_via
+                    user, call.name, call.input, budget=read_budget, via=data_via, acl_user=doc_user
                 )
                 if not result.get("is_error"):
                     read_budget -= len(str(result["content"]))  # 전문 읽기와 같은 예산(보안 리뷰)
             elif is_read:
                 result, used = await _read(
-                    call.input.get("n"), sources, read_ids, read_budget, exclude_doc
+                    doc_user, call.input.get("n"), sources, read_ids, read_budget, exclude_doc
                 )
                 read_budget -= used
             elif isinstance(query, str) and query.strip():
-                result = {"content": await _search(user, query, sources, folder_id, exclude_doc)}
+                result = {
+                    "content": await _search(doc_user, query, sources, folder_id, exclude_doc)
+                }
             else:
                 result = {
                     "content": "없는 도구이거나 query 가 비었습니다.",
@@ -867,7 +883,7 @@ async def chat(
     # 세션 행을 쓰기 전에 — 422 면 DB 에 아무것도 안 남는다. 규정 전문·문서 범위의 번호표(sources)도 여기서 미리.
     sources: list[Citation] = []
     scope_doc = _scope_doc_id(body.scope)
-    scope = None if scope_doc else await _scope_folder(db, body.scope)
+    scope = None if scope_doc else await _scope_folder(db, user, body.scope)
     doc_ids = list(
         dict.fromkeys(([scope_doc] if scope_doc else []) + body.docs)
     )  # 순서 유지, 중복 제거
@@ -875,8 +891,8 @@ async def chat(
         raise ApiError(422, "VALIDATION", f"참고 문서는 {MAX_REF_DOCS}개까지입니다.")
     if len(dict.fromkeys(body.attachments)) > MAX_ATTACHMENTS:  # 중복 제거 뒤에 센다(docs 와 같다)
         raise ApiError(422, "VALIDATION", f"첨부는 {MAX_ATTACHMENTS}개까지입니다.")
-    rules_block = await _rules_sources(db, sources)
-    doc_block = await _docs_source(db, doc_ids, sources)
+    rules_block = await _rules_sources(db, user, sources)
+    doc_block = await _docs_source(db, user, doc_ids, sources)
     attach_block = await _attachments_source(db, user, body.attachments, sources)
     session_id = await _session(db, user, body.session_id, str(provider.models()[0]["name"]))
     messages = [*await _history(db, session_id), {"role": "user", "content": body.message}]
@@ -1101,8 +1117,8 @@ async def doc_action(
     db: AsyncSession = Depends(get_db),
     provider: LLMProvider = Depends(get_provider),
 ) -> dict[str, object]:
-    # 문서는 로그인하면 누구나 연다(열람 등급 없음) — 있는지와 휴지통만 본다. 본문은 /yjs 릴레이가 저장한 평문.
-    doc = await _get_doc(db, body.doc_id, body=True)
+    # 문서는 폴더 열람 권한(README 57)을 따른다 — 있는지와 휴지통만 본다. 본문은 /yjs 릴레이가 저장한 평문.
+    doc = await _get_doc(db, body.doc_id, body=True, user=user)
     title, text = doc.title, doc.text_cache or ""
     if body.action in GROUNDED_PROMPTS:
         # 근거 경로(README 48): 규정 전문·검색 도구와 함께, 결과의 [[n]] 을 카드로. 상한·시간·스로틀은 팩트체커와 같다.
@@ -1189,12 +1205,13 @@ class TemplateOut(BaseModel):
 )
 async def template(
     body: TemplateIn,
+    user: User = Depends(current_user),
     db: AsyncSession = Depends(get_db),
     provider: LLMProvider = Depends(get_provider),
 ) -> dict[str, list[str]]:
     example = None
     if body.example_doc_id is not None:
-        doc = await _get_doc(db, body.example_doc_id, body=True)
+        doc = await _get_doc(db, body.example_doc_id, body=True, user=user)
         if not doc.ai_source:  # 다른 문서를 id 로 고르는 것이라 43 의 스위치를 본다(보안 리뷰)
             raise ApiError(422, "VALIDATION", "AI 근거로 쓰기가 꺼진 문서입니다.")
         example = (doc.text_cache or "")[:DOC_TEXT_LIMIT]
@@ -1418,7 +1435,9 @@ async def check(
         row = (
             await db.execute(
                 select(Document.text_cache, Document.ai_source).where(
-                    Document.id == body.doc_id, Document.deleted_at.is_(None)
+                    Document.id == body.doc_id,
+                    Document.deleted_at.is_(None),
+                    Document.folder_id.in_(acl.visible_folder_ids(user)),  # README 57
                 )
             )
         ).first()
@@ -1487,7 +1506,7 @@ async def _grounded(
     `<tag>` 블록(캐시 지점)으로 사용자 메시지에 — 호출자가 `_body()` 로 표지를 무력화해 넘긴다. 공급자를 기다리기 전
     commit 으로 커넥션을 반납한다(rollback 은 user 를 만료시켜 도구 실행이 깨진다). 실패는 503."""
     sources: list[Citation] = []
-    rules_block = await _rules_sources(db, sources)
+    rules_block = await _rules_sources(db, user, sources)
     await db.commit()
     blocks: list[dict[str, object]] = [{"type": "text", "text": SYSTEM_PROMPT}]
     if rules_block is not None:

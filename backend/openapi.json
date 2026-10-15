@@ -10273,6 +10273,25 @@
             "type": "integer",
             "title": "Sort",
             "default": 0
+          },
+          "min_role": {
+            "type": "string",
+            "enum": [
+              "member",
+              "lead",
+              "exec"
+            ],
+            "title": "Min Role",
+            "default": "member"
+          },
+          "allowed_users": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "maxItems": 200,
+            "title": "Allowed Users"
           }
         },
         "type": "object",
@@ -10307,6 +10326,23 @@
           "sort": {
             "type": "integer",
             "title": "Sort"
+          },
+          "min_role": {
+            "type": "string",
+            "enum": [
+              "member",
+              "lead",
+              "exec"
+            ],
+            "title": "Min Role"
+          },
+          "allowed_users": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "title": "Allowed Users"
           }
         },
         "type": "object",
@@ -10314,7 +10350,9 @@
           "id",
           "parent_id",
           "title",
-          "sort"
+          "sort",
+          "min_role",
+          "allowed_users"
         ],
         "title": "FolderOut"
       },
@@ -10355,6 +10393,38 @@
               }
             ],
             "title": "Sort"
+          },
+          "min_role": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "member",
+                  "lead",
+                  "exec"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Role"
+          },
+          "allowed_users": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "type": "array",
+                "maxItems": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allowed Users"
           }
         },
         "type": "object",

@@ -21,7 +21,7 @@ from fastapi import APIRouter, Depends, Form, Request, Response, UploadFile
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app import audit, storage
+from app import acl, audit, storage
 from app.db import get_db
 from app.deps import current_user
 from app.errors import ApiError
@@ -86,7 +86,12 @@ async def upload_file(
         raise ApiError(429, "UPLOAD_THROTTLED", "오늘 올릴 수 있는 파일 수를 넘었습니다.")
     if doc_id is not None:
         doc = await db.get(Document, doc_id)
-        if doc is None or doc.deleted_at is not None:  # 휴지통 문서도 없는 것으로
+        # 휴지통 문서·못 보는 문서도 없는 것으로(README 57) — 남의 폴더 문서에 파일을 붙이거나 존재를 알아내지 못하게
+        if (
+            doc is None
+            or doc.deleted_at is not None
+            or not await acl.can_view_folder(db, user, doc.folder_id)
+        ):
             raise ApiError(422, "VALIDATION", "없는 문서입니다.")
     # 거대한 본문은 main.py 의 body_limit 가 Content-Length 로 먼저 끊는다. 여기서는 상한 + 1 바이트만 읽어 판정.
     data = await file.read(MAX_FILE_BYTES + 1)
@@ -135,10 +140,29 @@ _FILE_HEADERS = {
     dependencies=[Depends(current_user)],
 )
 async def download_file(
-    id: uuid.UUID, request: Request, db: AsyncSession = Depends(get_db)
+    id: uuid.UUID,
+    request: Request,
+    user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_db),
 ) -> Response:
+    # 폴더 열람 권한(README 57) — 문서에 붙은 파일은 그 문서를 볼 수 있어야. 304 분기보다 위(ponytail 메모대로).
+    row = await db.get(StoredFile, id)
+    if (
+        row is not None
+        and row.doc_id is not None
+        and not await acl.can_view_doc(db, user, row.doc_id)
+    ):
+        audit.record(
+            db,
+            "acl.denied",
+            request=request,
+            actor_id=user.id,
+            target_id=id,
+            detail={"path": request.url.path, "doc_id": str(row.doc_id)},
+        )
+        await db.commit()
+        raise ApiError(403, "FORBIDDEN", "이 파일을 볼 권한이 없습니다.")
     # 키에 랜덤 id — 불변. 그래서 ETag 는 id 하나로 충분하고, 재검증 요청은 MinIO 를 안 탄다(#328).
-    # ponytail: 판정(폴더 등급·삭제)이 생기면 이 분기보다 위에 둘 것 — 304 는 MinIO·DB 를 안 본다
     etag = f'"{id}"'
     if request.headers.get("if-none-match") == etag:
         # 304 의 헤더가 캐시된 응답의 헤더를 덮어쓴다(RFC 9111 §4.3.4) — 보안 헤더도 200 과 같게 다시 보낸다
@@ -152,7 +176,6 @@ async def download_file(
         disposition = "inline"
     else:
         # 2026-10-02 이전 그림은 행이 없지만 그건 전부 inline 쪽이다
-        row = await db.get(StoredFile, id)
         name = row.name if row else "file"
         # RFC 6266 — 한글 파일명은 filename* 로. 프론트는 fetch 로 받아 저장하므로 이 이름에 기대지 않지만 주소창 직접 열기용.
         disposition = f"attachment; filename*=UTF-8''{quote(name, safe='')}"

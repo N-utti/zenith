@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app import acl
 from app.db import get_db
 from app.deps import current_user
 from app.errors import ApiError
@@ -150,13 +151,13 @@ class Items[T](BaseModel):
 async def _recent_docs(db: AsyncSession, user: User, limit: int) -> list[RecentDoc]:
     """이어서 작업(05 SCR-01) — 내가 마지막으로 손댄 문서. 하나도 없으면(신입) 전사 최근으로 채운다.
 
-    ponytail: 문서에는 열람 등급이 없다(03 §2.2 등급은 게시판·RAG). 폴더 등급이 생기면 _posts 처럼 여기서도 거른다.
+    폴더 열람 권한(README 57)으로 거른다 — 못 보는 폴더의 문서는 전사 최근에도 안 나온다.
     """
     base = (
         select(Document, User)
         .options(*DOC_LIST_OPTS)
         .outerjoin(User, User.id == Document.updated_by)
-        .where(Document.deleted_at.is_(None))
+        .where(Document.deleted_at.is_(None), Document.folder_id.in_(acl.visible_folder_ids(user)))
         .order_by(Document.updated_at.desc(), Document.id)
         .limit(limit)
     )

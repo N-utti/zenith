@@ -11,15 +11,15 @@ import binascii
 import logging
 import uuid
 from datetime import UTC, datetime, timedelta
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Query, Request, Response
-from pydantic import BaseModel, ConfigDict, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import defer
 
-from app import audit
+from app import acl, audit
 from app.ai import embed
 from app.db import get_db, session_scope
 from app.deps import current_user
@@ -32,6 +32,7 @@ from app.models import (
     Document,
     DocVersion,
     Folder,
+    FolderMember,
     Message,
     Notification,
     StoredFile,
@@ -69,6 +70,9 @@ class Person(BaseModel):
     name: str
 
 
+MinRole = Literal["member", "lead", "exec"]
+
+
 class FolderOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -76,18 +80,27 @@ class FolderOut(BaseModel):
     parent_id: uuid.UUID | None
     title: str
     sort: int
+    # 열람 권한(README 57) — 트리는 내가 볼 수 있는 폴더만 주므로 이 두 칸은 표시·설정용(자물쇠 아이콘·설정 화면)
+    min_role: MinRole
+    allowed_users: list[
+        uuid.UUID
+    ]  # 등급과 무관하게 여는 사람들(임원만 바꾼다). 보는 사람 누구나 본다(15명 사내)
 
 
 class FolderCreateIn(BaseModel):
     title: NonBlank
     parent_id: uuid.UUID | None = None
     sort: int = 0
+    min_role: MinRole = "member"  # 기본값이 아니면 임원만(403)
+    allowed_users: list[uuid.UUID] = Field(default_factory=list, max_length=200)
 
 
 class FolderPatchIn(BaseModel):
     title: NonBlank | None = None
     parent_id: uuid.UUID | None = None
     sort: int | None = None
+    min_role: MinRole | None = None  # 임원만
+    allowed_users: list[uuid.UUID] | None = Field(None, max_length=200)  # 전체 교체, 임원만
 
 
 class DocOut(BaseModel):
@@ -205,6 +218,7 @@ async def _get_doc(
     db: AsyncSession,
     doc_id: uuid.UUID,
     *,
+    user: User | None = None,
     trashed_ok: bool = False,
     body: bool = False,
     lock: bool = False,
@@ -221,15 +235,53 @@ async def _get_doc(
     )
     if doc is None or (doc.deleted_at is not None and not trashed_ok):
         raise ApiError(404, "NOT_FOUND", "없는 문서입니다.")
+    if user is not None:  # 폴더 열람 권한(README 57) — 못 보는 폴더의 문서는 403 + acl.denied
+        await acl.require_doc_view(db, user, doc, "docs")
     return doc
 
 
-async def _require_folder(db: AsyncSession, folder_id: uuid.UUID) -> Folder:
+async def _require_folder(
+    db: AsyncSession, folder_id: uuid.UUID, user: User | None = None
+) -> Folder:
     # 외래키 위반을 commit 에서 맞으면 409 로 떨어진다. 미리 확인해 422 로 돌려준다.
+    # 못 보는 폴더도 「없는 폴더」 — 존재 여부를 새게 하지 않는다(README 57)
     folder = await db.get(Folder, folder_id)
-    if folder is None:
+    if folder is None or (user is not None and not await acl.can_view_folder(db, user, folder_id)):
         raise ApiError(422, "VALIDATION", "없는 폴더입니다.")
     return folder
+
+
+async def _folder_out(db: AsyncSession, folders: list[Folder]) -> list[FolderOut]:
+    ids = [f.id for f in folders]
+    members: dict[uuid.UUID, list[uuid.UUID]] = {}
+    if ids:
+        for fid, uid in await db.execute(
+            select(FolderMember.folder_id, FolderMember.user_id).where(
+                FolderMember.folder_id.in_(ids)
+            )
+        ):
+            members.setdefault(fid, []).append(uid)
+    return [
+        FolderOut(
+            id=f.id,
+            parent_id=f.parent_id,
+            title=f.title,
+            sort=f.sort,
+            min_role=f.min_role,
+            allowed_users=sorted(members.get(f.id, []), key=str),  # 응답 순서를 일정하게
+        )
+        for f in folders
+    ]
+
+
+async def _set_members(db: AsyncSession, folder: Folder, user_ids: list[uuid.UUID]) -> None:
+    wanted = set(user_ids)
+    if wanted:
+        found = set(await db.scalars(select(User.id).where(User.id.in_(wanted))))
+        if found != wanted:
+            raise ApiError(422, "VALIDATION", "없는 사용자가 있습니다.")
+    await db.execute(delete(FolderMember).where(FolderMember.folder_id == folder.id))
+    db.add_all([FolderMember(folder_id=folder.id, user_id=uid) for uid in wanted])
 
 
 async def _assert_no_cycle(db: AsyncSession, folder_id: uuid.UUID, new_parent: uuid.UUID) -> None:
@@ -262,21 +314,26 @@ def _version_out(version: DocVersion, author: User | None) -> VersionOut:
 @router.get(
     "/tree", response_model=TreeOut, summary="사이드바 트리 {folders[], docs[]} (정렬 포함)"
 )
-async def tree(db: AsyncSession = Depends(get_db)) -> TreeOut:
-    folders = (
-        await db.execute(
-            select(Folder).order_by(Folder.parent_id.nulls_first(), Folder.sort, Folder.title)
-        )
-    ).scalars()
+async def tree(user: User = Depends(current_user), db: AsyncSession = Depends(get_db)) -> TreeOut:
+    visible = acl.visible_folder_ids(user)  # 못 보는 폴더는 문서째 빠진다(README 57)
+    folders = list(
+        (
+            await db.execute(
+                select(Folder)
+                .where(Folder.id.in_(visible))
+                .order_by(Folder.parent_id.nulls_first(), Folder.sort, Folder.title)
+            )
+        ).scalars()
+    )
     rows = await db.execute(
         select(Document, User)
         .options(*DOC_LIST_OPTS)
         .outerjoin(User, User.id == Document.updated_by)
-        .where(Document.deleted_at.is_(None))
+        .where(Document.deleted_at.is_(None), Document.folder_id.in_(visible))
         .order_by(Document.title, Document.id)  # folder_id 는 무작위 UUID 라 정렬 기준이 못 된다
     )
     return TreeOut(
-        folders=[FolderOut.model_validate(f) for f in folders],
+        folders=await _folder_out(db, folders),
         docs=[_doc_out(doc, editor) for doc, editor in rows],
     )
 
@@ -290,13 +347,17 @@ async def tree(db: AsyncSession = Depends(get_db)) -> TreeOut:
     summary="휴지통 목록 — `/tree` 의 여집합, 지운 지 최근 순. 30일이 지나면 서버가 영구 삭제한다",
 )
 async def list_trash(
-    limit: int = Query(200, ge=1, le=500), db: AsyncSession = Depends(get_db)
+    limit: int = Query(200, ge=1, le=500),
+    user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_db),
 ) -> Items[DocOut]:
     rows = await db.execute(
         select(Document, User)
         .options(*DOC_LIST_OPTS)
         .outerjoin(User, User.id == Document.updated_by)
-        .where(Document.deleted_at.is_not(None))
+        .where(
+            Document.deleted_at.is_not(None), Document.folder_id.in_(acl.visible_folder_ids(user))
+        )
         .order_by(Document.deleted_at.desc(), Document.id)
         .limit(limit)
     )
@@ -304,40 +365,70 @@ async def list_trash(
 
 
 @router.post("/folders", status_code=201, response_model=FolderOut, summary="폴더 생성")
-async def create_folder(body: FolderCreateIn, db: AsyncSession = Depends(get_db)) -> Folder:
+async def create_folder(
+    body: FolderCreateIn, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)
+) -> FolderOut:
     # ponytail: 워크스페이스는 하나다(03 §2.5 시드). 여러 개가 되면 요청에서 받는다.
     ws_id = (await db.execute(select(Workspace.id).limit(1))).scalar()
     if ws_id is None:
         raise ApiError(
             409, "CONFLICT", "워크스페이스가 없습니다. scripts/seed.py 를 먼저 돌리세요."
         )
+    if body.min_role != "member" or body.allowed_users:
+        acl.require_acl_editor(user)  # 등급·사람 지정은 임원만(README 57) — 다른 검사보다 먼저
     if body.parent_id is not None:
-        await _require_folder(db, body.parent_id)
-    folder = Folder(ws_id=ws_id, parent_id=body.parent_id, title=body.title, sort=body.sort)
+        await _require_folder(db, body.parent_id, user)
+    folder = Folder(
+        ws_id=ws_id,
+        parent_id=body.parent_id,
+        title=body.title,
+        sort=body.sort,
+        min_role=body.min_role,
+    )
     db.add(folder)
+    await db.flush()
+    await _set_members(db, folder, body.allowed_users)
     await db.commit()
     await db.refresh(folder)
-    return folder
+    return (await _folder_out(db, [folder]))[0]
 
 
 @router.patch("/folders/{id}", response_model=FolderOut, summary="폴더 이름·이동·정렬")
 async def update_folder(
-    id: uuid.UUID, body: FolderPatchIn, db: AsyncSession = Depends(get_db)
-) -> Folder:
+    id: uuid.UUID,
+    body: FolderPatchIn,
+    user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_db),
+) -> FolderOut:
     folder = await db.get(Folder, id)
-    if folder is None:
+    if folder is None or not await acl.can_view_folder(
+        db, user, id
+    ):  # 못 보는 폴더는 「없는 폴더」
         raise ApiError(404, "NOT_FOUND", "없는 폴더입니다.")
     changes = body.model_dump(exclude_unset=True)
-    if "parent_id" in changes and changes["parent_id"] is not None:
-        await _require_folder(db, changes["parent_id"])
-        await _assert_no_cycle(db, folder.id, changes["parent_id"])
+    allowed = changes.pop("allowed_users", "unset")
+    if "min_role" in changes or allowed != "unset":
+        acl.require_acl_editor(user)  # 등급·사람 지정은 임원만(README 57) — 다른 검사보다 먼저
+    if allowed is None:
+        raise ApiError(422, "VALIDATION", "allowed_users 는 null 일 수 없습니다.")
+    if "parent_id" in changes:
+        # 이동은 등급을 바꾸는 것과 같다(등급 폴더에서 꺼내면 공개, 넣으면 숨김) — 어느 쪽이든 「전원 열람」이 아니면 임원만
+        if await acl.is_restricted(db, folder.id) or (
+            changes["parent_id"] is not None and await acl.is_restricted(db, changes["parent_id"])
+        ):
+            acl.require_acl_editor(user)
+        if changes["parent_id"] is not None:
+            await _require_folder(db, changes["parent_id"], user)
+            await _assert_no_cycle(db, folder.id, changes["parent_id"])
     for key, value in changes.items():
         if value is None and key != "parent_id":  # NOT NULL 컬럼 — DB 409 대신 422
             raise ApiError(422, "VALIDATION", f"{key} 는 null 일 수 없습니다.")
         setattr(folder, key, value)
+    if allowed != "unset":
+        await _set_members(db, folder, allowed)
     await db.commit()
     await db.refresh(folder)
-    return folder
+    return (await _folder_out(db, [folder]))[0]
 
 
 @router.delete(
@@ -354,6 +445,8 @@ async def delete_folder(
     user: User = Depends(current_user),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
+    if not await acl.can_view_folder(db, user, id):  # 못 보는 폴더는 「없는 폴더」(README 57)
+        raise ApiError(404, "NOT_FOUND", "없는 폴더입니다.")
     # 행 잠금 — 같은 폴더를 두 탭에서 동시에 지우면 둘 다 204 에 감사가 두 건 남던 것(늦은 쪽은 None → 404)
     folder = await db.get(Folder, id, with_for_update=True, populate_existing=True)
     if folder is None:
@@ -405,7 +498,7 @@ async def delete_folder(
 async def create_doc(
     body: DocCreateIn, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)
 ) -> DocOut:
-    await _require_folder(db, body.folder_id)
+    await _require_folder(db, body.folder_id, user)
     doc = Document(
         folder_id=body.folder_id, title=body.title, updated_by=user.id, ai_source=body.ai_source
     )
@@ -418,9 +511,11 @@ async def create_doc(
 @router.get(
     "/docs/{id}", response_model=DocDetail, summary="메타 + 서버 보관 Yjs 상태 (초기 로드용)"
 )
-async def get_doc(id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> DocDetail:
+async def get_doc(
+    id: uuid.UUID, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)
+) -> DocDetail:
     # 휴지통에 있는 문서도 연다 — 복구하려면 열 수 있어야 한다. 트리에서만 빠진다.
-    doc = await _get_doc(db, id, trashed_ok=True, body=True)
+    doc = await _get_doc(db, id, user=user, trashed_ok=True, body=True)
     editor = await db.get(User, doc.updated_by) if doc.updated_by else None
     return DocDetail(**_doc_out(doc, editor).model_dump(), ydoc=_b64(doc.ydoc_snapshot))
 
@@ -437,13 +532,18 @@ async def update_doc(
     user: User = Depends(current_user),
     db: AsyncSession = Depends(get_db),
 ) -> DocOut:
-    doc = await _get_doc(db, id)
+    doc = await _get_doc(db, id, user=user)
     changes = body.model_dump(exclude_unset=True)
     if not changes:
         editor = await db.get(User, doc.updated_by) if doc.updated_by else None
         return _doc_out(doc, editor)  # 빈 본문으로 "이어서 작업" 순서를 흔들지 않는다
     if changes.get("folder_id") is not None:
-        await _require_folder(db, changes["folder_id"])
+        await _require_folder(db, changes["folder_id"], user)
+        # 이동은 등급을 바꾸는 것과 같다 — 원래 폴더나 대상 폴더가 「전원 열람」이 아니면 임원만(README 57)
+        if await acl.is_restricted(db, doc.folder_id) or await acl.is_restricted(
+            db, changes["folder_id"]
+        ):
+            acl.require_acl_editor(user)
     for key, value in changes.items():
         if value is None:
             raise ApiError(422, "VALIDATION", f"{key} 는 null 일 수 없습니다.")
@@ -484,7 +584,7 @@ async def delete_doc(
     user: User = Depends(current_user),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
-    doc = await _get_doc(db, id, trashed_ok=True, lock=hard)
+    doc = await _get_doc(db, id, user=user, trashed_ok=True, lock=hard)
     if not hard:
         if doc.deleted_at is None:
             doc.deleted_at = _now()
@@ -578,7 +678,7 @@ async def purge_loop() -> None:
 async def untrash_doc(
     id: uuid.UUID, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)
 ) -> DocOut:
-    doc = await _get_doc(db, id, trashed_ok=True, lock=True)
+    doc = await _get_doc(db, id, user=user, trashed_ok=True, lock=True)
     doc.deleted_at = None
     doc.updated_by = user.id
     doc.updated_at = _now()
@@ -596,8 +696,10 @@ async def untrash_doc(
     response_model=Items[VersionMeta],
     summary="버전 목록 (최신순) — 스냅샷은 /restore 로 받는다",
 )
-async def list_versions(id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> Items[VersionMeta]:
-    doc = await _get_doc(db, id, trashed_ok=True)
+async def list_versions(
+    id: uuid.UUID, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)
+) -> Items[VersionMeta]:
+    doc = await _get_doc(db, id, user=user, trashed_ok=True)
     rows = await db.execute(
         select(DocVersion, User)
         # 스냅샷은 읽지 않는다. 전에는 버전마다 읽어 base64 로 만든 뒤 응답에서 버렸다(60개×500KB 에 233ms·32MB).
@@ -631,7 +733,7 @@ async def create_version(
     user: User = Depends(current_user),
     db: AsyncSession = Depends(get_db),
 ) -> VersionOut:
-    doc = await _get_doc(db, id)
+    doc = await _get_doc(db, id, user=user)
     snapshot = _unb64(body.snapshot)
     latest = (
         await db.execute(
@@ -672,11 +774,14 @@ async def create_version(
     summary="버전 복구 — 복원할 스냅샷을 돌려준다. 적용은 클라이언트가 '앞으로 가는 편집' 한 번으로 한다",
 )
 async def restore_version(
-    id: uuid.UUID, body: RestoreIn, db: AsyncSession = Depends(get_db)
+    id: uuid.UUID,
+    body: RestoreIn,
+    user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_db),
 ) -> VersionOut:
     # Y.Doc 을 서버가 과거 상태로 갈아끼우면 접속 중인 다른 사람과 병합돼 도로 취소된다(frontend/README).
     # 그래서 서버는 표식만 돌려주고, 클라이언트가 setContent 한 뒤 라벨 붙은 버전을 다시 올린다.
-    doc = await _get_doc(db, id)
+    doc = await _get_doc(db, id, user=user)
     row = (
         await db.execute(
             select(DocVersion, User)
@@ -696,8 +801,10 @@ async def restore_version(
 @router.get(
     "/docs/{id}/comments", response_model=Items[CommentOut], summary="블록 댓글 목록 (오래된 순)"
 )
-async def list_comments(id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> Items[CommentOut]:
-    doc = await _get_doc(db, id, trashed_ok=True)
+async def list_comments(
+    id: uuid.UUID, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)
+) -> Items[CommentOut]:
+    doc = await _get_doc(db, id, user=user, trashed_ok=True)
     rows = await db.execute(
         select(DocComment, User)
         .join(User, User.id == DocComment.author_id)
@@ -722,7 +829,7 @@ async def _own_comment(
     db: AsyncSession, request: Request, user: User, doc_id: uuid.UUID, comment_id: uuid.UUID
 ) -> tuple[Document, DocComment]:
     """고치기·지우기의 공통 앞부분: 문서(휴지통 404) → 댓글(다른 문서의 것 404) → 쓴 사람(403 + acl.denied)."""
-    doc = await _get_doc(db, doc_id)
+    doc = await _get_doc(db, doc_id, user=user)
     # 행 잠금 — 두 탭에서 고치기와 지우기가 겹치면 늦은 쪽이 0행에 닿아 500(StaleDataError)이 나던 것.
     # 잠금을 기다리는 사이 지워졌으면 None 이 와서 404 로 떨어진다(#278 의 문서 잠금과 같은 방식)
     comment = await db.get(DocComment, comment_id, with_for_update=True, populate_existing=True)
@@ -758,7 +865,7 @@ async def create_comment(
     user: User = Depends(current_user),
     db: AsyncSession = Depends(get_db),
 ) -> CommentOut:
-    doc = await _get_doc(db, id)
+    doc = await _get_doc(db, id, user=user)
     comment = DocComment(
         doc_id=doc.id,
         block_id=body.block_id,
@@ -769,6 +876,12 @@ async def create_comment(
     db.add(comment)
     await db.flush()
 
+    # 못 보는 문서의 제목·댓글 미리보기를 멘션 알림으로 흘리지 않는다(README 57, 보안 리뷰)
+    targets = [
+        t
+        for t in await chat.mention_targets(db, comment.body, user.id)
+        if await acl.can_view_folder(db, t, doc.folder_id)
+    ]
     notices = [
         Notification(
             user_id=target.id,
@@ -783,7 +896,7 @@ async def create_comment(
                 "preview": comment.body[:120],
             },
         )
-        for target in await chat.mention_targets(db, comment.body, user.id)
+        for target in targets
         if wants(target.preferences, "mention")
     ]
     db.add_all(notices)
