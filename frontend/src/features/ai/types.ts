@@ -6,6 +6,9 @@ export type AiModel = Schema<'ModelOut'>
 /** `POST /ai/attachments` 응답(백엔드 #396). `chars` 는 서버가 뽑은 평문 글자 수다. */
 export type AiAttachment = Schema<'app__routers__ai__AttachmentOut'>
 
+/** `POST /ai/attachments/{id}/edit` 응답(백엔드 #401). `result` 는 고친 새 첨부이고 원본은 그대로다. */
+export type AiEditResult = Schema<'EditOut'>
+
 /**
  * 04 §8 `event: citations` 항목. 번호(`n`)는 본문의 `[[n]]` 표식과 짝을 이룬다(§8.1).
  *
