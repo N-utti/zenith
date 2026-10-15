@@ -12,6 +12,7 @@ import {
   FolderOpen,
   FolderPlus,
   Link2,
+  Lock,
   Pencil,
   Plus,
   Trash2,
@@ -41,6 +42,7 @@ import {
   ancestorsOf,
   buildTree,
   canDrop,
+  folderAccessLabel,
   previewDocs,
   type TreeItem,
   type TreeNode,
@@ -196,6 +198,7 @@ function FolderRow({
   actions: RowActions
 }) {
   const { id, title } = node.folder
+  const access = folderAccessLabel(node.folder)
   const { docId } = useParams()
   const { pathname } = useLocation()
   const [searchParams] = useSearchParams()
@@ -263,6 +266,11 @@ function FolderRow({
         >
           <Icon className="size-4 shrink-0" strokeWidth={2} />
           <span className="truncate">{title}</span>
+          {access && (
+            <Lock role="img" aria-label={access} className="text-subtle size-3.5 shrink-0">
+              <title>{access}</title>
+            </Lock>
+          )}
         </Link>
 
         {/*

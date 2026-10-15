@@ -160,3 +160,21 @@ export function previewDocs(docs: DocSummary[], limit: number, openId?: string):
   if (open && !shown.includes(open)) shown.push(open)
   return shown
 }
+
+const MIN_ROLE_LABEL: Record<Folder['min_role'], string> = {
+  member: '전원',
+  lead: '팀장 이상',
+  exec: '임원',
+}
+
+/**
+ * 폴더에 직접 건 열람 제한(백엔드 #421)의 설명. 「전원 열람」이고 지정한 사람도 없으면 `null`.
+ * 볼 수 있는 사람 = 등급이 기준 이상이거나 지정한 사람이다. 상위 폴더에서 물려받은 제한은 보지 않는다
+ * (자물쇠는 직접 건 폴더에만 단다).
+ */
+export function folderAccessLabel(folder: Folder): string | null {
+  const people = folder.allowed_users.length
+  if (folder.min_role === 'member' && !people) return null
+  const role = MIN_ROLE_LABEL[folder.min_role] ?? folder.min_role
+  return `열람: ${role}${people ? ` + 지정한 ${people}명` : ''}`
+}

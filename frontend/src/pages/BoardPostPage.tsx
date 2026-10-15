@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
-import { Lock, Pencil, Pin, Trash2 } from 'lucide-react'
+import { Pencil, Pin, Trash2 } from 'lucide-react'
+import { Forbidden } from '@/components/Forbidden'
 import { Avatar } from '@/components/ui/Avatar'
 import { BackLink } from '@/components/ui/BackLink'
 import { Button } from '@/components/ui/Button'
@@ -15,34 +16,6 @@ import { AttachmentList } from '@/features/approvals/AttachmentList'
 import { PostComments } from '@/features/board/PostComments'
 import { PostComposer } from '@/features/board/PostComposer'
 import { useCurrentUser } from '@/features/auth/AuthContext'
-
-/**
- * 열람 권한이 없을 때. 05 "상태·엣지 케이스"가 요구하는 **전용 403 화면**이다.
- *
- * 목록에서는 마스킹으로 막지만 주소를 직접 치고 들어올 수 있다. 그때 빈 화면이나
- * 일반 오류를 보여주면 "고장"으로 읽힌다. 막혔다는 사실과 이유를 밝힌다.
- */
-function Forbidden() {
-  return (
-    <div className="grid place-items-center py-20 text-center">
-      <div className="max-w-sm">
-        <span className="bg-sunken text-subtle mx-auto grid size-12 place-items-center rounded-xl">
-          <Lock className="size-5" />
-        </span>
-        <h1 className="text-fg mt-4 text-lg font-semibold">열람 권한이 없습니다</h1>
-        <p className="text-muted mt-2 text-sm leading-relaxed">
-          {/* 서버 403 은 code·detail 뿐이라 몇 등급부터인지는 모른다(routers/boards.py). */}
-          이 글을 볼 수 있는 등급이 아닙니다.
-          <br />
-          권한이 필요하면 경영지원팀에 문의해 주세요.
-        </p>
-        <Link to="/board" className="text-accent mt-5 inline-block text-sm hover:underline">
-          게시판으로 돌아가기 →
-        </Link>
-      </div>
-    </div>
-  )
-}
 
 export function BoardPostPage() {
   const { postId = '' } = useParams()
@@ -84,7 +57,11 @@ export function BoardPostPage() {
 
   if (error) {
     if (error instanceof ApiError && error.status === 403) {
-      return <Forbidden />
+      return (
+        <Forbidden to="/board" back="게시판으로 돌아가기">
+          이 글을 볼 수 있는 등급이 아닙니다.
+        </Forbidden>
+      )
     }
     return (
       <div className="py-20 text-center">
