@@ -880,10 +880,6 @@ async def chat(
     db: AsyncSession = Depends(get_db),
     provider: LLMProvider = Depends(get_provider),
 ) -> StreamingResponse:
-    if jobs.busy(
-        body.session_id
-    ):  # README 58 — 앞 답이 끝나기 전엔 같은 대화에 다음 질문을 받지 않는다
-        raise ApiError(409, "AI_BUSY", "이 대화는 아직 답변을 만드는 중입니다.")
     # 세션 행을 쓰기 전에 — 422 면 DB 에 아무것도 안 남는다. 규정 전문·문서 범위의 번호표(sources)도 여기서 미리.
     sources: list[Citation] = []
     scope_doc = _scope_doc_id(body.scope)
@@ -898,7 +894,13 @@ async def chat(
     rules_block = await _rules_sources(db, user, sources)
     doc_block = await _docs_source(db, user, doc_ids, sources)
     attach_block = await _attachments_source(db, user, body.attachments, sources)
-    session_id = await _session(db, user, body.session_id, str(provider.models()[0]["name"]))
+    model = str(provider.models()[0]["name"])
+    session_id = await _session(db, user, body.session_id, model)
+    if jobs.busy(
+        session_id
+    ):  # README 58 — 앞 답이 끝나기 전엔 같은 대화에 다음 질문을 받지 않는다(소유자 확인 뒤)
+        await db.rollback()
+        raise ApiError(409, "AI_BUSY", "이 대화는 아직 답변을 만드는 중입니다.")
     messages = [*await _history(db, session_id), {"role": "user", "content": body.message}]
     await db.commit()  # 세션 행만 남긴다. 공급자를 기다리는 동안 커넥션은 풀에 돌아간다.
     asked_at = datetime.now(UTC)
@@ -998,7 +1000,7 @@ async def chat(
             log.exception("AI 답변 스트림 실패")
             job.push("error", {"detail": "AI 답변을 만들지 못했습니다.", "code": "INTERNAL"})
 
-    job = jobs.start(jobs.Job(session_id, user.id, body.message, asked_at), run)
+    job = jobs.start(jobs.Job(session_id, user.id, body.message, model, asked_at), run)
     return StreamingResponse(
         _follow(job),
         media_type="text/event-stream",
@@ -1093,21 +1095,27 @@ async def list_sessions(
     ]
     listed = {o.id for o in out}
     # 첫 답을 만드는 중인 새 대화는 아직 메시지가 없다 — 진행 중 목록에서 보탠다(돌아온 화면이 찾을 수 있게)
-    for job in jobs.running.values():
-        if job.user_id == user.id and job.session_id not in listed:
-            model = await db.scalar(select(AiSession.model).where(AiSession.id == job.session_id))
-            out.insert(
-                0,
-                SessionOut(
-                    id=job.session_id,
-                    model=model or "",
-                    title=job.message[:TITLE_MAX],
-                    created_at=job.started_at,
-                    updated_at=job.started_at,
-                    pending=True,
-                ),
-            )
-    return out
+    mine = sorted(
+        (
+            j
+            for j in list(jobs.running.values())
+            if j.user_id == user.id and j.session_id not in listed
+        ),
+        key=lambda j: j.started_at,
+        reverse=True,
+    )
+    fresh = [
+        SessionOut(
+            id=j.session_id,
+            model=j.model,
+            title=j.message[:TITLE_MAX],
+            created_at=j.started_at,
+            updated_at=j.started_at,
+            pending=True,
+        )
+        for j in mine
+    ]
+    return (fresh + out)[:SESSIONS_MAX]
 
 
 async def _my_session(db: AsyncSession, user: User, session_id: uuid.UUID) -> AiSession:
@@ -1128,12 +1136,14 @@ async def get_session(
     db: AsyncSession = Depends(get_db),
 ) -> SessionDetailOut:
     session = await _my_session(db, user, session_id)
+    job = jobs.running.get(
+        session_id
+    )  # 메시지를 읽기 전에 — 그 사이 답이 끝나도 화면이 답을 놓치지 않게
     rows = await db.scalars(
         select(AiMessage)
         .where(AiMessage.session_id == session_id)
         .order_by(AiMessage.created_at, AiMessage.id)
     )
-    job = jobs.running.get(session_id)
     return SessionDetailOut(
         id=session.id,
         model=session.model,
@@ -1164,6 +1174,9 @@ async def stream_session(
     db: AsyncSession = Depends(get_db),
 ) -> StreamingResponse:
     await _my_session(db, user, session_id)
+    await (
+        db.rollback()
+    )  # 스트림이 끝날 때까지(분 단위) 커넥션을 쥐고 있지 않게 — chat 의 commit 과 같은 이유
     job = jobs.running.get(session_id)
     if job is None:
         raise ApiError(404, "NOT_FOUND", "만드는 중인 답변이 없습니다.")

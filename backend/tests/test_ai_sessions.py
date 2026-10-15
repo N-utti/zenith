@@ -48,14 +48,19 @@ class GatedProvider(FakeProvider):
 @pytest.fixture
 async def live(app: FastAPI, monkeypatch) -> AsyncIterator[AsyncClient]:
     monkeypatch.setattr(settings, "cookie_secure", False)  # http 로 붙는다
-    with socket.socket() as s:
-        s.bind(("127.0.0.1", 0))
-        port = s.getsockname()[1]
+    sock = socket.socket()
+    sock.bind(("127.0.0.1", 0))  # 잡은 소켓을 그대로 넘긴다(포트 경합 없음)
+    sock.listen()
+    port = sock.getsockname()[1]
     server = uvicorn.Server(
-        uvicorn.Config(app, host="127.0.0.1", port=port, lifespan="off", log_level="warning")
+        uvicorn.Config(
+            app, lifespan="off", log_level="warning", log_config=None
+        )  # log_config=None — 전역 로깅을 건드리지 않게
     )
-    task = asyncio.create_task(server.serve())
+    task = asyncio.create_task(server.serve(sockets=[sock]))
     while not server.started:
+        if task.done():
+            task.result()  # 기동 실패를 무한 대기 대신 예외로
         await asyncio.sleep(0.01)
     try:
         async with AsyncClient(base_url=f"http://127.0.0.1:{port}") as c:
@@ -63,17 +68,24 @@ async def live(app: FastAPI, monkeypatch) -> AsyncIterator[AsyncClient]:
     finally:
         server.should_exit = True
         await task
+        sock.close()
 
 
 @pytest.fixture
-def gated(app: FastAPI, monkeypatch, app_db):
+async def gated(app: FastAPI, monkeypatch, app_db):
     GatedProvider.gate = asyncio.Event()
     app.dependency_overrides[get_provider] = GatedProvider
     share_scope(monkeypatch, app_db)
     yield
-    assert (
-        not jobs.running
-    )  # 테스트마다 끝까지 기다린다(세션이 롤백된 뒤 태스크가 DB 를 만지면 안 된다)
+    # 테스트마다 끝까지 기다린다(세션이 롤백된 뒤 태스크가 DB 를 만지면 안 된다). 테스트가 중간에 죽었으면 여기서
+    # 문을 열어 남은 태스크를 끝내 다음 테스트를 오염시키지 않는다 — 그러고도 남아 있던 것은 실패로 알린다.
+    leftover = list(jobs.running.values())
+    GatedProvider.gate.set()
+    for job in leftover:
+        if job.task is not None:
+            await job.task
+    jobs.running.clear()
+    assert not leftover
 
 
 async def _first_frame(c: AsyncClient, method: str, url: str, **kw) -> str:

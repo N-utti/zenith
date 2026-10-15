@@ -25,6 +25,7 @@ class Job:
     session_id: uuid.UUID
     user_id: uuid.UUID
     message: str  # 질문 — 돌아온 화면이 답 위에 그릴 것
+    model: str  # 세션의 모델명 — 목록이 DB 없이 그린다
     started_at: datetime
     events: list[Event] = field(default_factory=list)  # 늦게 붙은 구독자에게 처음부터 되돌려 준다
     done: bool = False
@@ -54,6 +55,10 @@ class Job:
 
 
 running: dict[uuid.UUID, Job] = {}  # session_id → 진행 중인 답변(한 세션에 하나)
+PER_USER = 3  # 한 사람이 동시에 만들 수 있는 답변 — 끊고 새 세션으로 또 띄우는 식으로 비용을 쌓지 못하게(보안 리뷰)
+JOB_TIMEOUT_S = (
+    600  # 답 하나의 전체 상한 — 공급자가 멈춰도 그 세션이 AI_BUSY 에 오래 잠기지 않게(보안 리뷰)
+)
 
 
 def busy(session_id: uuid.UUID | None) -> bool:
@@ -64,11 +69,19 @@ def start(job: Job, run: Callable[[Job], Awaitable[None]]) -> Job:
     """`run(job)` 을 태스크로. 끝나면(정상·에러·취소 모두) 구독자를 풀어 주고 목록에서 뺀다."""
     if job.session_id in running:
         raise ApiError(409, "AI_BUSY", "이 대화는 아직 답변을 만드는 중입니다.")
+    if sum(j.user_id == job.user_id for j in running.values()) >= PER_USER:
+        raise ApiError(429, "AI_THROTTLED", f"동시에 만들 수 있는 답변은 {PER_USER}개까지입니다.")
     running[job.session_id] = job
 
     async def wrapped() -> None:
         try:
-            await run(job)
+            async with asyncio.timeout(JOB_TIMEOUT_S):
+                await run(job)
+        except TimeoutError:
+            job.push(
+                "error",
+                {"detail": "AI 답변이 제한 시간 안에 끝나지 않았습니다.", "code": "AI_TIMEOUT"},
+            )
         finally:
             job.finish()
             running.pop(job.session_id, None)
