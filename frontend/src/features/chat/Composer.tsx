@@ -323,7 +323,13 @@ export function Composer({
                 onSubmitEnter={dispatch}
                 rows={1}
                 aria-label={`${channelName}에 메시지 보내기`}
-                placeholder={`${hash ? '#' : ''}${channelName}에 메시지 보내기…`}
+                // 키보드가 있는 기기는 Tab 안내를 자리글로 둔다. 손가락 기기에는 Tab 키가 없어 방 이름 그대로.
+                // ponytail: 열 때 한 번만 본다. 태블릿에 키보드를 붙였다 떼는 경우는 따라가지 않는다.
+                placeholder={
+                  window.matchMedia?.('(pointer: coarse)').matches
+                    ? `${hash ? '#' : ''}${channelName}에 메시지 보내기…`
+                    : 'Tab 을 누르면 /ai 가 입력됩니다'
+                }
                 // 테두리는 감싼 칸이 그린다. 높이는 그 테두리 2px 을 빼서 옆 버튼(44px)과 밑선을 맞춘다.
                 className="max-h-40 min-h-[calc(2.75rem-2px)] border-0 bg-transparent"
               />
@@ -360,7 +366,7 @@ export function Composer({
             아랫줄이 잘린다. 좁은 폭에서는 아예 감춘다. 물리 키보드가 없어 알릴 내용이 없고,
             메시지 목록의 세로를 상시로 먹을 이유도 없다. */}
         <p className="text-subtle mt-2 hidden text-center text-[11px] sm:block">
-          Enter 전송 · Shift+Enter 줄바꿈 · Tab AI 에게 묻기
+          Enter 전송 · Shift+Enter 줄바꿈
         </p>
       </div>
 
