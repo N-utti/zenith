@@ -145,8 +145,8 @@ MAKE_TOOL = {
     "description": (
         "표를 엑셀(xlsx) 파일로 만든다. 사용자가 파일·엑셀로 달라고 할 때만 쓴다. 첫 행은 머리글. 값은 문자열·숫자·"
         "불리언·null 이고 '=' 로 시작하면 수식(셀 참조·숫자·SUM/AVERAGE/IF/ROUND 같은 계산 함수만, 문자열·외부 참조 없이, "
-        "예: '=B2-C2'). 만든 뒤 답에는 결과 번호로 [[n]] 각주를 달아 내려받기 카드를 보여 주고, 같은 표를 글로 다시 그리지 "
-        "않는다."
+        "예: '=B2-C2'). 만든 뒤 답 본문에 도구 결과가 준 마크다운 링크를 그대로 한 줄로 넣는다(각주 [[n]] 이 아니라 "
+        "링크 — 누르면 내려받는다). 같은 표를 글로 다시 그리지 않는다."
     ),
     "input_schema": {
         "type": "object",
@@ -373,20 +373,13 @@ async def _make(user: User, inp: dict, sources: list[Citation]) -> dict[str, obj
             "content": "파일을 저장하지 못했습니다. 잠시 뒤 다시 시도해 주세요.",
             "is_error": True,
         }
-    n = len(sources) + 1
-    sources.append(
-        Citation(
-            n=n,
-            type="file",
-            to=f"/api/ai/attachments/{att.id}",
-            doc_id=None,
-            title=name,
-            quote=text[:200],
-            path="AI 생성",
-        )
-    )
+    # 근거 카드가 아니라 답 본문의 링크로(사용자 결정 2026-10-15 「근거에 만들지 말고 채팅 인라인에」) — 프론트 AiMarkdown 은
+    # 사내 경로(`/…`) 링크를 <a> 로 그리고, GET /ai/attachments/{id} 는 올린 사람에게 octet-stream + attachment 로 내려준다.
+    # 파일명 안의 `]`·`)` 는 링크 문법을 깨므로 전각으로. sources 에는 넣지 않는다 — 각주가 없으니 카드도 없다.
+    label = _body(name).replace("]", "］").replace(")", "）")
+    link = f"[📎 {label}](/api/ai/attachments/{att.id})"
     return {
-        "content": f"[{n}] 《{_body(name)}》 파일을 만들었습니다({len(data):,}바이트). 답에 [[{n}]] 을 답니다."
+        "content": f"《{_body(name)}》 파일을 만들었습니다({len(data):,}바이트). 답 본문에 이 링크를 그대로 넣습니다: {link}"
     }
 
 
