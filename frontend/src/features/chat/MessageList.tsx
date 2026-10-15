@@ -8,8 +8,9 @@ import {
   type ReactNode,
 } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router'
-import { ArrowDown, Download, FileText, Paperclip, Pencil, Trash2 } from 'lucide-react'
+import { ArrowDown, Download, FileText, Paperclip, Pencil, Sparkles, Trash2 } from 'lucide-react'
 import { Avatar } from '@/components/ui/Avatar'
+import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { ImageViewer } from '@/components/ui/ImageViewer'
 import { Spinner } from '@/components/ui/Spinner'
@@ -23,6 +24,8 @@ import { httpUrl } from '@/lib/serverOrigin'
 import { useCurrentUser } from '@/features/auth/AuthContext'
 import { UNTITLED_DOC, useDoc } from '@/features/docs/api'
 import { MentionText } from '@/features/people/MentionText'
+import { AiMarkdown } from '@/features/ai/AiMarkdown'
+import { linkPaths } from './aiCommand'
 import { isImage } from './attachments'
 import { MAX_BODY_CHARS, useMessages, useOlderMessages } from './api'
 import { useChatSocketContext } from './ChatSocketContext'
@@ -179,7 +182,9 @@ export function MessageList({
   // 시작해 200px 조건을 넘지 못하고, 내 메시지가 화면 밖에 남으면 보냈는지 알 수 없다.
   // 내 메시지는 마지막 id 가 새로 바뀐 때만 본다. 목록을 다시 받아 건수만 줄어든 때(창 복귀,
   // 소켓 재연결)에 끌어내리면 위를 읽던 자리를 뺏는다.
-  const me = useCurrentUser().id
+  const user = useCurrentUser()
+  const me = user.id
+  const exec = user.role === 'exec'
   const last = data?.items.at(-1)
   const lastId = last?.id
   const lastMine = last?.author.id === me
@@ -397,7 +402,10 @@ export function MessageList({
                 // 쓴 사람만 고치고 지운다(백엔드 #284). 버튼을 감추는 것은 화면 편의이고 남의 메시지를
                 // 건드리는 요청의 차단은 서버의 `error` 이벤트(FORBIDDEN)다.
                 onEdit={message.author.id === me ? edit : undefined}
-                onDelete={message.author.id === me ? remove : undefined}
+                // 임원은 봇 글도 지운다(잘못된 답 회수, 백엔드 #400). 고치기는 안 된다.
+                onDelete={
+                  message.author.id === me || (exec && message.author.is_bot) ? remove : undefined
+                }
               >
                 {message.doc_ref && <DocCard docId={message.doc_ref} />}
               </MessageRow>
@@ -447,10 +455,13 @@ const MessageRow = memo(function MessageRow({
    * 하려면 그릴 때마다 같은 함수여야 한다(`MessageList` 가 붙잡는다).
    */
   onEdit?: (messageId: string, body: string) => boolean
+  /** 고치기와 같고, 임원에게는 봇 글에도 온다. */
   onDelete?: (messageId: string) => boolean
   /** 문서 카드. 없는 줄은 `null`. */
   children: ReactNode
 }) {
+  // `/ai` 커맨드에 답한 시스템 계정의 글(백엔드 #400). 이름이 아니라 서버가 실어 준 칸으로 가른다.
+  const bot = message.author.is_bot === true
   /** 고치는 중인 글. 고치는 중이 아니면 `null`. */
   const [draft, setDraft] = useState<string | null>(null)
   const row = useRef<HTMLDivElement>(null)
@@ -489,34 +500,45 @@ const MessageRow = memo(function MessageRow({
           있을 때만 보이고(줄은 누르면 초점을 받는다. 손가락 기기는 메시지를 한 번 누르면 뜬다),
           숨어 있을 때는 눌리지도 않는다.
         */}
-        {onEdit && onDelete && draft === null && (
+        {(onEdit || onDelete) && draft === null && (
           <div className="border-line bg-surface pointer-events-none absolute -top-3 right-2 flex rounded-md border opacity-0 shadow-sm transition-opacity group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100">
-            <button
-              type="button"
-              aria-label={`${formatTime(message.created_at)} 메시지 고치기`}
-              title="고치기"
-              onClick={() => setDraft(message.body)}
-              className="text-subtle hover:text-fg grid size-7 cursor-pointer place-items-center rounded"
-            >
-              <Pencil className="size-3.5" />
-            </button>
-            <button
-              type="button"
-              aria-label={`${formatTime(message.created_at)} 메시지 지우기`}
-              title="지우기"
-              onClick={() => {
-                if (confirm('이 메시지를 지울까요? 되돌릴 수 없습니다.')) onDelete(message.id)
-              }}
-              className="text-subtle hover:text-danger grid size-7 cursor-pointer place-items-center rounded"
-            >
-              <Trash2 className="size-3.5" />
-            </button>
+            {onEdit && (
+              <button
+                type="button"
+                aria-label={`${formatTime(message.created_at)} 메시지 고치기`}
+                title="고치기"
+                onClick={() => setDraft(message.body)}
+                className="text-subtle hover:text-fg grid size-7 cursor-pointer place-items-center rounded"
+              >
+                <Pencil className="size-3.5" />
+              </button>
+            )}
+            {onDelete && (
+              <button
+                type="button"
+                aria-label={`${formatTime(message.created_at)} 메시지 지우기`}
+                title="지우기"
+                onClick={() => {
+                  if (confirm('이 메시지를 지울까요? 되돌릴 수 없습니다.')) onDelete(message.id)
+                }}
+                className="text-subtle hover:text-danger grid size-7 cursor-pointer place-items-center rounded"
+              >
+                <Trash2 className="size-3.5" />
+              </button>
+            )}
           </div>
         )}
 
         {compact ? (
           <span className="text-subtle w-9 shrink-0 pt-0.5 text-right text-[11px] opacity-0 group-hover:opacity-100">
             {formatTime(message.created_at)}
+          </span>
+        ) : bot ? (
+          <span
+            aria-hidden
+            className="bg-accent-soft text-accent grid size-9 shrink-0 place-items-center rounded-full"
+          >
+            <Sparkles className="size-4" />
           </span>
         ) : (
           <Avatar name={message.author.name} hue={hueOf(message.author.id)} size="md" />
@@ -526,6 +548,11 @@ const MessageRow = memo(function MessageRow({
           {!compact && (
             <p className="text-fg text-sm font-semibold">
               {message.author.name}
+              {bot && (
+                <Badge tone="accent" className="ml-1.5 align-middle">
+                  AI
+                </Badge>
+              )}
               <span className="text-subtle ml-1.5 text-xs font-normal">
                 {formatTime(message.created_at)}
               </span>
@@ -563,6 +590,10 @@ const MessageRow = memo(function MessageRow({
                 <span className="text-subtle text-xs">Enter 저장 · Esc 취소</span>
               </div>
             </div>
+          ) : // 봇 답은 마크다운이다(`[[n]]` 각주, 끝의 근거 줄). 사람 글은 멘션만 살린 평문.
+          // 링크는 사내 경로만, 그림은 안 부른다(`AiMarkdown`).
+          bot ? (
+            <AiMarkdown text={linkPaths(message.body)} className="text-muted text-sm" />
           ) : (
             // 첨부만 남기고 글을 지운 메시지도 고친 것이다. 글이 없어도 표시는 남긴다.
             (message.body || message.edited_at) && (

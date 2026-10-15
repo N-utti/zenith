@@ -6,7 +6,7 @@ import { ToastContext, type ToastApi } from '@/components/ui/ToastContext'
 import { AuthContext, type AuthValue } from '@/features/auth/AuthContext'
 import { meQueryKey } from '@/features/auth/queries'
 import { api, ApiError } from '@/lib/api'
-import { useChatSocket } from './useChatSocket'
+import { useChatSocket, type ChatSocket } from './useChatSocket'
 
 vi.mock('@/lib/api', async (original) => ({
   ...(await original<typeof import('@/lib/api')>()),
@@ -16,13 +16,20 @@ const fetchMe = vi.mocked(api)
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
-/** 열린 소켓을 세고, 서버가 닫은 것처럼 `onclose` 를 부를 수 있게만 한다. */
+/** 열린 소켓을 세고, 서버가 보낸 것처럼 `onmessage`·`onclose` 를 부를 수 있게만 한다. */
 class FakeSocket {
+  static OPEN = 1
   static opened: FakeSocket[] = []
+  readyState = FakeSocket.OPEN
+  sent: string[] = []
   onopen: (() => void) | null = null
   onclose: ((event: { code: number }) => void) | null = null
+  onmessage: ((event: { data: string }) => void) | null = null
   constructor() {
     FakeSocket.opened.push(this)
+  }
+  send(data: string) {
+    this.sent.push(data)
   }
   close() {}
 }
@@ -30,6 +37,8 @@ class FakeSocket {
 const me = { id: 'me', name: '나' }
 const auth = { user: me, status: 'authenticated' } as unknown as AuthValue
 const toast: ToastApi = { success: vi.fn(), error: vi.fn(), info: vi.fn() }
+/** 마지막으로 그린 훅의 값. */
+let hook: ChatSocket
 
 /** 소켓을 하나 연다. 돌려준 `close` 는 그 소켓이 `code` 로 닫힌 뒤 재접속 대기 시간이 지난 상태까지 간다. */
 async function mount() {
@@ -37,7 +46,7 @@ async function mount() {
   qc.setQueryData(meQueryKey, me)
 
   const Probe = () => {
-    useChatSocket()
+    hook = useChatSocket()
     return null
   }
   const root = createRoot(document.createElement('div'))
@@ -207,4 +216,83 @@ test('자리 잡기 전에 화면이 내려가면 다시 받지 않는다', asyn
   })
 
   expect(refetch).not.toHaveBeenCalled()
+})
+
+/** 서버가 마지막 소켓에 프레임을 민 것처럼. */
+const receive = (event: object) =>
+  act(async () => {
+    FakeSocket.opened.at(-1)?.onmessage?.({ data: JSON.stringify(event) })
+  })
+const message = (body: string, author: object) => ({
+  ev: 'msg',
+  channel_id: 'c-1',
+  message: {
+    id: crypto.randomUUID(),
+    channel_id: 'c-1',
+    author,
+    body,
+    doc_ref: null,
+    attachments: null,
+    created_at: new Date().toISOString(),
+    edited_at: null,
+  },
+})
+const bot = { id: 'u-ai', name: 'AI 어시스턴트', is_bot: true }
+const askAi = () =>
+  act(async () => {
+    hook.sendMessage('c-1', { body: '/ai 연차는?' })
+  })
+const waiting = () => hook.typingByChannel['c-1'] ?? []
+
+test('남이 치는 중이면 이름이 뜨고 3초 뒤 사라진다', async () => {
+  await mount()
+  await receive({ ev: 'typing', channel_id: 'c-1', user_id: 'u-2', name: '진수연' })
+  expect(waiting()).toEqual(['진수연'])
+  await act(async () => vi.advanceTimersByTimeAsync(2000))
+  // 다시 치면 시간을 처음부터 잰다.
+  await receive({ ev: 'typing', channel_id: 'c-1', user_id: 'u-2', name: '진수연' })
+  await act(async () => vi.advanceTimersByTimeAsync(2000))
+  expect(waiting()).toEqual(['진수연'])
+  await act(async () => vi.advanceTimersByTimeAsync(1000))
+  expect(waiting()).toEqual([])
+})
+
+test('/ai 를 보내면 봇 답이 올 때까지 AI 어시스턴트가 치는 중으로 뜬다', async () => {
+  await mount()
+  await askAi()
+  expect(waiting()).toEqual(['AI 어시스턴트'])
+  await receive(message('/ai 연차는?', me))
+  expect(waiting()).toEqual(['AI 어시스턴트'])
+  await receive(message('15일입니다.', bot))
+  expect(waiting()).toEqual([])
+})
+
+test('거절이 내 글보다 먼저 와도 기다림 표시를 다시 켜지 않는다', async () => {
+  await mount()
+  await askAi()
+  await receive({ ev: 'error', code: 'AI_THROTTLED', detail: '잦습니다.', channel_id: 'c-1' })
+  await receive(message('/ai 연차는?', me))
+  expect(waiting()).toEqual([])
+  expect(toast.error).toHaveBeenCalledWith('잦습니다.')
+})
+
+test('봇 답이 끝내 안 오면 120초 뒤 기다림 표시를 끈다', async () => {
+  await mount()
+  await askAi()
+  await act(async () => vi.advanceTimersByTimeAsync(119_000))
+  expect(waiting()).toEqual(['AI 어시스턴트'])
+  await act(async () => vi.advanceTimersByTimeAsync(1000))
+  expect(waiting()).toEqual([])
+})
+
+test('끊겼다 다시 붙으면 기다림 표시를 끈다(놓친 봇 답은 봇 표시 없이 다시 받는다)', async () => {
+  await mount()
+  await askAi()
+  await act(async () => {
+    FakeSocket.opened[0].onclose?.({ code: 1006 })
+    await vi.advanceTimersByTimeAsync(2000)
+    FakeSocket.opened[1].onopen?.()
+    await vi.advanceTimersByTimeAsync(1000)
+  })
+  expect(waiting()).toEqual([])
 })

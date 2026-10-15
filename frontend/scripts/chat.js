@@ -263,6 +263,33 @@ function sendError(conn, code, detail, channelId) {
   conn.send(JSON.stringify(event))
 }
 
+/** 봇 계정. 실서버처럼 저장본에는 `is_bot` 이 없다(과거 메시지 조회엔 안 실린다, 이슈 #403). */
+const BOT = { id: 'u-ai', name: 'AI 어시스턴트' }
+
+/**
+ * 채팅 `/ai` 커맨드(백엔드 #400) 흉내. 잠시 뒤 「AI 어시스턴트」 명의의 답을 같은 채널에 단다.
+ * ponytail: 답은 고정 글이다.
+ */
+function replyAsBot(channel) {
+  setTimeout(() => {
+    const author = BOT
+    const message = {
+      id: `m-${nextId++}`,
+      channel_id: channel.id,
+      author: { ...author, is_bot: true },
+      body: '연차는 입사 1년 뒤 15일이 생깁니다[[1]]. **1년 미만**은 한 달 개근마다 1일입니다[[2]].\n\n근거: [1] 취업규칙 /docs/doc-rules · [2] 연차 안내 /board/b-notice/p-1',
+      doc_ref: null,
+      attachments: null,
+      created_at: new Date().toISOString(),
+      edited_at: null,
+    }
+    messages.get(channel.id)?.push({ ...message, author }) ??
+      messages.set(channel.id, [{ ...message, author }])
+    publish(channel.id, { ev: 'msg', channel_id: channel.id, message })
+    publishUnread(channel)
+  }, 2500)
+}
+
 export function handleChatConnection(conn, userId) {
   if (!USERS[userId]) return conn.close(4401, 'unknown user')
 
@@ -304,13 +331,26 @@ export function handleChatConnection(conn, userId) {
       }
 
       const message = makeMessage(channelId, userId, body, undefined, checked.files)
+      // 질문에 「잦」이 들어 있으면 실서버의 요청 과다 거절을 흉내 낸다. 실서버처럼 내 글을 뿌리기 전에 보낸다.
+      const asksAi = body === '/ai' || body.startsWith('/ai ')
+      const throttled = asksAi && body.includes('잦')
+      if (throttled) {
+        sendError(
+          conn,
+          'AI_THROTTLED',
+          'AI 요청이 너무 잦습니다. 잠시 후 다시 시도해 주세요.',
+          channelId,
+        )
+      }
       messages.get(channelId)?.push(message) ?? messages.set(channelId, [message])
       // 숨겨 둔 사람에게도 다시 보인다. 화면은 목록에 없는 채널의 `msg` 를 받으면 목록을 다시 받는다.
       for (const uid of channel.memberIds) hiddenDms.get(uid)?.delete(channelId)
       // 보낸 사람은 그 채널을 보고 있다. 서버도 보낸 사람의 last_read_at 을 같이 올린다.
       markRead(userId, channelId)
       publish(channelId, { ev: 'msg', channel_id: channelId, message })
-      return publishUnread(channel)
+      publishUnread(channel)
+      if (asksAi && !throttled) replyAsBot(channel)
+      return
     }
 
     // 고치기·지우기. 실서버(#284)가 아래 규칙대로 구현했다(04 §4.1 에는 아직 없다).
@@ -322,7 +362,9 @@ export function handleChatConnection(conn, userId) {
       const index = list.findIndex((m) => m.id === op.message_id)
       const target = list[index]
       if (!target) return sendError(conn, 'NOT_FOUND', '없는 메시지입니다.', channelId)
-      if (target.author.id !== userId) {
+      // 임원은 봇 글을 지울 수 있다(실서버 #400, 잘못된 답 회수). 고치기는 안 된다.
+      const botByExec = op.op === 'del' && target.author.id === BOT.id && EXECS.has(userId)
+      if (target.author.id !== userId && !botByExec) {
         return sendError(
           conn,
           'FORBIDDEN',

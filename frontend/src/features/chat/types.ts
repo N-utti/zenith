@@ -16,13 +16,19 @@ export type ChatAttachment = Schema<'app__routers__channels__AttachmentOut'>
  * 백엔드 `MessageOut`. 소켓이 밀어 주는 메시지도 같은 모양이다.
  * `doc_ref` 는 문서 id뿐이라(`MessageList.tsx` 의 `DocCard`), 제목·수정 정보는 그 문서를 따로 조회해 채운다.
  */
-export type ChatMessage = Schema<'MessageOut'>
+export type ChatMessage = Schema<'MessageOut'> & {
+  /**
+   * `is_bot` 은 `/ai` 커맨드에 답한 시스템 계정 「AI 어시스턴트」의 글에만 `true` 로 온다(백엔드 #400).
+   * 이름이 아니라 이 칸으로 가른다. 지금은 소켓 `msg` 에만 실려 과거 메시지를 다시 받으면 빠진다(이슈 #403).
+   */
+  author: Person & { is_bot?: boolean }
+}
 
 /**
  * 백엔드 `MessagePage`. 메시지 한 쪽(오래된 순). `next_cursor` 는 더 과거가 있을 때만 오고, 다음
  * 요청의 `?cursor=` 로 그대로 돌려준다. 뜻은 서버만 안다(화면은 읽지 않는다).
  */
-export type MessagePage = Schema<'MessagePage'>
+export type MessagePage = Omit<Schema<'MessagePage'>, 'items'> & { items: ChatMessage[] }
 
 /**
  * 백엔드 `ChannelOut`. DM 은 보는 사람에 따라 이름이 다르다. `name` 에 상대의 이름이 온다.
