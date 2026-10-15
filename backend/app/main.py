@@ -1,12 +1,13 @@
 import asyncio
 import contextlib
+import logging
 
 from fastapi import APIRouter, Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse
 
 from app import metrics
-from app.ai import embed
+from app.ai import embed, jobs
 from app.config import settings
 from app.deps import csrf_guard
 from app.errors import install_error_handlers
@@ -29,6 +30,8 @@ from app.routers import (
     search,
 )
 
+log = logging.getLogger("zenith.main")
+
 MAX_BODY_BYTES = (
     12 * 1024 * 1024
 )  # 첨부 상한(routers/channels.py MAX_ATTACHMENT_BYTES) + multipart 여유
@@ -48,6 +51,13 @@ async def lifespan(app: FastAPI):
         attach.cancel()
         # 돌던 배치의 세션 정리·워밍업 연결 정리까지 셋 다 기다린다 — return_exceptions 없으면 첫 취소에서 끝난다(리뷰)
         await asyncio.gather(task, warm, attach, return_exceptions=True)
+        # 만들던 AI 답변(README 58)은 저장되지 못하고 사라진다 — 건수만 남긴다(보안 리뷰)
+        pending = [j.task for j in list(jobs.running.values()) if j.task is not None]
+        if pending:
+            log.warning("종료 — 만들던 AI 답변 %d건 취소", len(pending))
+            for t in pending:
+                t.cancel()
+            await asyncio.gather(*pending, return_exceptions=True)
 
 
 def create_app() -> FastAPI:

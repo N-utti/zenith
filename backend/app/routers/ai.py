@@ -1004,7 +1004,10 @@ async def chat(
     return StreamingResponse(
         _follow(job),
         media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        headers={
+            "Cache-Control": "no-store",
+            "X-Accel-Buffering": "no",
+        },  # 미들웨어 setdefault 가 못 덮는다(보안 리뷰)
     )
 
 
@@ -1183,7 +1186,10 @@ async def stream_session(
     return StreamingResponse(
         _follow(job),
         media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        headers={
+            "Cache-Control": "no-store",
+            "X-Accel-Buffering": "no",
+        },  # 미들웨어 setdefault 가 못 덮는다(보안 리뷰)
     )
 
 
