@@ -15,7 +15,7 @@ function message(id: string): ChatMessage {
   return {
     id,
     channel_id: 'c1',
-    author: { id: 'u1', name: '정성운' },
+    author: { id: 'u1', name: '정성운', is_bot: false },
     body: '안녕하세요',
     doc_ref: null,
     attachments: null,

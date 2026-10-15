@@ -2128,13 +2128,13 @@ export interface components {
              * Format: date-time
              */
             occurred_at: string;
-            org: components["schemas"]["Person"];
-            deal: components["schemas"]["Person"] | null;
+            org: components["schemas"]["app__routers__crm__Person"];
+            deal: components["schemas"]["app__routers__crm__Person"] | null;
             /** Contacts */
-            contacts: components["schemas"]["Person"][];
+            contacts: components["schemas"]["app__routers__crm__Person"][];
             /** Users */
-            users: components["schemas"]["Person"][];
-            author: components["schemas"]["Person"];
+            users: components["schemas"]["app__routers__crm__Person"][];
+            author: components["schemas"]["app__routers__crm__Person"];
             /** Body */
             body: string;
             /** Can Edit */
@@ -2167,7 +2167,7 @@ export interface components {
              * @enum {string}
              */
             type_code: "leave" | "arrangement" | "overtime" | "correction" | "general";
-            drafter: components["schemas"]["Person"];
+            drafter: components["schemas"]["app__routers__approvals__Person"];
             /** Title */
             title: string;
             /**
@@ -2177,7 +2177,7 @@ export interface components {
             status: "draft" | "pending" | "approved" | "rejected" | "canceled" | "closed";
             /** Current Step */
             current_step: number | null;
-            waiting_on: components["schemas"]["Person"] | null;
+            waiting_on: components["schemas"]["app__routers__approvals__Person"] | null;
             /** Submitted At */
             submitted_at: string | null;
             /**
@@ -2201,7 +2201,7 @@ export interface components {
              * @enum {string}
              */
             type_code: "leave" | "arrangement" | "overtime" | "correction" | "general";
-            drafter: components["schemas"]["Person"];
+            drafter: components["schemas"]["app__routers__approvals__Person"];
             /** Title */
             title: string;
             /**
@@ -2211,7 +2211,7 @@ export interface components {
             status: "draft" | "pending" | "approved" | "rejected" | "canceled" | "closed";
             /** Current Step */
             current_step: number | null;
-            waiting_on: components["schemas"]["Person"] | null;
+            waiting_on: components["schemas"]["app__routers__approvals__Person"] | null;
             /** Submitted At */
             submitted_at: string | null;
             /**
@@ -2278,7 +2278,7 @@ export interface components {
             source_id: string;
             /** Source Title */
             source_title: string;
-            uploaded_by: components["schemas"]["Person"];
+            uploaded_by: components["schemas"]["app__routers__channels__Person"];
             /**
              * Created At
              * Format: date-time
@@ -2317,7 +2317,7 @@ export interface components {
              * Format: uuid
              */
             id: string;
-            user: components["schemas"]["Person"];
+            user: components["schemas"]["app__routers__approvals__Person"];
             /**
              * Kind
              * @enum {string}
@@ -2499,7 +2499,7 @@ export interface components {
             /** Is Private */
             is_private: boolean;
             /** Members */
-            members: components["schemas"]["Person"][];
+            members: components["schemas"]["app__routers__channels__Person"][];
             /** Unread */
             unread: number;
             last_message: components["schemas"]["MessageOut"] | null;
@@ -2534,7 +2534,8 @@ export interface components {
         };
         /**
          * CheckIn
-         * @description `doc_id`(저장된 문서) 또는 `text`(편집 중인 본문·선택 구간) 중 하나.
+         * @description `doc_id`(저장된 문서) 또는 `text`(편집 중인 본문·선택 구간). 둘 다 주면 `text` 를 검사하고 `doc_id` 는 그 글이
+         *     속한 문서 — 근거 검색에서 뺀다(자기 문서를 근거로 들면 늘 「일치」, 이슈 #410).
          */
         CheckIn: {
             /** Doc Id */
@@ -2615,7 +2616,7 @@ export interface components {
              * Format: date-time
              */
             at: string;
-            by: components["schemas"]["Person"];
+            by: components["schemas"]["app__routers__approvals__Person"];
             /** Reason */
             reason?: string | null;
         };
@@ -2630,7 +2631,7 @@ export interface components {
             status: "open" | "closed";
             /** Closed At */
             closed_at: string | null;
-            closed_by: components["schemas"]["Person"] | null;
+            closed_by: components["schemas"]["app__routers__approvals__Person"] | null;
             /** History */
             history: components["schemas"]["ClosingEvent"][];
         };
@@ -2650,7 +2651,7 @@ export interface components {
             id: string;
             /** Block Id */
             block_id: string | null;
-            author: components["schemas"]["Person"];
+            author: components["schemas"]["app__routers__docs__Person"];
             /** Body */
             body: string;
             /**
@@ -2826,8 +2827,8 @@ export interface components {
             kind: string;
             /** Name */
             name: string;
-            org: components["schemas"]["Person"];
-            owner: components["schemas"]["Person"] | null;
+            org: components["schemas"]["app__routers__crm__Person"];
+            owner: components["schemas"]["app__routers__crm__Person"] | null;
             /** Stage */
             stage: string;
             /** Amount Krw */
@@ -2863,7 +2864,7 @@ export interface components {
              * Format: uuid
              */
             id: string;
-            actor: components["schemas"]["Person"];
+            actor: components["schemas"]["app__routers__crm__Person"];
             /** From Stage */
             from_stage: string | null;
             /** To Stage */
@@ -2917,8 +2918,8 @@ export interface components {
             kind: string;
             /** Name */
             name: string;
-            org: components["schemas"]["Person"];
-            owner: components["schemas"]["Person"] | null;
+            org: components["schemas"]["app__routers__crm__Person"];
+            owner: components["schemas"]["app__routers__crm__Person"] | null;
             /** Stage */
             stage: string;
             /** Amount Krw */
@@ -2980,7 +2981,7 @@ export interface components {
              * Format: uuid
              */
             id: string;
-            delegate: components["schemas"]["Person"];
+            delegate: components["schemas"]["app__routers__approvals__Person"];
             /**
              * Start Date
              * Format: date
@@ -3017,7 +3018,7 @@ export interface components {
             deleted_at: string;
             /** Reason */
             reason: string;
-            duplicate: components["schemas"]["Person"] | null;
+            duplicate: components["schemas"]["app__routers__crm__Person"] | null;
         };
         /** DocActionIn */
         DocActionIn: {
@@ -3081,7 +3082,7 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
-            updated_by: components["schemas"]["Person"] | null;
+            updated_by: components["schemas"]["app__routers__docs__Person"] | null;
             /** Deleted At */
             deleted_at: string | null;
             /** Ai Source */
@@ -3108,7 +3109,7 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
-            updated_by: components["schemas"]["Person"] | null;
+            updated_by: components["schemas"]["app__routers__docs__Person"] | null;
             /** Deleted At */
             deleted_at: string | null;
             /** Ai Source */
@@ -3382,7 +3383,7 @@ export interface components {
             title: string;
             /** Masked */
             masked: boolean;
-            author: components["schemas"]["Person"] | null;
+            author: components["schemas"]["app__routers__me__Person"] | null;
             /**
              * Created At
              * Format: date-time
@@ -3630,7 +3631,7 @@ export interface components {
              * Format: uuid
              */
             id: string;
-            user: components["schemas"]["Person"];
+            user: components["schemas"]["app__routers__approvals__Person"];
             /** Type Code */
             type_code: string;
             /**
@@ -3743,7 +3744,7 @@ export interface components {
              * Format: uuid
              */
             channel_id: string;
-            author: components["schemas"]["Person"];
+            author: components["schemas"]["app__routers__channels__Person"];
             /** Body */
             body: string;
             /** Doc Ref */
@@ -3782,7 +3783,7 @@ export interface components {
         };
         /** Move */
         Move: {
-            from: components["schemas"]["Person"];
+            from: components["schemas"]["app__routers__crm__Person"];
             /**
              * Moved At
              * Format: date-time
@@ -3869,7 +3870,7 @@ export interface components {
         OrgCreated: {
             org: components["schemas"]["OrgDetail"];
             /** Duplicates */
-            duplicates: components["schemas"]["Person"][];
+            duplicates: components["schemas"]["app__routers__crm__Person"][];
         };
         /** OrgDeleteIn */
         OrgDeleteIn: {
@@ -3891,7 +3892,7 @@ export interface components {
             /** Org Type */
             org_type: string;
             /** Owners */
-            owners: components["schemas"]["Person"][];
+            owners: components["schemas"]["app__routers__crm__Person"][];
             /** Contact Count */
             contact_count: number;
             /** Last Contacted At */
@@ -3938,7 +3939,7 @@ export interface components {
             /** Org Type */
             org_type: string;
             /** Owners */
-            owners: components["schemas"]["Person"][];
+            owners: components["schemas"]["app__routers__crm__Person"][];
             /** Contact Count */
             contact_count: number;
             /** Last Contacted At */
@@ -4052,16 +4053,6 @@ export interface components {
             /** New Password */
             new_password: string;
         };
-        /** Person */
-        Person: {
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /** Name */
-            name: string;
-        };
         /** PersonOut */
         PersonOut: {
             /**
@@ -4089,7 +4080,7 @@ export interface components {
              * Format: uuid
              */
             id: string;
-            author: components["schemas"]["Person"];
+            author: components["schemas"]["app__routers__boards__Person"];
             /** Body */
             body: string;
             /**
@@ -4129,7 +4120,7 @@ export interface components {
             title: string;
             /** Masked */
             masked: boolean;
-            author: components["schemas"]["Person"] | null;
+            author: components["schemas"]["app__routers__boards__Person"] | null;
             /**
              * Created At
              * Format: date-time
@@ -4160,7 +4151,7 @@ export interface components {
             title: string;
             /** Masked */
             masked: boolean;
-            author: components["schemas"]["Person"] | null;
+            author: components["schemas"]["app__routers__boards__Person"] | null;
             /**
              * Created At
              * Format: date-time
@@ -4233,7 +4224,7 @@ export interface components {
             name: string;
             /** Description */
             description: string;
-            created_by: components["schemas"]["Person"];
+            created_by: components["schemas"]["app__routers__projects__Person"];
             /**
              * Created At
              * Format: date-time
@@ -4300,7 +4291,7 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
-            updated_by: components["schemas"]["Person"] | null;
+            updated_by: components["schemas"]["app__routers__me__Person"] | null;
         };
         /** RejectIn */
         RejectIn: {
@@ -4334,8 +4325,8 @@ export interface components {
         StepOut: {
             /** Step No */
             step_no: number;
-            approver: components["schemas"]["Person"];
-            acted_by: components["schemas"]["Person"] | null;
+            approver: components["schemas"]["app__routers__approvals__Person"];
+            acted_by: components["schemas"]["app__routers__approvals__Person"] | null;
             /**
              * Role
              * @enum {string}
@@ -4443,7 +4434,7 @@ export interface components {
              * @enum {string}
              */
             stage: "todo" | "doing" | "review" | "done";
-            assignee: components["schemas"]["Person"] | null;
+            assignee: components["schemas"]["app__routers__projects__Person"] | null;
             /** Due Date */
             due_date: string | null;
             /**
@@ -4672,7 +4663,7 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
-            author: components["schemas"]["Person"] | null;
+            author: components["schemas"]["app__routers__docs__Person"] | null;
             /** Label */
             label: string | null;
         };
@@ -4688,7 +4679,7 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
-            author: components["schemas"]["Person"] | null;
+            author: components["schemas"]["app__routers__docs__Person"] | null;
             /** Label */
             label: string | null;
             /** Snapshot */
@@ -4710,12 +4701,32 @@ export interface components {
             /** Chars */
             chars: number;
         };
+        /** Person */
+        app__routers__approvals__Person: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+        };
         /** ReopenIn */
         app__routers__attendance__ReopenIn: {
             /** Month */
             month: string;
             /** Reason */
             reason?: string | null;
+        };
+        /** Person */
+        app__routers__boards__Person: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
         };
         /**
          * AttachmentOut
@@ -4731,10 +4742,65 @@ export interface components {
             /** Content Type */
             content_type?: string | null;
         };
+        /** Person */
+        app__routers__channels__Person: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /**
+             * Is Bot
+             * @default false
+             */
+            is_bot: boolean;
+        };
+        /** Person */
+        app__routers__crm__Person: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+        };
         /** ReopenIn */
         app__routers__crm__ReopenIn: {
             /** Version */
             version?: number | null;
+        };
+        /** Person */
+        app__routers__docs__Person: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+        };
+        /** Person */
+        app__routers__me__Person: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+        };
+        /** Person */
+        app__routers__projects__Person: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
         };
     };
     responses: never;

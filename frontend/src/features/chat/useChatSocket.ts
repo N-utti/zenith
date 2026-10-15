@@ -134,8 +134,8 @@ export function useChatSocket(): ChatSocket {
   }, [])
 
   /**
-   * 모든 채널의 AI 답 기다림 표시를 끈다. 끊긴 사이 온 봇 답은 과거 메시지로 다시 받는데, 거기엔 봇 표시가 없어
-   * (이슈 #403) 표시를 끌 계기가 사라진다. 아직 안 온 답은 표시 없이 나타나지만 상한까지 헛표시를 남기는 것보다 낫다.
+   * 모든 채널의 AI 답 기다림 표시를 끈다. 끊긴 사이 온 봇 답은 소켓이 아니라 과거 메시지 조회로 다시 받아
+   * 표시를 끌 계기가 사라진다. 아직 안 온 답은 표시 없이 나타나지만 상한까지 헛표시를 남기는 것보다 낫다.
    */
   const hideAiEverywhere = useCallback(() => {
     for (const key of typingTimersRef.current.keys()) {

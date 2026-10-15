@@ -66,7 +66,7 @@ export function docFiles(
         source: 'doc' as const,
         source_id: file.doc_id,
         source_title: title,
-        uploaded_by: file.uploaded_by,
+        uploaded_by: { ...file.uploaded_by, is_bot: false },
         created_at: file.created_at,
         scope: 'all' as const,
       },

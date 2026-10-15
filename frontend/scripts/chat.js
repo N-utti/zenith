@@ -31,7 +31,9 @@
 import users from '../src/mocks/users.json' with { type: 'json' }
 
 /** 명단은 MSW 와 같은 users.json. u-1 진수연(사원) · u-2 정성운(사원) · u-3 홍성완(임원)이 시드 대화에 등장한다. */
-const USERS = Object.fromEntries(users.map((u) => [u.id, { id: u.id, name: u.name }]))
+const USERS = Object.fromEntries(
+  users.map((u) => [u.id, { id: u.id, name: u.name, is_bot: false }]),
+)
 
 /** 임원 id. 채널 지우기 권한에만 쓴다. `USERS` 에 등급을 넣으면 메시지의 `author` 로 새 나간다. */
 const EXECS = new Set(users.filter((u) => u.role === 'exec').map((u) => u.id))
@@ -263,8 +265,8 @@ function sendError(conn, code, detail, channelId) {
   conn.send(JSON.stringify(event))
 }
 
-/** 봇 계정. 실서버처럼 저장본에는 `is_bot` 이 없다(과거 메시지 조회엔 안 실린다, 이슈 #403). */
-const BOT = { id: 'u-ai', name: 'AI 어시스턴트' }
+/** 봇 계정. 실서버처럼 소켓과 과거 메시지 조회 양쪽에 `is_bot` 이 실린다(백엔드 #411). */
+const BOT = { id: 'u-ai', name: 'AI 어시스턴트', is_bot: true }
 
 /**
  * 채팅 `/ai` 커맨드(백엔드 #400) 흉내. 잠시 뒤 「AI 어시스턴트」 명의의 답을 같은 채널에 단다.
@@ -272,19 +274,17 @@ const BOT = { id: 'u-ai', name: 'AI 어시스턴트' }
  */
 function replyAsBot(channel) {
   setTimeout(() => {
-    const author = BOT
     const message = {
       id: `m-${nextId++}`,
       channel_id: channel.id,
-      author: { ...author, is_bot: true },
+      author: BOT,
       body: '연차는 입사 1년 뒤 15일이 생깁니다[[1]]. **1년 미만**은 한 달 개근마다 1일입니다[[2]].\n\n근거: [1] 취업규칙 /docs/doc-rules · [2] 연차 안내 /board/b-notice/p-1',
       doc_ref: null,
       attachments: null,
       created_at: new Date().toISOString(),
       edited_at: null,
     }
-    messages.get(channel.id)?.push({ ...message, author }) ??
-      messages.set(channel.id, [{ ...message, author }])
+    messages.get(channel.id)?.push(message) ?? messages.set(channel.id, [message])
     publish(channel.id, { ev: 'msg', channel_id: channel.id, message })
     publishUnread(channel)
   }, 2500)
