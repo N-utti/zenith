@@ -73,7 +73,8 @@ export function DocAskPanel({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {messages.length === 0 ? (
-        <p className="text-subtle flex-1 px-4 py-6 text-center text-xs leading-relaxed">
+        // min-h-0·overflow: 좁은 화면의 낮은 패널에서 이 안내가 제 높이를 고집하면 아래 입력칸을 밀어내 잘린다.
+        <p className="text-subtle min-h-0 flex-1 overflow-y-auto px-4 py-6 text-center text-xs leading-relaxed">
           이 문서의 본문을 근거로 답합니다.
           <br />
           필요하면 다른 사내 문서도 찾아 봅니다.
