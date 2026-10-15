@@ -89,7 +89,9 @@ export function VersionPreview({
         </Button>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      {/* 스크롤바 자리를 늘 비워 둔다. 좁은 화면에서 패널 높이를 바꿔 스크롤바가 생겨도 문서가 옆으로
+          밀리지 않게(편집 화면의 본문 칸과 같다). */}
+      <div className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">
         <div ref={tableBleedRef} className={cn('mx-auto px-6 py-8', widthClass)}>
           {titleChanged && (
             <p className="text-danger bg-danger/10 w-fit rounded-sm px-1 text-sm line-through">

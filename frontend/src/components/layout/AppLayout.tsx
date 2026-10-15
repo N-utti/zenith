@@ -76,11 +76,13 @@ export function AppLayout({ bleed = false }: { bleed?: boolean }) {
         <Sidebar open={sidebarOpen} collapsed={collapsed} onClose={() => setSidebarOpen(false)} />
 
         {/* 스크롤바 자리를 늘 비워 둔다. 긴 화면에서 짧은 화면(탭 전환)으로 갈 때 스크롤바가
-            사라지며 본문이 옆으로 움직이지 않게. */}
+            사라지며 본문이 옆으로 움직이지 않게.
+            bleed 는 hidden 이 아니라 clip 으로 자른다. hidden 은 사용자는 못 굴려도 코드는 굴릴 수 있어서,
+            넘친 안쪽(여닫는 중인 문서 패널 등)에 scrollIntoView 가 걸리면 화면 전체가 밀린 채 남는다. */}
         <main
           className={cn(
             'min-w-0 flex-1',
-            bleed ? 'overflow-hidden' : 'overflow-y-auto [scrollbar-gutter:stable]',
+            bleed ? 'overflow-clip' : 'overflow-y-auto [scrollbar-gutter:stable]',
           )}
         >
           {bleed ? (
