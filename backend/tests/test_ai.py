@@ -13,6 +13,7 @@ from httpx import AsyncClient
 from sqlalchemy import func, select, update
 
 from app.ai.provider import LLMError, ToolCall, ToolCalls, get_provider
+from app.config import settings
 from app.deps import current_user
 from app.models import AiFeedback, AiMessage, AiSession, Board, Document, Folder, Post, Workspace
 from app.routers import ai
@@ -607,6 +608,127 @@ async def test_chat_tool_rounds_are_capped_and_empty_search_is_reported(
     assert "찾은 자료가 없습니다." in SearchingProvider.turns[1][-1]["content"][0]["content"]
     assert next(d for e, d in ev if e == "citations") == []  # 근거가 없으니 [[1]] 도 카드 없음
     assert ev[-1][0] == "done"
+
+
+async def test_chat_reads_full_document_by_search_number(
+    app: FastAPI, client: AsyncClient, users: Users, app_db, monkeypatch
+) -> None:
+    """이슈 #409: 검색 번호로 전문을 읽는다 — 검색 구절 밖의 뒷부분까지. 없는 번호·게시글 번호·같은 문서 두 번·
+    휴지통 문서는 오류, 전문 합은 ai_doc_max_chars 예산 하나(잘리면 「앞 N자만」)."""
+    seeded = await _knowledge(app_db, users)
+    doc = seeded["doc"]
+    # 검색 구절(80단어)에 안 들어가게 긴 본문 — 뒤쪽에만 있는 수치로 「전문」을 읽었는지 가린다
+    long_text = doc.text_cache + " 참고 사항. " * 120 + " 특별 이월 한도는 7일이다."
+    doc.text_cache = long_text  # tsv 는 그대로 — 검색은 되고 headline 은 앞부분만 보여 준다
+    await app_db.flush()
+    monkeypatch.setattr(settings, "ai_doc_max_chars", len(long_text) - 3)
+    other = await app_db.scalar(select(Document).where(Document.title == "연차 이월 세칙"))
+
+    class Reader(SearchingProvider):
+        async def stream(self, *, system, messages, max_tokens=None, tools=None, tool_choice=None):
+            SearchingProvider.turns.append(messages)
+            SearchingProvider.tools_seen.append(tools)
+            last = messages[-1]["content"]
+            got_results = isinstance(last, list) and last and last[0].get("type") == "tool_result"
+            if not got_results:
+                yield self.calls(ToolCall(id="s", name="search_knowledge", input={"query": "이월"}))
+                return
+            if last[0]["tool_use_id"] == "s":
+                # 검색 결과 줄 「[n] (문서|게시글) 폴더 › 제목: 구절」에서 번호를 읽는다 — 순위에 기대지 않게
+                lines = last[0]["content"].split("\n\n")
+                Reader.n = {
+                    key: next(int(ln[1 : ln.index("]")]) for ln in lines if mark in ln)
+                    for key, mark in (
+                        ("rule", "› 휴가 규정:"),
+                        ("post", "(게시글)"),
+                        ("sub", "› 연차 이월 세칙:"),
+                        ("item", "› 비품 신청:"),
+                    )
+                }
+                yield self.calls(
+                    ToolCall(id="r1", name="read_document", input={"n": Reader.n["rule"]}),
+                    ToolCall(id="r99", name="read_document", input={"n": 99}),  # 없는 번호
+                    ToolCall(id="rpost", name="read_document", input={"n": Reader.n["post"]}),
+                )
+                return
+            if last[0]["tool_use_id"] == "r1":
+                other.deleted_at = datetime.now(UTC)  # 둘째 라운드 전에 세칙 문서를 휴지통으로
+                await app_db.flush()
+                yield self.calls(
+                    ToolCall(id="rdup", name="read_document", input={"n": Reader.n["rule"]}),
+                    ToolCall(id="rtrash", name="read_document", input={"n": Reader.n["sub"]}),
+                    ToolCall(id="rbudget", name="read_document", input={"n": Reader.n["item"]}),
+                )
+                return
+            yield "특별 이월 한도는 7일이다[[1]]."
+
+    app.dependency_overrides[get_provider] = Reader
+    SearchingProvider.turns, SearchingProvider.tools_seen = [], []
+    share_scope(monkeypatch, app_db)
+    await login(client, "sujin@zenith.co.kr")
+    ev = await _chat(client, "연차 이월 상세")
+    assert SearchingProvider.tools_seen[0][1] is ai.READ_TOOL
+    statuses = [d["text"] for e, d in ev if e == "status"]
+    assert statuses[:2] == ["문서를 찾는 중", "문서를 읽는 중"]
+    # turns 는 같은 messages 리스트 참조 — 최종 상태에서 tool_use_id 로 결과를 찾는다
+    results = {
+        r["tool_use_id"]: r
+        for m in SearchingProvider.turns[-1]
+        if m["role"] == "user" and isinstance(m["content"], list)
+        for r in m["content"]
+        if r.get("type") == "tool_result"
+    }
+    search = results["s"]["content"]
+    assert "› 휴가 규정:" in search and "7일" not in search  # 구절엔 뒤쪽 수치가 없다
+    r1 = results["r1"]
+    assert "is_error" not in r1 and r1["content"].startswith("[1] 《휴가 규정》 전문:\n<문서>\n")
+    assert "특별 이월 한도는 7일" in r1["content"]  # 전문에는 있다
+    assert "(본문이 길어 앞 " in r1["content"]  # 예산(ai_doc_max_chars)에 잘렸다
+    assert results["r99"]["is_error"] is True and "없는 번호" in results["r99"]["content"]
+    assert results["rpost"]["is_error"] is True and "문서가 아닙니다" in results["rpost"]["content"]
+    assert results["rdup"]["is_error"] is True and "이미 위에" in results["rdup"]["content"]
+    assert results["rtrash"]["is_error"] is True and "읽을 수 없는" in results["rtrash"]["content"]
+    assert results["rbudget"]["is_error"] is True and "한도를 다" in results["rbudget"]["content"]
+    citations = next(d for e, d in ev if e == "citations")
+    assert [c["n"] for c in citations] == [1] and citations[0]["doc_id"] == str(doc.id)
+    assert ev[-1][0] == "done"
+
+
+async def test_read_tool_is_withheld_when_web_search_is_on_and_blocks_are_not_reread(
+    app: FastAPI, client: AsyncClient, users: Users, app_db, monkeypatch
+) -> None:
+    """웹 검색이 켜진 요청엔 read_document 를 주지 않는다(전문이 검색어로 새지 않게). 참고 문서(docs)로 이미 블록에
+    들어간 문서는 그 번호로 다시 읽지 않는다."""
+
+    class Rereader(SearchingProvider):
+        async def stream(self, *, system, messages, max_tokens=None, tools=None, tool_choice=None):
+            SearchingProvider.turns.append(messages)
+            SearchingProvider.tools_seen.append(tools)
+            last = messages[-1]["content"]
+            if not (isinstance(last, list) and last and last[0].get("type") == "tool_result"):
+                yield self.calls(ToolCall(id="r", name="read_document", input={"n": 1}))
+                return
+            yield "답[[1]]."
+
+    app.dependency_overrides[get_provider] = Rereader
+    SearchingProvider.turns, SearchingProvider.tools_seen = [], []
+    share_scope(monkeypatch, app_db)
+    seeded = await _knowledge(app_db, users)
+    await login(client, "sujin@zenith.co.kr")
+    await _chat(client, "이 문서 전문 다시", docs=[str(seeded["doc"].id)])
+    assert SearchingProvider.tools_seen[0][1] is ai.READ_TOOL
+    r = SearchingProvider.turns[-1][-1]["content"][0]
+    assert r["is_error"] is True and "이미 위에" in r["content"]
+    # 웹 검색이 켜진 팩트체크 — 도구 목록에 read_document 가 없다
+    monkeypatch.setattr(settings, "ai_web_search", True)
+    SearchingProvider.tools_seen = []
+    await client.post(
+        "/api/ai/check", json={"text": "연차는 15일", "web": True}, headers=csrf(client)
+    )
+    assert [t["name"] for t in SearchingProvider.tools_seen[0]] == [
+        "search_knowledge",
+        "web_search",
+    ]
 
 
 async def test_chat_unknown_tool_or_blank_query(
