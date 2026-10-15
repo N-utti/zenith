@@ -410,11 +410,11 @@ async def test_chat_creates_spreadsheet_as_attachment(
     ai._ai_calls.clear()
     await login(client, "sujin@zenith.co.kr")
     ev = await _chat(client, "월별 이익을 엑셀로 만들어 줘")
-    assert [t["name"] for t in SearchingProvider.tools_seen[0]] == [
+    assert [t["name"] for t in SearchingProvider.tools_seen[0]][:3] == [
         "search_knowledge",
         "read_document",
         "create_spreadsheet",
-    ]
+    ]  # 뒤로 열람 도구 다섯(README 56)
     assert ("status", {"text": "파일을 만드는 중"}) in ev
     results = {r["tool_use_id"]: r for r in SearchingProvider.turns[-1][-1]["content"]}
     assert (

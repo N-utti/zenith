@@ -361,3 +361,33 @@ async def test_command_file_failures_keep_answer_and_clean_objects(
     )
     assert left == [], [o.object_name for o in left]
     assert url  # 도구 결과 문구는 남는다
+
+
+async def test_chat_command_gets_only_channel_safe_tools(
+    app: FastAPI, users: Users, app_db, monkeypatch
+) -> None:
+    """채팅 /ai 의 답은 채널 전원이 본다 — 자료실·파일 읽기만 주고 근태·결재는 주지 않는다(README 56)."""
+    from httpx_ws import aconnect_ws
+
+    from app.ai import chat_command
+
+    from .test_ai_chat_command import WS, recv_until, send, ws_client
+    from .test_ws import make_channel
+
+    class Peek(SearchingProvider):
+        async def stream(self, *, system, messages, max_tokens=None, tools=None, tool_choice=None):
+            SearchingProvider.tools_seen.append(tools)
+            yield "자료실을 볼 수 있습니다."
+
+    monkeypatch.setattr(chat_command, "get_provider", lambda: Peek())
+    SearchingProvider.tools_seen = []
+    channel = await make_channel(app_db, [users.member, users.lead])
+    async with ws_client(app) as a:
+        await login(a, "sujin@zenith.co.kr")
+        async with aconnect_ws(WS, a) as a_ws:
+            await send(a_ws, op="msg", channel_id=str(channel.id), body="/ai 뭐 있어")
+            await recv_until(a_ws, "msg")
+            await recv_until(a_ws, "msg", timeout=8.0)
+    names = [t["name"] for t in SearchingProvider.tools_seen[0]]
+    assert "archive" in names and "read_file" in names
+    assert "attendance" not in names and "approvals" not in names and "approval_detail" not in names
