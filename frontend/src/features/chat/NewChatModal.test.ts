@@ -15,8 +15,8 @@ vi.mock('@/lib/api', async (original) => ({ ...(await original<object>()), api }
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 const people = [
-  { id: 'me', name: '나', active: true },
-  { id: 'u1', name: '정성운', active: true },
+  { id: 'me', name: '나', active: true, is_bot: false },
+  { id: 'u1', name: '정성운', active: true, is_bot: false },
 ]
 const auth = { user: people[0], status: 'authenticated' } as unknown as AuthValue
 const toast: ToastApi = { success: vi.fn(), error: vi.fn(), info: vi.fn() }
@@ -118,7 +118,7 @@ test('비공개로 만들면 두 칸이 같이 나가고, 서버가 공개로 �
 
 test('비공개 표시는 달려 왔어도 고르지 않은 사람이 들어 있으면 성공이라고 하지 않는다', async () => {
   // 표시만 저장하고 멤버는 예전대로 전원을 넣는 서버.
-  const everyone = [...people, { id: 'u2', name: '홍성완' }]
+  const everyone = [...people, { id: 'u2', name: '홍성완', is_bot: false }]
   api.mockResolvedValue(channel({ id: 'c-2', name: '인사', is_private: true, members: everyone }))
   open([channel({ is_private: false })])
 

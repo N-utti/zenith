@@ -23,7 +23,7 @@ export const TITLE_MAX = 200
 export const BODY_MAX = 20_000
 
 /** 백엔드 `routers/boards.py` 의 `Person`. */
-export type Person = Schema<'Person'>
+export type Person = Schema<'app__routers__boards__Person'>
 
 /**
  * 게시판 목록의 글. 백엔드 `PostOut`(홈 공지 카드의 `HomePost` 와 같은 모양).

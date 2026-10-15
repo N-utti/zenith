@@ -285,7 +285,7 @@ test('봇 답이 끝내 안 오면 120초 뒤 기다림 표시를 끈다', async
   expect(waiting()).toEqual([])
 })
 
-test('끊겼다 다시 붙으면 기다림 표시를 끈다(놓친 봇 답은 봇 표시 없이 다시 받는다)', async () => {
+test('끊겼다 다시 붙으면 기다림 표시를 끈다(놓친 봇 답은 소켓이 아니라 과거 메시지 조회로 다시 받는다)', async () => {
   await mount()
   await askAi()
   await act(async () => {

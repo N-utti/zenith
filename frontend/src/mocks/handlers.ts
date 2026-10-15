@@ -1899,7 +1899,7 @@ data: ${JSON.stringify(data)}
     })
   }),
 
-  // 팩트체크(백엔드 #382). 문서 id 와 글 중 정확히 하나. 응답은 스트림이 아니라 한 번에 온다.
+  // 팩트체크(백엔드 #382). 문서 id 와 글 중 하나는 보낸다. 둘 다면 글을 검사하고 문서 id 는 근거에서 빼는 데만 쓴다(#410). 응답은 스트림이 아니라 한 번에 온다.
   http.post('/api/ai/check', async ({ request }) => {
     if (!authenticate()) return unauthorized()
     const { doc_id, text, web } = (await request.json()) as {
@@ -1907,9 +1907,9 @@ data: ${JSON.stringify(data)}
       text?: string | null
       web?: boolean
     }
-    // 둘 다·둘 다 없음은 라우터가 문자열로, 빈 글·길이 초과는 스키마 검증이라 배열로 거절한다.
-    if (Boolean(doc_id) === (text != null)) {
-      return validationError('doc_id 와 text 중 하나만 보냅니다.')
+    // 둘 다 없음은 라우터가 문자열로, 빈 글·길이 초과는 스키마 검증이라 배열로 거절한다.
+    if (!doc_id && text == null) {
+      return validationError('doc_id 와 text 중 하나는 보냅니다.')
     }
     if (text != null && (!text.trim() || text.length > 50000)) {
       return HttpResponse.json(
@@ -1929,7 +1929,10 @@ data: ${JSON.stringify(data)}
     // 문서 id 의 거절(없음·휴지통·근거 꺼짐)은 detail 이 문자열이다. 404 가 아니다.
     const doc = doc_id ? aliveDoc(doc_id) : undefined
     if (doc_id && !doc) return validationError('없는 문서입니다.')
-    if (doc && !doc.ai_source) return validationError('AI 근거로 쓰기가 꺼진 문서입니다.')
+    // 글을 같이 보내면 스위치를 보지 않는다(#412).
+    if (doc && text == null && !doc.ai_source) {
+      return validationError('AI 근거로 쓰기가 꺼진 문서입니다.')
+    }
     await delay(1200)
     // 모델 출력이 정해진 모양이 아니었을 때(실제 서버 routers/ai.py). 본문에 '오류'를 넣으면 본다.
     if (text?.includes('오류')) {

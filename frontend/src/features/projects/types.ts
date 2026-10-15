@@ -2,7 +2,7 @@ import type { Schema } from '@/types'
 
 /** 협업 공간(프로젝트 칸반보드)의 타입. 모양은 서버 계약에서 끌어오고, 화면 라벨과 길이 상한만 여기 둔다. */
 
-export type Person = Schema<'Person'>
+export type Person = Schema<'app__routers__projects__Person'>
 
 /** 지운 계정은 서버가 이름을 빈 문자열로 준다. */
 export const personName = (person: Person) => person.name || '알 수 없음'

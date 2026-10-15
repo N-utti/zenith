@@ -757,7 +757,7 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
             <DocAskPanel docId={meta.id} aiSource={meta.ai_source} />
           </div>
           <div hidden={tab !== 'check'} className="flex min-h-0 flex-1 flex-col">
-            <DocCheckPanel editor={editor} aiSource={meta.ai_source} onJump={jumpToText} />
+            <DocCheckPanel docId={meta.id} editor={editor} onJump={jumpToText} />
           </div>
         </DocSidebar>
       </div>

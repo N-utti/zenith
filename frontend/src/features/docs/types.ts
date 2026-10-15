@@ -1,7 +1,7 @@
 import type { Schema } from '@/types'
 
 /** 백엔드 `routers/docs.py` 의 `Person`. */
-export type Person = Schema<'Person'>
+export type Person = Schema<'app__routers__docs__Person'>
 
 /**
  * 폴더. 백엔드 `FolderOut` 과 같은 모양이다.

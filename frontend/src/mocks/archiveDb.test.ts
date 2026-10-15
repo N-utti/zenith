@@ -2,7 +2,7 @@ import { expect, it } from 'vitest'
 import { chatFiles, docFiles, newestFirst } from './archiveDb'
 import type { StoredFile } from './filesDb'
 
-const author = { id: 'u-2', name: '정성운' }
+const author = { id: 'u-2', name: '정성운', is_bot: false }
 const attachment = (name: string) => ({
   url: `/api/channels/c-1/attachments/f1/${name}`,
   name,

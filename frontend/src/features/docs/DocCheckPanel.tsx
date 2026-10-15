@@ -34,19 +34,20 @@ function cutAt(text: string): number {
 /**
  * 이 문서의 주장을 규정 전문·사내 자료와 대조한다(백엔드 #382 `POST /ai/check`). 결과는 서버에 남지 않는다.
  *
- * 문서 id 가 아니라 편집기의 글을 보낸다. 서버가 문서 id 로 읽는 본문은 마지막 저장분이라 방금 고친 글이
+ * 검사할 글은 편집기의 글이다. 서버가 문서 id 로 읽는 본문은 마지막 저장분이라 방금 고친 글이
  * 빠지고, 주장의 원문 발췌(`span`)가 지금 화면의 글과 어긋나 그 자리로 갈 수 없게 된다.
- * 글을 보내면 서버는 'AI 근거로 쓰기' 스위치를 보지 않는다. 꺼진 문서는 여기서 막는다(문서 id 로 보내면 422 인 것과 맞춘다).
+ * 문서 id 는 같이 보내되 근거 검색에서 이 문서를 빼는 데만 쓰인다(#410). 안 빼면 자기 구절이 근거로 잡혀 전부 일치가 된다.
+ * 글을 같이 보내면 서버는 'AI 근거로 쓰기' 스위치를 보지 않는다(#412). 스위치는 남의 AI 답에 근거로 쓰나이지 읽어도 되나가 아니다.
  *
  * 다른 탭을 보는 동안에도 숨긴 채 살아 있다. 검사는 오래 걸려(최대 2분) 탭을 옮겼다 와도 결과가 남아야 한다.
  */
 export function DocCheckPanel({
+  docId,
   editor,
-  aiSource,
   onJump,
 }: {
+  docId: string
   editor: Editor | null
-  aiSource: boolean
   /** 본문에서 그 글을 찾아 간다. 못 찾으면(검사 뒤 고쳤거나 두 블록에 걸침) `false`. */
   onJump: (text: string) => boolean
 }) {
@@ -64,7 +65,7 @@ export function DocCheckPanel({
       if (!text) throw new Error('본문이 비어 있습니다.')
       const out = await api<Schema<'CheckOut'>>('/ai/check', {
         method: 'POST',
-        body: JSON.stringify({ text: text.slice(0, cutAt(text)), web }),
+        body: JSON.stringify({ doc_id: docId, text: text.slice(0, cutAt(text)), web }),
       })
       return { ...out, truncated: text.length > MAX_TEXT }
     },
@@ -160,33 +161,23 @@ export function DocCheckPanel({
       )}
 
       <div className="border-line shrink-0 border-t p-3">
-        {aiSource ? (
-          <>
-            <Checkbox
-              className="mb-2.5"
-              checked={web}
-              onChange={(e) => setWeb(e.target.checked)}
-              disabled={check.isPending}
-              label="웹도 찾기"
-              description="검사할 글과 함께 찾은 사내 자료 일부가 외부 검색어에 쓰일 수 있습니다. 사내 자료로 확인되지 않는 법령·통계를 찾을 때만 켜세요. 검사가 끝나면 다시 꺼집니다."
-            />
-            <Button
-              className="w-full"
-              onClick={run}
-              disabled={!editor || check.isPending}
-              aria-busy={check.isPending}
-            >
-              <ScanSearch className="size-4" />
-              {check.isPending ? '검사 중' : result ? '다시 검사' : '이 문서 검사'}
-            </Button>
-          </>
-        ) : (
-          <p className="text-subtle text-center text-xs leading-relaxed">
-            이 문서는 AI 근거로 쓰기가 꺼져 있어 검사할 수 없습니다.
-            <br />
-            상단 줄의 AI 아이콘으로 켤 수 있습니다.
-          </p>
-        )}
+        <Checkbox
+          className="mb-2.5"
+          checked={web}
+          onChange={(e) => setWeb(e.target.checked)}
+          disabled={check.isPending}
+          label="웹도 찾기"
+          description="검사할 글과 함께 찾은 사내 자료 일부가 외부 검색어에 쓰일 수 있습니다. 사내 자료로 확인되지 않는 법령·통계를 찾을 때만 켜세요. 검사가 끝나면 다시 꺼집니다."
+        />
+        <Button
+          className="w-full"
+          onClick={run}
+          disabled={!editor || check.isPending}
+          aria-busy={check.isPending}
+        >
+          <ScanSearch className="size-4" />
+          {check.isPending ? '검사 중' : result ? '다시 검사' : '이 문서 검사'}
+        </Button>
       </div>
     </div>
   )
