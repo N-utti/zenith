@@ -7150,12 +7150,12 @@
             "title": "Occurred At"
           },
           "org": {
-            "$ref": "#/components/schemas/Person"
+            "$ref": "#/components/schemas/app__routers__crm__Person"
           },
           "deal": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/Person"
+                "$ref": "#/components/schemas/app__routers__crm__Person"
               },
               {
                 "type": "null"
@@ -7164,20 +7164,20 @@
           },
           "contacts": {
             "items": {
-              "$ref": "#/components/schemas/Person"
+              "$ref": "#/components/schemas/app__routers__crm__Person"
             },
             "type": "array",
             "title": "Contacts"
           },
           "users": {
             "items": {
-              "$ref": "#/components/schemas/Person"
+              "$ref": "#/components/schemas/app__routers__crm__Person"
             },
             "type": "array",
             "title": "Users"
           },
           "author": {
-            "$ref": "#/components/schemas/Person"
+            "$ref": "#/components/schemas/app__routers__crm__Person"
           },
           "body": {
             "type": "string",
@@ -7318,7 +7318,7 @@
             "title": "Type Code"
           },
           "drafter": {
-            "$ref": "#/components/schemas/Person"
+            "$ref": "#/components/schemas/app__routers__approvals__Person"
           },
           "title": {
             "type": "string",
@@ -7350,7 +7350,7 @@
           "waiting_on": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/Person"
+                "$ref": "#/components/schemas/app__routers__approvals__Person"
               },
               {
                 "type": "null"
@@ -7431,7 +7431,7 @@
             "title": "Type Code"
           },
           "drafter": {
-            "$ref": "#/components/schemas/Person"
+            "$ref": "#/components/schemas/app__routers__approvals__Person"
           },
           "title": {
             "type": "string",
@@ -7463,7 +7463,7 @@
           "waiting_on": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/Person"
+                "$ref": "#/components/schemas/app__routers__approvals__Person"
               },
               {
                 "type": "null"
@@ -7675,7 +7675,7 @@
             "title": "Source Title"
           },
           "uploaded_by": {
-            "$ref": "#/components/schemas/Person"
+            "$ref": "#/components/schemas/app__routers__channels__Person"
           },
           "created_at": {
             "type": "string",
@@ -7750,7 +7750,7 @@
             "title": "Id"
           },
           "user": {
-            "$ref": "#/components/schemas/Person"
+            "$ref": "#/components/schemas/app__routers__approvals__Person"
           },
           "kind": {
             "type": "string",
@@ -8243,7 +8243,7 @@
           },
           "members": {
             "items": {
-              "$ref": "#/components/schemas/Person"
+              "$ref": "#/components/schemas/app__routers__channels__Person"
             },
             "type": "array",
             "title": "Members"
@@ -8554,7 +8554,7 @@
             "title": "At"
           },
           "by": {
-            "$ref": "#/components/schemas/Person"
+            "$ref": "#/components/schemas/app__routers__approvals__Person"
           },
           "reason": {
             "anyOf": [
@@ -8605,7 +8605,7 @@
           "closed_by": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/Person"
+                "$ref": "#/components/schemas/app__routers__approvals__Person"
               },
               {
                 "type": "null"
@@ -8677,7 +8677,7 @@
             "title": "Block Id"
           },
           "author": {
-            "$ref": "#/components/schemas/Person"
+            "$ref": "#/components/schemas/app__routers__docs__Person"
           },
           "body": {
             "type": "string",
@@ -9123,12 +9123,12 @@
             "title": "Name"
           },
           "org": {
-            "$ref": "#/components/schemas/Person"
+            "$ref": "#/components/schemas/app__routers__crm__Person"
           },
           "owner": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/Person"
+                "$ref": "#/components/schemas/app__routers__crm__Person"
               },
               {
                 "type": "null"
@@ -9256,7 +9256,7 @@
             "title": "Id"
           },
           "actor": {
-            "$ref": "#/components/schemas/Person"
+            "$ref": "#/components/schemas/app__routers__crm__Person"
           },
           "from_stage": {
             "anyOf": [
@@ -9408,12 +9408,12 @@
             "title": "Name"
           },
           "org": {
-            "$ref": "#/components/schemas/Person"
+            "$ref": "#/components/schemas/app__routers__crm__Person"
           },
           "owner": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/Person"
+                "$ref": "#/components/schemas/app__routers__crm__Person"
               },
               {
                 "type": "null"
@@ -9637,7 +9637,7 @@
             "title": "Id"
           },
           "delegate": {
-            "$ref": "#/components/schemas/Person"
+            "$ref": "#/components/schemas/app__routers__approvals__Person"
           },
           "start_date": {
             "type": "string",
@@ -9711,7 +9711,7 @@
           "duplicate": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/Person"
+                "$ref": "#/components/schemas/app__routers__crm__Person"
               },
               {
                 "type": "null"
@@ -9841,7 +9841,7 @@
           "updated_by": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/Person"
+                "$ref": "#/components/schemas/app__routers__docs__Person"
               },
               {
                 "type": "null"
@@ -9913,7 +9913,7 @@
           "updated_by": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/Person"
+                "$ref": "#/components/schemas/app__routers__docs__Person"
               },
               {
                 "type": "null"
@@ -10635,7 +10635,7 @@
           "author": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/Person"
+                "$ref": "#/components/schemas/app__routers__me__Person"
               },
               {
                 "type": "null"
@@ -11327,7 +11327,7 @@
             "title": "Id"
           },
           "user": {
-            "$ref": "#/components/schemas/Person"
+            "$ref": "#/components/schemas/app__routers__approvals__Person"
           },
           "type_code": {
             "type": "string",
@@ -11568,7 +11568,7 @@
             "title": "Channel Id"
           },
           "author": {
-            "$ref": "#/components/schemas/Person"
+            "$ref": "#/components/schemas/app__routers__channels__Person"
           },
           "body": {
             "type": "string",
@@ -11712,7 +11712,7 @@
       "Move": {
         "properties": {
           "from": {
-            "$ref": "#/components/schemas/Person"
+            "$ref": "#/components/schemas/app__routers__crm__Person"
           },
           "moved_at": {
             "type": "string",
@@ -11896,7 +11896,7 @@
           },
           "duplicates": {
             "items": {
-              "$ref": "#/components/schemas/Person"
+              "$ref": "#/components/schemas/app__routers__crm__Person"
             },
             "type": "array",
             "title": "Duplicates"
@@ -11937,7 +11937,7 @@
           },
           "owners": {
             "items": {
-              "$ref": "#/components/schemas/Person"
+              "$ref": "#/components/schemas/app__routers__crm__Person"
             },
             "type": "array",
             "title": "Owners"
@@ -12053,7 +12053,7 @@
           },
           "owners": {
             "items": {
-              "$ref": "#/components/schemas/Person"
+              "$ref": "#/components/schemas/app__routers__crm__Person"
             },
             "type": "array",
             "title": "Owners"
@@ -12429,25 +12429,6 @@
         ],
         "title": "PasswordIn"
       },
-      "Person": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid",
-            "title": "Id"
-          },
-          "name": {
-            "type": "string",
-            "title": "Name"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "name"
-        ],
-        "title": "Person"
-      },
       "PersonOut": {
         "properties": {
           "id": {
@@ -12496,7 +12477,7 @@
             "title": "Id"
           },
           "author": {
-            "$ref": "#/components/schemas/Person"
+            "$ref": "#/components/schemas/app__routers__boards__Person"
           },
           "body": {
             "type": "string",
@@ -12599,7 +12580,7 @@
           "author": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/Person"
+                "$ref": "#/components/schemas/app__routers__boards__Person"
               },
               {
                 "type": "null"
@@ -12669,7 +12650,7 @@
           "author": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/Person"
+                "$ref": "#/components/schemas/app__routers__boards__Person"
               },
               {
                 "type": "null"
@@ -12872,7 +12853,7 @@
             "title": "Description"
           },
           "created_by": {
-            "$ref": "#/components/schemas/Person"
+            "$ref": "#/components/schemas/app__routers__projects__Person"
           },
           "created_at": {
             "type": "string",
@@ -13038,7 +13019,7 @@
           "updated_by": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/Person"
+                "$ref": "#/components/schemas/app__routers__me__Person"
               },
               {
                 "type": "null"
@@ -13122,12 +13103,12 @@
             "title": "Step No"
           },
           "approver": {
-            "$ref": "#/components/schemas/Person"
+            "$ref": "#/components/schemas/app__routers__approvals__Person"
           },
           "acted_by": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/Person"
+                "$ref": "#/components/schemas/app__routers__approvals__Person"
               },
               {
                 "type": "null"
@@ -13439,7 +13420,7 @@
           "assignee": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/Person"
+                "$ref": "#/components/schemas/app__routers__projects__Person"
               },
               {
                 "type": "null"
@@ -14158,7 +14139,7 @@
           "author": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/Person"
+                "$ref": "#/components/schemas/app__routers__docs__Person"
               },
               {
                 "type": "null"
@@ -14201,7 +14182,7 @@
           "author": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/Person"
+                "$ref": "#/components/schemas/app__routers__docs__Person"
               },
               {
                 "type": "null"
@@ -14268,6 +14249,25 @@
         ],
         "title": "AttachmentOut"
       },
+      "app__routers__approvals__Person": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "Person"
+      },
       "app__routers__attendance__ReopenIn": {
         "properties": {
           "month": {
@@ -14293,6 +14293,25 @@
           "month"
         ],
         "title": "ReopenIn"
+      },
+      "app__routers__boards__Person": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "Person"
       },
       "app__routers__channels__AttachmentOut": {
         "properties": {
@@ -14336,6 +14355,49 @@
         "title": "AttachmentOut",
         "description": "업로드 응답이자 messages.attachments[] 항목(03 §2.3 JSONB)."
       },
+      "app__routers__channels__Person": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "is_bot": {
+            "type": "boolean",
+            "title": "Is Bot",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "Person"
+      },
+      "app__routers__crm__Person": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "Person"
+      },
       "app__routers__crm__ReopenIn": {
         "properties": {
           "version": {
@@ -14352,6 +14414,63 @@
         },
         "type": "object",
         "title": "ReopenIn"
+      },
+      "app__routers__docs__Person": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "Person"
+      },
+      "app__routers__me__Person": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "Person"
+      },
+      "app__routers__projects__Person": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "Person"
       }
     }
   }
