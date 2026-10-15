@@ -7,6 +7,8 @@ const folder = (id: string, parent_id: string | null, title: string, sort = 0): 
   parent_id,
   title,
   sort,
+  min_role: 'member',
+  allowed_users: [],
 })
 const doc = (
   id: string,
