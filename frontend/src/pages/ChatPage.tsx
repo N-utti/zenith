@@ -135,9 +135,8 @@ export function ChatPage() {
                 <UserPlus role="img" aria-label="멤버 더하기·빼기" className="size-3.5 shrink-0" />
               </button>
             ) : (
-              <span className="text-subtle text-xs">
-                {channel.is_dm ? '다이렉트 메시지' : `멤버 ${channel.members.length}명`}
-              </span>
+              // 공개 채널은 모두가 보므로 인원수를 적지 않는다.
+              channel.is_dm && <span className="text-subtle text-xs">다이렉트 메시지</span>
             )}
 
             {/* 오른쪽 끝 묶음. 끊김 알림과 더보기가 같이 있어도 한 덩이로 붙는다. 좁은 화면에서는
