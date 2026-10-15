@@ -251,6 +251,9 @@ async def reply(
                     parts,
                     max_tokens=ai_router.CHECK_MAX_TOKENS,
                     maker=maker,
+                    # 답이 채널 전원에게 보인다 — 채널 멤버가 원래 받을 수 있는 자료실·파일 읽기만(보안 리뷰 HIGH)
+                    with_data=ai_router.data_tools.CHANNEL_SAFE,
+                    data_via="chat_command",
                 ):
                     if kind == "status":
                         last_round.clear()
