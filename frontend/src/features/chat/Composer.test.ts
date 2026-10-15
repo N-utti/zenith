@@ -11,12 +11,15 @@ vi.mock('@/features/people/MentionTextarea', () => ({
   MentionTextarea: ({
     value,
     onValueChange,
+    onKeyDown,
   }: {
     value: string
     onValueChange: (next: string) => void
+    onKeyDown: React.KeyboardEventHandler<HTMLTextAreaElement>
   }) =>
     createElement('textarea', {
       value,
+      onKeyDown,
       onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => onValueChange(e.target.value),
     }),
 }))
@@ -165,4 +168,56 @@ test('파일을 붙여 넣거나 창에 끌어 놓으면 첨부로 올라가고,
 
   act(() => root.unmount())
   upload.mockRestore()
+})
+
+test('Tab 을 누르면 쓰던 글 앞에 /ai 가 붙고, 이미 붙어 있으면 초점 이동을 막지 않는다', () => {
+  const container = document.createElement('div')
+  const root = createRoot(container)
+  act(() =>
+    root.render(
+      createElement(
+        ChatSocketContext,
+        { value: socket },
+        createElement(Composer, {
+          channelId: 'tab',
+          channelName: 'tab',
+          hash: true,
+          mentionCandidates: [],
+          onTyping: () => {},
+        }),
+      ),
+    ),
+  )
+  const box = container.querySelector('textarea')!
+  const tab = (init: KeyboardEventInit = {}) => {
+    const event = new KeyboardEvent('keydown', {
+      key: 'Tab',
+      bubbles: true,
+      cancelable: true,
+      ...init,
+    })
+    act(() => void box.dispatchEvent(event))
+    return event.defaultPrevented
+  }
+
+  expect(tab()).toBe(true)
+  expect(box.value).toBe('/ai ')
+  expect(getDraft('tab')).toBe('/ai ')
+  // 두 번째 Tab 은 원래대로 다음 칸으로 간다.
+  expect(tab()).toBe(false)
+  expect(box.value).toBe('/ai ')
+
+  act(() => type(container, '  연차 며칠 남았어'))
+  expect(tab({ shiftKey: true })).toBe(false)
+  expect(tab()).toBe(true)
+  expect(box.value).toBe('/ai 연차 며칠 남았어')
+  // 입력칸 위에 `/ai` 칩이 덮인다.
+  expect(container.querySelector('[aria-hidden] span')?.textContent).toBe('/ai')
+
+  // `/a` 까지 친 것은 앞에 덧붙이지 않고 이어서 채운다.
+  act(() => type(container, '/a'))
+  expect(container.querySelector('[aria-hidden] span')).toBeNull()
+  expect(tab()).toBe(true)
+  expect(box.value).toBe('/ai ')
+  act(() => root.unmount())
 })

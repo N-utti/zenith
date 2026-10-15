@@ -25,7 +25,7 @@ import { useCurrentUser } from '@/features/auth/AuthContext'
 import { UNTITLED_DOC, useDoc } from '@/features/docs/api'
 import { MentionText } from '@/features/people/MentionText'
 import { AiMarkdown } from '@/features/ai/AiMarkdown'
-import { linkPaths } from './aiCommand'
+import { isAiCommand, linkPaths } from './aiCommand'
 import { isImage } from './attachments'
 import { MAX_BODY_CHARS, useMessages, useOlderMessages } from './api'
 import { useChatSocketContext } from './ChatSocketContext'
@@ -607,7 +607,16 @@ const MessageRow = memo(function MessageRow({
                   message.attachments?.length && 'mt-1.5',
                 )}
               >
-                {message.body && <MentionText body={message.body} names={mentionNames} />}
+                {/* `/ai` 질문은 커맨드만 입력칸과 같은 모양으로 띄운다(`Composer`). */}
+                {message.body &&
+                  (isAiCommand(message.body) ? (
+                    <>
+                      <span className="bg-accent-soft text-accent rounded-sm">/ai</span>
+                      <MentionText body={message.body.trimStart().slice(3)} names={mentionNames} />
+                    </>
+                  ) : (
+                    <MentionText body={message.body} names={mentionNames} />
+                  ))}
                 {message.edited_at && (
                   <span
                     // 왼쪽 여백은 글과 띄우는 것이다. 글이 없으면 줄 맨 앞이 안쪽으로 밀린다.
