@@ -593,7 +593,11 @@ const MessageRow = memo(function MessageRow({
           ) : // 봇 답은 마크다운이다(`[[n]]` 각주, 끝의 근거 줄). 사람 글은 멘션만 살린 평문.
           // 링크는 사내 경로만, 그림은 안 부른다(`AiMarkdown`).
           bot ? (
-            <AiMarkdown text={linkPaths(message.body)} className="text-muted text-sm" />
+            // 채팅 /ai 가 만든 엑셀은 첨부로 온다(백엔드 #419). 사람 글처럼 칩과 띄운다.
+            <AiMarkdown
+              text={linkPaths(message.body)}
+              className={cn('text-muted text-sm', message.attachments?.length && 'mt-1.5')}
+            />
           ) : (
             // 첨부만 남기고 글을 지운 메시지도 고친 것이다. 글이 없어도 표시는 남긴다.
             (message.body || message.edited_at) && (

@@ -16,6 +16,8 @@ it('다른 경로를 가리키게 만든 주소는 막는다', () => {
   expect(downloadPath(`${base}/f-1/%2E%2e`)).toBeNull()
   expect(downloadPath(`${base}/f-1/..\\..\\me`)).toBeNull()
   expect(downloadPath(`${base}/f-1/a.pdf?next=x`)).toBeNull()
+  expect(downloadPath(`${base}/f-1/..%2F..%2Fadmin`)).toBeNull()
+  expect(downloadPath(`${base}/f-1/..%5cme`)).toBeNull()
   expect(downloadPath('/api/me')).toBeNull()
   expect(downloadPath('/api/../index.html')).toBeNull()
   expect(downloadPath('https://evil.example/api/files/x')).toBeNull()

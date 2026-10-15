@@ -54,5 +54,26 @@ export function webLink(source: Citation): { href: string; host: string } | null
  */
 export function fileLink(source: Citation): string | null {
   if (source.type !== 'file' || !source.to) return null
-  return /^\/api\/ai\/attachments\/[\w-]+$/.test(source.to) ? source.to : null
+  return AI_FILE.test(source.to) ? source.to : null
+}
+
+/** AI 첨부(질문에 올린 것, AI 가 만든 엑셀)의 원본 주소. */
+export const AI_FILE = /^\/api\/ai\/attachments\/[\w-]+$/
+
+/**
+ * 답변 속 파일 링크를 저장할 이름. 채널 첨부는 주소 끝 조각이 파일 이름이라 그걸 쓰고, 나머지는
+ * 링크 글자에서 앞의 클립 그림을 뗀다(AI 가 만든 엑셀은 `📎 이름.xlsx` 로 온다).
+ * 글자 방향 제어 문자는 뺀다. `매출[RLO]xslx.exe` 가 화면에 `매출exe.xlsx` 로 보이는 수법.
+ */
+export function downloadName(path: string, text: string): string {
+  let name = ''
+  if (path.startsWith('/api/channels/')) {
+    try {
+      name = decodeURIComponent(path.slice(path.lastIndexOf('/') + 1))
+    } catch {
+      // 깨진 인코딩이면 링크 글자로
+    }
+  }
+  name ||= text.replace(/^📎\s*/u, '')
+  return name.replace(/\p{Bidi_Control}/gu, '').trim() || '파일'
 }
