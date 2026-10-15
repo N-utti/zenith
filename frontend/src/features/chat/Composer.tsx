@@ -9,6 +9,7 @@ import { cn } from '@/lib/cn'
 import { formatBytes } from '@/lib/format'
 import { MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, MAX_BODY_CHARS, uploadAttachment } from './api'
 import { isImage, reorder } from './attachments'
+import { isAiCommand } from './aiCommand'
 import { useChatSocketContext } from './ChatSocketContext'
 import { getDraft, setDraft } from './drafts'
 import type { ChatAttachment, Person } from './types'
@@ -53,6 +54,8 @@ export function Composer({
    */
   const [triedOffline, setTriedOffline] = useState(false)
   const picker = useRef<HTMLInputElement>(null)
+  /** 입력칸 위에 덮어 그리는 `/ai` 칩 층. 입력칸이 스크롤되면 같이 올린다. */
+  const chipLayer = useRef<HTMLDivElement>(null)
 
   const pick = async (list: FileList | null) => {
     setError(null)
@@ -157,6 +160,12 @@ export function Composer({
     setDraft(channelId, '')
     setFiles([])
     setPreviews({})
+  }
+
+  const change = (next: string) => {
+    setBody(next)
+    setDraft(channelId, next)
+    onTyping()
   }
 
   const submit = (e: FormEvent) => {
@@ -290,22 +299,51 @@ export function Composer({
                 ))}
               </ul>
             )}
-            <MentionTextarea
-              value={body}
-              onValueChange={(next) => {
-                setBody(next)
-                setDraft(channelId, next)
-                onTyping()
-              }}
-              people={mentionCandidates}
-              submitOnEnter
-              onSubmitEnter={dispatch}
-              rows={1}
-              aria-label={`${channelName}에 메시지 보내기`}
-              placeholder={`${hash ? '#' : ''}${channelName}에 메시지 보내기…`}
-              // 테두리는 감싼 칸이 그린다. 높이는 그 테두리 2px 을 빼서 옆 버튼(44px)과 밑선을 맞춘다.
-              className="max-h-40 min-h-[calc(2.75rem-2px)] border-0 bg-transparent"
-            />
+            <div className="relative">
+              <MentionTextarea
+                value={body}
+                onValueChange={change}
+                // Tab 으로 쓰던 글 앞에 `/ai ` 를 붙인다. 이미 붙어 있으면 원래대로 초점을 옮긴다.
+                // `/a` 까지 친 것은 이어서 채운다. 멘션 목록이 떠 있을 때의 Tab(사람 고르기)은
+                // MentionTextarea 가 먼저 받는다.
+                onKeyDown={(e) => {
+                  if (e.key !== 'Tab' || e.shiftKey || e.ctrlKey || e.altKey || e.metaKey) return
+                  if (e.nativeEvent.isComposing || isAiCommand(body)) return
+                  e.preventDefault()
+                  const text = body.trimStart()
+                  change('/ai'.startsWith(text.toLowerCase()) ? '/ai ' : `/ai ${text}`)
+                }}
+                onScroll={(e) => {
+                  if (chipLayer.current)
+                    chipLayer.current.style.transform = `translateY(-${e.currentTarget.scrollTop}px)`
+                }}
+                aria-keyshortcuts="Tab"
+                people={mentionCandidates}
+                submitOnEnter
+                onSubmitEnter={dispatch}
+                rows={1}
+                aria-label={`${channelName}에 메시지 보내기`}
+                placeholder={`${hash ? '#' : ''}${channelName}에 메시지 보내기…`}
+                // 테두리는 감싼 칸이 그린다. 높이는 그 테두리 2px 을 빼서 옆 버튼(44px)과 밑선을 맞춘다.
+                className="max-h-40 min-h-[calc(2.75rem-2px)] border-0 bg-transparent"
+              />
+              {/* textarea 는 글자 일부만 색을 못 바꾼다. 같은 글꼴·여백으로 `/ai` 자리에 칩을 덮어 그린다.
+                칩은 맨 앞 커맨드라 앞의 빈칸·줄바꿈만 같이 그리면 자리가 맞는다(뒤 글의 줄바꿈과 무관).
+                ponytail: 칩이 불투명해 커서가 `/ai` 글자 사이에 있으면 가려진다. */}
+              <div
+                aria-hidden
+                className="pointer-events-none absolute inset-0 overflow-hidden px-3 py-2.5 text-sm break-words whitespace-pre-wrap pointer-coarse:text-base"
+              >
+                <div ref={chipLayer}>
+                  {isAiCommand(body) && (
+                    <>
+                      {body.slice(0, body.indexOf('/ai'))}
+                      <span className="bg-accent-soft text-accent rounded-sm">/ai</span>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
           <Button
             type="submit"
@@ -322,7 +360,7 @@ export function Composer({
             아랫줄이 잘린다. 좁은 폭에서는 아예 감춘다. 물리 키보드가 없어 알릴 내용이 없고,
             메시지 목록의 세로를 상시로 먹을 이유도 없다. */}
         <p className="text-subtle mt-2 hidden text-center text-[11px] sm:block">
-          Enter 전송 · Shift+Enter 줄바꿈
+          Enter 전송 · Shift+Enter 줄바꿈 · Tab AI 에게 묻기
         </p>
       </div>
 
