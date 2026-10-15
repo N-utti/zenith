@@ -86,7 +86,9 @@ class Room:
 def _plain_text(node, depth: int = 0) -> str:
     """검색용 평문. 태그를 훑지 않고 XmlText 만 모은다 — str(XmlFragment) 는 본문의 '<' 를 이스케이프하지 않는다."""
     if isinstance(node, XmlText):
-        return str(node)
+        # str(XmlText) 는 서식(mark)을 <bold>…</bold> 태그로 감싸 돌려준다(#391) — 글 조각만 잇는다.
+        # ponytail: 임베드는 버리고 양옆 글자가 붙는다 — y-prosemirror 는 이미지를 요소 노드로 두므로 실제론 안 생긴다
+        return "".join(piece for piece, _attrs in node.diff() if isinstance(piece, str))
     if depth > 64:
         return ""  # 악의적으로 깊은 중첩 — 검색 평문에서 그 아래는 버린다
     return "\n".join(_plain_text(child, depth + 1) for child in node.children).strip()
