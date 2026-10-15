@@ -39,7 +39,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import acl, audit, storage
-from app.ai import data_tools, edit, extract, make
+from app.ai import data_tools, edit, extract, jobs, make
 from app.ai.provider import ChatMessage, LLMError, LLMProvider, ToolCalls, get_provider
 from app.config import settings
 from app.db import get_db, session_scope
@@ -894,7 +894,13 @@ async def chat(
     rules_block = await _rules_sources(db, user, sources)
     doc_block = await _docs_source(db, user, doc_ids, sources)
     attach_block = await _attachments_source(db, user, body.attachments, sources)
-    session_id = await _session(db, user, body.session_id, str(provider.models()[0]["name"]))
+    model = str(provider.models()[0]["name"])
+    session_id = await _session(db, user, body.session_id, model)
+    if jobs.busy(
+        session_id
+    ):  # README 58 — 앞 답이 끝나기 전엔 같은 대화에 다음 질문을 받지 않는다(소유자 확인 뒤)
+        await db.rollback()
+        raise ApiError(409, "AI_BUSY", "이 대화는 아직 답변을 만드는 중입니다.")
     messages = [*await _history(db, session_id), {"role": "user", "content": body.message}]
     await db.commit()  # 세션 행만 남긴다. 공급자를 기다리는 동안 커넥션은 풀에 돌아간다.
     asked_at = datetime.now(UTC)
@@ -936,11 +942,11 @@ async def chat(
             blocks.append({"type": "text", "text": tail.strip()})
         system = blocks
 
-    async def events() -> AsyncIterator[str]:
+    async def run(job: jobs.Job) -> None:
         parts: list[str] = []
         try:
-            # 클라이언트가 끊기면 GeneratorExit 이 여기서 나는데, aclosing 이 없으면 안쪽 제너레이터(SDK 스트림·도구
-            # 세션)가 GC 까지 열린 채 남는다(보안 리뷰)
+            # 종료로 태스크가 취소되면 CancelledError 가 여기서 나는데, aclosing 이 없으면 안쪽 제너레이터(SDK 스트림·도구
+            # 세션)가 GC 까지 열린 채 남는다(보안 리뷰). 클라이언트가 끊겨도 이 태스크는 끝까지 간다(README 58).
             async with aclosing(
                 _turns(
                     provider,
@@ -956,7 +962,7 @@ async def chat(
                 )
             ) as turns:
                 async for kind, text in turns:
-                    yield sse(kind, {"text": text})
+                    job.push(kind, {"text": text})
             answer_text = "".join(parts)
             if not answer_text.strip():
                 # 빈 답을 저장하면 다음 턴부터 공급자가 그 세션을 거절한다(빈 content 400). `_complete` 와 같은 기준.
@@ -983,21 +989,25 @@ async def chat(
                 )
                 s.add(answer)
                 await s.commit()
-            yield sse("citations", [c.model_dump(mode="json") for c in citations])
-            yield sse("done", {"message_id": str(answer.id), "session_id": str(session_id)})
+            job.push("citations", [c.model_dump(mode="json") for c in citations])
+            job.push("done", {"message_id": str(answer.id), "session_id": str(session_id)})
         except LLMError as e:
-            yield sse("error", {"detail": e.detail, "code": e.code})
+            log.warning("AI 답변 실패 %s session=%s: %s", e.code, session_id, e.detail)
+            job.push("error", {"detail": e.detail, "code": e.code})
         except Exception:
-            # 200 과 헤더가 이미 나간 뒤라 예외 핸들러(errors.py)가 닿지 않는다. 여기서 안 잡으면 스트림이
-            # 말없이 끊겨 화면에 질문만 남는다(API 키가 없으면 SDK 가 AnthropicError 가 아닌 TypeError 를 던진다).
-            # 원인은 응답에 싣지 않고 로그에만.
+            # 태스크라 예외 핸들러(errors.py)가 닿지 않는다. 여기서 안 잡으면 구독자 화면에 질문만 남는다(API 키가
+            # 없으면 SDK 가 AnthropicError 가 아닌 TypeError 를 던진다). 원인은 응답에 싣지 않고 로그에만.
             log.exception("AI 답변 스트림 실패")
-            yield sse("error", {"detail": "AI 답변을 만들지 못했습니다.", "code": "INTERNAL"})
+            job.push("error", {"detail": "AI 답변을 만들지 못했습니다.", "code": "INTERNAL"})
 
+    job = jobs.start(jobs.Job(session_id, user.id, body.message, model, asked_at), run)
     return StreamingResponse(
-        events(),
+        _follow(job),
         media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        headers={
+            "Cache-Control": "no-store",
+            "X-Accel-Buffering": "no",
+        },  # 미들웨어 setdefault 가 못 덮는다(보안 리뷰)
     )
 
 
@@ -1005,6 +1015,182 @@ class FeedbackIn(BaseModel):
     # 문자열로 받는다 — 대화 저장(README 41) 전의 프론트는 자기가 만든 답변 id 를 보냈다.
     message_id: str = Field(min_length=1, max_length=100)
     value: Literal[1, -1]
+
+
+async def _follow(job: jobs.Job) -> AsyncIterator[str]:
+    async for event, data in job.follow():
+        yield sse(event, data)
+
+
+class PendingOut(BaseModel):
+    message: str  # 답을 만들고 있는 질문 — 아직 ai_messages 에 없다(답과 함께 저장된다, README 41)
+    started_at: datetime
+
+
+class SessionOut(BaseModel):
+    id: uuid.UUID
+    model: str
+    title: str  # 첫 질문(80자)
+    created_at: datetime
+    updated_at: datetime  # 마지막 메시지(진행 중이면 질문 시각)
+    pending: bool
+
+
+class SessionMessageOut(BaseModel):
+    id: uuid.UUID
+    role: Literal["user", "assistant"]
+    body: str
+    citations: list[Citation] | None = None
+    feedback: int | None = None
+    created_at: datetime
+
+
+class SessionDetailOut(BaseModel):
+    id: uuid.UUID
+    model: str
+    created_at: datetime
+    messages: list[SessionMessageOut]
+    pending: PendingOut | None = None  # 있으면 `GET /ai/sessions/{id}/stream` 으로 이어 받는다
+
+
+SESSIONS_MAX = 50
+TITLE_MAX = 80
+
+
+@router.get(
+    "/ai/sessions",
+    response_model=list[SessionOut],
+    summary="내 대화 목록 — 최근 순 50개, 답을 만드는 중인 것은 pending (README 58)",
+)
+async def list_sessions(
+    user: User = Depends(current_user), db: AsyncSession = Depends(get_db)
+) -> list[SessionOut]:
+    last = (
+        select(AiMessage.session_id, func.max(AiMessage.created_at).label("updated_at"))
+        .group_by(AiMessage.session_id)
+        .subquery()
+    )
+    first = (
+        select(AiMessage.session_id, AiMessage.body)
+        .where(AiMessage.msg_role == "user")
+        .distinct(AiMessage.session_id)
+        .order_by(AiMessage.session_id, AiMessage.created_at, AiMessage.id)
+        .subquery()
+    )
+    rows = await db.execute(
+        select(AiSession.id, AiSession.model, AiSession.created_at, last.c.updated_at, first.c.body)
+        .join(last, last.c.session_id == AiSession.id)
+        .join(first, first.c.session_id == AiSession.id)
+        .where(AiSession.user_id == user.id)
+        .order_by(last.c.updated_at.desc())
+        .limit(SESSIONS_MAX)
+    )
+    out = [
+        SessionOut(
+            id=sid,
+            model=model,
+            title=body[:TITLE_MAX],
+            created_at=created,
+            updated_at=updated,
+            pending=sid in jobs.running,
+        )
+        for sid, model, created, updated, body in rows.tuples()
+    ]
+    listed = {o.id for o in out}
+    # 첫 답을 만드는 중인 새 대화는 아직 메시지가 없다 — 진행 중 목록에서 보탠다(돌아온 화면이 찾을 수 있게)
+    mine = sorted(
+        (
+            j
+            for j in list(jobs.running.values())
+            if j.user_id == user.id and j.session_id not in listed
+        ),
+        key=lambda j: j.started_at,
+        reverse=True,
+    )
+    fresh = [
+        SessionOut(
+            id=j.session_id,
+            model=j.model,
+            title=j.message[:TITLE_MAX],
+            created_at=j.started_at,
+            updated_at=j.started_at,
+            pending=True,
+        )
+        for j in mine
+    ]
+    return (fresh + out)[:SESSIONS_MAX]
+
+
+async def _my_session(db: AsyncSession, user: User, session_id: uuid.UUID) -> AiSession:
+    session = await db.get(AiSession, session_id)
+    if session is None or session.user_id != user.id:  # 남의 것도 404(README 41)
+        raise ApiError(404, "NOT_FOUND", "없는 대화입니다.")
+    return session
+
+
+@router.get(
+    "/ai/sessions/{session_id}",
+    response_model=SessionDetailOut,
+    summary="대화 하나 — 질문·답변·각주, 답을 만드는 중이면 pending {message, started_at} (README 58)",
+)
+async def get_session(
+    session_id: uuid.UUID,
+    user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_db),
+) -> SessionDetailOut:
+    session = await _my_session(db, user, session_id)
+    job = jobs.running.get(
+        session_id
+    )  # 메시지를 읽기 전에 — 그 사이 답이 끝나도 화면이 답을 놓치지 않게
+    rows = await db.scalars(
+        select(AiMessage)
+        .where(AiMessage.session_id == session_id)
+        .order_by(AiMessage.created_at, AiMessage.id)
+    )
+    return SessionDetailOut(
+        id=session.id,
+        model=session.model,
+        created_at=session.created_at,
+        messages=[
+            SessionMessageOut(
+                id=m.id,
+                role=m.msg_role,  # type: ignore[arg-type]
+                body=m.body,
+                citations=m.citations,
+                feedback=m.feedback,
+                created_at=m.created_at,
+            )
+            for m in rows
+        ],
+        pending=PendingOut(message=job.message, started_at=job.started_at) if job else None,
+    )
+
+
+@router.get(
+    "/ai/sessions/{session_id}/stream",
+    summary="만드는 중인 답변에 다시 붙는다 — 지금까지의 이벤트부터 done/error 까지 SSE. 진행 중이 아니면 404 (README 58)",
+    responses={200: {"content": {"text/event-stream": {}}}},
+)
+async def stream_session(
+    session_id: uuid.UUID,
+    user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_db),
+) -> StreamingResponse:
+    await _my_session(db, user, session_id)
+    await (
+        db.rollback()
+    )  # 스트림이 끝날 때까지(분 단위) 커넥션을 쥐고 있지 않게 — chat 의 commit 과 같은 이유
+    job = jobs.running.get(session_id)
+    if job is None:
+        raise ApiError(404, "NOT_FOUND", "만드는 중인 답변이 없습니다.")
+    return StreamingResponse(
+        _follow(job),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-store",
+            "X-Accel-Buffering": "no",
+        },  # 미들웨어 setdefault 가 못 덮는다(보안 리뷰)
+    )
 
 
 @router.post("/ai/feedback", status_code=204, summary="{message_id, value: 1|-1} 답변 평가 → 204")

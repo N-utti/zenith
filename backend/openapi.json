@@ -3179,6 +3179,116 @@
         }
       }
     },
+    "/api/ai/sessions": {
+      "get": {
+        "tags": [
+          "ai"
+        ],
+        "summary": "내 대화 목록 — 최근 순 50개, 답을 만드는 중인 것은 pending (README 58)",
+        "operationId": "list_sessions_api_ai_sessions_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SessionOut"
+                  },
+                  "type": "array",
+                  "title": "Response List Sessions Api Ai Sessions Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ai/sessions/{session_id}": {
+      "get": {
+        "tags": [
+          "ai"
+        ],
+        "summary": "대화 하나 — 질문·답변·각주, 답을 만드는 중이면 pending {message, started_at} (README 58)",
+        "operationId": "get_session_api_ai_sessions__session_id__get",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionDetailOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ai/sessions/{session_id}/stream": {
+      "get": {
+        "tags": [
+          "ai"
+        ],
+        "summary": "만드는 중인 답변에 다시 붙는다 — 지금까지의 이벤트부터 done/error 까지 SSE. 진행 중이 아니면 404 (README 58)",
+        "operationId": "stream_session_api_ai_sessions__session_id__stream_get",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              },
+              "text/event-stream": {}
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/ai/feedback": {
       "post": {
         "tags": [
@@ -12499,6 +12609,25 @@
         ],
         "title": "PasswordIn"
       },
+      "PendingOut": {
+        "properties": {
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Started At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message",
+          "started_at"
+        ],
+        "title": "PendingOut"
+      },
       "PersonOut": {
         "properties": {
           "id": {
@@ -13165,6 +13294,149 @@
           "version_id"
         ],
         "title": "RestoreIn"
+      },
+      "SessionDetailOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "model": {
+            "type": "string",
+            "title": "Model"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/SessionMessageOut"
+            },
+            "type": "array",
+            "title": "Messages"
+          },
+          "pending": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PendingOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "model",
+          "created_at",
+          "messages"
+        ],
+        "title": "SessionDetailOut"
+      },
+      "SessionMessageOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "user",
+              "assistant"
+            ],
+            "title": "Role"
+          },
+          "body": {
+            "type": "string",
+            "title": "Body"
+          },
+          "citations": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/Citation"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Citations"
+          },
+          "feedback": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Feedback"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "role",
+          "body",
+          "created_at"
+        ],
+        "title": "SessionMessageOut"
+      },
+      "SessionOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "model": {
+            "type": "string",
+            "title": "Model"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "pending": {
+            "type": "boolean",
+            "title": "Pending"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "model",
+          "title",
+          "created_at",
+          "updated_at",
+          "pending"
+        ],
+        "title": "SessionOut"
       },
       "StepOut": {
         "properties": {
