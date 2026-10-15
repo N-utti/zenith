@@ -37,7 +37,8 @@ export function Avatar({ name, hue, size = 'md', className }: Props) {
         color: `oklch(0.38 0.13 ${hue})`,
       }}
     >
-      {initials(name)}
+      {/* 줄 상자는 글꼴의 위아래 여백이 달라 글자가 위로 뜬다. 대문자 높이~기준선으로 잘라 원 가운데에 둔다. */}
+      <span className="[text-box:trim-both_cap_alphabetic]">{initials(name)}</span>
     </span>
   )
 }
