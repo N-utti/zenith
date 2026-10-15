@@ -1046,6 +1046,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ai/attachments/{id}/edit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** {instruction} → 첨부(xlsx·docx)를 편집 연산으로 고친 새 첨부 + 변경 내역. 원본은 그대로 */
+        post: operations["edit_ai_attachment_api_ai_attachments__id__edit_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/attendance/me": {
         parameters: {
             query?: never;
@@ -2448,6 +2465,15 @@ export interface components {
             /** Doc Id */
             doc_id?: string | null;
         };
+        /** ChangeOut */
+        ChangeOut: {
+            /** Where */
+            where: string;
+            /** Before */
+            before: string;
+            /** After */
+            after: string;
+        };
         /** ChannelCreateIn */
         ChannelCreateIn: {
             /** Name */
@@ -3119,6 +3145,17 @@ export interface components {
             reason: string;
             /** Version */
             version?: number | null;
+        };
+        /** EditIn */
+        EditIn: {
+            /** Instruction */
+            instruction: string;
+        };
+        /** EditOut */
+        EditOut: {
+            result: components["schemas"]["app__routers__ai__AttachmentOut"];
+            /** Changes */
+            changes: components["schemas"]["ChangeOut"][];
         };
         /** EventCreateIn */
         EventCreateIn: {
@@ -7292,6 +7329,41 @@ export interface operations {
                 content: {
                     "application/json": unknown;
                     "application/octet-stream": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    edit_ai_attachment_api_ai_attachments__id__edit_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EditIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EditOut"];
                 };
             };
             /** @description Validation Error */
