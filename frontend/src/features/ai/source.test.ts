@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest'
-import { SOURCE_KINDS, fileLink, sourceKind, sourceTo, webLink } from './source'
+import { SOURCE_KINDS, downloadName, fileLink, sourceKind, sourceTo, webLink } from './source'
 import type { Citation } from './types'
 
 const base = { n: 1, title: '휴가 규정', quote: '인용', path: '인사' }
@@ -80,4 +80,15 @@ test('첨부 근거는 앱 안으로 이동하지 않고 원본 주소만 내려
   for (const to of ['/api/auth/logout', '/api/ai/attachments/../x', 'https://evil.example/a'])
     expect(fileLink({ ...file, to })).toBeNull()
   expect(fileLink({ ...base, type: 'doc', to: file.to })).toBeNull()
+})
+
+test('downloadName: 채널 첨부는 주소 끝 이름, 나머지는 클립 뗀 링크 글자, 방향 제어 문자는 뺀다', () => {
+  expect(downloadName('/api/channels/c1/attachments/f1/%ED%9A%8C%EC%9D%98.pdf', '자료')).toBe(
+    '회의.pdf',
+  )
+  expect(downloadName('/api/channels/c1/attachments/f1/%E0%A4', '자료.pdf')).toBe('자료.pdf')
+  expect(downloadName('/api/ai/attachments/x1', '📎 매출.xlsx')).toBe('매출.xlsx')
+  expect(downloadName('/api/files/x1', '')).toBe('파일')
+  const rlo = String.fromCharCode(0x202e)
+  expect(downloadName('/api/files/x1', `매출${rlo}xslx.exe`)).toBe('매출xslx.exe')
 })

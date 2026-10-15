@@ -26,5 +26,6 @@ export function downloadPath(url: string): string | null {
   if (uploadedFilePath(url)) return url
   const name = CHAT_FILE.exec(url)?.[1]
   // 점만으로 된 이름은 브라우저가 상위 경로로 푼다. `%2e` 로 적어도 같다.
-  return name && !/^(\.|%2e){1,2}$/i.test(name) ? url : null
+  // 인코딩된 `/`·`\` 는 서버가 풀어 경로를 바꾼다(`..%2F..%2Fadmin`).
+  return name && !/^(\.|%2e){1,2}$/i.test(name) && !/%2f|%5c/i.test(name) ? url : null
 }

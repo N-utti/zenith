@@ -40,6 +40,30 @@ describe('markdownToHtml', () => {
     expect(html).toContain('원문 (http://10.0.0.5/c?d=SECRET)')
   })
 
+  it('파일 주소는 링크가 아니라 내려받기 버튼, 그 밖의 API 주소는 글자다', () => {
+    const html = markdownToHtml(
+      '[📎 매출.xlsx](/api/ai/attachments/0b1c-9f) [규정](/api/files/ab12) [회의록.pdf](/api/channels/c1/attachments/f1/회의록.pdf) [사용자](/api/admin/users) [위](/api/channels/c1/attachments/f1/..)',
+    )
+    expect(html).not.toContain('<a ')
+    expect(html.match(/<button type="button"/g)).toHaveLength(3)
+    expect(html).toContain('📎 매출.xlsx</button>')
+    expect(html).toContain('사용자 (/api/admin/users)')
+    expect(html).toContain('위 (/api/channels/c1/attachments/f1/..)')
+  })
+
+  it('풀면 API 가 되는 주소도 링크로 두지 않는다', () => {
+    const html = markdownToHtml(
+      '[a](/./api/admin/users) [b](/docs/../api/admin/users) [c](/%61pi/admin/users) [d](/api?x=1) [e](/API/me) [규정](/docs/abc)',
+    )
+    expect(html.match(/<a /g)).toHaveLength(1)
+    expect(html).toContain('href="/docs/abc"')
+  })
+
+  it('굵게 감싼 파일 링크도 이름을 잃지 않는다', () => {
+    const html = markdownToHtml('[**📎 매출 _요약_.xlsx**](/api/ai/attachments/x1)')
+    expect(html).toContain('title="매출 요약.xlsx 내려받기"')
+  })
+
   it('깊게 겹친 마크다운으로 파서가 터지면 원문 글자로 남는다', () => {
     const text = '>'.repeat(5000) + ' x'
     const html = markdownToHtml(text)

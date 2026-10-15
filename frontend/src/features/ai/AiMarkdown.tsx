@@ -1,9 +1,14 @@
-import { createContext, use, type ReactNode } from 'react'
+import { createContext, use, useState, type ReactNode } from 'react'
 import Markdown, { type Components, type Options } from 'react-markdown'
 import remarkBreaks from 'remark-breaks'
 import remarkGfm from 'remark-gfm'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
+import { ToastContext } from '@/components/ui/ToastContext'
+import { downloadPath } from '@/features/archive/api'
+import { ApiError } from '@/lib/api'
 import { cn } from '@/lib/cn'
+import { downloadFromApi } from '@/lib/download'
+import { AI_FILE, downloadName } from './source'
 
 /** 각주 상태. 근거 목록에 있는 번호만 버튼이 되고, 나머지는 배지로 남는다. */
 export interface CiteState {
@@ -33,12 +38,29 @@ const toCiteLinks = (text: string) =>
  * 바깥 주소를 숨긴 링크가 생길 수 있다(누르면 사내망 밖으로 나간다). `//host` 는 바깥 주소다.
  * `javascript:` 같은 주소는 react-markdown 기본 `urlTransform` 이 먼저 비운다.
  */
-function Anchor({ href, children }: { href?: string; children?: ReactNode }) {
+function Anchor({
+  href,
+  children,
+  node,
+}: {
+  href?: string
+  children?: ReactNode
+  node?: HastNode
+}) {
   const cite = use(CiteContext)
   if (!href) return <>{children}</>
   const match = CITE.exec(href)
   if (!match) {
-    if (!INTERNAL.test(href)) {
+    const file = AI_FILE.test(href) ? href : downloadPath(href)
+    if (file) {
+      return (
+        <FileLink path={file} name={downloadName(file, textOf(node))}>
+          {children}
+        </FileLink>
+      )
+    }
+    // 그 밖의 API 주소도 링크로 두지 않는다. 답변이 아무 API 나 누르면 부르는 링크를 만들 수 있다.
+    if (!INTERNAL.test(href) || isApiPath(href)) {
       return children === href ? (
         <>{href}</>
       ) : (
@@ -70,6 +92,59 @@ function Anchor({ href, children }: { href?: string; children?: ReactNode }) {
       )}
     >
       {n}
+    </button>
+  )
+}
+
+type HastNode = { type: string; value?: string; children?: HastNode[] }
+
+/** 링크 글자. 굵게·기울임으로 감싼 글자까지 모은다. */
+const textOf = (node?: HastNode): string =>
+  node?.type === 'text' ? (node.value ?? '') : (node?.children ?? []).map(textOf).join('')
+
+/**
+ * 브라우저와 서버가 풀었을 때 API 주소인가. `/./api`·`/docs/../api`·`/%61pi`·`/api?x` 도 같은 API 다.
+ * 못 읽는 주소는 API 로 친다(링크로 두지 않는다).
+ */
+function isApiPath(href: string): boolean {
+  try {
+    const once = new URL(href, 'http://x').pathname
+    const path = new URL(decodeURIComponent(once), 'http://x').pathname.toLowerCase()
+    return path === '/api' || path.startsWith('/api/')
+  } catch {
+    return true
+  }
+}
+
+/**
+ * 답변 속 파일 링크(AI 가 만든 엑셀 `[📎 이름.xlsx](/api/ai/attachments/…)`, 백엔드 #418 · 자료실 파일).
+ * 링크로 따라가게 두지 않고 앱이 받아 저장시킨다(이유는 `downloadFromApi`, 데스크톱 셸에서는 빈 창이 뜬다).
+ * 문서로 저장하면 주소 없이 글자만 남는다. AI 첨부는 올린 사람만, 7일 동안만 받을 수 있는 주소라 일부러 버린다.
+ *
+ * 토스트는 있으면 쓴다. 문서로 저장할 때(`markdownToHtml`)는 공급자 없이 그려져 `useToast` 가 던진다.
+ */
+function FileLink({ path, name, children }: { path: string; name: string; children?: ReactNode }) {
+  const toast = use(ToastContext)
+  const [busy, setBusy] = useState(false)
+  const download = async () => {
+    setBusy(true)
+    try {
+      await downloadFromApi(path, name)
+    } catch (cause) {
+      toast?.error(cause instanceof ApiError ? cause.message : '파일을 내려받지 못했습니다.')
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => void download()}
+      disabled={busy}
+      title={`${name} 내려받기`}
+      className="text-accent cursor-pointer text-left underline underline-offset-2 [overflow-wrap:anywhere] disabled:cursor-wait disabled:opacity-60"
+    >
+      {children}
     </button>
   )
 }
