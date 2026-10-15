@@ -53,6 +53,24 @@ export function useRenameFolder() {
 }
 
 /**
+ * 폴더 열람 권한(백엔드 #421). 임원만 된다(그 외 403). 바뀐 칸만 보낸다. 사람 지정은 전체 교체다.
+ */
+export function useSetFolderAccess() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      id,
+      ...change
+    }: {
+      id: string
+      min_role?: Folder['min_role']
+      allowed_users?: string[]
+    }) => api<Folder>(`/folders/${id}`, { method: 'PATCH', body: JSON.stringify(change) }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: docKeys.tree }),
+  })
+}
+
+/**
  * 빈 폴더를 지운다(백엔드 #298). 안에 문서나 폴더가 있으면 서버가 409 `FOLDER_NOT_EMPTY` 로
  * 거절한다. 휴지통에 그 폴더의 문서가 남아 있을 때도 그렇다(트리에는 안 보인다. 문구는 서버가 준다).
  */

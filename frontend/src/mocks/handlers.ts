@@ -79,6 +79,8 @@ import {
   trashDoc,
   untrashDoc,
   updateFolder,
+  canViewFolder,
+  isRestricted,
   DOC_SEEDS,
   findDoc,
   listComments,
@@ -283,8 +285,38 @@ function aliveDoc(id: string) {
  * 않는다(`app/errors.py`). "이 게시판은 내 등급 밖" 과 "내 글이 아님" 을 호출자가 가려낼
  * 수 있으면 그 자체가 정보다.
  */
-const forbidden = () =>
-  HttpResponse.json({ detail: '권한이 부족합니다.', code: 'FORBIDDEN' }, { status: 403 })
+const forbidden = (detail = '권한이 부족합니다.') =>
+  HttpResponse.json({ detail, code: 'FORBIDDEN' }, { status: 403 })
+
+/** 폴더 열람 권한(백엔드 #421)을 바꾸거나 제한 폴더를 오가는 이동. 서버 문구 그대로. */
+const ACL_EXEC_ONLY = '폴더 열람 권한은 임원만 바꿀 수 있습니다.'
+const MIN_ROLES = ['member', 'lead', 'exec'] as const
+
+/** 요청의 `min_role`·`allowed_users` 검사. 문제가 있으면 응답, 없으면 고친 값. */
+function readAcl(body: { min_role?: unknown; allowed_users?: unknown }) {
+  if (body.min_role === null) return { error: validationError('min_role 는 null 일 수 없습니다.') }
+  if (body.allowed_users === null) {
+    return { error: validationError('allowed_users 는 null 일 수 없습니다.') }
+  }
+  if (
+    body.min_role !== undefined &&
+    !MIN_ROLES.includes(body.min_role as (typeof MIN_ROLES)[number])
+  ) {
+    return { error: validationError('min_role 은 member·lead·exec 중 하나입니다.') }
+  }
+  if (body.allowed_users !== undefined) {
+    if (
+      !Array.isArray(body.allowed_users) ||
+      body.allowed_users.some((id) => !MOCK_USERS.some((u) => u.id === id))
+    ) {
+      return { error: validationError('없는 사용자가 있습니다.') }
+    }
+  }
+  return {
+    min_role: body.min_role as (typeof MIN_ROLES)[number] | undefined,
+    allowed_users: body.allowed_users as string[] | undefined,
+  }
+}
 
 const validationError = (detail: string) =>
   HttpResponse.json({ detail, code: 'VALIDATION' }, { status: 422 })
@@ -1761,7 +1793,7 @@ export const handlers = [
     // 서버와 같은 순서: 폴더, 문서 개수, 첨부 개수, 문서, 첨부.
     // 범위는 폴더 id 다(백엔드 #372). 참고 문서와 같이 올 수 있다. 없는 폴더는 422 이고 이때 detail 은 문자열이다.
     // 실제 서버는 UUID 로 안 읽히는 값을 전체로 받지만, 목의 폴더 id(`f-1`)는 UUID 가 아니라 목록에 있는지로 가른다.
-    if (folder && !docTree().folders.some((each) => each.id === folder)) {
+    if (folder && !docTree(user).folders.some((each) => each.id === folder)) {
       return HttpResponse.json({ detail: '없는 폴더입니다.', code: 'VALIDATION' }, { status: 422 })
     }
     // 참고 문서(백엔드 #394). `doc:<문서 id>` 범위(#380)는 그 문서 하나짜리 별칭이라 앞에 붙여 합친다(중복 제거).
@@ -1990,40 +2022,77 @@ data: ${JSON.stringify(data)}
   // ── 문서 트리·폴더 ────────────────────────────────────────
   http.get(
     '/api/tree',
-    authed(() => HttpResponse.json(docTree())),
+    // 볼 수 있는 폴더·문서만 준다(백엔드 #421). 못 보는 폴더는 그 아래까지 통째로 빠진다.
+    authed((user) => HttpResponse.json(docTree(user))),
   ),
 
   http.post('/api/folders', async ({ request }) => {
-    if (!authenticate()) return unauthorized()
+    const user = authenticate()
+    if (!user) return unauthorized()
 
-    const body = await readJson<{ title?: unknown; parent_id?: unknown; sort?: unknown }>(request)
+    const body = await readJson<{
+      title?: unknown
+      parent_id?: unknown
+      sort?: unknown
+      min_role?: unknown
+      allowed_users?: unknown
+    }>(request)
     if (!body) return validationError('본문이 JSON 이 아닙니다.')
     if (typeof body.title !== 'string' || !body.title.trim() || body.title.trim().length > 200) {
       return validationError('폴더 이름은 1자 이상 200자 이하여야 합니다.')
     }
+    // 등급 값은 스키마 검증이라 먼저다. 그다음 등급이나 사람을 거는 생성인지 보고 임원만(백엔드 순서).
+    if (body.min_role === null) return validationError('min_role 는 null 일 수 없습니다.')
+    if (
+      body.min_role !== undefined &&
+      !MIN_ROLES.includes(body.min_role as (typeof MIN_ROLES)[number])
+    ) {
+      return validationError('min_role 은 member·lead·exec 중 하나입니다.')
+    }
+    const restricting =
+      (body.min_role !== undefined && body.min_role !== 'member') ||
+      (Array.isArray(body.allowed_users) && body.allowed_users.length > 0)
+    if (restricting && user.role !== 'exec') return forbidden(ACL_EXEC_ONLY)
+    const acl = readAcl(body)
+    if ('error' in acl) return acl.error
     const parentId =
       body.parent_id === undefined || body.parent_id === null ? null : String(body.parent_id)
     // 없는 폴더는 404 가 아니라 422 다. 백엔드가 외래키 위반을 미리 잡아 422 로 돌려준다.
-    if (parentId !== null && !findFolder(parentId)) return validationError('없는 폴더입니다.')
+    // 못 보는 폴더도 「없는 폴더」다. 있다는 것도 알리지 않는다.
+    if (parentId !== null && (!findFolder(parentId) || !canViewFolder(user, parentId))) {
+      return validationError('없는 폴더입니다.')
+    }
 
-    return HttpResponse.json(
-      createFolder({
-        title: body.title.trim(),
-        parent_id: parentId,
-        sort: typeof body.sort === 'number' ? body.sort : 0,
-      }),
-      { status: 201 },
-    )
+    const created = createFolder({
+      title: body.title.trim(),
+      parent_id: parentId,
+      sort: typeof body.sort === 'number' ? body.sort : 0,
+    })
+    return HttpResponse.json(updateFolder(created, acl), { status: 201 })
   }),
 
   http.patch('/api/folders/:folderId', async ({ request, params }) => {
-    if (!authenticate()) return unauthorized()
+    const user = authenticate()
+    if (!user) return unauthorized()
 
+    // 못 보는 폴더는 없는 폴더와 같다(임원 검사보다 먼저).
     const folder = findFolder(String(params.folderId))
-    if (!folder) return notFound()
+    if (!folder || !canViewFolder(user, folder.id)) return notFound()
 
-    const body = await readJson<{ title?: unknown; parent_id?: unknown; sort?: unknown }>(request)
+    const body = await readJson<{
+      title?: unknown
+      parent_id?: unknown
+      sort?: unknown
+      min_role?: unknown
+      allowed_users?: unknown
+    }>(request)
     if (!body) return validationError('본문이 JSON 이 아닙니다.')
+    // 열람 권한 칸은 값이 지금과 같아도 보내기만 하면 임원만 된다(이름 바꾸기는 `title` 만 보낸다).
+    if ((body.min_role !== undefined || body.allowed_users !== undefined) && user.role !== 'exec') {
+      return forbidden(ACL_EXEC_ONLY)
+    }
+    const acl = readAcl(body)
+    if ('error' in acl) return acl.error
     // null 은 "지움" 이 아니라 422 다. 문서·할 일 PATCH 와 같은 계약.
     for (const key of ['title', 'parent_id', 'sort'] as const) {
       if (body[key] === null && key !== 'parent_id') {
@@ -2038,8 +2107,13 @@ data: ${JSON.stringify(data)}
     let parentId: string | null | undefined
     if (body.parent_id !== undefined) {
       parentId = body.parent_id === null ? null : String(body.parent_id)
+      // 제한 폴더(자기나 조상에 등급·사람 지정)를 오가는 이동은 임원만. 대상 확인보다 먼저다.
+      const crossing = isRestricted(folder.id) || (parentId !== null && isRestricted(parentId))
+      if (crossing && user.role !== 'exec') return forbidden(ACL_EXEC_ONLY)
       if (parentId !== null) {
-        if (!findFolder(parentId)) return validationError('없는 폴더입니다.')
+        if (!findFolder(parentId) || !canViewFolder(user, parentId)) {
+          return validationError('없는 폴더입니다.')
+        }
         // 자기 자신이나 자기 자손 아래로 옮기면 트리에서 통째로 사라진다.
         if (isDescendantFolder(parentId, folder.id)) {
           return validationError('폴더를 자기 자신이나 하위 폴더로 옮길 수 없습니다.')
@@ -2052,6 +2126,8 @@ data: ${JSON.stringify(data)}
         title: typeof body.title === 'string' ? body.title.trim() : undefined,
         parent_id: parentId,
         sort: typeof body.sort === 'number' ? body.sort : undefined,
+        min_role: acl.min_role,
+        allowed_users: acl.allowed_users,
       }),
     )
   }),
@@ -2110,9 +2186,11 @@ data: ${JSON.stringify(data)}
   }),
 
   http.get('/api/docs/:docId', ({ params }) => {
-    if (!authenticate()) return unauthorized()
+    const user = authenticate()
+    if (!user) return unauthorized()
     const doc = findDoc(String(params.docId))
     if (!doc) return notFound()
+    if (!canViewFolder(user, doc.folder_id)) return forbidden('이 문서를 볼 권한이 없습니다.')
     // 실제 서버는 보관 중인 Yjs 상태(`ydoc`)를 준다. 목에는 그게 없어 초안(`seedHtml`)으로 대신한다.
     return HttpResponse.json({ ...doc, ydoc: null, seedHtml: DOC_SEEDS[doc.id] })
   }),
@@ -2187,9 +2265,15 @@ data: ${JSON.stringify(data)}
     if (body.ai_source !== undefined && typeof body.ai_source !== 'boolean') {
       return validationError('ai_source 는 불리언이어야 합니다.')
     }
-    if (!aliveDoc(String(params.docId))) return notFound()
-    if (body.folder_id !== undefined && !findFolder(String(body.folder_id))) {
-      return validationError('없는 폴더입니다.')
+    const alive = aliveDoc(String(params.docId))
+    if (!alive) return notFound()
+    if (!canViewFolder(user, alive.folder_id)) return forbidden('이 문서를 볼 권한이 없습니다.')
+    if (body.folder_id !== undefined) {
+      const to = String(body.folder_id)
+      if (!findFolder(to) || !canViewFolder(user, to)) return validationError('없는 폴더입니다.')
+      // 제한 폴더를 오가는 이동은 임원만(백엔드 #421). 같은 폴더로 보내도 서버는 똑같이 본다.
+      const crossing = isRestricted(alive.folder_id) || isRestricted(to)
+      if (crossing && user.role !== 'exec') return forbidden(ACL_EXEC_ONLY)
     }
     const doc = touchDoc(String(params.docId), user, {
       title: typeof body.title === 'string' ? body.title : undefined,

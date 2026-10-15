@@ -3,12 +3,14 @@ import { MOCK_USERS } from './db'
 import {
   addComment,
   addVersion,
+  canViewFolder,
   createDoc,
   createFolder,
   docTree,
   editComment,
   findDoc,
   findVersion,
+  isRestricted,
   listComments,
   listDocs,
   listTrash,
@@ -19,6 +21,7 @@ import {
   touchDoc,
   trashDoc,
   untrashDoc,
+  updateFolder,
 } from './docsDb'
 
 const user = MOCK_USERS.find((u) => u.id === 'u-2')!
@@ -219,4 +222,28 @@ it('AI 근거 스위치만 바꾸면 수정 시각과 수정한 사람은 그대
   expect(off).toMatchObject({ ai_source: false, updated_at, updated_by })
   // AI 답변을 저장한 문서는 끈 채로 생긴다.
   expect(createDoc(user, 'f-1', 'AI 답변', false).ai_source).toBe(false)
+})
+
+it('폴더 열람 권한: 조상 하나라도 막히면 아래 전부 안 보이고, 지정한 사람은 그 폴더만 뚫는다', () => {
+  const member = { id: 'm-1', role: 'member' as const }
+  const exec = { id: 'e-1', role: 'exec' as const }
+  const top = createFolder({ title: '경영' })
+  const child = createFolder({ title: '보고', parent_id: top.id })
+  const doc = createDoc(MOCK_USERS[0], child.id, '분기 보고')
+
+  expect(canViewFolder(member, child.id)).toBe(true)
+  expect(isRestricted(child.id)).toBe(false)
+
+  updateFolder(top, { min_role: 'exec' })
+  expect(canViewFolder(member, child.id)).toBe(false)
+  expect(canViewFolder(exec, child.id)).toBe(true)
+  expect(isRestricted(child.id)).toBe(true) // 물려받은 제한도 이동은 임원만
+  expect(docTree(member).docs.some((d) => d.id === doc.id)).toBe(false)
+  expect(docTree(member).folders.some((f) => f.id === child.id)).toBe(false)
+
+  // 아래 폴더에만 지정되면 조상이 막혀 소용없다. 조상에 지정해야 뚫린다.
+  updateFolder(child, { allowed_users: [member.id] })
+  expect(canViewFolder(member, child.id)).toBe(false)
+  updateFolder(top, { allowed_users: [member.id] })
+  expect(canViewFolder(member, child.id)).toBe(true)
 })
