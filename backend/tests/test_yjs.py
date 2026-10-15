@@ -571,3 +571,47 @@ async def test_empty_update_is_not_persisted(app: FastAPI, users: Users, app_db)
             await Peer(ws).connect()
         await rooms_empty()
         assert (await client.get(f"/api/docs/{doc_id}")).json()["updated_at"] == before
+
+
+async def test_marks_do_not_leak_into_plain_text(
+    app: FastAPI, users: Users, app_db, monkeypatch
+) -> None:
+    """#391: 굵게·링크 서식은 평문(text_cache)에 태그로 들어가지 않는다. 옛 저장본은 recache_text 가 고친다."""
+    from app.realtime import yjs as mod
+    from scripts import recache_text
+
+    monkeypatch.setattr(recache_text, "session_scope", mod.session_scope)
+    recache = recache_text.recache
+
+    def write_marked(doc: Doc) -> None:
+        frag = doc.get("default", type=XmlFragment)
+        para = XmlElement("paragraph")
+        frag.children.append(para)
+        text = para.children.append(XmlText("굵게 링크 그대로"))
+        text.format(0, 2, {"bold": {}})
+        text.format(3, 5, {"link": {"href": "https://example.com"}})
+
+    async with ws_client(app) as client:
+        await login(client, "sujin@zenith.co.kr")
+        doc_id = await _doc_id(client, app_db)
+        async with aconnect_ws(f"https://test/api/yjs/{doc_id}", client) as a_ws:
+            a = Peer(a_ws)
+            await a.connect()
+            await a.edit(write_marked)
+        await rooms_empty()
+        row = (await app_db.execute(select(Document).where(Document.id == doc_id))).scalar_one()
+        await app_db.refresh(row)
+        assert row.text_cache == "굵게 링크 그대로"
+
+        # 옛 저장본(태그 섞임)은 스냅샷에서 다시 뽑아 고친다 — 같으면 건드리지 않는다
+        await app_db.execute(
+            update(Document)
+            .where(Document.id == doc_id)
+            .values(text_cache="<bold>굵게</bold> 링크")
+        )
+        await app_db.commit()
+        assert await recache(uuid.UUID(doc_id)) is True
+        assert await recache(uuid.UUID(doc_id)) is False
+        await app_db.refresh(row)
+        assert row.text_cache == "굵게 링크 그대로"
+        assert "bold" not in str(row.tsv)  # tsv 도 같이 다시 썼다

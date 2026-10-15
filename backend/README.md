@@ -40,7 +40,7 @@ app/
 ├─ ai/provider.py   LLMProvider 프로토콜 · ClaudeProvider
 └─ routers/         auth · me · docs · channels · boards · search · ai · attendance · approvals · admin
 alembic/            비동기 env.py · versions/
-scripts/            export_openapi.py · seed.py
+scripts/            export_openapi.py · seed.py · reindex.py(벡터 백필) · recache_text.py(평문 백필, #391)
 tests/              계약 경로 검사 · 인증 왕복 · SSE 프레이밍 (DB 불필요) · 문서·홈·관리자·공동편집·채팅 소켓 (실 Postgres · httpx-ws)
 openapi.json        생성물 — 커밋한다 (아래 "계약의 강제")
 ```
