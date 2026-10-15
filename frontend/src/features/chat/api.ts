@@ -149,7 +149,9 @@ const NAME_CHARS_ERROR =
  * 나온 이모지를 서버는 받는데 화면이 막게 된다. 그쪽은 `channelNameFailure` 가 받는다.
  */
 export function checkChannelName(raw: string): { name: string; error: string | null } {
-  const name = raw.normalize('NFKC').trim()
+  // 한글 호환 자모(ㄱ~ㆎ)는 정규화에서 뺀다. NFKC 는 입력기가 넣은 ㅇ 을 조합용 첫소리(U+110B)로
+  // 바꾸는데, 그 글자는 혼자 있으면 위에 작게 그려지고 프리텐다드에도 없다(ㅋㅋ 가 깨져 보인다).
+  const name = raw.replace(/[^\u3131-\u318e]+/g, (run) => run.normalize('NFKC')).trim()
   let error: string | null = null
   if (/[\p{Cc}\p{Cf}\p{Cs}\p{Co}\p{Zl}\p{Zp}]/u.test(name)) error = NAME_CHARS_ERROR
   else if (!name) error = '이름을 적어 주세요.'
