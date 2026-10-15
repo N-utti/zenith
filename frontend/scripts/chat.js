@@ -425,7 +425,8 @@ export function handleChatConnection(conn, userId) {
  * 개발에서도 보이게 같은 모양으로 돌려준다(`nameRejected`).
  */
 function cleanChannelName(raw) {
-  const name = raw.normalize('NFKC').trim()
+  // 한글 호환 자모(ㄱ~ㆎ)는 정규화에서 뺀다. NFKC 가 ㅇ 을 조합용 첫소리(U+110B)로 바꿔 깨져 보인다.
+  const name = raw.replace(/[^\u3131-\u318e]+/g, (run) => run.normalize('NFKC')).trim()
   if (/[\p{C}\p{Zl}\p{Zp}]/u.test(name)) return { error: '이름에 쓸 수 없는 문자가 있습니다.' }
   if (!name) return { error: '이름을 적어 주세요.' }
   if ([...name].length > 100) return { error: '이름은 100자 이하여야 합니다.' }

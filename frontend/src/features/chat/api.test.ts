@@ -45,6 +45,9 @@ test('채널 이름을 서버처럼 다듬고, 서버가 거절할 이름은 이
   // 이모지는 UTF-16 으로 두 칸이지만 한 글자로 센다.
   expect(checkChannelName('\u{1f44d}'.repeat(100)).error).toBeNull()
   expect(checkChannelName('\u00a0').error).toMatch(/적어/)
+  // 자음·모음만 친 이름은 친 그대로 둔다. NFKC 는 조합용 자모로 바꾸고 따로 친 ㄱ·ㅏ 를 가 로 합친다.
+  expect(checkChannelName('\u314b\u314b \uff21').name).toBe('\u314b\u314b A')
+  expect(checkChannelName('\u3131\u314f').name).toBe('\u3131\u314f')
 })
 
 test('서버의 이름 검증 422(배열 detail)는 알아볼 문구로, 그 밖의 실패는 서버 문구로 낸다', () => {
