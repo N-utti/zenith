@@ -17,9 +17,10 @@ import re
 import time
 import uuid
 from collections import defaultdict, deque
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import aclosing
 from datetime import UTC, datetime, timedelta
+from functools import partial
 from typing import Annotated, Literal
 from urllib.parse import quote, urlsplit
 
@@ -145,8 +146,8 @@ MAKE_TOOL = {
     "description": (
         "표를 엑셀(xlsx) 파일로 만든다. 사용자가 파일·엑셀로 달라고 할 때만 쓴다. 첫 행은 머리글. 값은 문자열·숫자·"
         "불리언·null 이고 '=' 로 시작하면 수식(셀 참조·숫자·SUM/AVERAGE/IF/ROUND 같은 계산 함수만, 문자열·외부 참조 없이, "
-        "예: '=B2-C2'). 만든 뒤 답 본문에 도구 결과가 준 마크다운 링크를 그대로 한 줄로 넣는다(각주 [[n]] 이 아니라 "
-        "링크 — 누르면 내려받는다). 같은 표를 글로 다시 그리지 않는다."
+        "예: '=B2-C2'). 만든 뒤에는 도구 결과의 안내대로 한다(본문에 내려받기 링크를 넣거나, 첨부로 실리면 파일명만 "
+        "언급). 각주 [[n]] 은 달지 않고, 같은 표를 글로 다시 그리지 않는다."
     ),
     "input_schema": {
         "type": "object",
@@ -296,39 +297,51 @@ async def _read(
     return {"content": content}, len(text)
 
 
-async def _make(user: User, inp: dict, sources: list[Citation]) -> dict[str, object]:
-    """create_spreadsheet 실행 — 표를 xlsx 로 써서 질문자의 AI 첨부(README 51: 올린 사람만·7일·보관 한도)로 저장하고
-    파일 카드 번호를 돌려준다. 모양·상한 위반과 저장 실패는 is_error 로 — 파일 하나 때문에 답변 전체가 죽지 않게."""
+class MakeError(Exception):
+    """파일을 만들지 못했다 — 도구 결과(is_error)로 돌려줄 문구."""
+
+
+async def _build_xlsx(inp: dict, *, want_text: bool = True) -> tuple[str, bytes, str]:
+    """create_spreadsheet 입력 → (파일명, xlsx 바이트, 평문). /ai/chat(AI 첨부)과 채팅 /ai(채널 첨부)가 같이 쓴다.
+    모양·상한 위반·빌드 실패는 MakeError — 호출자가 is_error 로 접는다(파일 하나 때문에 답변이 죽지 않게).
+    `want_text=False` 면 평문을 뽑지 않는다(채널 첨부는 다시 읽히지 않는다 — 추출 60초를 아낀다)."""
     raw = inp.get("name")
     stem = re.sub(r"\.xlsx$", "", raw.strip(), flags=re.I) if isinstance(raw, str) else ""
     # 줄기만 safe_name 에 넣고 확장자는 뒤에 — safe_name 의 200바이트 자르기에 한글 이름의 .xlsx 가 잘리지 않게(리뷰)
     stem = storage.safe_name(stem).encode()[:150].decode("utf-8", "ignore").strip(". ") or "표"
     name = stem + ".xlsx"
+    text = ""
     try:
-        async with (
-            _extract_slots
-        ):  # 업로드·수정과 같은 가드(동시 2건·60초) — 기본 실행기 스레드를 다 쓰지 않게
+        # 업로드·수정과 같은 가드(동시 2건·60초) — 기본 실행기 스레드를 다 쓰지 않게
+        async with _extract_slots:
             data = await asyncio.wait_for(
                 asyncio.to_thread(make.build_xlsx, inp.get("sheets")), ATTACH_EXTRACT_TIMEOUT_S
             )
-            if len(data) > ATTACH_MAX_BYTES:
-                return {"content": "파일이 너무 큽니다 — 표를 줄여 주세요.", "is_error": True}
-            try:
-                # 다음 질문에서 첨부로 다시 읽을 수 있게 평문도 — 수식 셀은 캐시 값이 없어 빈칸
-                text = await asyncio.wait_for(
-                    asyncio.to_thread(extract.extract, name, data), ATTACH_EXTRACT_TIMEOUT_S
-                )
-            except (extract.Unsupported, extract.Empty, TimeoutError) as e:
-                log.warning("AI 생성 파일 평문 추출 실패 %s: %r", name, e)
-                text = ""
+            if want_text and len(data) <= ATTACH_MAX_BYTES:
+                try:
+                    # 다음 질문에서 첨부로 다시 읽을 수 있게 평문도 — 수식 셀은 캐시 값이 없어 빈칸
+                    text = await asyncio.wait_for(
+                        asyncio.to_thread(extract.extract, name, data), ATTACH_EXTRACT_TIMEOUT_S
+                    )
+                except (extract.Unsupported, extract.Empty, TimeoutError) as e:
+                    log.warning("AI 생성 파일 평문 추출 실패 %s: %r", name, e)
     except make.BadSpec as e:
-        return {"content": f"표 모양이 틀렸습니다: {e}", "is_error": True}
+        raise MakeError(f"표 모양이 틀렸습니다: {e}") from e
     except Exception as e:  # noqa: BLE001 — openpyxl 의 그 밖의 예외·시간 초과도 도구 오류로 접는다
         log.warning("AI 생성 파일 만들기 실패: %r", e)
-        return {
-            "content": "파일을 만들지 못했습니다 — 표를 단순하게 해 다시 시도합니다.",
-            "is_error": True,
-        }
+        raise MakeError("파일을 만들지 못했습니다 — 표를 단순하게 해 다시 시도합니다.") from e
+    if len(data) > ATTACH_MAX_BYTES:
+        raise MakeError("파일이 너무 큽니다 — 표를 줄여 주세요.")
+    return name, data, text
+
+
+async def _make(user: User, inp: dict, sources: list[Citation]) -> dict[str, object]:
+    """/ai/chat 의 create_spreadsheet — 표를 xlsx 로 써서 질문자의 AI 첨부(README 51: 올린 사람만·7일·보관 한도)로
+    저장하고 답 본문용 내려받기 링크를 돌려준다. 저장 실패는 is_error 로."""
+    try:
+        name, data, text = await _build_xlsx(inp)
+    except MakeError as e:
+        return {"content": str(e), "is_error": True}
     att = AiAttachment(
         id=uuid.uuid4(),
         user_id=user.id,
@@ -381,6 +394,10 @@ async def _make(user: User, inp: dict, sources: list[Citation]) -> dict[str, obj
     return {
         "content": f"《{_body(name)}》 파일을 만들었습니다({len(data):,}바이트). 답 본문에 이 링크를 그대로 넣습니다: {link}"
     }
+
+
+# 「만드는 함수」 — (도구 입력, sources) → tool_result. /ai/chat 은 _make(AI 첨부+링크), 채팅 /ai 는 채널 첨부(README 52)
+Maker = Callable[[dict, list[Citation]], Awaitable[dict[str, object]]]
 
 
 _CITE_RE = re.compile(r"\[\[(\d+)\]\]")
@@ -639,7 +656,8 @@ async def _turns(
     extra_tools: list[dict[str, object]] | None = None,
     web_urls: set[str] | None = None,  # 서버측 web_search 가 실제로 돌려준 URL 을 모은다(README 49)
     exclude_doc: uuid.UUID | None = None,  # 검색에서 뺄 문서(팩트체크의 검사 대상, #410)
-    make_files: bool = False,  # create_spreadsheet 를 준다(README 55) — /ai/chat 만
+    maker: Maker
+    | None = None,  # create_spreadsheet 를 준다(README 55) — /ai/chat 과 채팅 /ai 가 각자의 저장소로
 ) -> AsyncIterator[tuple[str, str]]:
     """도구 라운드(README 42) — 모델 턴을 받고, search_knowledge 호출을 질문자 권한으로 실행해 결과를 되돌리기를
     최대 MAX_TOOL_ROUNDS 번. 글 토큰은 `parts` 에 쌓고 ('token', 글)·('status', 글) 로 흘린다. `/ai/chat`(SSE)과
@@ -648,7 +666,7 @@ async def _turns(
     # 지금 sources 에 있는 문서 카드는 전부 블록(규정·참고 문서)에서 온 것 — 전문이 이미 프롬프트에 있다
     read_ids: set[uuid.UUID] = {c.doc_id for c in sources if c.type == "doc" and c.doc_id}
     read_tool = [] if web_urls is not None else [READ_TOOL]  # 웹 검색이 켜진 요청엔 전문 읽기 없음
-    make_tool = [MAKE_TOOL] if make_files else []
+    make_tool = [MAKE_TOOL] if maker is not None else []
     makes_left = MAKES_PER_ANSWER
     for round_ in range(MAX_TOOL_ROUNDS + 1):
         # 도구 정의는 늘 보낸다(앞 턴에 tool_use 블록이 있으면 API 가 요구) — 마지막 라운드는 부르지 못하게만
@@ -682,7 +700,7 @@ async def _turns(
         results = []
         for i, call in enumerate(turn_end.calls):
             is_read = call.name == READ_TOOL["name"]
-            is_make = make_files and call.name == MAKE_TOOL["name"]
+            is_make = maker is not None and call.name == MAKE_TOOL["name"]
             yield (
                 "status",
                 "파일을 만드는 중"
@@ -701,7 +719,7 @@ async def _turns(
                 if makes_left <= 0:
                     result = {"content": "파일은 한 답변에 하나만 만듭니다.", "is_error": True}
                 else:
-                    result = await _make(user, call.input, sources)
+                    result = await maker(call.input, sources)
                     if not result.get("is_error"):
                         makes_left -= 1
             elif is_read:
@@ -892,7 +910,16 @@ async def chat(
             # 클라이언트가 끊기면 GeneratorExit 이 여기서 나는데, aclosing 이 없으면 안쪽 제너레이터(SDK 스트림·도구
             # 세션)가 GC 까지 열린 채 남는다(보안 리뷰)
             async with aclosing(
-                _turns(provider, system, messages, user, sources, folder_id, parts, make_files=True)
+                _turns(
+                    provider,
+                    system,
+                    messages,
+                    user,
+                    sources,
+                    folder_id,
+                    parts,
+                    maker=partial(_make, user),
+                )
             ) as turns:
                 async for kind, text in turns:
                     yield sse(kind, {"text": text})

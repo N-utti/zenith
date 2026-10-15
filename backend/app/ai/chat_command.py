@@ -7,6 +7,7 @@
 """
 
 import asyncio
+import hashlib
 import logging
 import re
 import secrets
@@ -23,7 +24,7 @@ from app.ai import extract
 from app.ai.provider import LLMError, get_provider
 from app.config import settings
 from app.db import session_scope
-from app.models import ChannelMember, Message, User
+from app.models import ChannelMember, ChannelUpload, Message, User
 from app.security import hash_password_async
 
 log = logging.getLogger("zenith.ai")
@@ -185,6 +186,9 @@ async def reply(
     """답을 만들어 채널에 AI 메시지로 단다. 실패하면 짧은 실패 메시지(원인은 로그에만)."""
     from app.routers import ai as ai_router
 
+    made: list[dict] = []  # 이 답에서 만든 파일 — 봇 메시지의 첨부로 싣는다(README 55)
+    keys: list[str] = []  # 그 오브젝트 키 접두 — 답이 안 나가면 지운다
+    posted = False
     try:
         async with _reply_slots, session_scope() as db:
             bot = await ai_user(db)
@@ -232,6 +236,10 @@ async def reply(
             messages: list = [{"role": "user", "content": question or "첨부 파일을 요약해 줘"}]
             parts: list[str] = []
             last_round: list[str] = []
+
+            async def maker(inp: dict, _sources: list) -> dict[str, object]:
+                return await _make_channel_file(channel_id, inp, made, keys)
+
             async with asyncio.timeout(REPLY_TIMEOUT_S):
                 async for kind, text in ai_router._turns(
                     get_provider(),
@@ -242,6 +250,7 @@ async def reply(
                     None,
                     parts,
                     max_tokens=ai_router.CHECK_MAX_TOKENS,
+                    maker=maker,
                 ):
                     if kind == "status":
                         last_round.clear()
@@ -263,7 +272,9 @@ async def reply(
             )
             if still_member is None:
                 return  # 답을 기다리는 사이 채널에서 나갔다(강퇴 포함) — 조용히 끝낸다(리뷰)
-            await post_message(db, channel_id, bot, answer)
+            items = _record_files(db, channel_id, bot, asker, made)
+            await post_message(db, channel_id, bot, answer, attachments=items or None)
+            posted = True
     except Exception:  # noqa: BLE001 — 태스크라 잡지 않으면 조용히 사라진다. 원인은 로그에만
         log.exception("AI 채팅 커맨드 실패 channel=%s", channel_id)
         try:
@@ -274,15 +285,114 @@ async def reply(
                 )
         except Exception:  # noqa: BLE001
             log.exception("AI 채팅 커맨드 실패 메시지도 못 보냄 channel=%s", channel_id)
+    finally:
+        if (
+            keys and not posted
+        ):  # 시간 초과·빈 답·커밋 실패·멤버 이탈·취소 — 행은 롤백, 오브젝트는 여기서(리뷰)
+            await asyncio.shield(_discard_files(keys))
 
 
-async def post_message(db: AsyncSession, channel_id: uuid.UUID, author: User, body: str) -> None:
+async def _make_channel_file(
+    channel_id: uuid.UUID, inp: dict, made: list[dict], keys: list[str]
+) -> dict[str, object]:
+    """채팅 /ai 의 create_spreadsheet — 표를 xlsx 로 써서 **채널 첨부** 오브젝트로 저장하고 `made` 에
+    messages.attachments[] 항목(+ 내부용 `_file_id`·`_sha`)을, `keys` 에 오브젝트 키 접두를 쌓는다. DB 는 여기서
+    건드리지 않는다 — 행(channel_uploads·감사)은 reply 가 답을 달기 직전에 같은 트랜잭션으로 넣는다(공급자를 기다리는
+    동안 트랜잭션을 열어 두면 커넥션과 channels 행의 KEY SHARE 락을 120초 쥔다, 보안 리뷰). 답이 안 나가면 finally 가
+    오브젝트를 지운다."""
+    from app.routers import ai as ai_router
+    from app.routers.channels import MAX_ATTACHMENT_BYTES, attachment_key, attachment_url
+
+    try:
+        name, data, _ = await ai_router._build_xlsx(inp, want_text=False)
+    except ai_router.MakeError as e:
+        return {"content": str(e), "is_error": True}
+    if (
+        len(data) > MAX_ATTACHMENT_BYTES
+    ):  # 채널 첨부 상한(AttachmentOut.size 검증)과 같은 값으로 한 번 더
+        return {"content": "파일이 너무 큽니다 — 표를 줄여 주세요.", "is_error": True}
+    file_id = uuid.uuid4()
+    try:
+        await storage.put(attachment_key(channel_id, file_id, name), data, ai_router.XLSX_TYPE)
+        keys.append(f"channels/{channel_id}/{file_id}/")
+    except Exception as e:  # noqa: BLE001 — MinIO 오류는 이 도구만 실패로(답변은 살린다)
+        log.exception("AI 채팅 파일 저장 실패: %r", e)
+        return {
+            "content": "파일을 저장하지 못했습니다. 잠시 뒤 다시 시도해 주세요.",
+            "is_error": True,
+        }
+    made.append(
+        {
+            "url": attachment_url(channel_id, file_id, name),
+            "name": name,
+            "size": len(data),
+            "content_type": ai_router.XLSX_TYPE,
+            "_file_id": file_id,
+            "_sha": hashlib.sha256(data).hexdigest()[:16],
+        }
+    )
+    return {
+        "content": f"《{_plain_title(name)}》 파일을 만들었습니다({len(data):,}바이트). 이 답 메시지에 첨부로 실립니다 — "
+        "본문에는 링크 없이 파일명만 언급합니다."
+    }
+
+
+def _record_files(
+    db: AsyncSession, channel_id: uuid.UUID, bot: User, asker: User, made: list[dict]
+) -> list[dict]:
+    """답을 달기 직전 — 만든 파일마다 channel_uploads 행(올린 사람 = 봇)과 감사 `ai.file_create` 를 같은 트랜잭션에
+    넣고, 메시지에 실을 항목(내부 칸 뺀 것)을 돌려준다. 전달된 파일만 감사에 남는다."""
+    items = []
+    for m in made:
+        file_id, sha = m["_file_id"], m["_sha"]
+        db.add(
+            ChannelUpload(
+                file_id=file_id,
+                channel_id=channel_id,
+                uploader_id=bot.id,
+                size=m["size"],
+                content_type=m["content_type"],
+            )
+        )
+        audit.record(
+            db,
+            "ai.file_create",
+            actor_id=asker.id,
+            target_id=file_id,
+            detail={"ext": "xlsx", "size": m["size"], "sha": sha, "channel": str(channel_id)},
+        )
+        items.append({k: v for k, v in m.items() if not k.startswith("_")})
+    return items
+
+
+async def _discard_files(keys: list[str]) -> None:
+    """답이 채널에 안 나가면 만든 파일 오브젝트를 지운다(행은 트랜잭션 롤백으로 사라진다). 최선 노력."""
+    for key in keys:
+        try:
+            await storage.remove_prefix(key)
+        except Exception:  # noqa: BLE001
+            log.exception("AI 채팅 파일 정리 실패 %s", key)
+
+
+async def post_message(
+    db: AsyncSession,
+    channel_id: uuid.UUID,
+    author: User,
+    body: str,
+    attachments: list[dict] | None = None,
+) -> None:
     """채널에 메시지 한 줄을 넣고 멤버에게 `msg`·`unread` 를 민다 — realtime.chat 의 msg 경로와 같은 모양(멘션·숨긴 DM
-    복귀 제외). 봇은 멤버가 아니라 `last_read_at` 갱신이 없다."""
+    복귀 제외). 봇은 멤버가 아니라 `last_read_at` 갱신이 없다. `attachments` 는 messages.attachments[] 항목(README 15)."""
     from app.realtime import chat
 
     now = datetime.now(UTC)
-    message = Message(channel_id=channel_id, author_id=author.id, body=body, created_at=now)
+    message = Message(
+        channel_id=channel_id,
+        author_id=author.id,
+        body=body,
+        attachments=attachments,
+        created_at=now,
+    )
     db.add(message)
     await db.execute(
         update(ChannelMember)
@@ -309,7 +419,7 @@ async def post_message(db: AsyncSession, channel_id: uuid.UUID, author: User, bo
                     },  # 이름이 아니라 이 칸으로 판별
                     "body": body,
                     "doc_ref": None,
-                    "attachments": None,
+                    "attachments": attachments,
                     "created_at": now,
                     "edited_at": None,
                 },
