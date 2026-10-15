@@ -154,6 +154,15 @@
     @apply outline-accent outline-2 outline-offset-2;
   }
 
+  /* 패널 폭을 끄는 동안(ResizeHandle). 포인터가 손잡이를 벗어나도 커서를 유지하고, 글자가 잡히지
+     않게 하고, 사이드바 접기 전환이 끌기를 늦게 따라오지 않게 한다. */
+  html[data-resizing],
+  html[data-resizing] * {
+    cursor: col-resize !important;
+    user-select: none;
+    transition: none !important;
+  }
+
   /* 클릭 가능한 것은 전부 손 모양. Tailwind v4 가 button 기본 커서를 화살표로 바꿨다. */
   button:not(:disabled),
   [role='button']:not([aria-disabled='true']),
