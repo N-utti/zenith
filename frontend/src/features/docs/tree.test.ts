@@ -1,5 +1,13 @@
 import { expect, it } from 'vitest'
-import { ancestorsOf, buildTree, canDrop, folderRows, foldersTo, previewDocs } from './tree'
+import {
+  ancestorsOf,
+  buildTree,
+  canDrop,
+  folderAccessLabel,
+  folderRows,
+  foldersTo,
+  previewDocs,
+} from './tree'
 import type { DocSummary, DocTreeData, Folder } from './types'
 
 const folder = (id: string, parent_id: string | null, title: string, sort = 0): Folder => ({
@@ -140,4 +148,15 @@ it('previewDocs: 넘치면 최근 수정순으로 자르고, 열린 문서는 �
   expect(previewDocs(docs, 2, 'b').map((d) => d.id)).toEqual(['b', 'd'])
   expect(previewDocs(docs, 2, 'zz').map((d) => d.id)).toEqual(['b', 'd'])
   expect(previewDocs(docs, 4)).toBe(docs)
+})
+
+it('folderAccessLabel: 직접 건 제한만 설명하고, 전원 열람이면 없다', () => {
+  const f = folder('a', null, '인사')
+  expect(folderAccessLabel(f)).toBeNull()
+  expect(folderAccessLabel({ ...f, min_role: 'exec' })).toBe('열람: 임원')
+  expect(folderAccessLabel({ ...f, min_role: 'lead', allowed_users: ['u1', 'u2'] })).toBe(
+    '열람: 팀장 이상 + 지정한 2명',
+  )
+  // 전원 열람에 사람만 지정해도 서버는 제한 폴더로 본다(이동은 임원만).
+  expect(folderAccessLabel({ ...f, allowed_users: ['u1'] })).toBe('열람: 전원 + 지정한 1명')
 })

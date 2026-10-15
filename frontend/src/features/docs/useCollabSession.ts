@@ -3,7 +3,9 @@ import * as Y from 'yjs'
 import { IndexeddbPersistence } from 'y-indexeddb'
 import { WebsocketProvider } from 'y-websocket'
 import { api } from '@/lib/api'
+import { queryClient } from '@/lib/queryClient'
 import { wsUrl } from '@/lib/serverOrigin'
+import { docKeys } from './api'
 import { docCacheName, docCacheUsable } from './localCache'
 
 export interface CollabSession {
@@ -42,6 +44,7 @@ const RELAY_WAIT_MS = 1200
  */
 export function useCollabSession(docId: string): CollabSession | null {
   const [session, setSession] = useState<CollabSession | null>(null)
+  const [reopened, setReopened] = useState(false)
 
   useEffect(() => {
     // gc: false. 삭제된 내용을 수거하지 않는다. 수거해 버리면 과거 스냅샷을
@@ -49,21 +52,41 @@ export function useCollabSession(docId: string): CollabSession | null {
     // 커지므로, 릴레이(scripts/collab.js · backend realtime/yjs.py)도 같은 설정이어야 한다.
     const doc = new Y.Doc({ gc: false })
     const provider = new WebsocketProvider(relayUrl(), docId, doc)
+    const persistence = docCacheUsable() ? new IndexeddbPersistence(docCacheName(docId), doc) : null
+    // StrictMode의 두 번째 마운트에서 이미 정리된 세션을 넘기지 않도록 막는다.
+    let cancelled = false
     // 백엔드는 붙을 때 access 가 만료돼 있거나, 60초마다 하는 재검증에서 세션이 회수돼 있으면
     // 4401 로 닫는다(재검증은 만료를 보지 않는다, 백엔드 #343). y-websocket 은
     // 44xx 를 영구 종료로 보고 다시 붙지 않으므로, HTTP 와 같은 refresh 경로(lib/api.ts)로 세션을
     // 살린 뒤 한 번 다시 붙인다. 살아나지 않으면 진짜 로그아웃. 화면은 오프라인 편집으로 남는다.
     provider.on('closed', (event) => {
+      if (event.code === 4403) {
+        // 열람 권한이 회수됐다(백엔드 #421, 붙을 때나 60초 재검증). 다시 붙어도 같다. 볼 수 없게 된
+        // 내용을 이 브라우저에 남기지 않고(사용자 결정) 문서·트리를 다시 받는다. 문서 화면은 그 403 으로
+        // 권한 없음 화면이 된다(`DocEditorPage`). 그사이 친 글은 남지 않는다. 같은 브라우저의 다른 탭과
+        // 잇는 통로도 끊는다(y-websocket 은 서버가 닫아도 그건 열어 둔다).
+        // ponytail: 같은 문서를 연 다른 탭은 사본이 지워진 뒤 자기 4403(60초 안)까지 편집마다 닫힌 DB 에
+        // 쓰다 예외를 낸다(사본 자체는 안 남는다). 사람이 바뀔 때 사본을 지우는 `localCache` 도 같다.
+        provider.disconnect()
+        void persistence?.clearData()
+        void queryClient.invalidateQueries({ queryKey: docKeys.tree })
+        void queryClient.invalidateQueries({ queryKey: docKeys.detail(docId) }).then(() => {
+          // 다시 받은 문서가 열리면(그사이 권한이 돌아왔거나 판정이 잠깐 엇갈렸다) 이 세션은 릴레이도
+          // 사본도 끊긴 채라 친 글이 어디에도 안 남는다. 세션을 새로 연다. 되풀이하지 않게 한 번만.
+          if (cancelled || reopened) return
+          if (queryClient.getQueryState(docKeys.detail(docId))?.status === 'error') return
+          setSession(null)
+          setReopened(true)
+        })
+        return
+      }
       if (event.code !== 4401) return
       void api('/me').then(
         () => provider.connect(),
         () => undefined,
       )
     })
-    const persistence = docCacheUsable() ? new IndexeddbPersistence(docCacheName(docId), doc) : null
 
-    // StrictMode의 두 번째 마운트에서 이미 정리된 세션을 넘기지 않도록 막는다.
-    let cancelled = false
     let settled = false
     let relayTimeout: number | undefined
 
@@ -97,7 +120,7 @@ export function useCollabSession(docId: string): CollabSession | null {
       void persistence?.destroy()
       doc.destroy()
     }
-  }, [docId])
+  }, [docId, reopened])
 
   return session
 }
@@ -138,10 +161,14 @@ export function setCollabTitle(docId: string, title: string): Promise<void> {
     }
     const unreachable = new Error('문서 서버에 연결하지 못해 이름을 바꾸지 못했습니다.')
     const timeout = window.setTimeout(() => finish(unreachable), TITLE_SYNC_WAIT_MS)
-    // 서버가 거절한 연결(로그인이 풀렸다 4401, 문서가 없거나 휴지통에 있다 4404)은 다시 붙어도
+    // 서버가 거절한 연결(로그인이 풀렸다 4401, 볼 권한이 없다 4403, 문서가 없거나 휴지통에 있다 4404)은 다시 붙어도
     // 같다(y-websocket 은 44xx 를 영구 종료로 보고 `closed` 를 낸다). 5초를 기다리게 하지 않는다.
     provider.on('closed', () =>
-      finish(new Error('이 문서의 이름을 바꿀 수 없습니다. 지워졌거나 로그인이 풀렸습니다.')),
+      finish(
+        new Error(
+          '이 문서의 이름을 바꿀 수 없습니다. 지워졌거나, 볼 권한이 없거나, 로그인이 풀렸습니다.',
+        ),
+      ),
     )
     provider.on('sync', (synced: boolean) => {
       if (!synced || done || written) return
