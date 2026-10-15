@@ -2,6 +2,8 @@ import { useEffect, useRef } from 'react'
 import { Link } from 'react-router'
 import { Download, ExternalLink, ShieldCheck } from 'lucide-react'
 import { useToast } from '@/components/ui/ToastContext'
+import { ResizeHandle } from '@/components/ui/ResizeHandle'
+import { usePanelWidth } from '@/lib/usePanelWidth'
 import { ApiError } from '@/lib/api'
 import { cn } from '@/lib/cn'
 import { downloadFromApi } from '@/lib/download'
@@ -166,39 +168,47 @@ export function SourcesPanel({
   const sources = shown?.citations ?? []
   const activeFocus = shown && focus?.messageId === shown.id ? focus : null
 
-  return (
-    <aside className="border-line bg-canvas hidden w-72 shrink-0 flex-col border-l lg:flex">
-      <header className="border-line flex h-11 shrink-0 items-center border-b px-4">
-        <h2 className="text-fg text-[13.5px] font-semibold">
-          근거 <span className="text-subtle font-normal">{sources.length}</span>
-        </h2>
-      </header>
+  const panel = usePanelWidth('zenith.aiSourcesWidth', 288, 240, 520, 0.25)
 
-      <div className="flex-1 overflow-y-auto p-4">
-        {sources.length === 0 ? (
-          <p className="text-subtle text-center text-xs leading-relaxed">
-            질문하면 답변의 근거가 된 문서와 게시글이
-            <br />
-            여기에 표시됩니다.
-          </p>
-        ) : (
-          <>
-            <ul className="space-y-3.5">
-              {sources.map((source) => (
-                <li key={source.n}>
-                  <SourceCard
-                    source={source}
-                    activeTick={activeFocus?.n === source.n ? activeFocus.tick : undefined}
-                  />
-                </li>
-              ))}
-            </ul>
-            <div className="mt-4 px-2">
-              <ExcludedNote />
-            </div>
-          </>
-        )}
-      </div>
-    </aside>
+  return (
+    <>
+      <ResizeHandle panel={panel} side="left" label="근거 패널 폭" className="hidden lg:block" />
+      <aside
+        style={{ width: panel.width, maxWidth: panel.maxWidth }}
+        className="border-line bg-canvas hidden shrink-0 flex-col border-l lg:flex"
+      >
+        <header className="border-line flex h-11 shrink-0 items-center border-b px-4">
+          <h2 className="text-fg text-[13.5px] font-semibold">
+            근거 <span className="text-subtle font-normal">{sources.length}</span>
+          </h2>
+        </header>
+
+        <div className="flex-1 overflow-y-auto p-4">
+          {sources.length === 0 ? (
+            <p className="text-subtle text-center text-xs leading-relaxed">
+              질문하면 답변의 근거가 된 문서와 게시글이
+              <br />
+              여기에 표시됩니다.
+            </p>
+          ) : (
+            <>
+              <ul className="space-y-3.5">
+                {sources.map((source) => (
+                  <li key={source.n}>
+                    <SourceCard
+                      source={source}
+                      activeTick={activeFocus?.n === source.n ? activeFocus.tick : undefined}
+                    />
+                  </li>
+                ))}
+              </ul>
+              <div className="mt-4 px-2">
+                <ExcludedNote />
+              </div>
+            </>
+          )}
+        </div>
+      </aside>
+    </>
   )
 }

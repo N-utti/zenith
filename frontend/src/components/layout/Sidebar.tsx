@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from 'react'
+import { memo, useRef, useState, type ReactNode } from 'react'
 import { NavLink, useLocation, useMatch } from 'react-router'
 import { AtSign, ChevronDown, ChevronRight, Lock, Pencil, Plus, X } from 'lucide-react'
 import { cn } from '@/lib/cn'
@@ -16,6 +16,8 @@ import { useUnreadNotificationCount } from '@/features/notifications/api'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { MaskedRow } from '@/components/ui/MaskedRow'
+import { ResizeHandle } from '@/components/ui/ResizeHandle'
+import { usePanelWidth } from '@/lib/usePanelWidth'
 import { DocTree } from './DocTree'
 
 const ROW = 'flex items-center gap-2 rounded-md px-2.5 py-2 text-[15px] transition-colors'
@@ -263,7 +265,12 @@ function BoardSection({ onNavigate }: { onNavigate?: () => void }) {
   )
 }
 
-export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
+// 폭을 끄는 동안 Sidebar 가 이동마다 다시 그려진다. 넘기는 값이 같으면 내용(트리·채널)은 건너뛴다.
+export const SidebarContent = memo(function SidebarContent({
+  onNavigate,
+}: {
+  onNavigate?: () => void
+}) {
   const { role } = useCurrentUser()
   const unreadNotifications = useUnreadNotificationCount()
   const [docsCollapsed, toggleDocs] = useSectionCollapsed('docs')
@@ -296,7 +303,7 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
       </div>
     </div>
   )
-}
+})
 
 export function Sidebar({
   open,
@@ -312,24 +319,30 @@ export function Sidebar({
   // 대화상자 규약(12 UI 청사진 §8): 열리면 포커스를 가두고, Esc 로 닫고, 닫히면 연 버튼(헤더의
   // 메뉴 버튼)으로 포커스를 되돌린다. 로직은 공용 Modal 에서 뽑아낸 훅을 그대로 쓴다.
   useFocusTrap(open, drawerRef, onClose)
+  const panel = usePanelWidth('zenith.sidebarWidth', 300, 220, 480, 0.25)
 
   return (
     <>
-      {/* 데스크톱: 고정. 폭 300px. 12·UI 청사진 1b 셸 치수(270px)에서 글자를 키우며 같이 넓혔다. 접으면 폭을 0 으로 밀어 넣는다(아이콘 레일 없음).
+      {/* 데스크톱: 고정. 기본 폭 300px. 12·UI 청사진 1b 셸 치수(270px)에서 글자를 키우며 같이 넓혔다. 오른쪽 경계를 끌어 폭을 바꾼다.
+          접으면 폭을 0 으로 밀어 넣는다(아이콘 레일 없음).
           안쪽은 폭을 고정해 줄어드는 동안 내용이 찌그러지지 않고, 마운트를 유지해 문서 트리의 펼침이 남는다.
           접힌 동안은 inert 로 탭 이동에서도 뺀다. */}
       <aside
         inert={collapsed}
+        style={{ width: collapsed ? 0 : panel.width, maxWidth: panel.maxWidth }}
         className={cn(
           'border-line bg-sunken hidden shrink-0 overflow-hidden md:block',
           'motion-safe:transition-[width,border-color] motion-safe:duration-200 motion-safe:ease-out',
-          collapsed ? 'w-0 border-r border-transparent' : 'w-[300px] border-r',
+          collapsed ? 'border-r border-transparent' : 'border-r',
         )}
       >
-        <div className="h-full w-[300px]">
+        <div className="h-full" style={{ width: panel.width, maxWidth: panel.maxWidth }}>
           <SidebarContent />
         </div>
       </aside>
+      {!collapsed && (
+        <ResizeHandle panel={panel} side="right" label="사이드바 폭" className="hidden md:block" />
+      )}
 
       {/* 모바일: 왼쪽 서랍 */}
       {open && (
