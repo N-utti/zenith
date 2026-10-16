@@ -1,13 +1,9 @@
 import { NodeViewWrapper, type NodeViewProps } from '@tiptap/react'
 import { Paperclip } from 'lucide-react'
-import type { MouseEvent } from 'react'
-import { useToast } from '@/components/ui/ToastContext'
-import { ApiError } from '@/lib/api'
+import { DownloadLink } from '@/components/ui/AuthMedia'
 import { cn } from '@/lib/cn'
-import { downloadFromApi } from '@/lib/download'
 import { cleanName, formatBytes, splitExt } from '@/lib/format'
 import { uploadedFilePath } from '@/lib/links'
-import { httpUrl } from '@/lib/serverOrigin'
 
 /** 파일 하나. 채팅·결재의 첨부 칩과 같은 모양이고, 누르면 내려받는다. */
 export function FileChipView({ node, selected }: NodeViewProps) {
@@ -16,18 +12,6 @@ export function FileChipView({ node, selected }: NodeViewProps) {
   const name = typeof node.attrs.name === 'string' ? cleanName(node.attrs.name) : ''
   const size = Number(node.attrs.size) || 0
   const path = uploadedFilePath(node.attrs.src)
-  const toast = useToast()
-
-  // 링크를 그대로 따라가게 두지 않고 앱이 내용을 받아 저장시킨다(이유는 `downloadFromApi`).
-  const download = async (event: MouseEvent) => {
-    event.preventDefault()
-    if (!path) return
-    try {
-      await downloadFromApi(path, name || '파일')
-    } catch (cause) {
-      toast.error(cause instanceof ApiError ? cause.message : '파일을 내려받지 못했습니다.')
-    }
-  }
 
   const [stem, ext] = splitExt(name)
   const label = (
@@ -53,17 +37,16 @@ export function FileChipView({ node, selected }: NodeViewProps) {
       )}
     >
       {path ? (
-        <a
+        <DownloadLink
           // 저장된 값은 상대경로다. 서버 주소는 그릴 때만 붙인다(사진 블록과 같은 이유).
-          href={httpUrl(path)}
-          download={name}
-          onClick={download}
+          path={path}
+          name={name}
           // 링크를 끌면 브라우저가 주소 글자를 본문에 떨어뜨린다.
           draggable={false}
           className="text-muted hover:text-fg flex min-w-0 items-center gap-1.5 no-underline transition-colors"
         >
           {label}
-        </a>
+        </DownloadLink>
       ) : (
         <span className="flex min-w-0 items-center gap-1.5">{label}</span>
       )}

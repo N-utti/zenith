@@ -1,6 +1,6 @@
 import { Paperclip, X } from 'lucide-react'
+import { DownloadLink } from '@/components/ui/AuthMedia'
 import { formatBytes } from '@/lib/format'
-import { httpUrl } from '@/lib/serverOrigin'
 
 interface Item {
   name: string
@@ -39,13 +39,13 @@ export function AttachmentList({
             className="border-line bg-sunken text-muted flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs"
           >
             {file.url ? (
-              <a
-                href={httpUrl(file.url)}
-                download={file.name}
+              <DownloadLink
+                path={file.url}
+                name={file.name}
                 className="hover:text-fg flex items-center gap-1.5 transition-colors"
               >
                 {label}
-              </a>
+              </DownloadLink>
             ) : (
               label
             )}

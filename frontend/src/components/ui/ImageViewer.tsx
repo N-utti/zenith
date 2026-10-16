@@ -1,6 +1,7 @@
 import { useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { Download, X } from 'lucide-react'
+import { AuthImg, DownloadLink } from '@/components/ui/AuthMedia'
 import { useFocusTrap } from '@/lib/useFocusTrap'
 
 const BAR_BUTTON =
@@ -14,11 +15,12 @@ const BAR_BUTTON =
  * 원본 크기는 내려받아 본다. 한 메시지에 사진을 여러 장 올리는 일이 잦아지면 넘기기부터 붙인다.
  */
 export function ImageViewer({
-  src,
+  path,
   name,
   onClose,
 }: {
-  src: string
+  /** 서버 파일 주소(`/api/...`). */
+  path: string
   name: string
   onClose: () => void
 }) {
@@ -53,21 +55,21 @@ export function ImageViewer({
           <X className="size-4" />
         </button>
         <p className="text-fg min-w-0 flex-1 truncate text-sm">{name}</p>
-        <a
-          href={src}
-          download={name}
+        <DownloadLink
+          path={path}
+          name={name}
           aria-label={`${name} 내려받기`}
           title="내려받기"
           className={BAR_BUTTON}
         >
           <Download className="size-4" />
-        </a>
+        </DownloadLink>
       </header>
 
       {/* 그림 둘레의 빈 자리는 누름을 받지 않고 뒤의 닫기 자리로 흘려보낸다. */}
       <div className="pointer-events-none relative flex min-h-0 flex-1 items-center justify-center p-4">
-        <img
-          src={src}
+        <AuthImg
+          path={path}
           alt={name}
           // 첨부는 캐시되지 않아 여기서 다시 받는다. 그 사이 지워졌거나 못 받으면 깨진 그림 대신 닫는다.
           onError={onClose}
