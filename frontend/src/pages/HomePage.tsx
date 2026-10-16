@@ -78,9 +78,6 @@ export function HomePage() {
           <div className="order-1 lg:order-none">
             <ContinueWorkCard onCreate={() => setCreatingDoc(true)} />
           </div>
-          <div className="order-2 lg:order-none">
-            <MentionsCard />
-          </div>
         </div>
         <div className="contents lg:flex lg:flex-col lg:gap-6">
           <div className="order-3 lg:order-none">
@@ -91,6 +88,9 @@ export function HomePage() {
           </div>
           <div className="order-first lg:order-none">
             <TodayTasksCard />
+          </div>
+          <div className="order-2 lg:order-none">
+            <MentionsCard />
           </div>
         </div>
       </div>
