@@ -22,8 +22,9 @@ export type CalendarItem = (
   | { kind: 'absence'; group: CalendarGroup; id: string; label: string }
 ) & {
   /**
-   * 폰 칸처럼 좁은 자리의 짧은 이름. 일정은 시각 뺀 제목, 내 부재는 종류(「출장」), 동료 부재는 이름
-   * (「김다인」). 색이 개인·동료를 가르고 나머지는 날짜 창의 `label` 이 말한다.
+   * 폰 칸처럼 좁은 자리의 짧은 이름. 일정은 시각 뺀 제목, 내 부재는 종류(「출장」, 내 이름은 군더더기),
+   * 동료 부재는 이름과 종류(「김다인 연차」, 누가 왜 없는지가 요점이라 사용자 요청으로 종류까지).
+   * 시각과 긴 종류(「오전 반차」)가 잘린 나머지는 날짜 창의 `label` 이 말한다.
    */
   short: string
 }
@@ -81,7 +82,7 @@ export function itemsByDay(
   for (const absence of absences) {
     const label = `${absence.user.name} ${absence.what}`
     const group = absence.user.id === meId ? 'personal' : 'colleague'
-    const short = group === 'personal' ? absence.what : absence.user.name
+    const short = group === 'personal' ? absence.what : label
     const start = absence.start_date < range.from ? range.from : absence.start_date
     const end = absence.end_date > range.to ? range.to : absence.end_date
     for (let iso = start; iso <= end; iso = nextDay(iso)) {
