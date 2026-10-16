@@ -8,14 +8,6 @@ import type { Notification } from '@/features/notifications/types'
 export type RecentDoc = Schema<'RecentDoc'>
 
 /**
- * 안 읽은 대화. 백엔드 `UnreadChannel`. 0인 채널은 서버가 빼고 준다.
- *
- * `name` 은 DM 이면 상대 이름. `peer_id` 는 DM 이면 상대, 채널이면 `null`(키는 항상 있다).
- * 아바타 색을 이름이 아니라 사람으로 정한다.
- */
-export type UnreadChannel = Schema<'UnreadChannel'>
-
-/**
  * 홈 공지 카드의 글. 백엔드 `HomePost`.
  *
  * 게시판 목록의 `BoardPost` 와 다르다. 게시판 이름·등급이 실려 오고(따로 조회할 필요가 없다)
@@ -27,11 +19,13 @@ export type HomePost = Omit<Schema<'HomePost'>, 'min_role'> & { min_role: Role }
 /**
  * 홈 한 벌. 백엔드 `HomeOut`.
  *
- * 카드 다섯 개가 요청 하나를 나눠 쓴다. 전에는 각각 다른 경로로 받았는데 그 넷은 04 에
+ * 카드 넷이 요청 하나를 나눠 쓴다. 전에는 각각 다른 경로로 받았는데 그 넷은 04 에
  * 없는 프론트 전용 경로였다.
  *
  * `mentions` 는 멘션·댓글·답글 알림이고 알림함과 같은 모양이다(`features/notifications`).
  * `posts` 는 최근 공지. 권한 밖이면 서버가 제목을 가리고 `masked` 를 세운다.
+ * `unread`(채널별 안 읽은 수)는 서버가 주지만 화면은 쓰지 않는다. 안 읽은 메시지 카드를 뺐고,
+ * 그 숫자는 사이드바·탭바가 채널 목록에서 읽는다.
  */
 export type HomeData = Omit<Schema<'HomeOut'>, 'mentions' | 'posts'> & {
   mentions: Notification[]

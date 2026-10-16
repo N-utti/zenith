@@ -4,7 +4,7 @@ import { homeKeys } from './keys'
 import type { CalendarEvent, CalendarEventInput, HomeData, TodayTask } from './types'
 
 /**
- * 홈 한 벌. 카드 다섯 개가 이 요청 하나를 나눠 쓴다.
+ * 홈 한 벌. 카드 넷이 이 요청 하나를 나눠 쓴다.
  *
  * 전에는 카드마다 다른 경로로 받았는데(`/announcements`·`/mentions`·`/docs/recent`·
  * `/tasks/today`) 넷 다 04 에 없는 프론트 전용 경로였다. 서버는 처음부터 한 벌로 준다.
@@ -19,7 +19,7 @@ const todosKey = homeKeys.home
  * 홈 한 벌 안의 할 일만 바꾼다.
  *
  * 캐시에 들어 있는 것은 `{items}` 가 아니라 홈 한 벌이다. 할 일만 든 객체로 덮어쓰면
- * 나머지 카드(문서·멘션·안 읽은 대화·공지)가 통째로 사라진다.
+ * 나머지 카드(문서·멘션·공지)가 통째로 사라진다.
  */
 function patchTodos(qc: QueryClient, change: (todos: TodayTask[]) => TodayTask[]) {
   qc.setQueryData<HomeData>(homeKeys.home, (old) =>
@@ -43,7 +43,6 @@ const fetchHome = () => api<HomeData>('/me/home')
 const pickPosts = (data: HomeData) => data.posts
 const pickRecentDocs = (data: HomeData) => data.recent_docs
 const pickMentions = (data: HomeData) => data.mentions
-const pickUnread = (data: HomeData) => data.unread
 const pickTodos = (data: HomeData) => data.todos
 
 export function useAnnouncements() {
@@ -56,10 +55,6 @@ export function useRecentDocs() {
 
 export function useMentions() {
   return useHomeSlice(pickMentions)
-}
-
-export function useUnreadChannels() {
-  return useHomeSlice(pickUnread)
 }
 
 /**

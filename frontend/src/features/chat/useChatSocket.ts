@@ -253,8 +253,8 @@ export function useChatSocket(): ChatSocket {
           } else {
             void qc.invalidateQueries({ queryKey: chatKeys.channels })
           }
-          // 홈은 여기서 안 받는다. `msg` 뒤에는 늘 `unread` 가 따라오고(서버가 멤버마다 자기
-          // 숫자를 보낸다) 그쪽이 홈을 다시 받는다. 둘 다 하면 메시지 한 통에 홈을 두 번 받는다.
+          // 홈은 여기서 안 받는다. 홈이 채팅에서 쓰는 것은 멘션뿐이고, 멘션이면 같은 메시지의
+          // `notice` 가 따라와 그쪽이 받는다. 여기서도 받으면 메시지 한 통마다 홈을 다시 받는다.
           notifyIncoming(qc, message, user.id)
           // 봇 답이 오면 기다리는 표시를 끈다. 같은 채널에 둘이 물었으면 먼저 온 답에 꺼진다.
           if (message.author.is_bot) hideTyping(message.channel_id, AI_NAME)
@@ -265,13 +265,11 @@ export function useChatSocket(): ChatSocket {
          * 메시지를 고치거나 지우면 서버가 그 메시지의 멘션 알림도 고치거나 지운다(#284). 알림함과
          * 홈의 멘션 카드가 옛 미리보기를 들고 있으면, 가리려고 고친 글이 다음에 받을 때까지 보인다.
          * 알림 캐시의 메시지 id 로 좁힐 수도 있지만 이 규모에서는 그냥 다시 받는다.
-         *
-         * 지울 때는 홈을 여기서 안 받는다. `msg_del` 뒤에는 `unread` 가 따라오고 그쪽이 받는다.
          */
-        const staleMentions = (home: boolean) => {
+        const staleMentions = () => {
           void qc.invalidateQueries({ queryKey: notificationKeys.list })
           hideAiEverywhere()
-          if (home) void qc.invalidateQueries({ queryKey: homeKeys.home })
+          void qc.invalidateQueries({ queryKey: homeKeys.home })
         }
 
         if (event.ev === 'msg_edit') {
@@ -282,7 +280,7 @@ export function useChatSocket(): ChatSocket {
           qc.setQueryData<{ items: ChatChannel[] }>(chatKeys.channels, (old) =>
             withEditedLast(old, message),
           )
-          staleMentions(true)
+          staleMentions()
           return
         }
 
@@ -298,7 +296,7 @@ export function useChatSocket(): ChatSocket {
             .getQueryData<{ items: ChatChannel[] }>(chatKeys.channels)
             ?.items.some((item) => item.last_message?.id === message_id)
           if (wasLast) void qc.invalidateQueries({ queryKey: chatKeys.channels })
-          staleMentions(false)
+          staleMentions()
           return
         }
 
@@ -307,8 +305,7 @@ export function useChatSocket(): ChatSocket {
           qc.setQueryData<{ items: ChatChannel[] }>(chatKeys.channels, (old) =>
             withUnread(old, channel_id, count),
           )
-          // 홈은 안 읽은 대화를 카드 목록으로 그려서 숫자만 꽂을 자리가 없다. 다시 받는다.
-          void qc.invalidateQueries({ queryKey: homeKeys.home })
+          // 홈은 다시 받지 않는다. 안 읽은 대화 카드를 뺀 뒤로 홈에는 이 숫자를 쓰는 곳이 없다.
           return
         }
 
@@ -344,8 +341,8 @@ export function useChatSocket(): ChatSocket {
           // 판정해 제목을 가리는데(`_mask_post_notices`), 소켓으로 온 payload 는 그 판정 전이다.
           void qc.invalidateQueries({ queryKey: notificationKeys.list })
           hideAiEverywhere()
-          // 채팅 멘션이면 홈은 같은 메시지의 `unread` 가 이미 다시 받는다.
-          if (!event.payload?.channel_id) void qc.invalidateQueries({ queryKey: homeKeys.home })
+          // 홈 멘션 카드도 낡았다. 채팅 멘션이어도 `unread` 는 이제 홈을 안 받으므로 여기서 받는다.
+          void qc.invalidateQueries({ queryKey: homeKeys.home })
           // 결재 알림이면 열려 있는 결재함과 문서도 낡았다(내 차례가 왔거나 결과가 났다).
           // 근태 신청(휴가·예외 근무·연장·정정)도 결재 문서라, 그 결과면 근태 화면도 같이 낡는다.
           if (event.kind.startsWith('apv_')) {
