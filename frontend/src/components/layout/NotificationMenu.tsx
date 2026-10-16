@@ -63,9 +63,11 @@ export function NotificationMenu() {
         <Bell className="size-4.5" />
         {unreadIds.length > 0 && (
           <span
-            className="bg-accent absolute top-1 right-1 block size-2 rounded-full"
+            className="bg-accent text-on-accent absolute -top-0.5 -right-1 grid h-4 min-w-4 place-items-center rounded-full px-1 text-[10px] leading-none font-bold"
             aria-hidden
-          />
+          >
+            {unreadIds.length > 9 ? '9+' : unreadIds.length}
+          </span>
         )}
       </Button>
 
