@@ -26,18 +26,44 @@ export const MAX_CHIPS = 3
 /** 조회 기간과 격자가 같은 주 시작을 봐야 한다. 취업규칙이 일요일 시작이면 여기만 0 으로. */
 export const WEEK_STARTS_ON = 1
 
+const SHOW_KEY = 'zenith.calendarShow'
+
+/**
+ * 범례 토글 상태. 처음엔 개인만 켠다(사용자 결정). 사이드바 구획 접기처럼 브라우저에 남긴다. 홈 카드는
+ * 홈에 들어올 때마다 다시 그려져서, 컴포넌트 상태만으로는 켜 둔 동료가 매번 꺼진다.
+ */
+function readShow(): Record<CalendarGroup, boolean> {
+  const show = { personal: true, colleague: false }
+  try {
+    const raw: unknown = JSON.parse(localStorage.getItem(SHOW_KEY) ?? 'null')
+    if (raw && typeof raw === 'object') {
+      for (const group of ['personal', 'colleague'] as const) {
+        const v = (raw as Record<string, unknown>)[group]
+        if (typeof v === 'boolean') show[group] = v
+      }
+    }
+  } catch {
+    // 깨진 값이면 기본값.
+  }
+  return show
+}
+
 /**
  * 한 달 격자에 그릴 항목과 범례 토글. 홈 카드와 폰 캘린더 화면(`/calendar`)이 같이 쓴다.
  * 전 직원의 승인된 휴가·재택·외근·출장 + 내 개인 일정. 범례는 개인·동료 두 묶음.
  */
 export function useCalendarItems(month: string) {
   const me = useCurrentUser()
-  // 범례를 눌러 묶음별로 켜고 끈다. 처음엔 개인만 켠다(사용자 결정). 동료 부재는 필요할 때 켜 본다.
-  const [show, setShow] = useState<Record<CalendarGroup, boolean>>({
-    colleague: false,
-    personal: true,
-  })
-  const toggle = (group: CalendarGroup) => setShow((s) => ({ ...s, [group]: !s[group] }))
+  const [show, setShow] = useState(readShow)
+  const toggle = (group: CalendarGroup) => {
+    const next = { ...show, [group]: !show[group] }
+    setShow(next)
+    try {
+      localStorage.setItem(SHOW_KEY, JSON.stringify(next))
+    } catch {
+      // 저장 못 해도 이번 화면의 토글은 유지된다.
+    }
+  }
 
   // 보이는 칸(이웃 달 포함) 전체를 한 번에 묻는다. 달력에 빈 칸이 없어야 한다.
   const weeks = monthMatrix(month, WEEK_STARTS_ON)
