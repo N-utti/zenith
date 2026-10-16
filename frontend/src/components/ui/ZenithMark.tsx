@@ -8,7 +8,7 @@ import { cn } from '@/lib/cn'
  * 색을 CSS로 바꾸지 않는 이유는 브랜드 자산이라 토큰 팔레트가 바뀌어도
  * 따라 움직이면 안 되기 때문이다.
  *
- * 항상 로고 옆에 이름 텍스트가 함께 오므로 `alt`는 비운다(중복 낭독 방지).
+ * `alt`는 비운다. 쓰는 쪽이 이름을 준다(로그인은 옆 텍스트, 헤더는 링크의 aria-label).
  */
 export function ZenithMark({ className }: { className?: string }) {
   return (

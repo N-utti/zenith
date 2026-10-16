@@ -38,8 +38,7 @@ export function Header({
     // flex 로 두면 검색창은 좌우 묶음 "사이" 의 가운데라, 오른쪽 버튼 수가 달라지는 화면
     // (본문 너비 버튼이 없는 채팅·AI·문서 편집)을 오갈 때마다 옆으로 밀린다.
     // 좁은 화면에서는 양옆이 제 내용 폭을 지키고(최소 max-content) 검색창이 줄어든다(최소 0).
-    // 양옆 최소를 그냥 1fr 로 두면 한글은 글자마다 끊을 수 있어 "제니스" 가 한 글자 폭까지
-    // 줄 수 있다고 계산되고, 검색창이 로고를 덮는다.
+    // 양옆 최소를 그냥 1fr 로 두면 0 까지 줄 수 있다고 계산되어 검색창이 로고와 버튼을 덮는다.
     <header className="border-line bg-surface z-30 grid h-[50px] shrink-0 grid-cols-[minmax(max-content,1fr)_minmax(0,460px)_minmax(max-content,1fr)] items-center gap-3 border-b px-3 sm:px-4">
       <div className="flex items-center gap-3">
         <Button
@@ -68,9 +67,14 @@ export function Header({
           )}
         </Button>
 
-        <Link to="/" className="flex shrink-0 items-center gap-1.5">
+        {/* 로고 그림은 alt 가 비어 있으므로 링크 이름을 여기서 준다. */}
+        <Link
+          to="/"
+          aria-label="제니스 홈"
+          title="제니스 홈"
+          className="flex shrink-0 items-center"
+        >
           <ZenithMark className="size-[22px]" />
-          <span className="text-fg text-[14.5px] font-bold tracking-tight">제니스</span>
         </Link>
       </div>
 
