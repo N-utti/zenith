@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import { Bell } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
@@ -19,6 +19,7 @@ export function NotificationMenu() {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   const bellRef = useRef<HTMLButtonElement>(null)
+  const titleId = useId()
   const { data, isPending, isError, isFetching } = useNotifications()
   const markRead = useMarkNotificationsRead()
   const toast = useToast()
@@ -62,23 +63,31 @@ export function NotificationMenu() {
       >
         <Bell className="size-4.5" />
         {unreadIds.length > 0 && (
+          // 종에는 있다는 것만 알린다. 개수는 드롭다운 제목에 둔다(숫자 배지는 종을 덮었다).
           <span
-            className="bg-accent text-on-accent absolute -top-0.5 -right-1 grid h-4 min-w-4 place-items-center rounded-full px-1 text-[10px] leading-none font-bold"
+            className="bg-accent absolute top-1 right-1 block size-2 rounded-full"
             aria-hidden
-          >
-            {unreadIds.length > 9 ? '9+' : unreadIds.length}
-          </span>
+          />
         )}
       </Button>
 
       {open && (
         <div
           role="dialog"
-          aria-label="알림"
+          aria-labelledby={titleId}
           className="border-line bg-surface absolute right-0 z-40 mt-2 flex max-h-[min(560px,calc(100dvh-80px))] w-[380px] flex-col rounded-xl border shadow-lg"
         >
           <div className="border-line flex items-center justify-between border-b px-4 py-2.5">
-            <p className="text-fg text-sm font-semibold">알림</p>
+            <h2 id={titleId} className="text-fg text-sm font-semibold">
+              알림
+              {unreadIds.length > 0 && (
+                <span className="text-accent ml-1.5">
+                  <span className="sr-only">, </span>
+                  {unreadIds.length}
+                  <span className="sr-only">개 안 읽음</span>
+                </span>
+              )}
+            </h2>
             {unreadIds.length > 0 && (
               <button
                 type="button"
