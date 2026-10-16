@@ -125,9 +125,11 @@ export function MonthHeader({
 }) {
   // 폰: 두 화살표가 붙어 있으면 엄지로 반대쪽을 잘못 누른다. 양 끝에 44px 로 떼어 놓고,
   // 그 줄에 범례까지 넣으면 375px 에서 모자라 범례는 아래 줄로 내린다.
+  // -mt-3: 44px 상자 안에서 20px 아이콘이 가운데라 위에 12px 가 더 비어 보인다. 그만큼 당겨
+  // 보이는 위 여백을 다른 화면의 본문 시작(페이지 여백 24px)과 맞춘다. 누르는 크기는 그대로.
   if (spread && onMonthChange) {
     return (
-      <div className="mb-3">
+      <div className="-mt-3 mb-3">
         <div className="flex items-center justify-between">
           <MonthButton
             label="이전 달"
