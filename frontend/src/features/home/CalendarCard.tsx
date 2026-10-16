@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Plus, Trash2 } from 'lucide-react'
+import { Check, Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Calendar, CalendarDayNumber } from '@/components/ui/Calendar'
 import { Card, CardEmpty } from '@/components/ui/Card'
@@ -79,13 +79,15 @@ export function CalendarCard() {
   )
 }
 
-/** 범례 견본. 켜진 것은 단색, 끈 것은 칩과 같은 연한 색. */
 const LEGEND: Array<[CalendarGroup, string]> = [
   ['personal', '개인'],
   ['colleague', '동료'],
 ]
 
-/** 범례이자 토글. 끈 묶음은 흐리게. 칸 안 순서(개인이 먼저)와 맞춘다. */
+/**
+ * 범례이자 토글. 견본을 체크박스 모양으로 그려 누를 수 있다는 걸 드러낸다. 켜진 것은 묶음 색에
+ * 체크, 끈 것은 빈 칸(`Checkbox` 와 같은 테두리). 칸 안 순서(개인이 먼저)와 맞춘다.
+ */
 export function Legend({
   show,
   onToggle,
@@ -101,12 +103,16 @@ export function Legend({
           type="button"
           aria-pressed={show[group]}
           onClick={() => onToggle(group)}
-          className={cn(
-            'text-subtle hover:bg-surface-hover hover:text-fg flex items-center gap-1 rounded-md px-1.5 py-1 text-xs whitespace-nowrap transition-colors',
-            !show[group] && 'opacity-50',
-          )}
+          className="text-subtle hover:bg-surface-hover hover:text-fg flex items-center gap-1.5 rounded-md px-1.5 py-1 text-xs whitespace-nowrap transition-colors"
         >
-          <span className={cn('size-2.5 rounded-sm', show[group] ? DOT[group] : TONE[group])} />
+          <span
+            className={cn(
+              'grid size-3.5 place-items-center rounded-[3px] border',
+              show[group] ? cn(DOT[group], 'border-transparent') : 'border-line-strong bg-canvas',
+            )}
+          >
+            {show[group] && <Check className="text-on-accent size-3" strokeWidth={3} />}
+          </span>
           {label}
         </button>
       ))}
