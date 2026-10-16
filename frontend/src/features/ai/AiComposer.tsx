@@ -28,7 +28,7 @@ export function AiComposer({
 }: {
   models: AiModel[]
   disabled: boolean
-  /** 최근 질문을 눌러 들어온 값. 부모가 `key`로 리마운트시켜 채운다. */
+  /** ⌘K 팔레트에서 넘어온 검색어. 부모가 `key`로 리마운트시켜 채운다. */
   initialText?: string
   /** 서버가 첨부를 거절할 때마다 오른다(7일 지나 지워짐). 오르면 칩을 비운다. 안 그러면 다음 질문도 같은 422 다. */
   dropAttachments?: number

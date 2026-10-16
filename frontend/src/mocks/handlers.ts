@@ -1,5 +1,5 @@
 import { bypass, delay, http, HttpResponse, passthrough } from 'msw'
-import { PASSWORD_MIN, type User } from '@/types'
+import { PASSWORD_MIN, type Schema, type User } from '@/types'
 import { BODY_MAX, POST_COMMENT_MAX, TITLE_MAX } from '@/features/board/types'
 import type { PostAttachment } from '@/features/board/types'
 import { ARCHIVE_LIMIT, type ArchiveFile } from '@/features/archive/types'
@@ -202,6 +202,64 @@ const MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 /** AI 질문 첨부(백엔드 #396). 서버가 읽는 형식과 올린 파일. 메모리에만 둔다. */
 const AI_ATTACH_EXTS = ['txt', 'md', 'csv', 'docx', 'xlsx', 'pdf', 'hwpx']
 const AI_ATTACHMENTS = new Map<string, { owner: string; name: string; blob: File; text: string }>()
+
+/**
+ * AI 대화와 만드는 중인 답변(백엔드 #430). 서버처럼 답은 연결과 따로 끝까지 만들고, 끝나면 질문과 함께 대화에 남긴다.
+ * 대화는 질문을 받을 때 만든다(서버도 세션 행을 먼저 남긴다).
+ * ponytail: 메모리에만 둔다. 새로고침하면 사라져 되읽기는 404 다(서버 재시작과 같다). 새로고침 뒤 복원은 실서버에서 본다.
+ */
+const AI_SESSIONS = new Map<
+  string,
+  { owner: string; createdAt: string; messages: Schema<'SessionMessageOut'>[] }
+>()
+interface AiJob {
+  owner: string
+  message: string
+  startedAt: string
+  events: [string, unknown][]
+  done: boolean
+  wake: Set<() => void>
+}
+const AI_JOBS = new Map<string, AiJob>()
+
+function wakeJob(job: AiJob) {
+  for (const wake of job.wake) wake()
+  job.wake.clear()
+}
+
+function pushJob(job: AiJob, event: string, data: unknown) {
+  job.events.push([event, data])
+  wakeJob(job)
+}
+
+/** 답변 하나를 따라가는 SSE. 지금까지의 이벤트부터 끝까지 준다. 받는 쪽이 끊어도 답은 계속 만들어진다. */
+function followJob(job: AiJob) {
+  const encoder = new TextEncoder()
+  let closed = false
+  const stream = new ReadableStream({
+    async start(controller) {
+      let i = 0
+      for (;;) {
+        while (i < job.events.length && !closed) {
+          const [event, data] = job.events[i++]!
+          controller.enqueue(
+            encoder.encode(`event: ${event}
+data: ${JSON.stringify(data)}
+
+`),
+          )
+        }
+        if (job.done || closed) break
+        await new Promise<void>((resolve) => job.wake.add(resolve))
+      }
+      if (!closed) controller.close()
+    },
+    cancel() {
+      closed = true
+    },
+  })
+  return new HttpResponse(stream, { headers: { 'Content-Type': 'text/event-stream' } })
+}
 
 const unauthorized = () =>
   HttpResponse.json({ detail: '로그인이 필요합니다.', code: 'AUTH_REQUIRED' }, { status: 401 })
@@ -1829,51 +1887,132 @@ export const handlers = [
       answered.body +
       attached.map((c) => ` 첨부한 ${c.title} 의 내용도 참고했습니다[[${c.n}]].`).join('')
     const citations = [...answered.citations, ...attached]
-    const frame = (event: string, data: unknown) => `event: ${event}
-data: ${JSON.stringify(data)}
-
-`
-    const encoder = new TextEncoder()
-    const stream = new ReadableStream({
-      async start(controller) {
+    const sessionId = session_id ?? crypto.randomUUID()
+    // 서버 순서: 검증(422), 남의 대화(404), 진행 중(409).
+    const mine = AI_SESSIONS.get(sessionId)
+    if (mine && mine.owner !== user.id) return notFound('없는 대화입니다.')
+    if (AI_JOBS.has(sessionId))
+      return HttpResponse.json(
+        { detail: '이 대화는 아직 답변을 만드는 중입니다.', code: 'AI_BUSY' },
+        { status: 409 },
+      )
+    const startedAt = new Date().toISOString()
+    const saved = AI_SESSIONS.get(sessionId) ?? {
+      owner: user.id,
+      createdAt: startedAt,
+      messages: [],
+    }
+    AI_SESSIONS.set(sessionId, saved)
+    const job: AiJob = {
+      owner: user.id,
+      message,
+      startedAt,
+      events: [],
+      done: false,
+      wake: new Set(),
+    }
+    AI_JOBS.set(sessionId, job)
+    void (async () => {
+      try {
         await delay(300)
         // 서버는 문서를 찾는 동안 답변보다 먼저 진행 상황을 보낸다(백엔드 #366).
-        controller.enqueue(encoder.encode(frame('status', { text: '문서를 찾는 중' })))
+        pushJob(job, 'status', { text: '문서를 찾는 중' })
         await delay(900)
-        // 공급자 실패 경로(routers/ai.py LLMError). error 뒤에는 done 이 오지 않고 스트림이 끝난다.
+        // 공급자 실패 경로(routers/ai.py LLMError). error 뒤에는 done 이 오지 않고 스트림이 끝난다. 대화에 남기지 않는다.
         if (message.includes('오류')) {
-          controller.enqueue(encoder.encode(frame('token', { text: '답변을 시작하다가 ' })))
+          pushJob(job, 'token', { text: '답변을 시작하다가 ' })
           await delay(300)
-          controller.enqueue(
-            encoder.encode(
-              frame('error', {
-                detail: 'AI 요청이 몰려 있습니다. 잠시 후 다시 시도해 주세요.',
-                code: 'AI_RATE_LIMITED',
-              }),
-            ),
-          )
-          controller.close()
+          pushJob(job, 'error', {
+            detail: 'AI 요청이 몰려 있습니다. 잠시 후 다시 시도해 주세요.',
+            code: 'AI_RATE_LIMITED',
+          })
           return
         }
         // 어절 단위로 흘려 보내 스트리밍 타이핑이 실제로 보이게 한다.
         for (const word of body.split(/(?<= )/)) {
-          controller.enqueue(encoder.encode(frame('token', { text: word })))
+          pushJob(job, 'token', { text: word })
           await delay(40)
         }
-        controller.enqueue(encoder.encode(frame('citations', citations)))
-        // 서버는 저장한 답변의 id 와 세션 id 를 돌려준다(백엔드 #364). 안 보낸 세션은 서버가 만든다.
-        controller.enqueue(
-          encoder.encode(
-            frame('done', {
-              message_id: crypto.randomUUID(),
-              session_id: session_id ?? crypto.randomUUID(),
-            }),
-          ),
+        pushJob(job, 'citations', citations)
+        // 서버는 답을 질문과 함께 저장한 뒤 그 id 와 세션 id 를 돌려준다(백엔드 #364).
+        const answerId = crypto.randomUUID()
+        const now = new Date().toISOString()
+        saved.messages.push(
+          { id: crypto.randomUUID(), role: 'user', body: message, created_at: startedAt },
+          {
+            id: answerId,
+            role: 'assistant',
+            body,
+            citations: citations as Schema<'Citation'>[],
+            created_at: now,
+          },
         )
-        controller.close()
-      },
+        pushJob(job, 'done', { message_id: answerId, session_id: sessionId })
+      } finally {
+        job.done = true
+        wakeJob(job)
+        AI_JOBS.delete(sessionId)
+      }
+    })()
+    return followJob(job)
+  }),
+
+  // 내 대화 목록(백엔드 #430). 첫 답을 만드는 중인 새 대화는 아직 메시지가 없어 진행 중 목록에서 보탠다.
+  http.get('/api/ai/sessions', () => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    const model = AI_MODELS[0]!.name
+    const listed = [...AI_SESSIONS]
+      .filter(([, each]) => each.owner === user.id && each.messages.length > 0)
+      .map(([id, each]) => ({
+        id,
+        model,
+        title: each.messages.find((m) => m.role === 'user')!.body.slice(0, 80),
+        created_at: each.createdAt,
+        updated_at: each.messages.at(-1)!.created_at,
+        pending: AI_JOBS.has(id),
+      }))
+      .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
+    const fresh = [...AI_JOBS]
+      .filter(([id, job]) => job.owner === user.id && !listed.some((each) => each.id === id))
+      .map(([id, job]) => ({
+        id,
+        model,
+        title: job.message.slice(0, 80),
+        created_at: job.startedAt,
+        updated_at: job.startedAt,
+        pending: true,
+      }))
+      .reverse()
+    return HttpResponse.json([...fresh, ...listed].slice(0, 50))
+  }),
+
+  // 대화 하나(백엔드 #430). 남의 것도 404. 답을 만드는 중이면 그 질문을 `pending` 으로.
+  http.get('/api/ai/sessions/:id', ({ params }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    const id = String(params.id)
+    const saved = AI_SESSIONS.get(id)
+    if (!saved || saved.owner !== user.id) return notFound('없는 대화입니다.')
+    const job = AI_JOBS.get(id)
+    return HttpResponse.json({
+      id,
+      model: AI_MODELS[0]!.name,
+      created_at: saved.createdAt,
+      messages: saved.messages,
+      pending: job ? { message: job.message, started_at: job.startedAt } : null,
     })
-    return new HttpResponse(stream, { headers: { 'Content-Type': 'text/event-stream' } })
+  }),
+
+  // 만드는 중인 답변에 다시 붙는다(백엔드 #430). 진행 중이 아니면 404.
+  http.get('/api/ai/sessions/:id/stream', ({ params }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    const id = String(params.id)
+    if (AI_SESSIONS.get(id)?.owner !== user.id) return notFound('없는 대화입니다.')
+    const job = AI_JOBS.get(id)
+    if (!job) return notFound('만드는 중인 답변이 없습니다.')
+    return followJob(job)
   }),
 
   // 04 §8 feedback. 응답은 204(백엔드 #317).

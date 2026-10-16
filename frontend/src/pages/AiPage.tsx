@@ -1,19 +1,19 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useLocation } from 'react-router'
 import { useQueryClient } from '@tanstack/react-query'
-import { RotateCcw } from 'lucide-react'
+import { SquarePen } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
-import { Modal } from '@/components/ui/Modal'
 import { useToast } from '@/components/ui/ToastContext'
 import { AiComposer } from '@/features/ai/AiComposer'
 import { AiHistoryPanel } from '@/features/ai/AiHistoryPanel'
 import { Conversation } from '@/features/ai/Conversation'
 import { SourcesPanel } from '@/features/ai/SourcesPanel'
-import { useAiModels, useAsk } from '@/features/ai/api'
+import { aiSessionsKey, restoreThread, useAiModels, useAsk } from '@/features/ai/api'
 import { dropOnRetry, rejected } from '@/features/ai/scope'
 import type { AskState, CitationFocus } from '@/features/ai/types'
-import { patchMessage, removeMessage, resetThread, useThread } from '@/features/ai/store'
+import { patchMessage, removeMessage, resetThread, switchTo, useThread } from '@/features/ai/store'
 import { docKeys } from '@/features/docs/api'
+import { ApiError } from '@/lib/api'
 
 /**
  * 무엇이 답하는지 밝힌다. ARCHITECTURE §6(2026-09-04): 1차 공급자는 Claude API 이고 호출은 서버가 한다.
@@ -30,13 +30,13 @@ function ProviderBadge() {
 
 export function AiPage() {
   const { data: models } = useAiModels()
-  const { messages, status } = useThread()
+  const { sessionId, messages, status, busy, epoch } = useThread()
   const ask = useAsk()
   const toast = useToast()
+  const qc = useQueryClient()
   // 컴포저를 채울 글과 리마운트 열쇠. 같은 글을 두 번 채워도 열쇠(횟수)가 바뀌어 리마운트된다.
   const [seed, setSeed] = useState({ text: '', n: 0 })
   const fill = (text: string) => setSeed((s) => ({ text, n: s.n + 1 }))
-  const [confirmReset, setConfirmReset] = useState(false)
   // 눌린 각주. 새 질문을 보내면 지운다. 근거 패널이 예전 답변에 머물지 않게.
   const [focus, setFocus] = useState<CitationFocus | null>(null)
   // 붙잡아 둔다. 지난 답변 말풍선은 받은 값이 그대로면 다시 그리지 않는데(`Conversation` 의
@@ -57,13 +57,29 @@ export function AiPage() {
     fill(asked)
   }
 
+  // 새로고침 뒤나 목록에서 다른 대화를 고르면 서버에서 되읽는다. 화면을 떠났다 온 것이면 대화가 이미 있다.
+  // 답을 만드는 중이었으면 이어 받는다. 실패하면 서버에 남은 대로 그려 두고 알린다.
+  // 앞 대화에서 난 요청 실패(입력창 위 사유·다시 시도)도 이 대화의 것이 아니라 비운다.
+  useEffect(() => {
+    ask.reset()
+    if (messages.length > 0) return
+    restoreThread()
+      .catch((error: unknown) =>
+        toast.error(error instanceof Error ? error.message : '대화를 불러오지 못했습니다.'),
+      )
+      // 이어 받아 끝났으면 목록의 "답변 만드는 중" 을 걷는다.
+      .finally(() => void qc.invalidateQueries({ queryKey: aiSessionsKey }))
+    // 대화를 옮길 때만. 메시지가 쌓일 때마다 되읽지 않는다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [epoch])
+
   // 질문은 붙었는데 첫 토큰이 아직 안 왔을 때만 "생성 중" 을 보여준다. 그 뒤로는 말풍선이 자란다.
-  const generating = ask.isPending && messages.at(-1)?.role === 'user'
+  // 요청 상태(`ask.isPending`)가 아니라 스토어를 본다. 화면을 떠났다 오거나 되읽어 이어 받는 중에도 맞아야 한다.
+  const generating = busy && messages.at(-1)?.role === 'user'
 
   // 범위로 고른 폴더나 참고 문서를 서버가 거절하면(422, 백엔드 #372·#394) 트리가 낡은 것이다. 다시 받으면
   // 입력창이 그 폴더·문서를 잃는다(지식 소스는 전체로, 칩은 빠짐. `AiComposer`).
   // 첨부를 거절하면(백엔드 #396, 7일 지나 지워짐) 트리와 무관하다. 입력창의 첨부 칩을 비운다.
-  const qc = useQueryClient()
   const [dropAttachments, setDropAttachments] = useState(0)
   const send = (vars: Parameters<typeof ask.mutate>[0]) =>
     ask.mutate(vars, {
@@ -83,7 +99,7 @@ export function AiPage() {
    * 셋은 거절 문구로만 갈린다.
    */
   const retry = () => {
-    if (ask.isPending) return
+    if (busy) return
     const last = messages.at(-1)
     const question = [...messages].reverse().find((m) => m.role === 'user')
     if (!question) return
@@ -111,7 +127,13 @@ export function AiPage() {
 
   return (
     <div className="flex h-full">
-      <AiHistoryPanel messages={messages} onPick={fill} />
+      <AiHistoryPanel
+        current={sessionId}
+        onPick={(id) => {
+          setFocus(null)
+          switchTo(id)
+        }}
+      />
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="border-line bg-surface flex h-13 shrink-0 items-center gap-2.5 border-b px-5 py-2.5">
@@ -122,17 +144,20 @@ export function AiPage() {
             사내 문서·게시글 기반 답변
           </span>
           <ProviderBadge />
+          {/* 서버에 지우는 경로가 없다. 앞 대화는 지워지지 않고 좌패널 목록에 남는다. 받던 답변도 서버가 끝까지 만든다. */}
           {messages.length > 0 && (
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => setConfirmReset(true)}
-              disabled={ask.isPending}
-              aria-label="대화 지우기"
+              onClick={() => {
+                resetThread()
+                setFocus(null)
+              }}
+              aria-label="새 대화"
               className="ml-2 shrink-0 px-2"
-              title="대화 지우기"
+              title="새 대화"
             >
-              <RotateCcw className="size-4" />
+              <SquarePen className="size-4" />
             </Button>
           )}
         </header>
@@ -141,7 +166,7 @@ export function AiPage() {
           messages={messages}
           generating={generating}
           status={status}
-          streaming={ask.isPending}
+          streaming={busy}
           focus={focus}
           onCite={cite}
           onRetry={retry}
@@ -150,11 +175,13 @@ export function AiPage() {
         {/* 첫 이벤트 전에 실패하면(HTTP 오류·연결 실패) 말풍선이 없다. 그때만 여기서 사유와 재시도를 보인다. 말풍선이 있으면 거기에 붙는다. */}
         {ask.isError && messages.at(-1)?.role === 'user' && (
           <p className="text-danger flex items-center justify-center gap-3 px-5 pb-2 text-xs">
-            {ask.error.message || '답변을 받지 못했습니다.'}
+            {ask.error instanceof ApiError && ask.error.code === 'AI_BUSY'
+              ? '앞 답변을 아직 만드는 중입니다. 끝난 뒤에 다시 보내 주세요.'
+              : ask.error.message || '답변을 받지 못했습니다.'}
             <button
               type="button"
               onClick={retry}
-              disabled={ask.isPending}
+              disabled={busy}
               className="text-subtle hover:text-fg cursor-pointer underline underline-offset-2 transition-colors"
             >
               다시 시도
@@ -166,7 +193,7 @@ export function AiPage() {
           key={seed.n}
           models={models ?? []}
           initialText={seed.text}
-          disabled={ask.isPending}
+          disabled={busy}
           dropAttachments={dropAttachments}
           onSend={(prompt, scope, docs, attachments) => {
             setFocus(null)
@@ -176,36 +203,6 @@ export function AiPage() {
       </div>
 
       <SourcesPanel messages={messages} focus={focus} />
-
-      {/* 되돌릴 수 없는 동작이라 확인을 받는다. §4.2가 지목한 Modal의 첫 소비처다. */}
-      <Modal
-        open={confirmReset}
-        onClose={() => setConfirmReset(false)}
-        title="대화를 지울까요?"
-        description="주고받은 질문과 답변이 모두 사라집니다. 되돌릴 수 없습니다."
-        size="sm"
-        footer={
-          <>
-            <Button variant="secondary" size="sm" onClick={() => setConfirmReset(false)}>
-              취소
-            </Button>
-            <Button
-              variant="danger"
-              size="sm"
-              onClick={() => {
-                resetThread()
-                setFocus(null)
-                setConfirmReset(false)
-                toast.success('대화를 지웠습니다.')
-              }}
-            >
-              지우기
-            </Button>
-          </>
-        }
-      >
-        <p className="text-muted text-sm">최근 질문 목록도 함께 비워집니다.</p>
-      </Modal>
     </div>
   )
 }
