@@ -232,7 +232,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
           id={listId}
           role="listbox"
           aria-label="검색 결과"
-          className="max-h-80 overflow-y-auto p-1.5"
+          className="max-h-80 overflow-y-auto px-1.5 pt-1.5"
         >
           <div role="group" aria-labelledby={`${listId}-nav`}>
             <p
@@ -362,11 +362,12 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
             </div>
           )}
 
-          {/* 목록이 길어도 항상 보이게 스크롤 영역 바닥에 붙인다. */}
+          {/* 목록이 길어도 항상 보이게 스크롤 영역 바닥에 붙인다. 바닥 여백은 이 칸이 갖는다.
+              스크롤 칸에 아래 여백을 두면 붙는 자리가 그만큼 떠서 그 틈으로 뒤 목록이 비친다. */}
           <div
             role="group"
             aria-label="AI"
-            className="border-line bg-surface sticky bottom-0 mt-1.5 border-t pt-1.5"
+            className="border-line bg-surface sticky bottom-0 mt-1.5 border-t py-1.5"
           >
             <button
               ref={active === askIndex ? activeRow : undefined}
