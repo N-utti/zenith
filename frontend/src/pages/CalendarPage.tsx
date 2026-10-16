@@ -65,7 +65,8 @@ function MonthPane({
       hideHeader
       className={cn('min-h-0 flex-1', isPending && 'animate-pulse opacity-60')}
       // 칸 높이는 화면이 정한다. 짧은 폰에서 칸이 낮아지면 칩은 들어가는 만큼만 보이고 나머지는 날짜 창에서.
-      dayClassName="min-h-0 overflow-hidden p-0.5"
+      // 좌우 1px: 칩이 칸 폭을 거의 다 쓰게. 옆 칸 칩과는 2px 틈이 남는다.
+      dayClassName="min-h-0 overflow-hidden px-px py-0.5"
       renderDay={(day) => {
         const items = days.get(day.iso) ?? []
         return (
@@ -80,11 +81,13 @@ function MonthPane({
             )}
           >
             <CalendarDayNumber day={day} className={weekendTone(day)} />
+            {/* 10px·자간 -0.04em: 한글 한 자가 약 8.2px 라 375px 폰 칸(약 50px)에 여섯 글자가 든다. 11px
+                기본 자간이면 9.5px 라 넉 자에 말줄임표였다. TimeTree 수준으로 맞춘 사용자 결정(2026-10-16). */}
             {items.slice(0, MAX_CHIPS).map((item) => (
               <span
                 key={item.id}
                 className={cn(
-                  'w-full truncate rounded-sm px-0.5 text-left text-[11px] leading-4',
+                  'w-full truncate rounded-sm px-px text-left text-[10px] leading-4 tracking-[-0.04em]',
                   chipTone(item),
                 )}
               >
@@ -92,7 +95,7 @@ function MonthPane({
               </span>
             ))}
             {items.length > MAX_CHIPS && (
-              <span className="text-subtle text-[11px] leading-4">+{items.length - MAX_CHIPS}</span>
+              <span className="text-subtle text-[10px] leading-4">+{items.length - MAX_CHIPS}</span>
             )}
           </button>
         )
