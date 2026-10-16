@@ -55,6 +55,11 @@ const EXTRA_ARRANGEMENTS: Array<
   ['u-5', 'remote', workday(0), workday(0)],
   ['u-7', 'field', workday(-2), workday(-2)],
   ['u-8', 'remote', workday(7), workday(7)],
+  // 지난달·다음 달(폰 캘린더에서 밀어 넘겨 보는 달)
+  ['u-7', 'trip', workday(-30), workday(-28)],
+  ['u-5', 'field', workday(-20), workday(-20)],
+  ['u-3', 'remote', workday(24), workday(24)],
+  ['u-7', 'trip', workday(32), workday(34)],
 ]
 
 function arrangement(
@@ -92,6 +97,8 @@ function arrangementsFor(user: User): Arrangement[] {
             arrangement('field', workday(-3), workday(-3), 'approved', '현장 점검'),
             arrangement('remote', workday(4), workday(4), 'approved', '집중 작업'),
             arrangement('remote', workday(9), workday(9), 'pending', '이사'),
+            arrangement('field', workday(-26), workday(-26), 'approved', '고객사 설치'),
+            arrangement('trip', workday(26), workday(27), 'approved', '지사 교육'),
           ]
         : []),
       ...EXTRA_ARRANGEMENTS.filter(([id]) => id === user.id).map(([, kind, start, end]) =>
