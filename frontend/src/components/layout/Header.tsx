@@ -1,7 +1,7 @@
 import {
   FoldHorizontal,
+  Menu,
   Moon,
-  PanelLeft,
   PanelLeftClose,
   PanelLeftOpen,
   Search,
@@ -49,7 +49,7 @@ export function Header({
           aria-label="메뉴 열기"
           className="px-2 md:hidden"
         >
-          <PanelLeft className="size-4.5" />
+          <Menu className="size-4.5" />
         </Button>
         {/* 데스크톱: 같은 자리의 버튼이 서랍이 아니라 고정 사이드바를 접고 편다. */}
         <Button
