@@ -39,6 +39,7 @@ export function Calendar({
   actions,
   className,
   dayClassName,
+  spread,
 }: {
   /** `2026-08` */
   month: string
@@ -51,6 +52,8 @@ export function Calendar({
   className?: string
   /** 칸 크기를 바꿀 때. 폰 캘린더는 아래 목록을 보이려고 칸을 줄인다. */
   dayClassName?: string
+  /** 화살표를 제목 양옆에 크게 벌린다. 폰 캘린더용. */
+  spread?: boolean
 }) {
   const weeks = monthMatrix(month, weekStartsOn)
   const todayIso = toISODate(new Date())
@@ -59,7 +62,7 @@ export function Calendar({
 
   return (
     <div className={className}>
-      <MonthHeader month={month} onMonthChange={onMonthChange} actions={actions} />
+      <MonthHeader month={month} onMonthChange={onMonthChange} actions={actions} spread={spread} />
 
       {/* 칸 사이 선은 칸마다 그린 왼쪽·위 테두리다. 격자를 1px 당겨 첫 열·첫 줄 테두리는 바깥 상자
           안쪽 경계에서 잘려 안 보인다. 틈(gap-px)에 회색 배경을 비추던 예전 방식은 칸 너비가 소수점이면
@@ -113,11 +116,42 @@ export function MonthHeader({
   month,
   onMonthChange,
   actions,
+  spread,
 }: {
   month: string
   onMonthChange?: (month: string) => void
   actions?: ReactNode
+  spread?: boolean
 }) {
+  // 폰: 두 화살표가 붙어 있으면 엄지로 반대쪽을 잘못 누른다. 양 끝에 44px 로 떼어 놓고,
+  // 그 줄에 범례까지 넣으면 375px 에서 모자라 범례는 아래 줄로 내린다.
+  if (spread && onMonthChange) {
+    return (
+      <div className="mb-3">
+        <div className="flex items-center justify-between">
+          <MonthButton
+            label="이전 달"
+            onClick={() => onMonthChange(shiftMonth(month, -1))}
+            className="grid size-11 place-items-center"
+          >
+            <ChevronLeft className="size-5" />
+          </MonthButton>
+          <h2 className="text-fg text-base font-semibold whitespace-nowrap">
+            {formatMonth(month)}
+          </h2>
+          <MonthButton
+            label="다음 달"
+            onClick={() => onMonthChange(shiftMonth(month, 1))}
+            className="grid size-11 place-items-center"
+          >
+            <ChevronRight className="size-5" />
+          </MonthButton>
+        </div>
+        {actions && <div className="flex justify-center">{actions}</div>}
+      </div>
+    )
+  }
+
   return (
     // flex-wrap: 범례가 붙는 화면(홈)에서 375px 에 한 줄로 다 못 들어간다. 안 접으면
     // 제목이 "2026년 9 / 월" 로 쪼개진다. 접히면 범례만 다음 줄로 내려간다.
@@ -170,17 +204,22 @@ function MonthButton({
   label,
   onClick,
   children,
+  className,
 }: {
   label: string
   onClick: () => void
   children: ReactNode
+  className?: string
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
       aria-label={label}
-      className="text-muted hover:bg-surface-hover hover:text-fg rounded-md p-1.5 transition-colors"
+      className={cn(
+        'text-muted hover:bg-surface-hover hover:text-fg rounded-md p-1.5 transition-colors',
+        className,
+      )}
     >
       {children}
     </button>
