@@ -21,9 +21,11 @@ interface Props extends InputHTMLAttributes<HTMLInputElement> {
   icon?: ReactNode
   /** 초점을 옮겨야 할 때. React 19 부터는 함수 컴포넌트도 `ref` 를 보통 속성으로 받는다. */
   ref?: Ref<HTMLInputElement>
+  /** 아이콘이 있을 때 안쪽 입력칸에 붙일 것. `className` 은 바깥 틀로 간다(아래 주석). */
+  inputClassName?: string
 }
 
-export function Input({ icon, className, ref, ...props }: Props) {
+export function Input({ icon, className, inputClassName, ref, ...props }: Props) {
   if (!icon) {
     return <input ref={ref} className={cn(CONTROL_BASE, 'h-10 px-3', className)} {...props} />
   }
@@ -38,7 +40,7 @@ export function Input({ icon, className, ref, ...props }: Props) {
       <span className="text-subtle pointer-events-none absolute inset-y-0 left-3 flex items-center">
         {icon}
       </span>
-      <input ref={ref} className={cn(CONTROL_BASE, 'h-10 pr-3 pl-9')} {...props} />
+      <input ref={ref} className={cn(CONTROL_BASE, 'h-10 pr-3 pl-9', inputClassName)} {...props} />
     </div>
   )
 }

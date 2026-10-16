@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Check, Plus, Trash2 } from 'lucide-react'
+import { Check, Clock, Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Calendar, CalendarDayNumber } from '@/components/ui/Calendar'
 import { Card, CardEmpty } from '@/components/ui/Card'
@@ -220,23 +220,34 @@ export function DayAgenda({
             />
           )}
         </Field>
-        <div className="flex items-end gap-2">
-          {/* min-w-0: 아이폰 사파리의 시각 입력은 제 내용 폭 아래로 줄지 않아, flex 안에서 옆 추가 버튼
-              밑으로 파고들었다(실기기, 사용자 지적). 필드와 입력 둘 다 줄어들 수 있게 푼다. */}
-          <Field label="시각" hint="비우면 종일" className="min-w-0 flex-1">
+        {/* 그리드로 나눠 입력 칸은 남는 폭만(minmax(0,1fr)), 버튼 칸은 제 크기만. 아이폰 사파리의 시각
+            입력이 버튼 밑으로 파고들었다(iPhone 15 Pro). 전역 CSS 로 자체 모양을 껐지만, 그래도 넘치면
+            필드가 잘라 버튼은 늘 온전하다. */}
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-2">
+          <Field label="시각" hint="비우면 종일" className="min-w-0 overflow-hidden">
             {(slot) => (
+              // 시계 아이콘은 직접 그린다. 아이폰 사파리는 아이콘을 안 그리고 크롬은 오른쪽에 그려서, 크롬
+              // 것은 숨기고 누르면 고르기 창을 연다(아이폰은 누르면 원래 휠이 뜬다). 기기마다 아이콘 하나.
               <Input
                 {...slot}
                 type="time"
                 value={time}
                 onChange={(e) => setTime(e.target.value)}
-                className="min-w-0"
+                icon={<Clock className="size-4" />}
+                inputClassName="[&::-webkit-calendar-picker-indicator]:hidden"
+                onClick={(e) => {
+                  try {
+                    e.currentTarget.showPicker()
+                  } catch {
+                    // 고르기 창을 열 수 없는 브라우저는 입력 칸을 누른 것만으로 연다.
+                  }
+                }}
               />
             )}
           </Field>
           {/* 시각 필드의 힌트 줄만큼 띄워 입력과 버튼의 밑선을 맞춘다. 힌트(text-xs, mt-1.5)는
-                줄 높이 16px + 위 여백 6px = 22px 다. */}
-          <Button type="submit" size="sm" disabled={!canSubmit} className="mb-[22px]">
+              줄 높이 16px + 위 여백 6px = 22px 다. 높이는 입력과 같은 40px(md, 사용자 요청). */}
+          <Button type="submit" size="md" disabled={!canSubmit} className="mb-[22px]">
             {create.isPending ? (
               <Spinner className="border-t-on-accent" />
             ) : (

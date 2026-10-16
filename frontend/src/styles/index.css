@@ -31,21 +31,14 @@
      재면 타이머와 상태가 따라붙는다. 몇 초인지는 스타일이 알면 되는 일이다. */
   --animate-flash: zenith-flash 2s ease-out;
 
-  /* 폰 바텀시트(`Modal` 의 sheet)가 아래에서 올라오고 뒤 배경이 서서히 어두워진다. 곡선은 iOS 시트처럼
-     빨리 출발해 천천히 멈춘다. 닫힐 때는 Modal 이 transition 으로 되돌린다. */
+  /* 폰 바텀시트(`Modal` 의 sheet)가 아래에서 올라온다. 곡선은 iOS 시트처럼 빨리 출발해 천천히 멈춘다.
+     닫힐 때는 Modal 이 transition 으로 되돌린다. 뒤 그림자는 페이드하지 않는다(Modal 주석: 아이폰 막대). */
   --animate-sheet-in: zenith-sheet-in 280ms cubic-bezier(0.32, 0.72, 0, 1);
-  --animate-fade-in: zenith-fade-in 200ms ease-out;
 }
 
 @keyframes zenith-sheet-in {
   from {
     transform: translateY(100%);
-  }
-}
-
-@keyframes zenith-fade-in {
-  from {
-    opacity: 0;
   }
 }
 
@@ -178,6 +171,18 @@
 
   :focus-visible {
     @apply outline-accent outline-2 outline-offset-2;
+  }
+
+  /* 아이폰 사파리는 날짜·시각 입력을 자체 모양(appearance: auto)으로 그리며 폭 지정을 무시하고 제 크기를
+     고집한다. 일정 추가 창에서 시각 입력이 옆 추가 버튼 밑으로 파고들었다(iPhone 15 Pro, 사용자 확인). 자체
+     모양을 끄면 폭을 따르고 눌렀을 때 휠은 그대로 뜬다. 값 글자는 사파리가 가운데로 모아서 왼쪽으로 되돌린다.
+     크롬은 appearance 를 꺼도 달력·시계 아이콘을 그대로 그려 PC 모양은 같다. */
+  input:is([type='date'], [type='time'], [type='datetime-local'], [type='month']) {
+    appearance: none;
+    min-width: 0;
+  }
+  input::-webkit-date-and-time-value {
+    text-align: left;
   }
 
   /* 패널 폭을 끄는 동안(ResizeHandle). 포인터가 손잡이를 벗어나도 커서를 유지하고, 글자가 잡히지
