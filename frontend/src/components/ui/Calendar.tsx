@@ -38,6 +38,7 @@ export function Calendar({
   weekStartsOn = 1,
   actions,
   className,
+  dayClassName,
 }: {
   /** `2026-08` */
   month: string
@@ -48,6 +49,8 @@ export function Calendar({
   /** 월 이동 옆에 붙는 것. 범례, "오늘" 버튼 등 */
   actions?: ReactNode
   className?: string
+  /** 칸 크기를 바꿀 때. 폰 캘린더는 아래 목록을 보이려고 칸을 줄인다. */
+  dayClassName?: string
 }) {
   const weeks = monthMatrix(month, weekStartsOn)
   const todayIso = toISODate(new Date())
@@ -76,7 +79,7 @@ export function Calendar({
             const iso = toISODate(date)
             const weekday = date.getDay()
             return (
-              <div key={iso} className="bg-surface min-h-[76px] p-1.5">
+              <div key={iso} className={cn('bg-surface min-h-[76px] p-1.5', dayClassName)}>
                 {renderDay({
                   date,
                   iso,

@@ -12,6 +12,7 @@ import { ApprovalNewPage } from '@/pages/ApprovalNewPage'
 import { ApprovalsPage } from '@/pages/ApprovalsPage'
 import { ArchivePage } from '@/pages/ArchivePage'
 import { AttendancePage } from '@/pages/AttendancePage'
+import { CalendarPage } from '@/pages/CalendarPage'
 import { BoardPage } from '@/pages/BoardPage'
 import { BoardPostPage } from '@/pages/BoardPostPage'
 import { ChatSocketProvider } from '@/features/chat/ChatSocketProvider'
@@ -77,6 +78,7 @@ export function AppRoutes() {
             <Route path="board/:boardId" element={<BoardPage />} />
             <Route path="board/:boardId/:postId" element={<BoardPostPage />} />
             <Route path="attendance" element={<AttendancePage />} />
+            <Route path="calendar" element={<CalendarPage />} />
             <Route path="approvals" element={<ApprovalsPage />} />
             <Route path="approvals/new" element={<ApprovalNewPage />} />
             <Route path="approvals/:approvalId" element={<ApprovalDetailPage />} />
