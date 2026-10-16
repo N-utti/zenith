@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/cn'
-import { formatMonth, monthMatrix, shiftMonth, toISODate } from '@/lib/datetime'
+import { currentMonth, formatMonth, monthMatrix, shiftMonth, toISODate } from '@/lib/datetime'
 
 /** 월요일 시작 기준. `weekStartsOn`을 0으로 주면 앞의 일요일이 뒤로 간다. */
 const WEEKDAYS = ['월', '화', '수', '목', '금', '토', '일']
@@ -39,7 +39,8 @@ export function Calendar({
   actions,
   className,
   dayClassName,
-  spread,
+  phone,
+  hideHeader,
 }: {
   /** `2026-08` */
   month: string
@@ -50,10 +51,12 @@ export function Calendar({
   /** 월 이동 옆에 붙는 것. 범례, "오늘" 버튼 등 */
   actions?: ReactNode
   className?: string
-  /** 칸 크기를 바꿀 때. 폰 캘린더는 아래 목록을 보이려고 칸을 줄인다. */
+  /** 칸 크기를 바꿀 때. 폰 캘린더는 최소 높이를 풀어 남은 높이를 주 수로 나눠 갖게 한다. */
   dayClassName?: string
-  /** 폰 캘린더용. 화살표를 제목 양옆에 크게 벌리고, 격자는 화면 폭을 다 채운다. */
-  spread?: boolean
+  /** 폰 캘린더(/calendar)용. 제목을 왼쪽에 크게(눌러서 달 고르기), 격자는 화면 폭을 다 채운다. */
+  phone?: boolean
+  /** 머리줄 없이 격자만. 폰 캘린더는 이웃 달 격자를 옆에 나란히 두고 머리줄은 하나만 그린다. */
+  hideHeader?: boolean
 }) {
   const weeks = monthMatrix(month, weekStartsOn)
   const todayIso = toISODate(new Date())
@@ -61,38 +64,52 @@ export function Calendar({
   const labels = weekStartsOn === 1 ? WEEKDAYS : [WEEKDAYS[6], ...WEEKDAYS.slice(0, 6)]
 
   return (
-    <div className={className}>
-      <MonthHeader month={month} onMonthChange={onMonthChange} actions={actions} spread={spread} />
+    <div className={cn(phone && 'flex min-h-0 flex-col', className)}>
+      {!hideHeader && (
+        <MonthHeader month={month} onMonthChange={onMonthChange} actions={actions} phone={phone} />
+      )}
 
       {/* 칸 사이 선은 칸마다 그린 왼쪽·위 테두리다. 격자를 1px 당겨 첫 열·첫 줄 테두리는 바깥 상자
           안쪽 경계에서 잘려 안 보인다. 틈(gap-px)에 회색 배경을 비추던 예전 방식은 칸 너비가 소수점이면
           브라우저가 칸을 픽셀에 맞추다 마지막 칸 뒤에 1px 이 남아, 그 회색이 바깥 테두리와 붙어 오른쪽만
           2px 로 보였다(PC 홈 캘린더). 그 1px 틈은 지금도 남을 수 있어서, 줄마다 바탕을 칸이 아니라 격자
           전체에 깐다. 요일 줄은 회색 격자, 날짜 줄은 흰 바깥 상자라 틈이 같은 색으로 묻힌다. */}
-      {/* spread: 본문 좌우 여백(AppLayout 의 px-4 sm:px-6)만큼 밖으로 빼 화면 끝까지. 화면 끝에 닿는
-          둥근 모서리·좌우 테두리와 칸 사이 세로선은 빼고 주 사이 가로선만 남긴다. 폰 캘린더 앱들
-          (네이버웍스·아이폰)이 이렇게 그린다. */}
+      {/* phone: 화면 끝까지 닿는 격자(여백 밖으로 빼는 건 CalendarPage 몫). 둥근 모서리·좌우 테두리와 칸
+          사이 세로선은 빼고 주 사이 가로선만 남긴다. 폰 캘린더 앱들(네이버웍스·아이폰)이 이렇게 그린다.
+          높이는 남은 자리를 다 쓰고 주 수(4~6)로 똑같이 나눈다. */}
       <div
         className={cn(
           'border-line bg-surface overflow-hidden border',
-          spread ? '-mx-4 border-x-0 sm:-mx-6' : 'rounded-lg',
+          phone ? 'flex min-h-0 flex-1 flex-col border-x-0' : 'rounded-lg',
         )}
       >
-        <div className={cn('bg-sunken -mt-px grid grid-cols-7', !spread && '-ml-px')}>
+        <div className={cn('bg-sunken -mt-px grid grid-cols-7', !phone && '-ml-px')}>
           {labels.map((label) => (
             <div
               key={label}
               className={cn(
                 'border-line border-t py-1.5 text-center text-xs font-medium',
-                !spread && 'border-l',
-                label === '토' || label === '일' ? 'text-subtle' : 'text-muted',
+                !phone && 'border-l',
+                // 폰은 한국 달력 관례대로 일요일 빨강·토요일 파랑. PC·근태는 회색 그대로.
+                label === '토' || label === '일'
+                  ? phone
+                    ? label === '일'
+                      ? 'text-danger'
+                      : 'text-accent'
+                    : 'text-subtle'
+                  : 'text-muted',
               )}
             >
               {label}
             </div>
           ))}
         </div>
-        <div className={cn('grid grid-cols-7', !spread && '-ml-px')}>
+        <div
+          className={cn('grid grid-cols-7', phone ? 'min-h-0 flex-1' : '-ml-px')}
+          style={
+            phone ? { gridTemplateRows: `repeat(${weeks.length}, minmax(0, 1fr))` } : undefined
+          }
+        >
           {weeks.flat().map((date) => {
             const iso = toISODate(date)
             const weekday = date.getDay()
@@ -101,7 +118,7 @@ export function Calendar({
                 key={iso}
                 className={cn(
                   'border-line bg-surface min-h-[76px] border-t p-1.5',
-                  !spread && 'border-l',
+                  !phone && 'border-l',
                   dayClassName,
                 )}
               >
@@ -126,40 +143,54 @@ export function MonthHeader({
   month,
   onMonthChange,
   actions,
-  spread,
+  phone,
 }: {
   month: string
   onMonthChange?: (month: string) => void
   actions?: ReactNode
-  spread?: boolean
+  phone?: boolean
 }) {
-  // 폰: 두 화살표가 붙어 있으면 엄지로 반대쪽을 잘못 누른다. 양 끝에 44px 로 떼어 놓고,
-  // 그 줄에 범례까지 넣으면 375px 에서 모자라 범례는 아래 줄로 내린다.
-  // -mt-3: 44px 상자 안에서 20px 아이콘이 가운데라 위에 12px 가 더 비어 보인다. 그만큼 당겨
-  // 보이는 위 여백을 다른 화면의 본문 시작(페이지 여백 24px)과 맞춘다. 누르는 크기는 그대로.
-  if (spread && onMonthChange) {
+  // 폰(TimeTree 참고): 화살표 없이 왼쪽에 큰 제목. 달은 좌우로 밀어 넘기고(CalendarPage), 제목을 누르면
+  // 브라우저 기본 달 고르기(아이폰은 휠)가 뜬다. 투명한 입력을 제목 위에 겹쳐 그 입력이 눌리게 한다.
+  // 데스크톱 크롬은 입력의 달력 아이콘이 아니면 안 열려서 showPicker 로 연다.
+  if (phone && onMonthChange) {
     return (
-      <div className="-mt-3 mb-3">
-        <div className="flex items-center justify-between">
-          <MonthButton
-            label="이전 달"
-            onClick={() => onMonthChange(shiftMonth(month, -1))}
-            className="grid size-11 place-items-center"
-          >
-            <ChevronLeft className="size-5" />
-          </MonthButton>
-          <h2 className="text-fg text-base font-semibold whitespace-nowrap">
-            {formatMonth(month)}
+      <div className="mb-2">
+        <div className="flex items-center gap-2">
+          <h2 className="relative">
+            <label className="text-fg has-[:focus-visible]:ring-accent flex cursor-pointer items-center gap-1 rounded-md text-xl font-bold whitespace-nowrap has-[:focus-visible]:ring-2">
+              {formatMonth(month)}
+              <ChevronDown className="text-subtle size-5" />
+              <input
+                type="month"
+                value={month}
+                aria-label="달 고르기"
+                onClick={(e) => {
+                  try {
+                    e.currentTarget.showPicker()
+                  } catch {
+                    // 아이폰 사파리는 입력을 누른 것만으로 휠이 뜬다.
+                  }
+                }}
+                onChange={(e) => {
+                  // 달 입력을 모르는 브라우저(맥 사파리·파이어폭스)는 글자 칸이 되고, 크롬도 키보드로 연도를
+                  // 치는 중간에 `0002-10` 같은 값을 낸다. 그대로 넘기면 격자 계산이 깨진다. 범위는 YearHeader 와 같다.
+                  const v = e.target.value
+                  if (/^\d{4}-\d{2}$/.test(v) && v >= '2000' && v < '2101') onMonthChange(v)
+                }}
+                className="absolute inset-0 cursor-pointer opacity-0"
+              />
+            </label>
           </h2>
-          <MonthButton
-            label="다음 달"
-            onClick={() => onMonthChange(shiftMonth(month, 1))}
-            className="grid size-11 place-items-center"
+          <button
+            type="button"
+            onClick={() => onMonthChange(currentMonth())}
+            className="border-line text-muted hover:bg-surface-hover hover:text-fg ml-auto rounded-full border px-3 py-1 text-xs font-medium transition-colors"
           >
-            <ChevronRight className="size-5" />
-          </MonthButton>
+            오늘
+          </button>
         </div>
-        {actions && <div className="flex justify-center">{actions}</div>}
+        {actions && <div className="mt-1 -ml-1.5 flex">{actions}</div>}
       </div>
     )
   }
@@ -216,22 +247,17 @@ function MonthButton({
   label,
   onClick,
   children,
-  className,
 }: {
   label: string
   onClick: () => void
   children: ReactNode
-  className?: string
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
       aria-label={label}
-      className={cn(
-        'text-muted hover:bg-surface-hover hover:text-fg rounded-md p-1.5 transition-colors',
-        className,
-      )}
+      className="text-muted hover:bg-surface-hover hover:text-fg rounded-md p-1.5 transition-colors"
     >
       {children}
     </button>
@@ -242,7 +268,7 @@ function MonthButton({
  * 셀 안의 날짜 숫자. `renderDay`가 매번 다시 짜지 않도록 기본 모양을 준다.
  * 이웃 달은 흐리게, 오늘은 채운 원으로. 셋을 색만으로 구분하면 흑백 인쇄에서 사라진다.
  */
-export function CalendarDayNumber({ day }: { day: CalendarDay }) {
+export function CalendarDayNumber({ day, className }: { day: CalendarDay; className?: string }) {
   return (
     <span
       className={cn(
@@ -250,6 +276,7 @@ export function CalendarDayNumber({ day }: { day: CalendarDay }) {
         day.isToday && 'bg-accent text-on-accent font-semibold',
         !day.isToday && !day.inMonth && 'text-subtle/60',
         !day.isToday && day.inMonth && (day.isWeekend ? 'text-subtle' : 'text-muted'),
+        className,
       )}
     >
       {day.date.getDate()}

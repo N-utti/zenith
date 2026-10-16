@@ -53,6 +53,8 @@ export function AppRoutes() {
             <Route path="chat/:channelId" element={<ChatPage />} />
             {/* AI도 좌패널·대화·근거 3분할이라 영역별로 따로 스크롤한다. */}
             <Route path="ai" element={<AiPage />} />
+            {/* 폰 캘린더는 달력이 본문 높이를 정확히 채워 세로 스크롤이 없다(사용자 요청). */}
+            <Route path="calendar" element={<CalendarPage />} />
             <Route
               path="docs/:docId"
               element={
@@ -78,7 +80,6 @@ export function AppRoutes() {
             <Route path="board/:boardId" element={<BoardPage />} />
             <Route path="board/:boardId/:postId" element={<BoardPostPage />} />
             <Route path="attendance" element={<AttendancePage />} />
-            <Route path="calendar" element={<CalendarPage />} />
             <Route path="approvals" element={<ApprovalsPage />} />
             <Route path="approvals/new" element={<ApprovalNewPage />} />
             <Route path="approvals/:approvalId" element={<ApprovalDetailPage />} />

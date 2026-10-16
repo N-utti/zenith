@@ -137,7 +137,16 @@ function DayModal({
 }
 
 /** 그날의 항목 목록 + 내 일정 추가·삭제. 휴가는 여기서 손대지 않는다(근태 화면 몫). */
-export function DayAgenda({ iso, items }: { iso: string; items: CalendarItem[] }) {
+export function DayAgenda({
+  iso,
+  items,
+  autoFocus,
+}: {
+  iso: string
+  items: CalendarItem[]
+  /** 폰 캘린더의 + 버튼으로 열었을 때. 바로 적게 추가 칸에 초점을 준다. */
+  autoFocus?: boolean
+}) {
   const create = useCreateEvent()
   const remove = useDeleteEvent()
   const toast = useToast()
@@ -169,7 +178,7 @@ export function DayAgenda({ iso, items }: { iso: string; items: CalendarItem[] }
         <ul className="space-y-1">
           {items.map((item) => (
             <li key={item.id} className="flex items-center gap-2 text-sm">
-              <span className={cn('size-2.5 shrink-0 rounded-sm', TONE[item.group])} />
+              <span className={cn('size-2.5 shrink-0 rounded-sm', DOT[item.group])} />
               <span className="text-fg min-w-0 flex-1 truncate">{item.label}</span>
               {item.kind === 'event' && (
                 <button
@@ -204,6 +213,7 @@ export function DayAgenda({ iso, items }: { iso: string; items: CalendarItem[] }
             <Input
               {...slot}
               value={title}
+              autoFocus={autoFocus}
               maxLength={200}
               placeholder="예: 치과 예약"
               onChange={(e) => setTitle(e.target.value)}

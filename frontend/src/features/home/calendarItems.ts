@@ -17,9 +17,16 @@ export type CalendarGroup = 'personal' | 'colleague'
  * 휴가와 재택·외근·출장은 홈에서 한 범주(`absence`)다. 홈 캘린더는 "누가 왜 자리에 없나"를 보는
  * 곳이라 둘을 가를 이유가 없고, 무엇 때문인지는 라벨("김다인 연차"·"홍성완 출장")이 말한다(2026-09-08 결정).
  */
-export type CalendarItem =
+export type CalendarItem = (
   | { kind: 'event'; group: 'personal'; id: string; label: string; event: CalendarEvent }
   | { kind: 'absence'; group: CalendarGroup; id: string; label: string }
+) & {
+  /**
+   * 폰 칸처럼 좁은 자리의 짧은 이름. 일정은 시각 뺀 제목, 내 부재는 종류(「출장」), 동료 부재는 이름
+   * (「김다인」). 색이 개인·동료를 가르고 나머지는 날짜 창의 `label` 이 말한다.
+   */
+  short: string
+}
 
 /** `2026-09-08` 의 다음 날. 문자열끼리 비교하려고 ISO 로 되돌린다. */
 function nextDay(iso: string): string {
@@ -50,7 +57,14 @@ export function itemsByDay(
   const sortedEvents = [...events].sort((a, b) => (a.time ?? '').localeCompare(b.time ?? ''))
   for (const event of sortedEvents) {
     const label = event.time ? `${event.time} ${event.title}` : event.title
-    push(event.date, { kind: 'event', group: 'personal', id: event.id, label, event })
+    push(event.date, {
+      kind: 'event',
+      group: 'personal',
+      id: event.id,
+      label,
+      short: event.title,
+      event,
+    })
   }
 
   // 휴가와 예외 근무를 한 목록으로 합쳐 내 것이 먼저, 그다음 이름순. 같은 사람의 연차와 출장이
@@ -67,10 +81,11 @@ export function itemsByDay(
   for (const absence of absences) {
     const label = `${absence.user.name} ${absence.what}`
     const group = absence.user.id === meId ? 'personal' : 'colleague'
+    const short = group === 'personal' ? absence.what : absence.user.name
     const start = absence.start_date < range.from ? range.from : absence.start_date
     const end = absence.end_date > range.to ? range.to : absence.end_date
     for (let iso = start; iso <= end; iso = nextDay(iso)) {
-      push(iso, { kind: 'absence', group, id: `${absence.id}:${iso}`, label })
+      push(iso, { kind: 'absence', group, id: `${absence.id}:${iso}`, label, short })
     }
   }
   return days

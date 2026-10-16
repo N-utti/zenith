@@ -30,6 +30,7 @@ export function Modal({
   description,
   size = 'md',
   footer,
+  sheet,
   children,
 }: {
   open: boolean
@@ -40,6 +41,11 @@ export function Modal({
   size?: Size
   /** 우측 정렬되는 액션 영역. 주 버튼을 오른쪽 끝에 둔다. */
   footer?: ReactNode
+  /**
+   * 폰(md 미만)에서 화면 아래에 붙는 시트로 연다. 엄지가 닿는 자리라 폰 캘린더의 날짜 창이 쓴다.
+   * 끌어 내리기는 없다. 닫기는 바깥 누름·X·Esc 로 같다. 손잡이 막대를 그리면 끌 수 있는 줄 안다.
+   */
+  sheet?: boolean
   children: ReactNode
 }) {
   const panelRef = useRef<HTMLDivElement>(null)
@@ -61,7 +67,12 @@ export function Modal({
   if (!open) return null
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div
+      className={cn(
+        'fixed inset-0 z-50 flex items-center justify-center p-4',
+        sheet && 'max-md:items-end max-md:p-0',
+      )}
+    >
       <button
         type="button"
         aria-label="닫기"
@@ -80,6 +91,8 @@ export function Modal({
         className={cn(
           'border-line bg-surface relative flex max-h-full w-full flex-col rounded-xl border shadow-2xl outline-none',
           SIZES[size],
+          sheet &&
+            'max-md:max-h-[85dvh] max-md:max-w-none max-md:rounded-b-none max-md:border-x-0 max-md:border-b-0 max-md:pb-[env(safe-area-inset-bottom)]',
         )}
       >
         <header className="flex items-start gap-3 px-5 pt-5 pb-3">

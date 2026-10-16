@@ -115,6 +115,8 @@ describe('홈 캘린더 부재 묶음', () => {
     const items = days.get('2026-09-08') ?? []
     expect(items.map((i) => i.label)).toEqual(['치과', '하지민 연차', '김다인 연차'])
     expect(items.map((i) => i.group)).toEqual(['personal', 'personal', 'colleague'])
+    // 좁은 칸의 짧은 이름: 일정은 제목, 내 부재는 종류, 동료 부재는 이름.
+    expect(items.map((i) => i.short)).toEqual(['치과', '연차', '김다인'])
 
     // 개인을 끄면 내 휴가도 같이 꺼진다.
     const shown = onlyShown(days, { personal: false, colleague: true })
