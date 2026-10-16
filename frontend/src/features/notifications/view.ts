@@ -179,3 +179,17 @@ export function noticeToast(
   if (!view) return null
   return { title: view.summary, body: view.detail ?? undefined }
 }
+
+/** 서버가 준 알림과 화면이 그릴 모양을 짝지은 것. 그릴 수 없는 알림은 애초에 여기 없다. */
+export interface NotificationRowData {
+  notification: Notification
+  view: NotificationView
+}
+
+/** 그릴 수 있는 알림만 남긴다. 알림함과 헤더 드롭다운이 같은 기준으로 센다. */
+export function toRows(items: Notification[]): NotificationRowData[] {
+  return items.flatMap((notification) => {
+    const view = notificationView(notification)
+    return view ? [{ notification, view }] : []
+  })
+}
