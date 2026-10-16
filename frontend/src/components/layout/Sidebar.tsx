@@ -105,10 +105,12 @@ function AddButton({ label, onClick }: { label: string; onClick: () => void }) {
 /** 채널·DM 행의 안 읽은 개수 알약. */
 function UnreadPill({ count }: { count: number }) {
   return (
-    <span className="bg-muted text-surface ml-auto shrink-0 rounded-full px-1.5 text-xs font-bold">
+    // 높이와 최소 너비를 같게 둬야 한 자리 숫자가 찌그러진 타원이 아니라 원이 된다.
+    <span className="bg-muted text-surface ml-auto inline-flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full px-1 text-xs font-bold tabular-nums">
       {/* 낭독기가 앞의 이름과 붙여 읽지 않게 끊는다("개발3개" 가 아니라 "개발, 3개"). */}
       <span className="sr-only">, </span>
-      {count}
+      {/* 줄 상자는 글꼴의 위아래 여백이 달라 숫자가 위로 뜬다. 숫자 높이로 잘라 가운데에 둔다(Avatar 와 같다). */}
+      <span className="[text-box:trim-both_cap_alphabetic]">{count}</span>
       <span className="sr-only">개 안 읽음</span>
     </span>
   )

@@ -48,8 +48,9 @@ function Row({ channel }: { channel: ChatChannel }) {
       </div>
       <div className="flex shrink-0 flex-col items-end gap-1">
         {channel.unread > 0 && (
-          <span className="bg-accent text-on-accent rounded-full px-1.5 py-0.5 text-[11px] font-semibold tabular-nums">
-            {channel.unread}
+          // 높이와 최소 너비를 같게 둬야 한 자리 숫자가 원이 된다. 숫자는 Avatar 처럼 숫자 높이로 잘라 가운데에 둔다.
+          <span className="bg-accent text-on-accent inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-semibold tabular-nums">
+            <span className="[text-box:trim-both_cap_alphabetic]">{channel.unread}</span>
           </span>
         )}
         {last && <span className="text-subtle text-[11px]">{formatRelative(last.created_at)}</span>}
