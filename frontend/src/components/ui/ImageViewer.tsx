@@ -41,7 +41,8 @@ export function ImageViewer({
         aria-label="닫기"
         tabIndex={-1}
         onClick={onClose}
-        className="absolute inset-0 cursor-zoom-out bg-black/80"
+        // fixed: 아이폰 사파리가 시간 표시 줄도 같이 어둡게 칠한다(Modal 의 그림자 주석).
+        className="fixed inset-0 cursor-zoom-out bg-black/80"
       />
 
       <header className="border-line bg-surface relative flex items-center gap-1 border-b py-1.5 pr-2 pl-4">

@@ -338,7 +338,8 @@ export function Sidebar({
             aria-label="메뉴 닫기"
             tabIndex={-1}
             onClick={onClose}
-            className="absolute inset-0 bg-black/40"
+            // fixed: 아이폰 사파리가 시간 표시 줄도 같이 어둡게 칠한다(Modal 의 그림자 주석).
+            className="fixed inset-0 bg-black/40"
           />
           <aside
             ref={drawerRef}

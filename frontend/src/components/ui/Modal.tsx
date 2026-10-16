@@ -88,13 +88,17 @@ export function Modal({
         sheet && 'max-md:items-end max-md:p-0',
       )}
     >
+      {/* 그림자는 fixed 여야 한다. 아이폰 사파리(iOS 26~)는 화면 가장자리에 닿은 fixed 요소의 바탕색으로
+          시간 표시 줄·아래 막대를 칠하고 absolute 는 무시한다. absolute 였을 때 그 줄이 늦게, 버벅이며
+          어두워졌다(사용자 실기기). 바깥 상자가 이미 fixed inset-0 이라 자리는 같다. 페이드 중에는 막대가
+          따라 흐려지지 않고 투명도 0.1 을 넘는 순간 한 번에 바뀐다(사파리 동작). */}
       <button
         type="button"
         aria-label="닫기"
         tabIndex={-1}
         onClick={close}
         className={cn(
-          'absolute inset-0 cursor-default bg-black/40',
+          'fixed inset-0 cursor-default bg-black/40',
           sheet &&
             'max-md:motion-safe:animate-fade-in max-md:transition-opacity max-md:duration-200',
           closing && 'opacity-0',
