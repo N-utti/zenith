@@ -221,9 +221,17 @@ export function DayAgenda({
           )}
         </Field>
         <div className="flex items-end gap-2">
-          <Field label="시각" hint="비우면 종일" className="flex-1">
+          {/* min-w-0: 아이폰 사파리의 시각 입력은 제 내용 폭 아래로 줄지 않아, flex 안에서 옆 추가 버튼
+              밑으로 파고들었다(실기기, 사용자 지적). 필드와 입력 둘 다 줄어들 수 있게 푼다. */}
+          <Field label="시각" hint="비우면 종일" className="min-w-0 flex-1">
             {(slot) => (
-              <Input {...slot} type="time" value={time} onChange={(e) => setTime(e.target.value)} />
+              <Input
+                {...slot}
+                type="time"
+                value={time}
+                onChange={(e) => setTime(e.target.value)}
+                className="min-w-0"
+              />
             )}
           </Field>
           {/* 시각 필드의 힌트 줄만큼 띄워 입력과 버튼의 밑선을 맞춘다. 힌트(text-xs, mt-1.5)는
