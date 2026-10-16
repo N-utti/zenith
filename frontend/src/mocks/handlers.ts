@@ -267,38 +267,6 @@ const notFound = (detail = '문서를 찾을 수 없습니다.') =>
   HttpResponse.json({ detail, code: 'NOT_FOUND' }, { status: 404 })
 
 /**
- * 안 읽은 대화. 채팅은 MSW 가 아니라 개발 릴레이에 있어서 목이 그 값을 모른다.
- * 그래서 여기서만 릴레이에 한 번 물어본다. 실제 서버는 홈 한 벌에 이미 담아서 준다.
- *
- * 릴레이가 안 떠 있으면 빈 목록이다. 홈의 다른 카드까지 같이 죽으면 안 된다.
- */
-async function unreadChannels(meId: string) {
-  try {
-    // `bypass` 로 이 요청이 목을 다시 타지 않게 못 박는다. 지금은 `/api/channels` 가
-    // passthrough 라 우연히 맞지만, 나중에 거기 진짜 핸들러가 들어오면 목이 목을 부른다.
-    // 릴레이가 떠 있으면서 응답하지 않으면 홈 카드 다섯 장이 전부 스켈레톤에 묶이므로 끊어 준다.
-    const res = await fetch(bypass('/api/channels'), { signal: AbortSignal.timeout(2000) })
-    if (!res.ok) return []
-    const { items } = (await res.json()) as { items: ChatChannel[] }
-    return items
-      .filter((channel) => channel.unread > 0)
-      .map((channel) => ({
-        channel_id: channel.id,
-        name: channel.name,
-        is_dm: channel.is_dm,
-        is_private: channel.is_private,
-        // DM 이면 상대, 채널이면 null. 홈과 채팅이 같은 사람을 같은 색으로 그린다.
-        peer_id: channel.is_dm
-          ? (channel.members.find((member) => member.id !== meId)?.id ?? null)
-          : null,
-        count: channel.unread,
-      }))
-  } catch {
-    return []
-  }
-}
-
-/**
  * 채팅 첨부. 릴레이에 채널 목록을 묻고 채널마다 메시지를 받아 첨부를 꺼낸다. 실제 서버는
  * 질의 한 번으로 준다.
  *
@@ -850,18 +818,19 @@ export const handlers = [
 
   // ── 홈 한 벌 ──────────────────────────────────────────────
   /**
-   * 대시보드 1콜. 카드 다섯 개가 이것 하나를 나눠 쓴다.
+   * 대시보드 1콜. 카드 넷이 이것 하나를 나눠 쓴다.
    *
    * 조각을 따로 만들지 않는다. 공지는 게시판, 멘션은 알림, 할 일은 할 일 저장소에서 온다.
    * 별도 데이터를 두면 두 벌이 되어 어긋난다.
    */
-  http.get('/api/me/home', async () => {
+  http.get('/api/me/home', () => {
     const user = authenticate()
     if (!user) return unauthorized()
     return HttpResponse.json({
       recent_docs: recentDocs(user, 8),
       mentions: listMentionNotifications(user, 10),
-      unread: await unreadChannels(user.id),
+      // 실서버는 채널별 안 읽은 수를 싣지만 화면이 쓰지 않는다. 릴레이에 묻지 않고 비워 둔다.
+      unread: [],
       posts: homePosts(user, 3),
       todos: listTasks().slice(0, 200),
     })
