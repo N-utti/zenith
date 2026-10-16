@@ -13,7 +13,7 @@ import { toRows } from '@/features/notifications/view'
  * 헤더의 알림 종과 드롭다운. 알림함(`/notifications`)과 같은 목록 캐시를 읽어 요청이 늘지 않는다.
  * 지우기는 알림함에만 둔다. 여기는 훑어보고 그 자리로 가는 곳이다.
  *
- * 폰에서는 숨긴다. 하단 탭바에 알림 탭이 이미 있다.
+ * 폰에서도 뜬다. 하단 탭의 알림 자리는 캘린더가 가져갔다.
  */
 export function NotificationMenu() {
   const [open, setOpen] = useState(false)
@@ -49,7 +49,7 @@ export function NotificationMenu() {
   }, [open])
 
   return (
-    <div ref={ref} className="relative hidden md:block">
+    <div ref={ref} className="relative">
       <Button
         ref={bellRef}
         variant="ghost"
@@ -75,7 +75,9 @@ export function NotificationMenu() {
         <div
           role="dialog"
           aria-labelledby={titleId}
-          className="border-line bg-surface absolute right-0 z-40 mt-2 flex max-h-[min(560px,calc(100dvh-80px))] w-[380px] flex-col rounded-xl border shadow-lg"
+          // 폰에서는 종 밑에 매달면 왼쪽이 화면 밖으로 나간다(380px). 헤더(50px) 바로 아래 양옆 8px 에 걸고,
+          // 아래는 하단 탭바(약 65px)와 아이폰 홈 막대를 비운다.
+          className="border-line bg-surface fixed inset-x-2 top-[54px] z-40 flex max-h-[calc(100dvh-130px-env(safe-area-inset-bottom))] md:max-h-[min(560px,calc(100dvh-80px))] flex-col rounded-xl border shadow-lg md:absolute md:inset-x-auto md:top-auto md:right-0 md:mt-2 md:w-[380px]"
         >
           <div className="border-line flex items-center justify-between border-b px-4 py-2.5">
             <h2 id={titleId} className="text-fg text-sm font-semibold">

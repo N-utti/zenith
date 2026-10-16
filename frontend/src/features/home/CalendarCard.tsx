@@ -8,65 +8,19 @@ import { Input } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
 import { Spinner } from '@/components/ui/Spinner'
 import { useToast } from '@/components/ui/ToastContext'
-import { useAllArrangements, useAllLeaves, useLeaveTypes } from '@/features/attendance/api'
 import { cn } from '@/lib/cn'
 import { ApiError } from '@/lib/api'
-import { currentMonth, formatISODate, monthMatrix, toISODate } from '@/lib/datetime'
-import { useCreateEvent, useDeleteEvent, useMyEvents } from './api'
-import { itemsByDay, type CalendarItem } from './calendarItems'
+import { currentMonth, formatISODate } from '@/lib/datetime'
+import { useCreateEvent, useDeleteEvent } from './api'
+import type { CalendarItem } from './calendarItems'
 import { HomeSection } from './HomeSection'
+import { DOT, MAX_CHIPS, TONE, WEEK_STARTS_ON, useCalendarItems } from './useCalendarItems'
 
-/**
- * 부재(휴가·재택·외근·출장)는 파랑(accent) 하나, 내 일정은 초록. 홈에서는 종류를 색으로 가르지 않는다.
- * 05 의 상태 색 규약(휴가 파랑 / 예외 근무 청록)은 근태 캘린더 몫이고, 홈은 "자리에 없다"만 보면 된다.
- */
-const TONE: Record<CalendarItem['kind'], string> = {
-  absence: 'bg-accent-soft text-accent',
-  event: 'bg-success/12 text-success',
-}
-
-/** 칸 하나에 보이는 최대 줄 수. 넘치면 "+N" 으로 접고 눌러서 본다. */
-const MAX_CHIPS = 3
-
-/** 조회 기간과 격자가 같은 주 시작을 봐야 한다. 취업규칙이 일요일 시작이면 여기만 0 으로. */
-const WEEK_STARTS_ON = 1
-
-/** 홈 캘린더. 전 직원의 승인된 휴가·재택·외근·출장 + 내 개인 일정. 날짜를 누르면 그날 항목과 일정 추가. */
+/** 홈 캘린더. 날짜를 누르면 그날 항목과 일정 추가. 폰에서는 홈에 두지 않고 `/calendar` 탭이 맡는다. */
 export function CalendarCard() {
   const [month, setMonth] = useState(currentMonth)
   const [selected, setSelected] = useState<string | null>(null)
-  // 범례를 눌러 종류별로 끈다. 휴가만 보거나 내 일정만 보거나.
-  const [show, setShow] = useState<Record<CalendarItem['kind'], boolean>>({
-    absence: true,
-    event: true,
-  })
-  const toggle = (kind: CalendarItem['kind']) => setShow((s) => ({ ...s, [kind]: !s[kind] }))
-
-  // 보이는 칸(이웃 달 포함) 전체를 한 번에 묻는다. 달력에 빈 칸이 없어야 한다.
-  const weeks = monthMatrix(month, WEEK_STARTS_ON)
-  const range = {
-    from: toISODate(weeks[0][0]),
-    to: toISODate(weeks[weeks.length - 1][6]),
-  }
-  const leaves = useAllLeaves(range.from, range.to)
-  const arrangements = useAllArrangements(range.from, range.to)
-  const events = useMyEvents(range.from, range.to)
-  const types = useLeaveTypes()
-  // 남의 휴가는 종류를 가려 `leave` 로 온다(병가·경조사는 알릴 일이 아니다, 백엔드 #316). 목록에 없는
-  // 종류는 그냥 휴가로 보인다.
-  const typeName = (code: string) => types.data?.items.find((t) => t.code === code)?.name ?? '휴가'
-  const isError = leaves.isError || arrangements.isError || events.isError
-  const retry = () =>
-    Promise.all([leaves, arrangements, events].filter((q) => q.isError).map((q) => q.refetch()))
-  const isPending = leaves.isPending || arrangements.isPending || events.isPending
-
-  const days = itemsByDay(
-    (show.absence && leaves.data?.items) || [],
-    (show.event && events.data?.items) || [],
-    typeName,
-    range,
-    (show.absence && arrangements.data?.items) || [],
-  )
+  const { days, show, toggle, isError, isPending, retry } = useCalendarItems(month)
 
   return (
     <HomeSection title="캘린더" to="/attendance" linkLabel="근태">
@@ -92,22 +46,11 @@ export function CalendarCard() {
                 )}
               >
                 <CalendarDayNumber day={day} />
-                {/* 좁은 화면에서는 글자가 한 자씩만 남아 읽을 수 없다. 점으로 개수만 보이고 눌러서 본다. */}
-                {items.length > 0 && (
-                  <span className="flex flex-wrap gap-0.5 px-0.5 sm:hidden">
-                    {items.slice(0, MAX_CHIPS).map((item) => (
-                      <span
-                        key={item.id}
-                        className={cn('size-1.5 rounded-full', TONE[item.kind])}
-                      />
-                    ))}
-                  </span>
-                )}
                 {items.slice(0, MAX_CHIPS).map((item) => (
                   <span
                     key={item.id}
                     className={cn(
-                      'hidden w-full truncate rounded px-1 text-[13px] leading-5 sm:block',
+                      'w-full truncate rounded px-1 text-[13px] leading-5',
                       TONE[item.kind],
                     )}
                   >
@@ -115,7 +58,7 @@ export function CalendarCard() {
                   </span>
                 ))}
                 {items.length > MAX_CHIPS && (
-                  <span className="text-subtle hidden px-1 text-[13px] leading-5 sm:block">
+                  <span className="text-subtle px-1 text-[13px] leading-5">
                     +{items.length - MAX_CHIPS}
                   </span>
                 )}
@@ -137,13 +80,13 @@ export function CalendarCard() {
 }
 
 /** 범례 견본. 켜진 것은 단색, 끈 것은 칩과 같은 연한 색. */
-const LEGEND: Array<[CalendarItem['kind'], string, string]> = [
-  ['absence', '휴가·예외 근무', 'bg-accent'],
-  ['event', '내 일정', 'bg-success'],
+const LEGEND: Array<[CalendarItem['kind'], string]> = [
+  ['absence', '휴가·예외 근무'],
+  ['event', '내 일정'],
 ]
 
 /** 범례이자 토글. 끈 종류는 흐리게. */
-function Legend({
+export function Legend({
   show,
   onToggle,
 }: {
@@ -152,7 +95,7 @@ function Legend({
 }) {
   return (
     <div className="flex items-center gap-1">
-      {LEGEND.map(([kind, label, solid]) => (
+      {LEGEND.map(([kind, label]) => (
         <button
           key={kind}
           type="button"
@@ -163,7 +106,7 @@ function Legend({
             !show[kind] && 'opacity-50',
           )}
         >
-          <span className={cn('size-2.5 rounded-sm', show[kind] ? solid : TONE[kind])} />
+          <span className={cn('size-2.5 rounded-sm', show[kind] ? DOT[kind] : TONE[kind])} />
           {label}
         </button>
       ))}
@@ -171,7 +114,6 @@ function Legend({
   )
 }
 
-/** 그날의 항목 목록 + 내 일정 추가·삭제. 휴가는 여기서 손대지 않는다(근태 화면 몫). */
 function DayModal({
   iso,
   items,
@@ -181,6 +123,15 @@ function DayModal({
   items: CalendarItem[]
   onClose: () => void
 }) {
+  return (
+    <Modal open onClose={onClose} title={formatISODate(iso)} size="sm">
+      <DayAgenda iso={iso} items={items} />
+    </Modal>
+  )
+}
+
+/** 그날의 항목 목록 + 내 일정 추가·삭제. 휴가는 여기서 손대지 않는다(근태 화면 몫). */
+export function DayAgenda({ iso, items }: { iso: string; items: CalendarItem[] }) {
   const create = useCreateEvent()
   const remove = useDeleteEvent()
   const toast = useToast()
@@ -205,79 +156,72 @@ function DayModal({
   }
 
   return (
-    <Modal open onClose={onClose} title={formatISODate(iso)} size="sm">
-      <div className="space-y-4">
-        {items.length === 0 ? (
-          <p className="text-subtle text-sm">이날 일정이 없습니다.</p>
-        ) : (
-          <ul className="space-y-1">
-            {items.map((item) => (
-              <li key={item.id} className="flex items-center gap-2 text-sm">
-                <span className={cn('size-2.5 shrink-0 rounded-sm', TONE[item.kind])} />
-                <span className="text-fg min-w-0 flex-1 truncate">{item.label}</span>
-                {item.kind === 'event' && (
-                  <button
-                    type="button"
-                    aria-label={`${item.label} 삭제`}
-                    disabled={remove.isPending && remove.variables === item.event.id}
-                    onClick={() =>
-                      remove.mutate(item.event.id, {
-                        onError: () => toast.error('일정을 지우지 못했습니다.'),
-                      })
-                    }
-                    className="text-subtle hover:text-danger rounded p-1 transition-colors disabled:opacity-50"
-                  >
-                    <Trash2 className="size-3.5" />
-                  </button>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
+    <div className="space-y-4">
+      {items.length === 0 ? (
+        <p className="text-subtle text-sm">이날 일정이 없습니다.</p>
+      ) : (
+        <ul className="space-y-1">
+          {items.map((item) => (
+            <li key={item.id} className="flex items-center gap-2 text-sm">
+              <span className={cn('size-2.5 shrink-0 rounded-sm', TONE[item.kind])} />
+              <span className="text-fg min-w-0 flex-1 truncate">{item.label}</span>
+              {item.kind === 'event' && (
+                <button
+                  type="button"
+                  aria-label={`${item.label} 삭제`}
+                  disabled={remove.isPending && remove.variables === item.event.id}
+                  onClick={() =>
+                    remove.mutate(item.event.id, {
+                      onError: () => toast.error('일정을 지우지 못했습니다.'),
+                    })
+                  }
+                  className="text-subtle hover:text-danger rounded p-1 transition-colors disabled:opacity-50"
+                >
+                  <Trash2 className="size-3.5" />
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
 
-        {/* Enter 로 바로 추가. 한 줄짜리 입력이라 폼 제출이 자연스럽다. */}
-        <form
-          className="border-line space-y-3 border-t pt-4"
-          onSubmit={(e) => {
-            e.preventDefault()
-            if (canSubmit) submit()
-          }}
-        >
-          <Field label="내 일정 추가" error={error}>
+      {/* Enter 로 바로 추가. 한 줄짜리 입력이라 폼 제출이 자연스럽다. */}
+      <form
+        className="border-line space-y-3 border-t pt-4"
+        onSubmit={(e) => {
+          e.preventDefault()
+          if (canSubmit) submit()
+        }}
+      >
+        <Field label="내 일정 추가" error={error}>
+          {(slot) => (
+            <Input
+              {...slot}
+              value={title}
+              maxLength={200}
+              placeholder="예: 치과 예약"
+              onChange={(e) => setTitle(e.target.value)}
+            />
+          )}
+        </Field>
+        <div className="flex items-end gap-2">
+          <Field label="시각" hint="비우면 종일" className="flex-1">
             {(slot) => (
-              <Input
-                {...slot}
-                value={title}
-                maxLength={200}
-                placeholder="예: 치과 예약"
-                onChange={(e) => setTitle(e.target.value)}
-              />
+              <Input {...slot} type="time" value={time} onChange={(e) => setTime(e.target.value)} />
             )}
           </Field>
-          <div className="flex items-end gap-2">
-            <Field label="시각" hint="비우면 종일" className="flex-1">
-              {(slot) => (
-                <Input
-                  {...slot}
-                  type="time"
-                  value={time}
-                  onChange={(e) => setTime(e.target.value)}
-                />
-              )}
-            </Field>
-            {/* 시각 필드의 힌트 줄만큼 띄워 입력과 버튼의 밑선을 맞춘다. 힌트(text-xs, mt-1.5)는
+          {/* 시각 필드의 힌트 줄만큼 띄워 입력과 버튼의 밑선을 맞춘다. 힌트(text-xs, mt-1.5)는
                 줄 높이 16px + 위 여백 6px = 22px 다. */}
-            <Button type="submit" size="sm" disabled={!canSubmit} className="mb-[22px]">
-              {create.isPending ? (
-                <Spinner className="border-t-on-accent" />
-              ) : (
-                <Plus className="size-4" />
-              )}
-              추가
-            </Button>
-          </div>
-        </form>
-      </div>
-    </Modal>
+          <Button type="submit" size="sm" disabled={!canSubmit} className="mb-[22px]">
+            {create.isPending ? (
+              <Spinner className="border-t-on-accent" />
+            ) : (
+              <Plus className="size-4" />
+            )}
+            추가
+          </Button>
+        </div>
+      </form>
+    </div>
   )
 }
