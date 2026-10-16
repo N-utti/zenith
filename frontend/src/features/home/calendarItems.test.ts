@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { LeaveOnCalendar } from '@/features/attendance/types'
-import { itemsByDay } from './calendarItems'
+import { itemsByDay, onlyShown } from './calendarItems'
 
 const leave = (over: Partial<LeaveOnCalendar>): LeaveOnCalendar => ({
   id: 'lv-1',
@@ -92,5 +92,32 @@ describe('홈 캘린더 부재 묶음', () => {
     const items = days.get('2026-09-08') ?? []
     expect(items.map((i) => i.kind)).toEqual(['absence', 'absence', 'absence'])
     expect(items.map((i) => i.label)).toEqual(['강민지 재택', '김다인 연차', '홍성완 출장'])
+    expect(items.map((i) => i.group)).toEqual(['colleague', 'colleague', 'colleague'])
+  })
+
+  it('내 휴가·예외 근무는 개인 묶음으로, 내 일정 다음·동료 앞에 온다', () => {
+    const days = itemsByDay(
+      [
+        leave({ start_date: '2026-09-08', end_date: '2026-09-08' }),
+        leave({
+          id: 'lv-2',
+          user: { id: 'u-9', name: '하지민' },
+          start_date: '2026-09-08',
+          end_date: '2026-09-08',
+        }),
+      ],
+      [{ id: 'e-1', date: '2026-09-08', title: '치과', time: null, created_at: '' }],
+      () => '연차',
+      { from: '2026-09-08', to: '2026-09-08' },
+      [],
+      'u-9',
+    )
+    const items = days.get('2026-09-08') ?? []
+    expect(items.map((i) => i.label)).toEqual(['치과', '하지민 연차', '김다인 연차'])
+    expect(items.map((i) => i.group)).toEqual(['personal', 'personal', 'colleague'])
+
+    // 개인을 끄면 내 휴가도 같이 꺼진다.
+    const shown = onlyShown(days, { personal: false, colleague: true })
+    expect(shown.get('2026-09-08')?.map((i) => i.label)).toEqual(['김다인 연차'])
   })
 })

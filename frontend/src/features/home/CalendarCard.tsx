@@ -12,7 +12,7 @@ import { cn } from '@/lib/cn'
 import { ApiError } from '@/lib/api'
 import { currentMonth, formatISODate } from '@/lib/datetime'
 import { useCreateEvent, useDeleteEvent } from './api'
-import type { CalendarItem } from './calendarItems'
+import type { CalendarGroup, CalendarItem } from './calendarItems'
 import { HomeSection } from './HomeSection'
 import { DOT, MAX_CHIPS, TONE, WEEK_STARTS_ON, useCalendarItems } from './useCalendarItems'
 
@@ -51,7 +51,7 @@ export function CalendarCard() {
                     key={item.id}
                     className={cn(
                       'w-full truncate rounded px-1 text-[13px] leading-5',
-                      TONE[item.kind],
+                      TONE[item.group],
                     )}
                   >
                     {item.label}
@@ -80,33 +80,33 @@ export function CalendarCard() {
 }
 
 /** 범례 견본. 켜진 것은 단색, 끈 것은 칩과 같은 연한 색. */
-const LEGEND: Array<[CalendarItem['kind'], string]> = [
-  ['absence', '휴가·예외 근무'],
-  ['event', '내 일정'],
+const LEGEND: Array<[CalendarGroup, string]> = [
+  ['personal', '개인'],
+  ['colleague', '동료'],
 ]
 
-/** 범례이자 토글. 끈 종류는 흐리게. */
+/** 범례이자 토글. 끈 묶음은 흐리게. 칸 안 순서(개인이 먼저)와 맞춘다. */
 export function Legend({
   show,
   onToggle,
 }: {
-  show: Record<CalendarItem['kind'], boolean>
-  onToggle: (kind: CalendarItem['kind']) => void
+  show: Record<CalendarGroup, boolean>
+  onToggle: (group: CalendarGroup) => void
 }) {
   return (
     <div className="flex items-center gap-1">
-      {LEGEND.map(([kind, label]) => (
+      {LEGEND.map(([group, label]) => (
         <button
-          key={kind}
+          key={group}
           type="button"
-          aria-pressed={show[kind]}
-          onClick={() => onToggle(kind)}
+          aria-pressed={show[group]}
+          onClick={() => onToggle(group)}
           className={cn(
             'text-subtle hover:bg-surface-hover hover:text-fg flex items-center gap-1 rounded-md px-1.5 py-1 text-xs whitespace-nowrap transition-colors',
-            !show[kind] && 'opacity-50',
+            !show[group] && 'opacity-50',
           )}
         >
-          <span className={cn('size-2.5 rounded-sm', show[kind] ? DOT[kind] : TONE[kind])} />
+          <span className={cn('size-2.5 rounded-sm', show[group] ? DOT[group] : TONE[group])} />
           {label}
         </button>
       ))}
@@ -163,7 +163,7 @@ export function DayAgenda({ iso, items }: { iso: string; items: CalendarItem[] }
         <ul className="space-y-1">
           {items.map((item) => (
             <li key={item.id} className="flex items-center gap-2 text-sm">
-              <span className={cn('size-2.5 shrink-0 rounded-sm', TONE[item.kind])} />
+              <span className={cn('size-2.5 shrink-0 rounded-sm', TONE[item.group])} />
               <span className="text-fg min-w-0 flex-1 truncate">{item.label}</span>
               {item.kind === 'event' && (
                 <button
