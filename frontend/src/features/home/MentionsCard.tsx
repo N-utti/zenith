@@ -50,7 +50,7 @@ export function MentionsCard() {
                       {view.detail && (
                         <p className="text-muted mt-0.5 truncate text-[12px]">{view.detail}</p>
                       )}
-                      <p className="text-subtle mt-1 truncate text-[11px]">
+                      <p className="text-subtle mt-1 truncate text-[12px]">
                         {formatRelative(notification.created_at)}
                       </p>
                     </div>
