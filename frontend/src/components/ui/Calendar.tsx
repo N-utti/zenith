@@ -61,25 +61,37 @@ export function Calendar({
     <div className={className}>
       <MonthHeader month={month} onMonthChange={onMonthChange} actions={actions} />
 
-      <div className="border-line bg-line overflow-hidden rounded-lg border">
-        <div className="grid grid-cols-7 gap-px">
+      {/* 칸 사이 선은 칸마다 그린 왼쪽·위 테두리다. 격자를 1px 당겨 첫 열·첫 줄 테두리는 바깥 상자
+          안쪽 경계에서 잘려 안 보인다. 틈(gap-px)에 회색 배경을 비추던 예전 방식은 칸 너비가 소수점이면
+          브라우저가 칸을 픽셀에 맞추다 마지막 칸 뒤에 1px 이 남아, 그 회색이 바깥 테두리와 붙어 오른쪽만
+          2px 로 보였다(PC 홈 캘린더). 그 1px 틈은 지금도 남을 수 있어서, 줄마다 바탕을 칸이 아니라 격자
+          전체에 깐다. 요일 줄은 회색 격자, 날짜 줄은 흰 바깥 상자라 틈이 같은 색으로 묻힌다. */}
+      <div className="border-line bg-surface overflow-hidden rounded-lg border">
+        <div className="bg-sunken -mt-px -ml-px grid grid-cols-7">
           {labels.map((label) => (
             <div
               key={label}
               className={cn(
-                'bg-sunken py-1.5 text-center text-xs font-medium',
+                'border-line border-t border-l py-1.5 text-center text-xs font-medium',
                 label === '토' || label === '일' ? 'text-subtle' : 'text-muted',
               )}
             >
               {label}
             </div>
           ))}
-
+        </div>
+        <div className="-ml-px grid grid-cols-7">
           {weeks.flat().map((date) => {
             const iso = toISODate(date)
             const weekday = date.getDay()
             return (
-              <div key={iso} className={cn('bg-surface min-h-[76px] p-1.5', dayClassName)}>
+              <div
+                key={iso}
+                className={cn(
+                  'border-line bg-surface min-h-[76px] border-t border-l p-1.5',
+                  dayClassName,
+                )}
+              >
                 {renderDay({
                   date,
                   iso,
