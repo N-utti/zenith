@@ -59,9 +59,9 @@ export function ContinueWorkCard({
               >
                 <p className="text-fg truncate text-[13.5px] font-semibold">{doc.title}</p>
                 {doc.path.length > 0 && (
-                  <p className="text-subtle mt-1 truncate text-[11px]">{doc.path.join(' / ')}</p>
+                  <p className="text-subtle mt-1 truncate text-[12px]">{doc.path.join(' / ')}</p>
                 )}
-                <p className="text-subtle mt-1 truncate text-[11px]">
+                <p className="text-subtle mt-1 truncate text-[12px]">
                   {doc.updated_by?.name ?? '알 수 없음'} · {formatRelative(doc.updated_at)}
                 </p>
               </Link>
