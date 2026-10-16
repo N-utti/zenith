@@ -30,6 +30,23 @@
   /* 검색으로 찾아온 곳을 잠깐 밝혔다 끈다(`animate-flash`). 켜고 끄는 시각을 자바스크립트가
      재면 타이머와 상태가 따라붙는다. 몇 초인지는 스타일이 알면 되는 일이다. */
   --animate-flash: zenith-flash 2s ease-out;
+
+  /* 폰 바텀시트(`Modal` 의 sheet)가 아래에서 올라오고 뒤 배경이 서서히 어두워진다. 곡선은 iOS 시트처럼
+     빨리 출발해 천천히 멈춘다. 닫힐 때는 Modal 이 transition 으로 되돌린다. */
+  --animate-sheet-in: zenith-sheet-in 280ms cubic-bezier(0.32, 0.72, 0, 1);
+  --animate-fade-in: zenith-fade-in 200ms ease-out;
+}
+
+@keyframes zenith-sheet-in {
+  from {
+    transform: translateY(100%);
+  }
+}
+
+@keyframes zenith-fade-in {
+  from {
+    opacity: 0;
+  }
 }
 
 @keyframes zenith-flash {

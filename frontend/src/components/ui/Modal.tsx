@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, type ReactNode } from 'react'
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import { cn } from '@/lib/cn'
@@ -52,7 +52,22 @@ export function Modal({
   const titleId = useId()
   const descId = useId()
 
-  useFocusTrap(open, panelRef, onClose)
+  // 폰 시트는 내려가는 걸 보여 준 뒤 닫는다(200ms). 닫는 길(바깥 누름·X·Esc)이 모두 이걸 거친다.
+  // PC 크기이거나 동작 줄이기를 켰으면 바로 닫는다.
+  const [closing, setClosing] = useState(false)
+  if (!open && closing) setClosing(false)
+  const close = () => {
+    const animate =
+      sheet &&
+      matchMedia('(max-width: 767.98px)').matches &&
+      !matchMedia('(prefers-reduced-motion: reduce)').matches
+    if (!animate) return onClose()
+    if (closing) return
+    setClosing(true)
+    setTimeout(onClose, 200)
+  }
+
+  useFocusTrap(open, panelRef, close)
 
   // 배경 스크롤 잠금. 모달 뒤 본문이 따라 굴러가지 않는다.
   useEffect(() => {
@@ -77,8 +92,13 @@ export function Modal({
         type="button"
         aria-label="닫기"
         tabIndex={-1}
-        onClick={onClose}
-        className="absolute inset-0 cursor-default bg-black/40"
+        onClick={close}
+        className={cn(
+          'absolute inset-0 cursor-default bg-black/40',
+          sheet &&
+            'max-md:motion-safe:animate-fade-in max-md:transition-opacity max-md:duration-200',
+          closing && 'opacity-0',
+        )}
       />
 
       <div
@@ -92,7 +112,8 @@ export function Modal({
           'border-line bg-surface relative flex max-h-full w-full flex-col rounded-xl border shadow-2xl outline-none',
           SIZES[size],
           sheet &&
-            'max-md:max-h-[85dvh] max-md:max-w-none max-md:rounded-b-none max-md:border-x-0 max-md:border-b-0 max-md:pb-[env(safe-area-inset-bottom)]',
+            'max-md:max-h-[85dvh] max-md:max-w-none max-md:rounded-b-none max-md:border-x-0 max-md:border-b-0 max-md:pb-[env(safe-area-inset-bottom)] max-md:motion-safe:animate-sheet-in max-md:transition-transform max-md:duration-200 max-md:ease-in',
+          closing && 'translate-y-full',
         )}
       >
         <header className="flex items-start gap-3 px-5 pt-5 pb-3">
@@ -108,7 +129,7 @@ export function Modal({
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={close}
             aria-label="닫기"
             className="text-subtle hover:bg-surface-hover hover:text-fg -mt-1 -mr-1 grid size-8 shrink-0 cursor-pointer place-items-center rounded-lg transition-colors"
           >
