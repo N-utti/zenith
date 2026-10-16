@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { currentMonth, formatMonth, monthMatrix, shiftMonth, toISODate } from '@/lib/datetime'
@@ -150,6 +150,9 @@ export function MonthHeader({
   actions?: ReactNode
   phone?: boolean
 }) {
+  // 투명한 달 입력의 초점 고리는 키보드로 들어왔을 때만. 크롬·사파리는 날짜 입력을 눌러도 :focus-visible 로
+  // 쳐서, CSS 로만 하면 제목을 누른 뒤 고리가 계속 남는다. Tab 의 keyup 은 새로 초점 받은 입력에서 난다.
+  const [keyboardFocus, setKeyboardFocus] = useState(false)
   // 폰(TimeTree 참고): 화살표 없이 왼쪽에 큰 제목. 달은 좌우로 밀어 넘기고(CalendarPage), 제목을 누르면
   // 브라우저 기본 달 고르기(아이폰은 휠)가 뜬다. 투명한 입력을 제목 위에 겹쳐 그 입력이 눌리게 한다.
   // 데스크톱 크롬은 입력의 달력 아이콘이 아니면 안 열려서 showPicker 로 연다.
@@ -158,13 +161,20 @@ export function MonthHeader({
       <div className="mb-2">
         <div className="flex items-center gap-2">
           <h2 className="relative">
-            <label className="text-fg has-[:focus-visible]:ring-accent flex cursor-pointer items-center gap-1 rounded-md text-xl font-bold whitespace-nowrap has-[:focus-visible]:ring-2">
+            <label
+              className={cn(
+                'text-fg flex cursor-pointer items-center gap-1 rounded-md text-xl font-bold whitespace-nowrap',
+                keyboardFocus && 'ring-accent ring-2',
+              )}
+            >
               {formatMonth(month)}
               <ChevronDown className="text-subtle size-5" />
               <input
                 type="month"
                 value={month}
                 aria-label="달 고르기"
+                onKeyUp={() => setKeyboardFocus(true)}
+                onBlur={() => setKeyboardFocus(false)}
                 onClick={(e) => {
                   try {
                     e.currentTarget.showPicker()

@@ -71,6 +71,13 @@ const EXTRA_SEEDS: Array<
   ['u-3', 'official', workday(1), workday(1), 'approved'],
   ['u-8', 'annual', workday(-6), workday(-5), 'approved'],
   ['u-9', 'sick', workday(5), workday(5), 'pending'],
+  // 폰 캘린더는 옆으로 밀어 지난달·다음 달을 넘겨 본다. 앞뒤 달도 비지 않게 한 달 남짓 거리에 깐다.
+  ['u-8', 'annual', workday(-38), workday(-36), 'approved'],
+  ['u-6', 'half_pm', workday(-24), workday(-24), 'approved'],
+  ['u-3', 'annual', workday(-17), workday(-17), 'approved'],
+  ['u-9', 'annual', workday(20), workday(21), 'approved'],
+  ['u-5', 'official', workday(28), workday(28), 'approved'],
+  ['u-6', 'annual', workday(36), workday(37), 'approved'],
 ]
 
 function extraSeeds(user: User): LeaveRequest[] {

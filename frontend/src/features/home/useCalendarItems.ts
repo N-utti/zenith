@@ -23,8 +23,11 @@ export const DOT: Record<CalendarGroup, string> = {
 /** 칸 하나에 보이는 최대 줄 수. 넘치면 "+N" 으로 접고 눌러서 본다. */
 export const MAX_CHIPS = 3
 
-/** 조회 기간과 격자가 같은 주 시작을 봐야 한다. 취업규칙이 일요일 시작이면 여기만 0 으로. */
-export const WEEK_STARTS_ON = 1
+/**
+ * 홈 캘린더·폰 캘린더의 주 시작. 조회 기간과 격자가 같은 값을 봐야 한다. 일요일(2026-10-16 사용자 결정,
+ * 흔한 달력 모양). 근태 달력은 주 40시간 집계가 월~일 주라 월요일 그대로다(`Calendar` 기본값).
+ */
+export const WEEK_STARTS_ON = 0
 
 const SHOW_KEY = 'zenith.calendarShow'
 
