@@ -32,9 +32,9 @@ export const WEEK_STARTS_ON = 1
  */
 export function useCalendarItems(month: string) {
   const me = useCurrentUser()
-  // 범례를 눌러 묶음별로 끈다. 동료 부재만 보거나 개인 것만 보거나.
+  // 범례를 눌러 묶음별로 켜고 끈다. 처음엔 개인만 켠다(사용자 결정). 동료 부재는 필요할 때 켜 본다.
   const [show, setShow] = useState<Record<CalendarGroup, boolean>>({
-    colleague: true,
+    colleague: false,
     personal: true,
   })
   const toggle = (group: CalendarGroup) => setShow((s) => ({ ...s, [group]: !s[group] }))
