@@ -82,12 +82,14 @@ function MonthPane({
           >
             <CalendarDayNumber day={day} className={weekendTone(day)} />
             {/* 10px·자간 -0.04em: 한글 한 자가 약 8.2px 라 375px 폰 칸(약 50px)에 여섯 글자가 든다. 11px
-                기본 자간이면 9.5px 라 넉 자에 말줄임표였다. TimeTree 수준으로 맞춘 사용자 결정(2026-10-16). */}
+                기본 자간이면 9.5px 라 넉 자에 말줄임표였다. TimeTree 수준으로 맞춘 사용자 결정(2026-10-16).
+                가운데 정렬이어도 칩보다 긴 글자는 브라우저가 왼쪽부터 채워 끝을 자른다(CSS 규칙). 짧으면 가운데,
+                넘치면 왼쪽부터 말줄임표라는 사용자 요청이 그대로 된다. */}
             {items.slice(0, MAX_CHIPS).map((item) => (
               <span
                 key={item.id}
                 className={cn(
-                  'w-full truncate rounded-sm px-px text-left text-[10px] leading-4 tracking-[-0.04em]',
+                  'w-full truncate rounded-sm px-px text-center text-[10px] leading-4 tracking-[-0.04em]',
                   chipTone(item),
                 )}
               >
