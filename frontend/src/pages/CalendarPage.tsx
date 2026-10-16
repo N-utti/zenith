@@ -51,7 +51,7 @@ export function CalendarPage() {
               {items.length > 0 && (
                 <span className="flex gap-0.5">
                   {items.slice(0, MAX_CHIPS).map((item) => (
-                    <span key={item.id} className={cn('size-1.5 rounded-full', DOT[item.kind])} />
+                    <span key={item.id} className={cn('size-1.5 rounded-full', DOT[item.group])} />
                   ))}
                 </span>
               )}
