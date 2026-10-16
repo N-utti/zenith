@@ -228,147 +228,140 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
           {summary}
         </p>
 
-        <div
-          id={listId}
-          role="listbox"
-          aria-label="검색 결과"
-          className="max-h-80 overflow-y-auto px-1.5 pt-1.5"
-        >
-          <div role="group" aria-labelledby={`${listId}-nav`}>
-            <p
-              id={`${listId}-nav`}
-              role="presentation"
-              className="text-subtle px-2.5 pt-2 pb-1 text-[11px] font-semibold tracking-wide uppercase"
-            >
-              화면 이동
-            </p>
-            {navItems.length === 0 && (
-              <p aria-hidden="true" className="text-muted px-2.5 py-6 text-center text-sm">
-                일치하는 화면이 없습니다.
-              </p>
-            )}
-            {navItems.map((item, i) => {
-              const Icon = item.icon
-              return (
-                <button
-                  key={item.to}
-                  ref={i === active ? activeRow : undefined}
-                  role="option"
-                  id={optionId(i)}
-                  aria-selected={i === active}
-                  tabIndex={-1}
-                  type="button"
-                  onMouseEnter={() => setCursor(i)}
-                  onClick={() => go(item.to)}
-                  className={cn(
-                    'flex w-full cursor-pointer items-center gap-3 rounded-lg px-2.5 py-2 text-sm',
-                    i === active ? 'bg-accent-soft text-accent' : 'text-muted',
-                  )}
-                >
-                  <Icon className="size-4.5 shrink-0" />
-                  <span>{item.label}</span>
-                  {i === active && <CornerDownLeft className="ml-auto size-3.5" />}
-                </button>
-              )
-            })}
-          </div>
-
-          {rooms.length > 0 && (
-            <div role="group" aria-labelledby={`${listId}-rooms`}>
+        <div id={listId} role="listbox" aria-label="검색 결과" className="flex max-h-80 flex-col">
+          <div className="min-h-0 overflow-y-auto p-1.5">
+            <div role="group" aria-labelledby={`${listId}-nav`}>
               <p
-                id={`${listId}-rooms`}
+                id={`${listId}-nav`}
                 role="presentation"
-                className="text-subtle px-2.5 pt-3 pb-1 text-[11px] font-semibold tracking-wide uppercase"
+                className="text-subtle px-2.5 pt-2 pb-1 text-[11px] font-semibold tracking-wide uppercase"
               >
-                채팅방
+                화면 이동
               </p>
-              {rooms.map((room, i) => {
-                const index = navItems.length + i
-                const Icon = room.is_dm ? AtSign : room.is_private ? Lock : Hash
+              {navItems.length === 0 && (
+                <p aria-hidden="true" className="text-muted px-2.5 py-6 text-center text-sm">
+                  일치하는 화면이 없습니다.
+                </p>
+              )}
+              {navItems.map((item, i) => {
+                const Icon = item.icon
                 return (
                   <button
-                    key={room.id}
-                    ref={index === active ? activeRow : undefined}
+                    key={item.to}
+                    ref={i === active ? activeRow : undefined}
                     role="option"
-                    id={optionId(index)}
-                    aria-selected={index === active}
+                    id={optionId(i)}
+                    aria-selected={i === active}
                     tabIndex={-1}
                     type="button"
-                    onMouseEnter={() => setCursor(index)}
-                    onClick={() => go(`/chat/${room.id}`)}
+                    onMouseEnter={() => setCursor(i)}
+                    onClick={() => go(item.to)}
                     className={cn(
                       'flex w-full cursor-pointer items-center gap-3 rounded-lg px-2.5 py-2 text-sm',
-                      index === active ? 'bg-accent-soft text-accent' : 'text-muted',
+                      i === active ? 'bg-accent-soft text-accent' : 'text-muted',
                     )}
                   >
                     <Icon className="size-4.5 shrink-0" />
-                    <span className="truncate">{room.name}</span>
-                    <span className="text-subtle shrink-0 text-[11px]">
-                      {room.is_dm ? 'DM' : room.is_private ? '비공개 채널' : '채널'}
+                    <span>{item.label}</span>
+                    {i === active && <CornerDownLeft className="ml-auto size-3.5" />}
+                  </button>
+                )
+              })}
+            </div>
+
+            {rooms.length > 0 && (
+              <div role="group" aria-labelledby={`${listId}-rooms`}>
+                <p
+                  id={`${listId}-rooms`}
+                  role="presentation"
+                  className="text-subtle px-2.5 pt-3 pb-1 text-[11px] font-semibold tracking-wide uppercase"
+                >
+                  채팅방
+                </p>
+                {rooms.map((room, i) => {
+                  const index = navItems.length + i
+                  const Icon = room.is_dm ? AtSign : room.is_private ? Lock : Hash
+                  return (
+                    <button
+                      key={room.id}
+                      ref={index === active ? activeRow : undefined}
+                      role="option"
+                      id={optionId(index)}
+                      aria-selected={index === active}
+                      tabIndex={-1}
+                      type="button"
+                      onMouseEnter={() => setCursor(index)}
+                      onClick={() => go(`/chat/${room.id}`)}
+                      className={cn(
+                        'flex w-full cursor-pointer items-center gap-3 rounded-lg px-2.5 py-2 text-sm',
+                        index === active ? 'bg-accent-soft text-accent' : 'text-muted',
+                      )}
+                    >
+                      <Icon className="size-4.5 shrink-0" />
+                      <span className="truncate">{room.name}</span>
+                      <span className="text-subtle shrink-0 text-[11px]">
+                        {room.is_dm ? 'DM' : room.is_private ? '비공개 채널' : '채널'}
+                      </span>
+                      {index === active && <CornerDownLeft className="ml-auto size-3.5 shrink-0" />}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+
+            {searching && (
+              <div role="group" aria-labelledby={`${listId}-hits`}>
+                <p
+                  id={`${listId}-hits`}
+                  role="presentation"
+                  className="text-subtle px-2.5 pt-3 pb-1 text-[11px] font-semibold tracking-wide uppercase"
+                >
+                  문서·채팅·게시글
+                  {pending && (
+                    <span aria-hidden="true" className="ml-1.5 font-normal normal-case">
+                      찾는 중…
                     </span>
-                    {index === active && <CornerDownLeft className="ml-auto size-3.5 shrink-0" />}
-                  </button>
-                )
-              })}
-            </div>
-          )}
-
-          {searching && (
-            <div role="group" aria-labelledby={`${listId}-hits`}>
-              <p
-                id={`${listId}-hits`}
-                role="presentation"
-                className="text-subtle px-2.5 pt-3 pb-1 text-[11px] font-semibold tracking-wide uppercase"
-              >
-                문서·채팅·게시글
-                {pending && (
-                  <span aria-hidden="true" className="ml-1.5 font-normal normal-case">
-                    찾는 중…
-                  </span>
+                  )}
+                </p>
+                {isError && !pending && (
+                  <p aria-hidden="true" className="text-muted px-2.5 py-4 text-center text-sm">
+                    검색에 실패했습니다. 잠시 뒤에 다시 시도해 주세요.
+                  </p>
                 )}
-              </p>
-              {isError && !pending && (
-                <p aria-hidden="true" className="text-muted px-2.5 py-4 text-center text-sm">
-                  검색에 실패했습니다. 잠시 뒤에 다시 시도해 주세요.
-                </p>
-              )}
-              {!isError && hits.length === 0 && !pending && (
-                <p aria-hidden="true" className="text-muted px-2.5 py-4 text-center text-sm">
-                  “{query.trim()}” 에 맞는 내용이 없습니다.
-                </p>
-              )}
-              {hits.map((hit, i) => {
-                const index = navItems.length + rooms.length + i
-                return (
-                  <button
-                    key={`${hit.type}-${hit.id}`}
-                    ref={index === active ? activeRow : undefined}
-                    role="option"
-                    id={optionId(index)}
-                    aria-selected={index === active}
-                    tabIndex={-1}
-                    type="button"
-                    onMouseEnter={() => setCursor(index)}
-                    onClick={() => go(hit.to)}
-                    className={cn(
-                      'flex w-full cursor-pointer items-start gap-3 rounded-lg px-2.5 py-2 text-left text-sm',
-                      index === active ? 'bg-accent-soft text-accent' : 'text-muted',
-                    )}
-                  >
-                    <HitRow hit={hit} active={index === active} />
-                  </button>
-                )
-              })}
-            </div>
-          )}
+                {!isError && hits.length === 0 && !pending && (
+                  <p aria-hidden="true" className="text-muted px-2.5 py-4 text-center text-sm">
+                    “{query.trim()}” 에 맞는 내용이 없습니다.
+                  </p>
+                )}
+                {hits.map((hit, i) => {
+                  const index = navItems.length + rooms.length + i
+                  return (
+                    <button
+                      key={`${hit.type}-${hit.id}`}
+                      ref={index === active ? activeRow : undefined}
+                      role="option"
+                      id={optionId(index)}
+                      aria-selected={index === active}
+                      tabIndex={-1}
+                      type="button"
+                      onMouseEnter={() => setCursor(index)}
+                      onClick={() => go(hit.to)}
+                      className={cn(
+                        'flex w-full cursor-pointer items-start gap-3 rounded-lg px-2.5 py-2 text-left text-sm',
+                        index === active ? 'bg-accent-soft text-accent' : 'text-muted',
+                      )}
+                    >
+                      <HitRow hit={hit} active={index === active} />
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
 
-          {/* 목록이 길어도 항상 보이게 스크롤 영역 바닥에 붙인다. 바닥 여백은 이 칸이 갖는다.
-              스크롤 칸에 아래 여백을 두면 붙는 자리가 그만큼 떠서 그 틈으로 뒤 목록이 비친다. */}
-          <div
-            role="group"
-            aria-label="AI"
-            className="border-line bg-surface sticky bottom-0 mt-1.5 border-t py-1.5"
-          >
+          {/* 목록이 길어도 항상 보이게 스크롤 영역 밖에 둔다. 안에 두면 위 선이 스크롤바 폭만큼
+              덜 뻗고, 방향키로 고른 줄이 이 칸 뒤로 숨는다. */}
+          <div role="group" aria-label="AI" className="border-line border-t p-1.5">
             <button
               ref={active === askIndex ? activeRow : undefined}
               role="option"
