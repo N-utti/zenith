@@ -2,7 +2,7 @@ import { useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { NodeViewContent, NodeViewWrapper, type NodeViewProps } from '@tiptap/react'
 import { cn } from '@/lib/cn'
 import { uploadedFilePath } from '@/lib/links'
-import { httpUrl } from '@/lib/serverOrigin'
+import { AuthImg } from '@/components/ui/AuthMedia'
 
 const MIN_WIDTH = 96
 
@@ -57,11 +57,11 @@ export function ImageBlockView({ node, updateAttributes, selected, editor }: Nod
       <div ref={frameRef} contentEditable={false} className="relative w-full">
         <span className="relative inline-block max-w-full align-bottom">
           {path ? (
-            <img
+            <AuthImg
               // 문서에 저장된 src는 `/api/files/{id}` 상대경로다. 서버 주소는 저장하지
               // 않는다. 서버가 옮겨 가면 저장된 문서가 전부 깨지기 때문이다. 대신
               // 화면에 그릴 때만 오리진을 붙인다(데스크탑 셸에서만 값이 붙는다).
-              src={httpUrl(path)}
+              path={path}
               alt={alt ?? ''}
               draggable={false}
               style={shownWidth ? { width: `${shownWidth}px` } : undefined}

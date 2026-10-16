@@ -9,6 +9,7 @@ import {
 } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router'
 import { ArrowDown, Download, FileText, Paperclip, Pencil, Sparkles, Trash2 } from 'lucide-react'
+import { AuthImg, DownloadLink } from '@/components/ui/AuthMedia'
 import { Avatar } from '@/components/ui/Avatar'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -82,8 +83,8 @@ function Attachments({ files }: { files: ChatAttachment[] | null }) {
                   setViewing(file)
                 }}
               >
-                <img
-                  src={httpUrl(file.url)}
+                <AuthImg
+                  path={file.url}
                   alt={file.name}
                   loading="lazy"
                   // 못 그리면 파일 링크로 떨어뜨린다. 깨진 그림 아이콘만 남으면 이름조차 안 보인다.
@@ -93,35 +94,31 @@ function Attachments({ files }: { files: ChatAttachment[] | null }) {
               </a>
               {/* 줄에서 바로 저장하는 길. 파일 칩과 같은 `download` 를 얹는다.
                   숨어 있을 때는 눌리지도 않는다. 그림을 열려고 누른 것이 내려받기가 되면 안 된다. */}
-              <a
-                href={httpUrl(file.url)}
-                download={file.name}
+              <DownloadLink
+                path={file.url}
+                name={file.name}
                 aria-label={`${file.name} 내려받기`}
                 title="내려받기"
                 className="border-line bg-surface text-muted hover:text-fg pointer-events-none absolute top-1.5 right-1.5 grid size-7 place-items-center rounded-md border opacity-0 transition-opacity group-focus-within/image:pointer-events-auto group-focus-within/image:opacity-100 group-hover/image:pointer-events-auto group-hover/image:opacity-100 pointer-coarse:pointer-events-auto pointer-coarse:opacity-100"
               >
                 <Download className="size-3.5" />
-              </a>
+              </DownloadLink>
             </div>
           ) : (
-            <a
-              href={httpUrl(file.url)}
-              download={file.name}
+            <DownloadLink
+              path={file.url}
+              name={file.name}
               className="border-line bg-sunken text-muted hover:text-fg flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs transition-colors"
             >
               <Paperclip className="size-3.5 shrink-0" />
               <span className="max-w-48 truncate">{file.name}</span>
               <span className="text-subtle">{formatBytes(file.size)}</span>
-            </a>
+            </DownloadLink>
           )}
         </li>
       ))}
       {viewing && (
-        <ImageViewer
-          src={httpUrl(viewing.url)}
-          name={viewing.name}
-          onClose={() => setViewing(null)}
-        />
+        <ImageViewer path={viewing.url} name={viewing.name} onClose={() => setViewing(null)} />
       )}
     </ul>
   )
