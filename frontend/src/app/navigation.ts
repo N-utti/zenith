@@ -51,10 +51,10 @@ const ARCHIVE_NAV: NavItem = { to: '/archive', label: '자료실', icon: Archive
 /**
  * 사이드바 최상단 그룹. 12·UI 청사진의 1b 셸에서 섹션 헤더 없이 먼저 오는 항목들이다.
  * 문서·채널·게시판은 여기 없다. 각각 트리와 목록 섹션으로 따로 렌더한다.
+ * 받은 알림도 없다. PC 는 헤더의 알림 종(`NotificationMenu`), 폰은 하단 탭이 맡는다.
  */
 export const TOP_NAV: NavItem[] = [
   { to: '/', label: '홈', icon: House, end: true },
-  { to: '/notifications', label: '받은 알림', icon: Bell },
   { to: '/attendance', label: '근태', icon: Clock },
   { to: '/approvals', label: '결재', icon: ClipboardCheck },
   ...CRM_NAV,

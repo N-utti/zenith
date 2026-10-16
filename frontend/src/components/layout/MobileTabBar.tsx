@@ -4,7 +4,7 @@ import { MOBILE_TABS } from '@/app/navigation'
 import { useChannels } from '@/features/chat/api'
 import { useUnreadNotificationCount } from '@/features/notifications/api'
 
-/** 와이어프레임 3a의 하단 탭바. 데스크톱에서는 트리 사이드바가 이 역할을 한다. */
+/** 와이어프레임 3a의 하단 탭바. 데스크톱에서는 트리 사이드바가, 알림은 헤더 종이 이 역할을 한다. */
 export function MobileTabBar() {
   // 사이드바 배지와 같은 채널 목록의 unread 합. 사이드바가 이미 받아 두고 소켓이 캐시를 바로
   // 고치므로 요청이 늘지 않는다(홈 한 벌을 구독하면 메시지마다 /me/home 을 다시 받는다).

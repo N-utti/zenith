@@ -12,7 +12,6 @@ import { useHasDraft } from '@/features/chat/drafts'
 import { NewChatModal } from '@/features/chat/NewChatModal'
 import { WorkStatus } from '@/features/chat/WorkStatus'
 import type { ChatChannel } from '@/features/chat/types'
-import { useUnreadNotificationCount } from '@/features/notifications/api'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { MaskedRow } from '@/components/ui/MaskedRow'
@@ -103,11 +102,11 @@ function AddButton({ label, onClick }: { label: string; onClick: () => void }) {
   )
 }
 
-/** 안 읽은 개수 알약. 채널 행과 「받은 알림」 행이 같은 모양을 쓴다. */
+/** 채널·DM 행의 안 읽은 개수 알약. */
 function UnreadPill({ count }: { count: number }) {
   return (
     <span className="bg-muted text-surface ml-auto shrink-0 rounded-full px-1.5 text-xs font-bold">
-      {/* 낭독기가 앞의 이름과 붙여 읽지 않게 끊는다("받은 알림3개" 가 아니라 "받은 알림, 3개"). */}
+      {/* 낭독기가 앞의 이름과 붙여 읽지 않게 끊는다("개발3개" 가 아니라 "개발, 3개"). */}
       <span className="sr-only">, </span>
       {count}
       <span className="sr-only">개 안 읽음</span>
@@ -115,15 +114,7 @@ function UnreadPill({ count }: { count: number }) {
   )
 }
 
-function NavRow({
-  item,
-  unread = 0,
-  onNavigate,
-}: {
-  item: NavItem
-  unread?: number
-  onNavigate?: () => void
-}) {
+function NavRow({ item, onNavigate }: { item: NavItem; onNavigate?: () => void }) {
   const Icon = item.icon
   return (
     <NavLink
@@ -134,7 +125,6 @@ function NavRow({
     >
       <Icon className="size-[18px] shrink-0" strokeWidth={2} />
       <span className="truncate">{item.label}</span>
-      {unread > 0 && <UnreadPill count={unread} />}
     </NavLink>
   )
 }
@@ -272,19 +262,13 @@ export const SidebarContent = memo(function SidebarContent({
   onNavigate?: () => void
 }) {
   const { role } = useCurrentUser()
-  const unreadNotifications = useUnreadNotificationCount()
   const [docsCollapsed, toggleDocs] = useSectionCollapsed('docs')
 
   return (
     <div className="flex h-full flex-col">
       <nav className="flex-1 overflow-y-auto px-2 py-3">
         {visibleNav(TOP_NAV, role).map((item) => (
-          <NavRow
-            key={item.to}
-            item={item}
-            unread={item.to === '/notifications' ? unreadNotifications : 0}
-            onNavigate={onNavigate}
-          />
+          <NavRow key={item.to} item={item} onNavigate={onNavigate} />
         ))}
 
         <SectionLabel collapsed={docsCollapsed} onToggle={toggleDocs}>
