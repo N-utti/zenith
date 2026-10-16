@@ -52,7 +52,7 @@ export function Calendar({
   className?: string
   /** 칸 크기를 바꿀 때. 폰 캘린더는 아래 목록을 보이려고 칸을 줄인다. */
   dayClassName?: string
-  /** 화살표를 제목 양옆에 크게 벌린다. 폰 캘린더용. */
+  /** 폰 캘린더용. 화살표를 제목 양옆에 크게 벌리고, 격자는 화면 폭을 다 채운다. */
   spread?: boolean
 }) {
   const weeks = monthMatrix(month, weekStartsOn)
@@ -69,13 +69,22 @@ export function Calendar({
           브라우저가 칸을 픽셀에 맞추다 마지막 칸 뒤에 1px 이 남아, 그 회색이 바깥 테두리와 붙어 오른쪽만
           2px 로 보였다(PC 홈 캘린더). 그 1px 틈은 지금도 남을 수 있어서, 줄마다 바탕을 칸이 아니라 격자
           전체에 깐다. 요일 줄은 회색 격자, 날짜 줄은 흰 바깥 상자라 틈이 같은 색으로 묻힌다. */}
-      <div className="border-line bg-surface overflow-hidden rounded-lg border">
-        <div className="bg-sunken -mt-px -ml-px grid grid-cols-7">
+      {/* spread: 본문 좌우 여백(AppLayout 의 px-4 sm:px-6)만큼 밖으로 빼 화면 끝까지. 화면 끝에 닿는
+          둥근 모서리·좌우 테두리와 칸 사이 세로선은 빼고 주 사이 가로선만 남긴다. 폰 캘린더 앱들
+          (네이버웍스·아이폰)이 이렇게 그린다. */}
+      <div
+        className={cn(
+          'border-line bg-surface overflow-hidden border',
+          spread ? '-mx-4 border-x-0 sm:-mx-6' : 'rounded-lg',
+        )}
+      >
+        <div className={cn('bg-sunken -mt-px grid grid-cols-7', !spread && '-ml-px')}>
           {labels.map((label) => (
             <div
               key={label}
               className={cn(
-                'border-line border-t border-l py-1.5 text-center text-xs font-medium',
+                'border-line border-t py-1.5 text-center text-xs font-medium',
+                !spread && 'border-l',
                 label === '토' || label === '일' ? 'text-subtle' : 'text-muted',
               )}
             >
@@ -83,7 +92,7 @@ export function Calendar({
             </div>
           ))}
         </div>
-        <div className="-ml-px grid grid-cols-7">
+        <div className={cn('grid grid-cols-7', !spread && '-ml-px')}>
           {weeks.flat().map((date) => {
             const iso = toISODate(date)
             const weekday = date.getDay()
@@ -91,7 +100,8 @@ export function Calendar({
               <div
                 key={iso}
                 className={cn(
-                  'border-line bg-surface min-h-[76px] border-t border-l p-1.5',
+                  'border-line bg-surface min-h-[76px] border-t p-1.5',
+                  !spread && 'border-l',
                   dayClassName,
                 )}
               >
