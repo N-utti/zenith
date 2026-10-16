@@ -14,6 +14,7 @@ import { ZenithMark } from '@/components/ui/ZenithMark'
 import { cn } from '@/lib/cn'
 import { setContentWide, useContentWide } from '@/lib/contentWidth'
 import { useTheme } from '@/lib/theme'
+import { NotificationMenu } from './NotificationMenu'
 import { UserMenu } from './UserMenu'
 
 export function Header({
@@ -119,6 +120,7 @@ export function Header({
         >
           {theme === 'dark' ? <Sun className="size-4.5" /> : <Moon className="size-4.5" />}
         </Button>
+        <NotificationMenu />
         <UserMenu />
       </div>
     </header>
