@@ -14,7 +14,7 @@ export const TONE: Record<CalendarGroup, string> = {
   personal: 'bg-success/12 text-success',
 }
 
-/** 진한 색. 폰 칸의 점과 켜진 범례 견본. 점은 작아서 칩의 연한 색으로는 안 보인다. */
+/** 진한 색. 켜진 범례 견본, 날짜 창 목록의 견본, 폰 칸의 종일 칩 바탕. 작은 견본은 연한 색으로는 안 보인다. */
 export const DOT: Record<CalendarGroup, string> = {
   colleague: 'bg-accent',
   personal: 'bg-success',
@@ -48,12 +48,8 @@ function readShow(): Record<CalendarGroup, boolean> {
   return show
 }
 
-/**
- * 한 달 격자에 그릴 항목과 범례 토글. 홈 카드와 폰 캘린더 화면(`/calendar`)이 같이 쓴다.
- * 전 직원의 승인된 휴가·재택·외근·출장 + 내 개인 일정. 범례는 개인·동료 두 묶음.
- */
-export function useCalendarItems(month: string) {
-  const me = useCurrentUser()
+/** 범례 토글. 폰 캘린더는 나란히 그린 세 달 격자가 이 상태 하나를 같이 쓴다. */
+export function useCalendarShow() {
   const [show, setShow] = useState(readShow)
   const toggle = (group: CalendarGroup) => {
     const next = { ...show, [group]: !show[group] }
@@ -64,6 +60,14 @@ export function useCalendarItems(month: string) {
       // 저장 못 해도 이번 화면의 토글은 유지된다.
     }
   }
+  return { show, toggle }
+}
+
+/**
+ * 한 달 격자에 그릴 항목. 전 직원의 승인된 휴가·재택·외근·출장 + 내 개인 일정에서 `show` 로 켠 묶음만.
+ */
+export function useCalendarDays(month: string, show: Record<CalendarGroup, boolean>) {
+  const me = useCurrentUser()
 
   // 보이는 칸(이웃 달 포함) 전체를 한 번에 묻는다. 달력에 빈 칸이 없어야 한다.
   const weeks = monthMatrix(month, WEEK_STARTS_ON)
@@ -92,5 +96,11 @@ export function useCalendarItems(month: string) {
     me.id,
   )
   const days = onlyShown(all, show)
-  return { days, show, toggle, isError, isPending, retry }
+  return { days, isError, isPending, retry }
+}
+
+/** 한 달 격자에 그릴 항목과 범례 토글. 홈 카드가 쓴다. */
+export function useCalendarItems(month: string) {
+  const { show, toggle } = useCalendarShow()
+  return { ...useCalendarDays(month, show), show, toggle }
 }
