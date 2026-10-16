@@ -25,7 +25,7 @@ export function MentionsCard() {
     .slice(0, 3)
 
   return (
-    <HomeSection title="나에게 온 멘션 & 댓글" to="/notifications">
+    <HomeSection title="나에게 온 멘션" to="/notifications">
       <Card>
         {isPending && <SkeletonRows />}
         {isError && !data && <CardEmpty onRetry={refetch}>알림을 불러오지 못했습니다.</CardEmpty>}
