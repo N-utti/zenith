@@ -140,10 +140,11 @@ const rowTone = (active: boolean, menuOpen: boolean) =>
       : 'text-muted hover:bg-surface-hover hover:text-fg'
 
 /**
- * 줄 왼쪽 여백. 기본 4px 에 한 단계마다 14px. 28px 줄에서 계단이 보이는 비율이고, 기본값은 알약
- * 왼쪽 끝과 아이콘 사이의 숨 쉴 틈이다(Sidebar 의 구획 제목 화살표가 이 값에 맞춰 서 있다).
+ * 줄 왼쪽 여백. 기본 8px 에 한 단계마다 14px. 28px 줄에서 계단이 보이는 비율이고, 기본값은 최상위
+ * 문서 아이콘이 상단 메뉴 아이콘과 같은 세로줄(사이드바 왼쪽에서 18px)에 서는 값이다(Sidebar 의
+ * 구획 제목 화살표도 여기에 맞춰 서 있다).
  */
-const indent = (depth: number) => 4 + depth * 14
+const indent = (depth: number) => 8 + depth * 14
 
 function DocRow({
   node,
@@ -662,7 +663,7 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
         className={cn(
           ROW,
           ROW_LINK,
-          'text-subtle hover:bg-surface-hover hover:text-fg mt-0.5 w-full cursor-pointer pr-2.5 pl-1',
+          'text-subtle hover:bg-surface-hover hover:text-fg mt-0.5 w-full cursor-pointer pr-2.5 pl-2',
           over === ROOT_DROP && 'bg-accent-soft text-accent',
         )}
       >
