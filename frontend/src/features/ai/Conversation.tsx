@@ -102,7 +102,7 @@ function Generating({ status }: { status: string | null }) {
       <span className="bg-accent-soft text-accent grid size-8 shrink-0 place-items-center rounded-lg">
         <Sparkles className="size-4" />
       </span>
-      <div className="flex items-center gap-2 pt-1.5">
+      <div className="flex items-center gap-2">
         <span className="flex gap-1">
           {[0, 1, 2].map((i) => (
             <span
