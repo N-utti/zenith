@@ -93,14 +93,15 @@ const ROOT_DROP = ''
 
 /**
  * 끄는 동안 포인터에 붙는 그림을 바꾼다. 브라우저 기본값(주소가 든 말풍선)은 위쪽 메뉴 링크를 끌
- * 때와 똑같아서 옮기는 중인지 알 수 없다. 그 줄의 아이콘과 이름을 본뜬 카드를 붙인다.
+ * 때와 똑같아서 옮기는 중인지 알 수 없다. 그 줄의 이름을 본뜬 카드를 붙인다(문서는 아이콘까지.
+ * 폴더 아이콘은 펼치기 버튼 안에 있어 링크를 복제하면 따라오지 않는다).
  *
  * 그림은 dragstart 가 끝난 직후에 찍힌다. 화면 밖에 잠깐 붙였다가 다음 박자에 치운다.
  */
 function setDragCard(e: DragEvent, row: HTMLElement) {
   const card = row.cloneNode(true) as HTMLElement
   card.className =
-    'bg-surface text-fg border-accent fixed -top-96 left-0 flex max-w-60 items-center gap-2 rounded-md border px-2.5 py-1.5 text-[15px] font-medium'
+    'bg-surface text-fg border-accent fixed -top-96 left-0 flex max-w-60 items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-sm font-medium'
   document.body.append(card)
   e.dataTransfer.setDragImage(card, 12, 16)
   setTimeout(() => card.remove())
@@ -119,13 +120,30 @@ interface RowActions {
   onRename: (folderId: string, title: string) => void
 }
 
-/** 줄의 이름 링크. 지금 화면이거나, 올려 뒀거나, 이 줄의 메뉴가 열려 있을 때의 색. */
-const rowLink = (active: boolean, menuOpen: boolean) =>
+/**
+ * 트리의 한 줄. 노션 사이드바 규격이다: 28px 높이(손가락 기기는 32px), 14px 글자, 깊이와 상관없이
+ * 줄 전체(화살표·조작 포함)가 하나의 알약으로 칠해진다. 들여쓰기는 알약 안쪽 여백으로만 주되,
+ * 알약 안에 눌리지 않는 빈 칸이 생기지 않게 그 여백은 줄 div 가 아니라 맨 앞 링크·버튼이 갖는다.
+ */
+const ROW =
+  'group/row flex items-center rounded-md text-sm transition-[background-color,color,opacity]'
+
+/** 줄 안의 이름 링크. 세로 여백이 곧 줄 높이다. */
+const ROW_LINK = 'flex min-w-0 flex-1 items-center gap-1.5 py-1 pointer-coarse:py-1.5'
+
+/** 줄의 색. 지금 화면이거나, 올려 뒀거나, 이 줄의 메뉴가 열려 있을 때. */
+const rowTone = (active: boolean, menuOpen: boolean) =>
   active
     ? 'bg-accent-soft text-accent font-semibold'
     : menuOpen
       ? 'bg-surface-hover text-fg'
       : 'text-muted hover:bg-surface-hover hover:text-fg'
+
+/**
+ * 줄 왼쪽 여백. 기본 4px 에 한 단계마다 14px. 28px 줄에서 계단이 보이는 비율이고, 기본값은 알약
+ * 왼쪽 끝과 아이콘 사이의 숨 쉴 틈이다(Sidebar 의 구획 제목 화살표가 이 값에 맞춰 서 있다).
+ */
+const indent = (depth: number) => 4 + depth * 14
 
 function DocRow({
   node,
@@ -137,26 +155,29 @@ function DocRow({
   actions: RowActions
 }) {
   const { id } = node.doc
+  const active = useParams().docId === id
   return (
     <div
       // 줄 어디서든 우클릭하면 이 줄의 메뉴가 뜬다(`data-row`). 끄는 것은 이름 링크다.
       data-row
-      className={cn('flex items-center transition-opacity', actions.dragId === id && 'opacity-40')}
+      className={cn(
+        ROW,
+        rowTone(active, actions.menuId === id),
+        actions.dragId === id && 'opacity-40',
+      )}
     >
-      <span className="size-5 shrink-0" style={{ marginLeft: depth * 14 }} />
       <NavLink
         to={`/docs/${id}`}
         onClick={actions.onNavigate}
         data-drag="doc"
         data-id={id}
-        className={({ isActive }) =>
-          cn(
-            'flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-2 text-[15px] transition-colors',
-            rowLink(isActive, actions.menuId === id),
-          )
-        }
+        className={cn(ROW_LINK, 'pr-2.5')}
+        style={{ paddingLeft: indent(depth) }}
       >
-        <FileText className="size-4 shrink-0" strokeWidth={2} />
+        {/* 아이콘은 글자보다 흐리게. 문서마다 같은 그림이라 글자만큼 진하면 줄마다 소음이 된다. */}
+        <span className="text-subtle grid size-5 shrink-0 place-items-center">
+          <FileText className="size-4" strokeWidth={2} />
+        </span>
         <span className="truncate">{node.doc.title}</span>
       </NavLink>
     </div>
@@ -235,21 +256,36 @@ function FolderRow({
         actions.dragId === id && 'opacity-40',
       )}
     >
-      <div data-row className="group/row flex items-center">
+      {/* 굵기는 줄에 둔다. 링크에 두면 지금 보는 폴더의 semibold 가 링크의 medium 에 가려진다. */}
+      <div data-row className={cn(ROW, 'font-medium', rowTone(current, actions.menuId === id))}>
+        {/*
+          앞자리 하나가 아이콘과 화살표를 겸한다(노션). 평소엔 폴더 아이콘, 줄에 마우스를 올리거나
+          키보드 초점이 오면 화살표로 바뀐다. 터치 기기는 hover 가 없어 늘 화살표다.
+          초점 조건은 `focus-within` 이 아니라 `has-focus-visible` 이다. 크롬 계열은 마우스로 누른
+          버튼·링크에도 초점을 주는데, 그걸로 켜면 누른 줄의 화살표와 조작이 마우스를 치운 뒤에도 남는다.
+          폴더 이름이 이동 링크가 되어 펼치기는 이 버튼만 한다. 들여쓰기 여백도 이 버튼이 갖는다
+          (`box-content` 라 20px 칸에 여백이 더해진다). 그 빈 칸을 눌러도 펼쳐진다.
+        */}
         <button
           type="button"
           onClick={toggle}
           aria-label={`${title} ${expanded ? '접기' : '펼치기'}`}
           aria-expanded={expanded}
-          // 폴더 이름이 이동 링크가 되어 펼치기는 이 화살표만 한다. 모바일에서 눌리게 보이는 크기보다
-          // 넓게 받는다(before 로 사방 4px, 28px).
-          className="text-subtle hover:text-fg relative grid size-5 shrink-0 cursor-pointer place-items-center rounded transition-colors before:absolute before:-inset-1"
-          style={{ marginLeft: depth * 14 }}
+          className="text-subtle hover:text-fg grid size-5 shrink-0 cursor-pointer place-items-center box-content self-stretch transition-colors"
+          style={{ paddingLeft: indent(depth) }}
         >
-          {expanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
+          <Icon
+            className="size-4 group-has-focus-visible/row:hidden group-hover/row:hidden pointer-coarse:hidden"
+            strokeWidth={2}
+          />
+          {expanded ? (
+            <ChevronDown className="hidden size-3.5 group-has-focus-visible/row:block group-hover/row:block pointer-coarse:block" />
+          ) : (
+            <ChevronRight className="hidden size-3.5 group-has-focus-visible/row:block group-hover/row:block pointer-coarse:block" />
+          )}
         </button>
 
-        {/* 이름은 폴더 목록 화면으로 간다(노션과 같이). 펼치고 접기는 옆 화살표가 맡는다. */}
+        {/* 이름은 폴더 목록 화면으로 간다(노션과 같이). 펼치고 접기는 앞의 버튼이 맡는다. */}
         <Link
           to={`/docs?folder=${id}`}
           onClick={(e) => {
@@ -261,12 +297,8 @@ function FolderRow({
           aria-current={current ? 'page' : undefined}
           data-drag="folder"
           data-id={id}
-          className={cn(
-            'flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-2 text-[15px] font-medium transition-colors',
-            rowLink(current, actions.menuId === id),
-          )}
+          className={cn(ROW_LINK, 'px-1.5')}
         >
-          <Icon className="size-4 shrink-0" strokeWidth={2} />
           <span className="truncate">{title}</span>
           {access && (
             <Lock role="img" aria-label={access} className="text-subtle size-3.5 shrink-0">
@@ -276,12 +308,12 @@ function FolderRow({
         </Link>
 
         {/*
-          폴더 행에만 붙는 조작. 마우스를 올렸을 때와 키보드 초점이 왔을 때 보인다.
+          폴더 행에만 붙는 조작. 마우스를 올렸을 때와 키보드 초점이 왔을 때 보인다(위 버튼과 같은 조건).
           `opacity-0` 은 보이지만 않을 뿐 초점을 받으므로 Tab 으로도 닿는다.
           터치 기기에는 hover 가 없어 늘 보인다. 안 그러면 모바일에서 폴더를 골라 문서를 만들 길이
           없고, 투명한 버튼이 행 오른쪽 탭을 가로채 모르는 새 문서가 생긴다.
         */}
-        <div className="flex shrink-0 opacity-0 transition-opacity group-focus-within/row:opacity-100 group-hover/row:opacity-100 pointer-coarse:opacity-100">
+        <div className="flex shrink-0 pr-1 opacity-0 transition-opacity group-has-focus-visible/row:opacity-100 group-hover/row:opacity-100 pointer-coarse:opacity-100">
           <FolderAction label={`${title} 안에 새 문서`} onClick={() => actions.onAddDoc(id)}>
             <FilePlus2 className="size-3.5" />
           </FolderAction>
@@ -312,14 +344,16 @@ function FolderRow({
             <DocRow key={doc.id} node={{ kind: 'doc', doc }} depth={depth + 1} actions={actions} />
           ))}
           {shownDocs.length < docs.length && (
-            <div className="flex items-center">
-              <span className="size-5 shrink-0" style={{ marginLeft: (depth + 1) * 14 }} />
+            <div className={cn(ROW, 'text-subtle hover:bg-surface-hover hover:text-fg')}>
               <Link
                 to={`/docs?folder=${id}`}
                 onClick={actions.onNavigate}
                 aria-label={`${title} 전체 ${docs.length}개 보기`}
-                className="text-subtle hover:bg-surface-hover hover:text-fg flex min-w-0 flex-1 items-center rounded-md px-2 py-1.5 text-sm transition-colors"
+                className={cn(ROW_LINK, 'pr-2.5')}
+                style={{ paddingLeft: indent(depth + 1) }}
               >
+                {/* 문서 줄의 아이콘 자리만큼 비워 글자를 같은 세로줄에 세운다. */}
+                <span className="size-5 shrink-0" />
                 전체 {docs.length}개 보기
               </Link>
             </div>
@@ -626,20 +660,17 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
         data-drop={ROOT_DROP}
         onClick={() => actions.onAddFolder(null)}
         className={cn(
-          'text-subtle hover:bg-surface-hover hover:text-fg mt-1 flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors',
+          ROW,
+          ROW_LINK,
+          'text-subtle hover:bg-surface-hover hover:text-fg mt-0.5 w-full cursor-pointer pr-2.5 pl-1',
           over === ROOT_DROP && 'bg-accent-soft text-accent',
         )}
       >
-        {toRoot ? (
-          <>
-            <CornerLeftUp className="size-3.5 shrink-0" />
-            여기에 놓으면 최상위로
-          </>
-        ) : (
-          <>
-            <Plus className="size-3.5 shrink-0" />새 폴더
-          </>
-        )}
+        {/* 아이콘 자리를 문서 줄과 같은 20px 로 맞춰 글자가 같은 세로줄에 선다. */}
+        <span className="grid size-5 shrink-0 place-items-center">
+          {toRoot ? <CornerLeftUp className="size-3.5" /> : <Plus className="size-3.5" />}
+        </span>
+        {toRoot ? '여기에 놓으면 최상위로' : '새 폴더'}
       </button>
 
       {naming && (
