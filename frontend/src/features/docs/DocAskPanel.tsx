@@ -74,7 +74,9 @@ export function DocAskPanel({
     <div className="flex min-h-0 flex-1 flex-col">
       {messages.length === 0 ? (
         // min-h-0·overflow: 좁은 화면의 낮은 패널에서 이 안내가 제 높이를 고집하면 아래 입력칸을 밀어내 잘린다.
-        <p className="text-subtle min-h-0 flex-1 overflow-y-auto px-4 py-6 text-center text-xs leading-relaxed">
+        // 위에 붙이고 여백은 12px. 폰 원래 높이(240px)에서도 두 줄이 입력칸에 가리지 않는다. 팩트체크 탭의
+        // 안내(`DocCheckPanel`)와 자리·여백을 맞춘다. 가운데로 두면 아래 영역 높이가 달라 탭마다 자리가 어긋난다.
+        <p className="text-subtle min-h-0 flex-1 overflow-y-auto px-4 py-3 text-center text-xs leading-relaxed">
           이 문서의 본문을 근거로 답합니다.
           <br />
           필요하면 다른 사내 문서도 찾아 봅니다.

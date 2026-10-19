@@ -145,7 +145,8 @@ export function DocCheckPanel({
             </div>
           </>
         ) : (
-          <p className="text-subtle px-1 py-6 text-center text-xs leading-relaxed">
+          // 바깥 칸의 p-3 만 여백으로 둔다. AI 질문 탭 안내(`DocAskPanel`)와 자리·여백이 같다.
+          <p className="text-subtle px-1 text-center text-xs leading-relaxed">
             본문의 주장을 사내 규정과 문서에 대조합니다.
             <br />
             주장을 누르면 본문의 그 문장으로 갑니다.
