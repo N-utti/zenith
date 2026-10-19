@@ -72,8 +72,8 @@ describe('halfHeight', () => {
     expect(halfHeight(700, 58)).toBe(315)
   })
 
-  it('작은 칸에서는 240px 까지 올리되 본문을 120px 남긴다', () => {
-    expect(halfHeight(460, 58)).toBe(240)
+  it('작은 칸에서는 263px 까지 올리되 본문을 120px 남긴다', () => {
+    expect(halfHeight(460, 58)).toBe(263)
     expect(halfHeight(300, 58)).toBe(180)
   })
 
