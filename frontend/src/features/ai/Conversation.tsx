@@ -1,5 +1,14 @@
-import { memo, useEffect, useRef, useState } from 'react'
-import { Check, Copy, FilePlus2, RefreshCw, Sparkles, ThumbsUp } from 'lucide-react'
+import { memo, useEffect, useId, useRef, useState } from 'react'
+import {
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Copy,
+  FilePlus2,
+  RefreshCw,
+  Sparkles,
+  ThumbsUp,
+} from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { copyText } from '@/lib/clipboard'
 import { useToast } from '@/components/ui/ToastContext'
@@ -131,7 +140,7 @@ export function Conversation({
   onCite: (focus: Omit<CitationFocus, 'tick'>) => void
   /** 마지막 답변이 실패했을 때 같은 질문을 다시 보낸다(05 공통 규칙 "생성 실패, 다시 시도"). */
   onRetry: () => void
-  /** 근거 카드를 답변 아래에 늘 펼친다. 옆에 근거 패널이 없는 곳(문서 질문창)에서 켠다. */
+  /** 근거 목록을 화면 폭과 상관없이 답변 아래에 둔다(기본은 접힘). 옆에 근거 패널이 없는 곳(문서 질문창)에서 켠다. */
   inlineSources?: boolean
 }) {
   const scrollerRef = useRef<HTMLDivElement>(null)
@@ -216,6 +225,16 @@ const Answer = memo(function Answer({
   onRetry: (() => void) | undefined
   inlineSources: boolean
 }) {
+  // 답변 아래 근거 목록은 접어 둔다. 본문보다 길어 대화를 밀어낸다.
+  // 이 답변의 각주를 누르면(일련번호가 바뀌면) 펼친다. 렌더 중에 맞춰야 카드가 같은 커밋에 보인다.
+  const [sourcesOpen, setSourcesOpen] = useState(false)
+  const [seenTick, setSeenTick] = useState(focusTick)
+  if (focusTick !== seenTick) {
+    setSeenTick(focusTick)
+    if (focusTick !== undefined) setSourcesOpen(true)
+  }
+  const sourcesId = useId()
+
   return (
     <div className="flex gap-3">
       <span className="bg-accent-soft text-accent grid size-8 shrink-0 place-items-center rounded-lg">
@@ -258,21 +277,35 @@ const Answer = memo(function Answer({
         {/* lg 미만에는 우측 근거 패널이 없다. 따라갈 수 없는 각주를 남기지 않는다. */}
         {(message.citations?.length ?? 0) > 0 && (
           <div className={cn('mt-3', !inlineSources && 'lg:hidden')}>
-            <p className="text-subtle mb-2 text-[11px] font-bold">
+            <button
+              type="button"
+              onClick={() => setSourcesOpen((v) => !v)}
+              aria-expanded={sourcesOpen}
+              aria-controls={sourcesId}
+              className="text-subtle hover:text-fg flex cursor-pointer items-center gap-1 text-[11px] font-bold transition-colors"
+            >
+              {sourcesOpen ? (
+                <ChevronDown className="size-3.5" aria-hidden />
+              ) : (
+                <ChevronRight className="size-3.5" aria-hidden />
+              )}
               근거 {message.citations?.length}
-            </p>
-            <ul className="space-y-2">
-              {message.citations?.map((source) => (
-                <li key={source.n}>
-                  <SourceCard
-                    source={source}
-                    activeTick={focusN === source.n ? focusTick : undefined}
-                  />
-                </li>
-              ))}
-            </ul>
-            <div className="mt-2">
-              <ExcludedNote />
+            </button>
+            {/* 접혀도 카드는 그려 둔다. 각주를 누른 그 커밋에 보이게 바꿔야 카드가 스크롤·초점을 받는다. */}
+            <div id={sourcesId} hidden={!sourcesOpen} className="mt-2">
+              <ul className="space-y-2">
+                {message.citations?.map((source) => (
+                  <li key={source.n}>
+                    <SourceCard
+                      source={source}
+                      activeTick={focusN === source.n ? focusTick : undefined}
+                    />
+                  </li>
+                ))}
+              </ul>
+              <div className="mt-2">
+                <ExcludedNote />
+              </div>
             </div>
           </div>
         )}
