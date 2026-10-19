@@ -85,6 +85,15 @@ test('답변이 자라는 동안 지난 답변은 다시 그리지 않고, 각�
     expect(document.activeElement).toBe(button)
   }
 
+  /** 답변마다 근거 목록이 펼쳐져 있는지. */
+  const toggles = () =>
+    [...container.querySelectorAll<HTMLButtonElement>('button[aria-expanded]')].filter((b) =>
+      b.textContent?.startsWith('근거'),
+    )
+  const opened = () => toggles().map((b) => b.getAttribute('aria-expanded'))
+  // 답변 아래 근거 목록은 처음에 접혀 있다.
+  expect(opened()).toEqual(['false', 'false'])
+
   // 답변 조각 하나(`useAsk` 가 `token` 마다 하는 일). 자라는 답변의 카드만 다시 그려진다.
   drawn.mockClear()
   act(() => patchMessage('a2', (m) => ({ body: m.body + '네, ' })))
@@ -99,6 +108,8 @@ test('답변이 자라는 동안 지난 답변은 다시 그리지 않고, 각�
     [1, 1],
     [1, undefined],
   ])
+  // 각주를 누른 답변의 근거만 펼쳐진다. 접힌 채면 켜진 카드가 보이지 않는다.
+  expect(opened()).toEqual(['true', 'false'])
 
   // 다른 답변의 각주를 누르면 앞 답변의 카드는 꺼진다.
   cite(1)
@@ -106,4 +117,11 @@ test('답변이 자라는 동안 지난 답변은 다시 그리지 않고, 각�
     [1, undefined],
     [1, 2],
   ])
+  expect(opened()).toEqual(['true', 'true'])
+
+  // 제목을 누르면 다시 접힌다. 같은 각주를 또 누르면 다시 펼쳐진다.
+  act(() => toggles()[0].click())
+  expect(opened()).toEqual(['false', 'true'])
+  cite(0)
+  expect(opened()).toEqual(['true', 'true'])
 })
