@@ -15,7 +15,7 @@ import { useColleagues } from '@/features/people/colleagues'
 function TypingLine({ names }: { names: string[] }) {
   if (names.length === 0) return <span className="h-4" />
   return (
-    <span className="text-subtle block text-center text-xs">
+    <span className="text-subtle block pb-1.5 text-center text-xs">
       {names.slice(0, 2).join(', ')}
       {names.length > 2 && ` 외 ${names.length - 2}명`} 입력 중…
     </span>
