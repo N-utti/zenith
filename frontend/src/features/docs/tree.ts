@@ -147,6 +147,32 @@ export function canDrop(
 /** 최근 수정순. */
 export const byRecent = (a: DocSummary, b: DocSummary) => b.updated_at.localeCompare(a.updated_at)
 
+export type FolderNode = TreeNode & { kind: 'folder' }
+
+/**
+ * 트리에서 이 폴더의 노드. 폴더 목록 화면이 하위 폴더를 사이드바와 같은 순서·같은 고리 처리로
+ * 그리려고 쓴다(`parent_id` 를 따로 거르면 고리가 있을 때 두 화면이 어긋난다).
+ */
+export function findFolder(tree: TreeNode[], id: string): FolderNode | undefined {
+  for (const node of tree) {
+    if (node.kind !== 'folder') continue
+    if (node.folder.id === id) return node
+    const found = findFolder(node.children, id)
+    if (found) return found
+  }
+  return undefined
+}
+
+/** 폴더 줄에 적는 「폴더 2개 · 문서 3개」. 바로 아래 것만 센다. 둘 다 없으면 「비어 있음」. */
+export function folderSummary(node: FolderNode): string {
+  const folders = node.children.filter((c) => c.kind === 'folder').length
+  const docs = node.children.length - folders
+  return (
+    [folders && `폴더 ${folders}개`, docs && `문서 ${docs}개`].filter(Boolean).join(' · ') ||
+    '비어 있음'
+  )
+}
+
 /**
  * 사이드바 폴더에 펼쳐 둘 문서. `limit` 개를 넘으면 최근 수정순으로 그만큼만 보이고 나머지는
  * 폴더 목록 화면(`/docs?folder=`)으로 넘긴다. 주간 보고처럼 매주 쌓이는 폴더가 사이드바를
