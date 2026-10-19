@@ -74,7 +74,7 @@ export function DocAskPanel({
     <div className="flex min-h-0 flex-1 flex-col">
       {messages.length === 0 ? (
         // min-h-0·overflow: 좁은 화면의 낮은 패널에서 이 안내가 제 높이를 고집하면 아래 입력칸을 밀어내 잘린다.
-        // 위에 붙이고 여백은 12px. 폰 원래 높이(240px)에서도 두 줄이 입력칸에 가리지 않는다. 팩트체크 탭의
+        // 위에 붙이고 여백은 12px. 폰 원래 높이 하한(263px)에서도 두 줄이 입력칸에 가리지 않는다. 팩트체크 탭의
         // 안내(`DocCheckPanel`)와 자리·여백을 맞춘다. 가운데로 두면 아래 영역 높이가 달라 탭마다 자리가 어긋난다.
         <p className="text-subtle min-h-0 flex-1 overflow-y-auto px-4 py-3 text-center text-xs leading-relaxed">
           이 문서의 본문을 근거로 답합니다.
@@ -111,9 +111,11 @@ export function DocAskPanel({
         </p>
       )}
 
-      <div className="border-line shrink-0 border-t p-3">
+      {/* 높이를 팩트체크 탭의 검사 영역(`DocCheckPanel`, 143px)에 맞춘다. 탭을 오가도 위 안내 칸의 높이가
+          같아 안내 자리와 위아래 여백이 그대로다. 남는 높이는 입력칸이 받는다. */}
+      <div className="border-line flex min-h-[143px] shrink-0 flex-col border-t p-3">
         {aiSource ? (
-          <div className="border-line bg-surface focus-within:border-line-strong rounded-xl border p-2.5 transition-colors">
+          <div className="border-line bg-surface focus-within:border-line-strong flex flex-1 flex-col rounded-xl border p-2.5 transition-colors">
             <Textarea
               value={text}
               onChange={(e) => setText(e.target.value)}
@@ -124,7 +126,7 @@ export function DocAskPanel({
               maxLength={30000}
               aria-label="이 문서에 대해 AI에게 묻기"
               placeholder="이 문서에 대해 물어보세요"
-              className="resize-none border-0 bg-transparent p-0 text-[13px] focus:border-0"
+              className="flex-1 resize-none border-0 bg-transparent p-0 text-[13px] focus:border-0"
             />
             <div className="mt-2 flex justify-end">
               <Button size="sm" onClick={send} disabled={ask.isPending || text.trim().length === 0}>

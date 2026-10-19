@@ -161,6 +161,7 @@ export function DocCheckPanel({
         </p>
       )}
 
+      {/* AI 질문 탭의 입력 영역(`DocAskPanel`)이 이 높이(143px)에 맞춘다. 여기 내용이 바뀌면 거기 값도 고친다. */}
       <div className="border-line shrink-0 border-t p-3">
         <Checkbox
           className="mb-2.5"

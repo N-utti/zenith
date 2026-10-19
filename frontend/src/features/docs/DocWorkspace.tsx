@@ -385,8 +385,8 @@ function DocSidebar({
             ? 'max-lg:h-(--doc-panel-head) max-lg:overflow-clip'
             : full
               ? 'max-lg:h-full'
-              : // 원래 높이: 45% 와 240px 중 큰 쪽, 본문은 120px 남김(`halfHeight` 와 맞춘다).
-                'max-lg:h-[45%] max-lg:pointer-coarse:min-h-[min(240px,calc(100%_-_120px))]',
+              : // 원래 높이: 45% 와 263px 중 큰 쪽, 본문은 120px 남김(`halfHeight` 와 맞춘다).
+                'max-lg:h-[45%] max-lg:pointer-coarse:min-h-[min(263px,calc(100%_-_120px))]',
           // PC 는 다 펼침이 없다. 손가락 기기에서 다 펼친 채 마우스 기기로 바뀌어도(태블릿 모드 해제) PC 높이로.
           // 범위(최소 220px, 본문 120px 남김)는 창을 줄여도, 옛 저장값이어도 지킨다.
           open &&
