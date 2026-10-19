@@ -3,9 +3,11 @@ import {
   ancestorsOf,
   buildTree,
   canDrop,
+  findFolder,
   folderAccessChange,
   folderAccessLabel,
   folderRows,
+  folderSummary,
   foldersTo,
   previewDocs,
 } from './tree'
@@ -63,6 +65,23 @@ it('폴더가 폴더를 담고 문서는 폴더에만 담긴다. 폴더가 문�
     '제품',
     '규정',
   ])
+})
+
+it('findFolder: 깊이에 상관없이 그 폴더 노드. folderSummary: 바로 아래 것만 센다', () => {
+  const tree = buildTree({
+    folders: [...data.folders, folder('f-4', 'f-2', '손자')],
+    docs: data.docs,
+  })
+  const wiki = findFolder(tree, 'f-1')
+  expect(wiki?.children.map((n) => (n.kind === 'folder' ? n.folder.title : n.doc.title))).toEqual([
+    '제품',
+    '규정',
+  ])
+  // 휴지통 문서(d-3)는 트리에 없어 수에도 안 든다.
+  expect(folderSummary(wiki!)).toBe('폴더 1개 · 문서 1개')
+  expect(folderSummary(findFolder(tree, 'f-2')!)).toBe('폴더 1개 · 문서 1개')
+  expect(folderSummary(findFolder(tree, 'f-4')!)).toBe('비어 있음')
+  expect(findFolder(tree, 'f-없음')).toBeUndefined()
 })
 
 it('부모를 잃은 것은 최상위로 올린다. 트리에서 사라지면 열 방법이 없다', () => {

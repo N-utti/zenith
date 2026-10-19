@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router'
-import { FileText, Plus, Search } from 'lucide-react'
+import { FileText, Folder, Plus, Search } from 'lucide-react'
 import { Avatar } from '@/components/ui/Avatar'
 import { Button } from '@/components/ui/Button'
 import { Card, CardEmpty } from '@/components/ui/Card'
@@ -14,10 +14,17 @@ import { hueOf } from '@/lib/avatar'
 import { formatRelative } from '@/lib/datetime'
 import { useCreateDoc, useTree } from '@/features/docs/api'
 import { NewDocModal } from '@/features/docs/NewDocModal'
-import { byRecent } from '@/features/docs/tree'
+import {
+  buildTree,
+  byRecent,
+  findFolder,
+  folderSummary,
+  type FolderNode,
+} from '@/features/docs/tree'
 
 /**
- * 문서 목록. 사이드바 폴더 이름을 누르면 `?folder=` 가 붙어 그 폴더 문서만 보인다.
+ * 문서 목록. 사이드바 폴더 이름을 누르면 `?folder=` 가 붙어 그 폴더의 하위 폴더와 문서만 보인다.
+ * 폴더를 안 열었을 때는 모든 문서를 최근 수정순으로 편다(폴더는 사이드바가 보여 준다).
  *
  * 폴더가 바뀌면 검색어를 비운다. 같은 라우트라 다시 마운트되지 않아서 key 로 끊는다.
  */
@@ -47,8 +54,17 @@ function DocsList({ folderId }: { folderId: string | null }) {
         .sort(byRecent),
     [data, folderId],
   )
+  // 폴더를 열었을 때만 하위 폴더를 문서 위에 둔다. 사이드바가 그리는 트리 그대로라 순서가 같다.
+  const subfolders = useMemo(() => {
+    if (!folderId || !data) return []
+    const node = findFolder(buildTree(data), folderId)
+    return node ? node.children.filter((c): c is FolderNode => c.kind === 'folder') : []
+  }, [data, folderId])
   const q = query.trim().toLowerCase()
   const items = q ? docs.filter((d) => d.title.toLowerCase().includes(q)) : docs
+  const folderItems = q
+    ? subfolders.filter((n) => n.folder.title.toLowerCase().includes(q))
+    : subfolders
 
   // 폴더를 열어 두었으면 거기에 바로 만든다. 아니면 넣을 폴더를 먼저 고른다.
   const create = () => {
@@ -84,7 +100,8 @@ function DocsList({ folderId }: { folderId: string | null }) {
         title={folderId ? (folder?.title ?? (missing ? '폴더' : '')) : '문서'}
         description={
           folderId
-            ? folder && `문서 ${docs.length}개 · 최근 수정순`
+            ? folder &&
+              `${subfolders.length ? `폴더 ${subfolders.length}개 · ` : ''}문서 ${docs.length}개 · 최근 수정순`
             : '사내 위키와 회의록. 여러 명이 동시에 편집할 수 있습니다.'
         }
         actions={
@@ -122,12 +139,31 @@ function DocsList({ folderId }: { folderId: string | null }) {
             >
               폴더를 찾을 수 없습니다. 지워졌거나 옮겨졌을 수 있습니다.
             </CardEmpty>
-          ) : items.length === 0 ? (
+          ) : items.length === 0 && folderItems.length === 0 ? (
             <CardEmpty action={!query && createButton}>
-              {query ? `"${query}"와 일치하는 문서가 없습니다.` : '아직 문서가 없습니다.'}
+              {query
+                ? `"${query}"와 일치하는 ${folderId ? '폴더나 문서가' : '문서가'} 없습니다.`
+                : '아직 문서가 없습니다.'}
             </CardEmpty>
           ) : (
             <ul className="p-2">
+              {folderItems.map((sub) => (
+                <li key={sub.folder.id}>
+                  <Link
+                    to={`/docs?folder=${sub.folder.id}`}
+                    className="hover:bg-surface-hover flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors"
+                  >
+                    <Folder className="text-subtle size-4 shrink-0" />
+                    <span className="text-fg min-w-0 flex-1 truncate text-sm font-medium">
+                      {/* 아이콘은 낭독기가 건너뛴다. 문서 줄과 구별되게 「폴더」를 읽어 준다. */}
+                      <span className="sr-only">폴더 </span>
+                      {sub.folder.title}
+                    </span>
+                    {/* 문서 줄의 아바타·시각 자리. 폴더엔 그게 없으니 든 것의 수를 둔다. */}
+                    <span className="text-subtle shrink-0 text-xs">{folderSummary(sub)}</span>
+                  </Link>
+                </li>
+              ))}
               {items.map((doc) => (
                 <li key={doc.id}>
                   <Link
