@@ -93,10 +93,6 @@ export function AiComposer({
     )
     setText('')
   }
-  const refs = [refDocs.length > 0 && '참고 문서', attachments.length > 0 && '첨부']
-    .filter(Boolean)
-    .join('·')
-
   return (
     <div className="shrink-0 px-5 pb-5">
       <div className="mx-auto max-w-3xl">
@@ -265,20 +261,6 @@ export function AiComposer({
             </Button>
           </div>
         </div>
-
-        <p className="text-subtle mt-2 text-center text-[11px]">
-          {/* 손가락 기기에는 Shift+Enter 가 없다. 키 안내를 빼면 한 줄에 들어간다. */}
-          <span className="pointer-coarse:hidden">Enter 전송 · Shift+Enter 줄바꿈 · </span>
-          답변은 {refs && `${refs}와 `}
-          {scope === SCOPE_ALL
-            ? refs
-              ? '사내 문서·게시글을'
-              : '사내 문서와 게시글을'
-            : refs
-              ? '고른 폴더의 문서를'
-              : '고른 폴더의 문서만'}{' '}
-          근거로 만들어집니다
-        </p>
 
         {/* 열 때마다 새로 그려 검색어를 비운다. */}
         {picking && (
