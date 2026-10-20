@@ -79,10 +79,11 @@ export function Header({
         </Link>
       </div>
 
+      {/* 폰 폭에서는 안내 문구가 잘려 지저분해 보여 숨기고, 오른쪽 묶음의 돋보기 버튼이 대신한다. */}
       <button
         type="button"
         onClick={onOpenCommandPalette}
-        className="border-line bg-canvas text-subtle hover:border-line-strong flex h-[34px] cursor-pointer items-center gap-2 rounded-lg border px-3 text-[13px] transition-colors"
+        className="border-line bg-canvas text-subtle hover:border-line-strong hidden h-[34px] sm:flex cursor-pointer items-center gap-2 rounded-lg border px-3 text-[13px] transition-colors"
       >
         <Search className="size-4 shrink-0" />
         <span className="truncate">문서·채팅·게시글 전체 검색</span>
@@ -91,7 +92,17 @@ export function Header({
         </kbd>
       </button>
 
-      <div className="flex shrink-0 items-center justify-self-end gap-1">
+      {/* 검색창이 숨으면 자동 배치가 이 묶음을 가운데 칸으로 당기므로 셋째 칸에 못 박는다. */}
+      <div className="col-start-3 flex shrink-0 items-center justify-self-end gap-1">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onOpenCommandPalette}
+          aria-label="전체 검색"
+          className="px-2 sm:hidden"
+        >
+          <Search className="size-4.5" />
+        </Button>
         {/* 본문이 최대폭(max-w-6xl, 1152px)에 닿아야 눌러서 달라진다. 사이드바(300px)를 편 채로는
             1470px 쯤부터, 접으면 xl 부터 닿는다. 그보다 좁은 화면과 꽉 채우는 화면(bleed)에서는 숨긴다. */}
         {showWidthToggle && (
@@ -116,7 +127,8 @@ export function Header({
           size="sm"
           onClick={toggle}
           aria-label={theme === 'dark' ? '라이트 모드로 전환' : '다크 모드로 전환'}
-          className="px-2"
+          // 폰에서는 숨긴다. 설정 화면에도 같은 선택이 있다.
+          className="hidden px-2 sm:inline-flex"
         >
           {theme === 'dark' ? <Sun className="size-4.5" /> : <Moon className="size-4.5" />}
         </Button>
