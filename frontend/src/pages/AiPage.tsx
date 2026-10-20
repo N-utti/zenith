@@ -154,7 +154,8 @@ export function AiPage() {
                 setFocus(null)
               }}
               aria-label="새 대화"
-              className="ml-2 shrink-0 px-2"
+              // 폰에서는 오른쪽으로 미는 공급자 표시가 숨는다. 그때는 이 버튼이 스스로 오른쪽 끝으로 간다.
+              className="ml-auto shrink-0 px-2 sm:ml-2"
               title="새 대화"
             >
               <SquarePen className="size-4" />

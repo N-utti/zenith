@@ -102,15 +102,17 @@ export function AiComposer({
   return (
     <div className="shrink-0 px-5 pb-5">
       <div className="mx-auto max-w-3xl">
-        {/* 템플릿 자동작성. 누르면 컴포저에 프롬프트를 채운다 */}
-        <div className="mb-3 flex flex-wrap items-center gap-2">
-          <span className="text-subtle text-[11.5px] font-bold">템플릿으로 자동작성</span>
+        {/* 템플릿 자동작성. 누르면 컴포저에 프롬프트를 채운다.
+            폰에서는 꺾지 않고 옆으로 민다. 두 줄로 꺾이면 대화가 그만큼 좁아진다. 화면 끝까지 밀리게 여백을 걷는다.
+            넘침을 자르면 키보드 초점 테두리도 잘려 위아래 자리(py-1)를 둔다. 데스크톱은 꺾으므로 자르지 않는다. */}
+        <div className="-mx-5 mb-2 flex items-center gap-2 overflow-x-auto px-5 py-1 sm:mx-0 sm:mb-3 sm:flex-wrap sm:overflow-visible sm:p-0">
+          <span className="text-subtle shrink-0 text-[11.5px] font-bold">템플릿으로 자동작성</span>
           {AI_TEMPLATES.map((template) => (
             <button
               key={template.id}
               type="button"
               onClick={() => setText(template.prompt)}
-              className="border-line bg-surface text-muted hover:border-line-strong hover:text-fg flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12.5px] transition-colors"
+              className="border-line bg-surface text-muted hover:border-line-strong hover:text-fg flex shrink-0 cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12.5px] transition-colors"
             >
               <FileText className="size-3.5" />
               {template.label}
@@ -200,9 +202,14 @@ export function AiComposer({
             className="resize-none border-0 bg-transparent p-0 text-[13.5px] focus:border-0"
           />
 
+          {/* 폰에서는 모델 이름을 빼고 버튼을 아이콘만 남겨 한 줄에 둔다. 폭마다 다른 버튼이 다음 줄로 꺾였다.
+              버튼 글자는 화면에서만 숨기고 읽기 프로그램에는 남긴다(sr-only). */}
           <div className="mt-2.5 flex flex-wrap items-center gap-2">
             {/* 모델은 서버가 정한다(`/ai/chat` 에 model 필드가 없다). 무엇으로 답하는지만 밝힌다. */}
-            <span className="text-subtle flex items-center gap-1.5 text-xs" title="공급자 모델">
+            <span
+              className="text-subtle hidden items-center gap-1.5 text-xs sm:flex"
+              title="공급자 모델"
+            >
               <Cpu className="size-3.5" />
               {models[0]?.name ?? '모델 확인 중'}
             </span>
@@ -219,10 +226,10 @@ export function AiComposer({
               type="button"
               onClick={() => setPicking(true)}
               aria-haspopup="dialog"
-              className="border-line text-muted hover:border-line-strong hover:text-fg flex cursor-pointer items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11.5px] transition-colors"
+              className="border-line text-muted hover:border-line-strong hover:text-fg flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border px-2.5 text-[11.5px] transition-colors"
             >
               <FilePlus className="size-3.5" />
-              참고 문서
+              <span className="sr-only sm:not-sr-only">참고 문서</span>
               {refDocs.length > 0 && (
                 <span className="text-subtle">
                   {refDocs.length}/{MAX_REF_DOCS}
@@ -234,10 +241,10 @@ export function AiComposer({
               onClick={() => fileInput.current?.click()}
               disabled={room <= 0}
               title="txt·md·csv·docx·xlsx·pdf·hwpx, 10MB 까지. 7일 뒤 지워집니다."
-              className="border-line text-muted hover:border-line-strong hover:text-fg flex cursor-pointer items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11.5px] transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+              className="border-line text-muted hover:border-line-strong hover:text-fg flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border px-2.5 text-[11.5px] transition-colors disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Paperclip className="size-3.5" />
-              첨부
+              <span className="sr-only sm:not-sr-only">첨부</span>
               {attachments.length > 0 && (
                 <span className="text-subtle">
                   {attachments.length}/{MAX_ATTACHMENTS}
@@ -263,13 +270,15 @@ export function AiComposer({
               className="ml-auto shrink-0"
             >
               <SendHorizontal className="size-4" />
-              보내기
+              <span className="sr-only sm:not-sr-only">보내기</span>
             </Button>
           </div>
         </div>
 
         <p className="text-subtle mt-2 text-center text-[11px]">
-          Enter 전송 · Shift+Enter 줄바꿈 · 답변은 {refs && `${refs}와 `}
+          {/* 손가락 기기에는 Shift+Enter 가 없다. 키 안내를 빼면 한 줄에 들어간다. */}
+          <span className="pointer-coarse:hidden">Enter 전송 · Shift+Enter 줄바꿈 · </span>
+          답변은 {refs && `${refs}와 `}
           {scope === SCOPE_ALL
             ? refs
               ? '사내 문서·게시글을'
