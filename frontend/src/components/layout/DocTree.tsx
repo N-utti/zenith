@@ -272,7 +272,7 @@ function FolderRow({
           onClick={toggle}
           aria-label={`${title} ${expanded ? '접기' : '펼치기'}`}
           aria-expanded={expanded}
-          className="text-subtle hover:text-fg grid size-5 shrink-0 cursor-pointer place-items-center box-content self-stretch transition-colors"
+          className="text-subtle hover:text-fg grid w-5 shrink-0 cursor-pointer place-items-center box-content self-stretch transition-colors"
           style={{ paddingLeft: indent(depth) }}
         >
           <Icon
