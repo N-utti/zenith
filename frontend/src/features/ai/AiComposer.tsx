@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { Cpu, FilePlus, FileText, Loader2, Paperclip, SendHorizontal, Wand2, X } from 'lucide-react'
+import { FilePlus, FileText, Loader2, Paperclip, SendHorizontal, Wand2, X } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Dropdown } from '@/components/ui/Dropdown'
 import { Textarea } from '@/components/ui/Textarea'
@@ -12,7 +12,7 @@ import { AttachmentEditor } from './AttachmentEditor'
 import { AI_TEMPLATES } from './catalog'
 import { RefDocPicker } from './RefDocPicker'
 import { MAX_ATTACHMENTS, MAX_REF_DOCS, SCOPE_ALL, topFolders } from './scope'
-import type { AiAttachment, AiModel } from './types'
+import type { AiAttachment } from './types'
 
 /** 서버가 읽는 형식(백엔드 #396). 서버가 확장자로 가르므로 고르는 창도 확장자로 거른다. */
 const ATTACH_ACCEPT = '.txt,.md,.csv,.docx,.xlsx,.pdf,.hwpx'
@@ -20,13 +20,11 @@ const ATTACH_ACCEPT = '.txt,.md,.csv,.docx,.xlsx,.pdf,.hwpx'
 const ATTACH_MAX_BYTES = 10 * 1024 * 1024
 
 export function AiComposer({
-  models,
   disabled,
   initialText = '',
   dropAttachments = 0,
   onSend,
 }: {
-  models: AiModel[]
   disabled: boolean
   /** ⌘K 팔레트에서 넘어온 검색어. 부모가 `key`로 리마운트시켜 채운다. */
   initialText?: string
@@ -95,10 +93,6 @@ export function AiComposer({
     )
     setText('')
   }
-  const refs = [refDocs.length > 0 && '참고 문서', attachments.length > 0 && '첨부']
-    .filter(Boolean)
-    .join('·')
-
   return (
     <div className="shrink-0 px-5 pb-5">
       <div className="mx-auto max-w-3xl">
@@ -202,17 +196,10 @@ export function AiComposer({
             className="resize-none border-0 bg-transparent p-0 text-[13.5px] focus:border-0"
           />
 
-          {/* 폰에서는 모델 이름을 빼고 버튼을 아이콘만 남겨 한 줄에 둔다. 폭마다 다른 버튼이 다음 줄로 꺾였다.
-              버튼 글자는 화면에서만 숨기고 읽기 프로그램에는 남긴다(sr-only). */}
+          {/* 폰에서는 버튼을 아이콘만 남겨 한 줄에 둔다. 폭마다 다른 버튼이 다음 줄로 꺾였다.
+              버튼 글자는 화면에서만 숨기고 읽기 프로그램에는 남긴다(sr-only).
+              모델 이름은 두지 않는다. 서버가 정해 고를 수 없고, 직원이 보고 할 일이 없다. */}
           <div className="mt-2.5 flex flex-wrap items-center gap-2">
-            {/* 모델은 서버가 정한다(`/ai/chat` 에 model 필드가 없다). 무엇으로 답하는지만 밝힌다. */}
-            <span
-              className="text-subtle hidden items-center gap-1.5 text-xs sm:flex"
-              title="공급자 모델"
-            >
-              <Cpu className="size-3.5" />
-              {models[0]?.name ?? '모델 확인 중'}
-            </span>
             <Dropdown
               label="지식 소스:"
               value={scope}
@@ -274,20 +261,6 @@ export function AiComposer({
             </Button>
           </div>
         </div>
-
-        <p className="text-subtle mt-2 text-center text-[11px]">
-          {/* 손가락 기기에는 Shift+Enter 가 없다. 키 안내를 빼면 한 줄에 들어간다. */}
-          <span className="pointer-coarse:hidden">Enter 전송 · Shift+Enter 줄바꿈 · </span>
-          답변은 {refs && `${refs}와 `}
-          {scope === SCOPE_ALL
-            ? refs
-              ? '사내 문서·게시글을'
-              : '사내 문서와 게시글을'
-            : refs
-              ? '고른 폴더의 문서를'
-              : '고른 폴더의 문서만'}{' '}
-          근거로 만들어집니다
-        </p>
 
         {/* 열 때마다 새로 그려 검색어를 비운다. */}
         {picking && (

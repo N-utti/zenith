@@ -8,28 +8,14 @@ import { AiComposer } from '@/features/ai/AiComposer'
 import { AiHistoryPanel } from '@/features/ai/AiHistoryPanel'
 import { Conversation } from '@/features/ai/Conversation'
 import { SourcesPanel } from '@/features/ai/SourcesPanel'
-import { aiSessionsKey, restoreThread, useAiModels, useAsk } from '@/features/ai/api'
+import { aiSessionsKey, restoreThread, useAsk } from '@/features/ai/api'
 import { dropOnRetry, rejected } from '@/features/ai/scope'
 import type { AskState, CitationFocus } from '@/features/ai/types'
 import { patchMessage, removeMessage, resetThread, switchTo, useThread } from '@/features/ai/store'
 import { docKeys } from '@/features/docs/api'
 import { ApiError } from '@/lib/api'
 
-/**
- * 무엇이 답하는지 밝힌다. ARCHITECTURE §6(2026-09-04): 1차 공급자는 Claude API 이고 호출은 서버가 한다.
- * 예전 "로컬 LLM · 오프라인" 문구는 이제 사실이 아니라 뺐다.
- */
-function ProviderBadge() {
-  return (
-    <span className="border-line bg-success/10 text-success ml-auto hidden shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold sm:flex">
-      <span className="bg-success size-1.5 rounded-full" />
-      Claude API · 사내 서버 경유
-    </span>
-  )
-}
-
 export function AiPage() {
-  const { data: models } = useAiModels()
   const { sessionId, messages, status, busy, epoch } = useThread()
   const ask = useAsk()
   const toast = useToast()
@@ -143,7 +129,6 @@ export function AiPage() {
           <span className="text-subtle hidden min-w-0 truncate text-xs sm:inline">
             사내 문서·게시글 기반 답변
           </span>
-          <ProviderBadge />
           {/* 서버에 지우는 경로가 없다. 앞 대화는 지워지지 않고 좌패널 목록에 남는다. 받던 답변도 서버가 끝까지 만든다. */}
           {messages.length > 0 && (
             <Button
@@ -154,8 +139,7 @@ export function AiPage() {
                 setFocus(null)
               }}
               aria-label="새 대화"
-              // 폰에서는 오른쪽으로 미는 공급자 표시가 숨는다. 그때는 이 버튼이 스스로 오른쪽 끝으로 간다.
-              className="ml-auto shrink-0 px-2 sm:ml-2"
+              className="ml-auto shrink-0 px-2"
               title="새 대화"
             >
               <SquarePen className="size-4" />
@@ -192,7 +176,6 @@ export function AiPage() {
 
         <AiComposer
           key={seed.n}
-          models={models ?? []}
           initialText={seed.text}
           disabled={busy}
           dropAttachments={dropAttachments}

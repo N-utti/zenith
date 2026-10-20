@@ -54,7 +54,6 @@ test('답변이 자라는 동안 지난 답변은 다시 그리지 않고, 각�
   })
 
   const qc = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: false } } })
-  qc.setQueryData(['ai', 'models'], [])
   const container = document.createElement('div')
   // 각주 버튼의 초점을 보려면 문서에 붙어 있어야 한다.
   document.body.append(container)
