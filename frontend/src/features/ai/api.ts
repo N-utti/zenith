@@ -4,7 +4,7 @@ import { markOnboarding } from '@/features/home/onboarding'
 import { uuid } from '@/lib/uuid'
 import type { Schema } from '@/types'
 import { aiThread, type ThreadStore } from './store'
-import type { AiAttachment, AiEditResult, AiMessage, AiModel, Citation } from './types'
+import type { AiAttachment, AiEditResult, AiMessage, Citation } from './types'
 
 /**
  * 04 §8 `POST /ai/feedback {message_id, value: 1|-1}`. 응답은 204(백엔드 #317).
@@ -39,15 +39,6 @@ export function editAiAttachment(id: string, instruction: string) {
   return api<AiEditResult>(`/ai/attachments/${id}/edit`, {
     method: 'POST',
     body: JSON.stringify({ instruction }),
-  })
-}
-
-export function useAiModels() {
-  return useQuery({
-    queryKey: ['ai', 'models'],
-    queryFn: () => api<AiModel[]>('/ai/models'),
-    // 공급자 모델 목록은 세션 중에 바뀌지 않는다.
-    staleTime: Infinity,
   })
 }
 
