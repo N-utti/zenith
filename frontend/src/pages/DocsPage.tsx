@@ -11,6 +11,7 @@ import { Spinner } from '@/components/ui/Spinner'
 import { useToast } from '@/components/ui/ToastContext'
 import { ApiError } from '@/lib/api'
 import { hueOf } from '@/lib/avatar'
+import { cn } from '@/lib/cn'
 import { formatRelative } from '@/lib/datetime'
 import { useCreateDoc, useTree } from '@/features/docs/api'
 import { NewDocModal } from '@/features/docs/NewDocModal'
@@ -24,7 +25,8 @@ import {
 
 /**
  * 문서 목록. 사이드바 폴더 이름을 누르면 `?folder=` 가 붙어 그 폴더의 하위 폴더와 문서만 보인다.
- * 폴더를 안 열었을 때는 모든 문서를 최근 수정순으로 편다(폴더는 사이드바가 보여 준다).
+ * 폴더를 안 열었을 때는 모든 문서를 최근 수정순으로 편다(폴더는 사이드바가 보여 준다). 폰은 사이드바가
+ * 햄버거 안에 숨어 있어 대신 최상위 폴더를 펴고, 거기서 폴더 화면으로 들어간다. 검색하면 폰도 전체 문서를 찾는다.
  *
  * 폴더가 바뀌면 검색어를 비운다. 같은 라우트라 다시 마운트되지 않아서 key 로 끊는다.
  */
@@ -54,17 +56,23 @@ function DocsList({ folderId }: { folderId: string | null }) {
         .sort(byRecent),
     [data, folderId],
   )
-  // 폴더를 열었을 때만 하위 폴더를 문서 위에 둔다. 사이드바가 그리는 트리 그대로라 순서가 같다.
+  // 폴더를 열었으면 하위 폴더를, 아니면 (폰에만 보일) 최상위 폴더를 문서 위에 둔다. 사이드바가
+  // 그리는 트리 그대로라 순서가 같다.
   const subfolders = useMemo(() => {
-    if (!folderId || !data) return []
-    const node = findFolder(buildTree(data), folderId)
-    return node ? node.children.filter((c): c is FolderNode => c.kind === 'folder') : []
+    if (!data) return []
+    const tree = buildTree(data)
+    const nodes = folderId ? (findFolder(tree, folderId)?.children ?? []) : tree
+    return nodes.filter((c): c is FolderNode => c.kind === 'folder')
   }, [data, folderId])
   const q = query.trim().toLowerCase()
   const items = q ? docs.filter((d) => d.title.toLowerCase().includes(q)) : docs
-  const folderItems = q
-    ? subfolders.filter((n) => n.folder.title.toLowerCase().includes(q))
-    : subfolders
+  /** 첫 화면에서 검색하지 않을 때. 폰은 폴더만, PC 는 문서만 보인다. */
+  const rootBrowse = !folderId && !q
+  const folderItems = !q
+    ? subfolders
+    : folderId
+      ? subfolders.filter((n) => n.folder.title.toLowerCase().includes(q))
+      : []
 
   // 폴더를 열어 두었으면 거기에 바로 만든다. 아니면 넣을 폴더를 먼저 고른다.
   const create = () => {
@@ -147,8 +155,14 @@ function DocsList({ folderId }: { folderId: string | null }) {
             </CardEmpty>
           ) : (
             <ul className="p-2">
+              {/* 문서 없이 빈 폴더만 있는 첫 화면. 폰은 폴더 줄이 보이지만 PC 는 그릴 줄이 없다. */}
+              {rootBrowse && items.length === 0 && (
+                <li className="max-md:hidden">
+                  <CardEmpty action={createButton}>아직 문서가 없습니다.</CardEmpty>
+                </li>
+              )}
               {folderItems.map((sub) => (
-                <li key={sub.folder.id}>
+                <li key={sub.folder.id} className={cn(rootBrowse && 'md:hidden')}>
                   <Link
                     to={`/docs?folder=${sub.folder.id}`}
                     className="hover:bg-surface-hover flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors"
@@ -165,7 +179,7 @@ function DocsList({ folderId }: { folderId: string | null }) {
                 </li>
               ))}
               {items.map((doc) => (
-                <li key={doc.id}>
+                <li key={doc.id} className={cn(rootBrowse && 'max-md:hidden')}>
                   <Link
                     to={`/docs/${doc.id}`}
                     className="hover:bg-surface-hover flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors"
