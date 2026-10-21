@@ -22,6 +22,8 @@ from app.errors import ApiError
 from app.models import AuthSession, Team, User
 from app.security import (
     clear_auth_cookies,
+    cookie_attrs,
+    csrf_token,
     decode_token,
     hash_password,
     hash_password_async,
@@ -79,6 +81,7 @@ async def _verify_credentials(db: AsyncSession, email: str, password: str) -> Us
 
 
 async def _open_session(db: AsyncSession, request: Request, response: Response, user: User) -> None:
+    attrs = cookie_attrs(request)  # 저장 전에 판정 — 평문 사이트의 셸 로그인은 세션 행 없이 400
     session = AuthSession(
         user_id=user.id,
         refresh_jti=uuid.uuid4(),
@@ -89,7 +92,11 @@ async def _open_session(db: AsyncSession, request: Request, response: Response, 
     db.add(session)
     await db.flush()
     set_auth_cookies(
-        response, user_id=user.id, session_id=session.id, refresh_jti=session.refresh_jti
+        response,
+        attrs=attrs,
+        user_id=user.id,
+        session_id=session.id,
+        refresh_jti=session.refresh_jti,
     )
 
 
@@ -150,6 +157,8 @@ async def login(
     summary="refresh 쿠키로 access/refresh/csrf 재발급 — refresh 는 회전, 재사용은 세션 종료",
 )
 async def refresh(request: Request, response: Response, db: AsyncSession = Depends(get_db)) -> None:
+    # 회전을 commit 하기 전에 판정 — 뒤에서 400 이 나면 쿠키만 안 바뀌어 다음 요청이 재사용 탐지로 오인된다
+    attrs = cookie_attrs(request)
     token = request.cookies.get("refresh")
     if not token:
         raise ApiError(401, "AUTH_REQUIRED", "로그인이 필요합니다.")
@@ -191,7 +200,11 @@ async def refresh(request: Request, response: Response, db: AsyncSession = Depen
         session.last_used_at = _now()
         await db.commit()
     set_auth_cookies(
-        response, user_id=user.id, session_id=session.id, refresh_jti=session.refresh_jti
+        response,
+        attrs=attrs,
+        user_id=user.id,
+        session_id=session.id,
+        refresh_jti=session.refresh_jti,
     )
 
 
@@ -218,14 +231,20 @@ async def logout(request: Request, response: Response, db: AsyncSession = Depend
             )
             await db.commit()
         break
-    clear_auth_cookies(response)
+    clear_auth_cookies(response, attrs=cookie_attrs(request, strict=False))
     # 이 브라우저가 캐시해 둔 첨부·문서 파일을 비운다(#328) — 공용 PC 의 다음 사용자가 캐시로 열지 못하게.
     # HTTPS 에서만 동작한다(평문 사내 주소에서는 브라우저가 무시) — 첨부는 어차피 no-store, 문서 파일은 no-cache.
     response.headers["Clear-Site-Data"] = '"cache"'
 
 
 @router.get("/me", response_model=MeOut, summary="내 프로필")
-async def me(user: User = Depends(current_user), db: AsyncSession = Depends(get_db)) -> MeOut:
+async def me(
+    response: Response, auth: Auth = Depends(current_auth), db: AsyncSession = Depends(get_db)
+) -> MeOut:
+    user, session = auth
+    # 셸은 csrf 쿠키를 못 읽는다(security.set_auth_cookies) — 앱을 다시 켜면 메모리의 토큰이 없으므로 로그인
+    # 판정자인 이 응답에서 되살린다. 웹은 쿠키를 먼저 쓰므로 영향 없음.
+    response.headers["X-CSRF-Token"] = csrf_token(session.id)
     team = await db.get(Team, user.team_id) if user.team_id else None
     return MeOut(
         id=user.id,

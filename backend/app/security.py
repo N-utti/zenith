@@ -14,7 +14,7 @@ from typing import Literal
 
 import anyio
 import jwt
-from fastapi import Response
+from fastapi import Request, Response
 from pwdlib import PasswordHash
 
 from app.config import settings
@@ -113,12 +113,45 @@ def session_id_from_cookies(cookies: Mapping[str, str]) -> uuid.UUID | None:
     return None
 
 
+def cookie_attrs(request: Request, *, strict: bool = True) -> dict[str, object]:
+    """세션 쿠키의 Secure·SameSite — 요청이 어디서 왔는지로 정한다(11 §7.2 · I6).
+
+    웹(같은 오리진)은 Lax. 네이티브 셸(Origin 이 CORS_ORIGINS 에 있는 요청)은 셸 오리진(http://tauri.localhost)과
+    서버가 교차 사이트라 Lax 쿠키가 fetch 에 실리지 않으므로 SameSite=None. None 은 Secure 가 필수(Chromium 이
+    아니면 버린다) — 평문 사이트(사내망 5180)에서는 셸 로그인이 조용히 깨지는 대신 400 으로 알린다.
+    strict=False(로그아웃)는 400 대신 Lax 로 폴백한다 — 삭제는 (name, path) 만 맞으면 되고 응답은 늘 204 여야 한다.
+    CSRF 는 SameSite 가 아니라 출처 대조 + HMAC 토큰(deps.csrf_guard)이 막으므로 None 이 방어를 깎지 않는다.
+    호출부는 DB 를 commit 하기 **전에** 부른다 — refresh 가 회전을 저장한 뒤 400 이 나면 쿠키만 안 바뀌어
+    다음 요청이 재사용 탐지(세션 종료)로 오인된다.
+
+    받아들인 위험(리뷰 2026-10-21): `*.localhost` 는 Chromium 이 루프백으로 못박으므로 사용자 PC 의 127.0.0.1:80
+    을 점유한 프로세스가 일반 브라우저에서도 http://tauri.localhost 오리진을 얻어 login CSRF(피해자 브라우저에
+    공격자 세션 쿠키 심기)를 할 수 있다. 로컬 코드 실행이 전제라 파일럿에서는 받아들인다. 막으려면 셸을
+    useHttpsScheme(https://tauri.localhost)으로 옮기고 CORS_ORIGINS 를 맞춘다(apps/desktop, 프론트 영역).
+    """
+    lax = {"secure": settings.cookie_secure, "samesite": "lax", "path": "/"}
+    if request.headers.get("origin") not in settings.cors_origins:
+        return lax
+    # caddy 뒤에서는 X-Forwarded-Proto 가 브라우저가 본 scheme 이다
+    scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
+    if not (settings.cookie_secure or scheme == "https"):
+        if not strict:
+            return lax
+        raise ApiError(400, "SHELL_NEEDS_HTTPS", "앱 로그인은 HTTPS 주소로만 됩니다.")
+    return {"secure": True, "samesite": "none", "path": "/"}
+
+
 def set_auth_cookies(
-    response: Response, *, user_id: uuid.UUID, session_id: uuid.UUID, refresh_jti: uuid.UUID
+    response: Response,
+    *,
+    attrs: dict[str, object],
+    user_id: uuid.UUID,
+    session_id: uuid.UUID,
+    refresh_jti: uuid.UUID,
 ) -> None:
     access_ttl = timedelta(minutes=settings.access_ttl_minutes)
     refresh_ttl = timedelta(days=settings.refresh_ttl_days)
-    common = {"secure": settings.cookie_secure, "samesite": "lax", "path": "/"}
+    common = attrs
     # ponytail: 11 §7.2대로 전부 Path=/. refresh 는 /api/auth 로 좁히는 편이 낫지만 명세를 먼저 고친 뒤에.
     # access 쿠키의 수명은 refresh 와 같다. 15분은 토큰(exp)이 판정한다 — 쿠키 수명을 15분으로 두면
     # 브라우저가 만료된 쿠키를 아예 버려 서버가 AUTH_EXPIRED 대신 AUTH_REQUIRED 를 주고, 프론트는
@@ -140,17 +173,16 @@ def set_auth_cookies(
         **common,
     )
     # JS 가 읽어 X-CSRF-Token 헤더로 되돌려 보낸다(11 §4.3). HttpOnly 가 아닌 유일한 쿠키.
+    token = csrf_token(session_id)
     response.set_cookie(
-        "csrf",
-        csrf_token(session_id),
-        max_age=int(refresh_ttl.total_seconds()),
-        httponly=False,
-        **common,
+        "csrf", token, max_age=int(refresh_ttl.total_seconds()), httponly=False, **common
     )
+    # 셸 페이지(http://tauri.localhost)는 서버 도메인의 쿠키를 document.cookie 로 못 읽는다 — 같은 값을 헤더로도
+    # 준다(main.py CORS expose_headers). 세션 HMAC 이라 노출해도 쿠키와 같은 수준이다. 프론트 lib/api.ts 가 받아 둔다.
+    response.headers["X-CSRF-Token"] = token
 
 
-def clear_auth_cookies(response: Response) -> None:
+def clear_auth_cookies(response: Response, *, attrs: dict[str, object]) -> None:
+    common = attrs
     for name, httponly in (("access", True), ("refresh", True), ("csrf", False)):
-        response.delete_cookie(
-            name, path="/", httponly=httponly, secure=settings.cookie_secure, samesite="lax"
-        )
+        response.delete_cookie(name, httponly=httponly, **common)

@@ -313,6 +313,57 @@ async def test_non_browser_clients_and_allowed_shells_pass_the_origin_check(
     assert r.status_code == 204
 
 
+async def test_shell_origin_gets_samesite_none_cookies_only_over_https(
+    client: AsyncClient, users: Users, monkeypatch
+) -> None:
+    """네이티브 셸(CORS_ORIGINS)은 서버와 교차 사이트라 SameSite=None·Secure 로 발급한다(11 I6).
+    None 은 Secure 가 필수이므로 평문 사이트에서는 조용히 깨지는 대신 400. 웹(같은 오리진)은 그대로 Lax."""
+    monkeypatch.setattr(settings, "cors_origins", ["http://tauri.localhost"])
+    monkeypatch.setattr(
+        settings, "cookie_secure", False
+    )  # 사내망 평문 사이트(ZENITH_COOKIE_SECURE=false)
+    shell = {"Origin": "http://tauri.localhost", "Sec-Fetch-Site": "cross-site"}
+    body = {"email": "sujin@zenith.co.kr", "password": PASSWORD}
+
+    r = await client.post(  # 사내망 평문 사이트 — caddy 가 X-Forwarded-Proto: http 를 붙인다
+        "/api/auth/login", json=body, headers={**shell, "X-Forwarded-Proto": "http"}
+    )
+    assert (r.status_code, r.json()["code"]) == (400, "SHELL_NEEDS_HTTPS")
+    assert _cookie_names(r) == []
+
+    r = await client.post(
+        "/api/auth/login", json=body, headers={**shell, "X-Forwarded-Proto": "https"}
+    )
+    assert r.status_code == 204
+    assert _cookie_names(r) == ["access", "csrf", "refresh"]
+    for c in r.headers.get_list("set-cookie"):
+        assert "SameSite=none" in c and "Secure" in c
+    # 셸 페이지는 서버 도메인의 csrf 쿠키를 document.cookie 로 못 읽는다 — 같은 값을 헤더로 받는다
+    assert r.headers["X-CSRF-Token"] == client.cookies["csrf"]
+
+    https_shell = {**shell, "X-Forwarded-Proto": "https"}
+    r = await client.post("/api/auth/refresh", headers={**https_shell, **csrf(client)})
+    assert r.status_code == 204
+    assert all("SameSite=none" in c for c in r.headers.get_list("set-cookie"))
+    assert r.headers["X-CSRF-Token"] == client.cookies["csrf"]
+
+    # 앱을 다시 켜면 메모리의 토큰이 없다 — 로그인 판정자인 /me 가 같은 값을 헤더로 되살린다
+    r = await client.get("/api/me", headers=https_shell)
+    assert r.status_code == 200
+    assert r.headers["X-CSRF-Token"] == client.cookies["csrf"]
+
+    # 평문으로 온 셸 로그아웃은 400 대신 Lax 로 삭제하고 204 — 세션 회수는 이미 commit 됐다
+    r = await client.post(
+        "/api/auth/logout", headers={**shell, "X-Forwarded-Proto": "http", **csrf(client)}
+    )
+    assert r.status_code == 204
+    assert _cookie_names(r) == ["access", "csrf", "refresh"]
+
+    r = await login(client, "sujin@zenith.co.kr")  # 같은 오리진(Origin 없음)은 Lax 그대로
+    assert r.status_code == 204
+    assert all("SameSite=lax" in c for c in r.headers.get_list("set-cookie"))
+
+
 async def test_lockout_needs_the_same_ip_as_the_failures(
     client: AsyncClient, users: Users, app_db
 ) -> None:

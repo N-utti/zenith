@@ -39,6 +39,30 @@ describe('api()', () => {
     expect(headersOf(1).get('X-CSRF-Token')).toBe('session-hmac')
   })
 
+  it('csrf 쿠키가 안 보이면(데스크탑 셸) 로그인 응답의 X-CSRF-Token 헤더를 받아 되돌린다', async () => {
+    document.cookie = 'csrf=; Path=/; Max-Age=0'
+    fetchMock
+      .mockResolvedValueOnce(
+        new Response(null, { status: 204, headers: { 'X-CSRF-Token': 'from-header' } }),
+      )
+      .mockResolvedValueOnce(reply(204))
+    await api('/auth/login', { method: 'POST', body: '{}' })
+    await api('/auth/logout', { method: 'POST' })
+    expect(headersOf(0).get('X-CSRF-Token')).toBeNull()
+    expect(headersOf(1).get('X-CSRF-Token')).toBe('from-header')
+  })
+
+  it('앱을 껐다 켜도(모듈 재로드) 받아 둔 토큰으로 refresh 를 보낸다', async () => {
+    document.cookie = 'csrf=; Path=/; Max-Age=0'
+    localStorage.setItem('zenith.csrf', 'kept')
+    vi.resetModules()
+    const fresh = await import('./api')
+    fetchMock.mockResolvedValueOnce(reply(204))
+    await fresh.api('/auth/refresh', { method: 'POST' })
+    expect(headersOf(0).get('X-CSRF-Token')).toBe('kept')
+    localStorage.removeItem('zenith.csrf')
+  })
+
   it('204 는 undefined 로 돌아오고 JSON 본문에는 Content-Type 이 붙는다', async () => {
     fetchMock.mockImplementation(async () => reply(204))
     await expect(api('/auth/login', { method: 'POST', body: '{}' })).resolves.toBeUndefined()
