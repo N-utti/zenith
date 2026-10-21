@@ -25,6 +25,7 @@ import { ApiError } from '@/lib/api'
 import { copyText } from '@/lib/clipboard'
 import { isDesktopShell } from '@/lib/desktop'
 import { serverOrigin } from '@/lib/serverOrigin'
+import { useLongPress } from '@/lib/useLongPress'
 import { useCurrentUser } from '@/features/auth/AuthContext'
 import { FolderAccessModal } from '@/features/docs/FolderAccessModal'
 import { FolderNameModal } from '@/features/docs/FolderNameModal'
@@ -124,12 +125,15 @@ interface RowActions {
  * 트리의 한 줄. 노션 사이드바 규격이다: 28px 높이(손가락 기기는 32px), 14px 글자, 깊이와 상관없이
  * 줄 전체(화살표·조작 포함)가 하나의 알약으로 칠해진다. 들여쓰기는 알약 안쪽 여백으로만 주되,
  * 알약 안에 눌리지 않는 빈 칸이 생기지 않게 그 여백은 줄 div 가 아니라 맨 앞 링크·버튼이 갖는다.
+ * 손가락 기기는 줄 어디를 꾹 눌러도 줄 메뉴가 뜬다. 사파리의 링크 미리보기·글자 선택이 겹쳐 뜨지
+ * 않게 줄 전체에서 끈다.
  */
 const ROW =
-  'group/row flex items-center rounded-md text-sm transition-[background-color,color,opacity]'
+  'group/row flex items-center rounded-md text-sm transition-[background-color,color,opacity] pointer-coarse:select-none pointer-coarse:[-webkit-touch-callout:none]'
 
-/** 줄 안의 이름 링크. 세로 여백이 곧 줄 높이다. */
-const ROW_LINK = 'flex min-w-0 flex-1 items-center gap-1.5 py-1 pointer-coarse:py-1.5'
+/** 줄 안의 이름 링크. 세로 여백이 곧 줄 높이다. 손가락 기기는 꾹 누를 때 링크 끌기가 시작되지 않게 끈다. */
+const ROW_LINK =
+  'flex min-w-0 flex-1 items-center gap-1.5 py-1 pointer-coarse:py-1.5 pointer-coarse:[-webkit-user-drag:none]'
 
 /** 줄의 색. 지금 화면이거나, 올려 뒀거나, 이 줄의 메뉴가 열려 있을 때. */
 const rowTone = (active: boolean, menuOpen: boolean) =>
@@ -311,10 +315,10 @@ function FolderRow({
         {/*
           폴더 행에만 붙는 조작. 마우스를 올렸을 때와 키보드 초점이 왔을 때 보인다(위 버튼과 같은 조건).
           `opacity-0` 은 보이지만 않을 뿐 초점을 받으므로 Tab 으로도 닿는다.
-          터치 기기에는 hover 가 없어 늘 보인다. 안 그러면 모바일에서 폴더를 골라 문서를 만들 길이
-          없고, 투명한 버튼이 행 오른쪽 탭을 가로채 모르는 새 문서가 생긴다.
+          터치 기기에는 hover 가 없어 아예 뺀다. 같은 일은 줄을 꾹 누른 메뉴가 한다. 투명하게만 두면
+          버튼이 행 오른쪽 탭을 가로채 모르는 새 문서가 생긴다.
         */}
-        <div className="flex shrink-0 pr-1 opacity-0 transition-opacity group-has-focus-visible/row:opacity-100 group-hover/row:opacity-100 pointer-coarse:opacity-100">
+        <div className="flex shrink-0 pr-1 opacity-0 transition-opacity group-has-focus-visible/row:opacity-100 group-hover/row:opacity-100 pointer-coarse:hidden">
           <FolderAction label={`${title} 안에 새 문서`} onClick={() => actions.onAddDoc(id)}>
             <FilePlus2 className="size-3.5" />
           </FolderAction>
@@ -503,22 +507,29 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
     onDragEnd: endDrag,
   }
 
-  /** 줄 위에서 우클릭(또는 Shift+F10, 메뉴 키). 줄이 아닌 곳에서는 브라우저 메뉴를 그대로 둔다. */
-  const openMenu = (e: MouseEvent) => {
-    if (!(e.target instanceof Element)) return
-    const link = e.target.closest('[data-row]')?.querySelector<HTMLAnchorElement>('a[data-drag]')
+  /** `target` 이 든 줄의 메뉴를 (x, y) 에 띄운다. 줄이 아니면 false. */
+  const openMenuAt = (target: Element, x: number, y: number) => {
+    const link = target.closest('[data-row]')?.querySelector<HTMLAnchorElement>('a[data-drag]')
     const id = link?.dataset.id
-    if (!link || !id) return
-    e.preventDefault()
+    if (!link || !id) return false
     // 키보드로 열면 포인터 좌표가 없다. 그 줄 바로 아래에 띄운다.
     const rect = link.getBoundingClientRect()
     setMenu({
       item: { kind: link.dataset.drag === 'folder' ? 'folder' : 'doc', id },
-      x: e.clientX || rect.left,
-      y: e.clientY || rect.bottom,
+      x: x || rect.left,
+      y: y || rect.bottom,
       href: link.href,
     })
+    return true
   }
+
+  /** 줄 위에서 우클릭(또는 Shift+F10, 메뉴 키). 줄이 아닌 곳에서는 브라우저 메뉴를 그대로 둔다. */
+  const openMenu = (e: MouseEvent) => {
+    if (e.target instanceof Element && openMenuAt(e.target, e.clientX, e.clientY))
+      e.preventDefault()
+  }
+  // 손가락 기기는 꾹 누르기로 같은 메뉴를 연다(폴더 줄의 버튼 셋을 대신한다).
+  const longPress = useLongPress(openMenuAt)
 
   const copyLink = (id: string) =>
     // 받은 사람의 채팅·댓글에서 문서 제목 칩으로 바뀌는 주소(서버 주소 기준).
@@ -630,7 +641,7 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
   }
 
   return (
-    <div {...dragHandlers} onContextMenu={openMenu}>
+    <div {...dragHandlers} {...longPress} onContextMenu={openMenu}>
       {isError && !data && (
         <div className="space-y-1 px-3 py-2">
           <p className="text-danger text-[13px]">문서 트리를 불러오지 못했습니다.</p>
