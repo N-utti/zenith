@@ -39,6 +39,12 @@ export const COMMENT_BODY_MAX = 10_000
 /** 블록 id 길이 상한(백엔드 `BlockId`). 공백을 턴 뒤 1~100자다. */
 export const BLOCK_ID_MAX = 100
 
+/**
+ * 사이드바 트리에서 문서를 끌 때 같이 싣는 표식. 값은 문서 id. 편집 화면이 이걸 보고 오른쪽에 열 자리를 띄운다.
+ * 트리 자체의 표식은 폴더도 같이 써서, 끄는 중(놓기 전)에는 문서인지 가를 수 없다.
+ */
+export const DOC_DRAG_TYPE = 'application/x-zenith-doc'
+
 /** 서버가 휴지통 문서를 들고 있는 기간(백엔드 `TRASH_RETENTION`). 지나면 서버가 지운다. */
 export const TRASH_KEEP_DAYS = 30
 
