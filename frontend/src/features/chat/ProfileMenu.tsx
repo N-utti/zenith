@@ -6,6 +6,7 @@ import { Avatar } from '@/components/ui/Avatar'
 import { useToast } from '@/components/ui/ToastContext'
 import { useCurrentUser } from '@/features/auth/AuthContext'
 import { useTodayArrangementKinds } from '@/features/attendance/api'
+import { useColleagues } from '@/features/people/colleagues'
 import { ATTENDANCE_STATUS_LABEL } from '@/features/attendance/types'
 import { ApiError } from '@/lib/api'
 import { hueOf } from '@/lib/avatar'
@@ -120,8 +121,11 @@ function ProfileCard({
   const create = useCreateChannel()
   const { data: channels } = useChannels()
   const kind = useTodayArrangementKinds().get(person.id)
-  const ref = useRef<HTMLDivElement>(null)
+  const { people } = useColleagues()
   const mine = person.id === me.id
+  // 사람 목록은 나를 빼고 준다. 내 팀은 로그인한 내 정보에 있다.
+  const team = mine ? me.team : people.find((each) => each.id === person.id)?.team
+  const ref = useRef<HTMLDivElement>(null)
   // 이미 있는 DM 이면 서버에 묻지 않고 그리로 간다. 지금 그 DM 안이면 보낼 곳이 여기라 버튼을 뺀다.
   const dm = channels?.items.find(
     (channel) => channel.is_dm && channel.members.some((member) => member.id === person.id),
@@ -207,7 +211,8 @@ function ProfileCard({
             {person.name}
             {mine && <span className="text-subtle ml-1 text-xs font-normal">(나)</span>}
           </p>
-          {/* 서버가 남의 팀·이메일을 주지 않는다(`/people` 은 이름뿐). 근태가 아는 오늘 근무만 붙인다. */}
+          {/* 남의 팀은 사람 목록의 `team` 이다. 계약에 아직 없어 서버가 안 주는 동안은 줄째 없다(`Colleague`). */}
+          {team && <p className="text-muted truncate text-xs">{team.name}</p>}
           {kind && (
             <span className="text-info bg-info/12 mt-1 inline-block rounded-full px-2 py-px text-xs leading-4 font-medium">
               {ATTENDANCE_STATUS_LABEL[kind]}
