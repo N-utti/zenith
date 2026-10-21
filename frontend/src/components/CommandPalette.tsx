@@ -178,7 +178,8 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
       if (matchMedia('(prefers-reduced-motion: reduce)').matches) return close()
       setClosing(true)
       el.style.transition = 'transform 200ms ease-in'
-      el.style.transform = 'translateY(100%)'
+      // 시트 높이(100%)가 아니라 화면 높이만큼: 짧은 시트는 100% 로는 화면 가운데서 멈춘다.
+      el.style.transform = 'translateY(100dvh)'
       window.setTimeout(close, 200)
     }
     el.addEventListener('touchstart', onStart, { passive: true })
@@ -275,7 +276,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-3 sm:px-4 sm:pt-[12vh]">
+    <div className="fixed inset-0 z-50 flex items-start justify-center pt-10 pb-4 sm:px-4 sm:pt-[12vh]">
       <button
         type="button"
         aria-label="닫기"
@@ -302,7 +303,9 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
           e.preventDefault()
           e.stopPropagation()
         }}
-        className="border-line bg-surface relative flex h-full w-full flex-col overflow-hidden rounded-t-2xl border-t pb-[env(safe-area-inset-bottom)] shadow-2xl outline-none max-sm:motion-safe:animate-sheet-in sm:h-auto sm:max-w-xl sm:rounded-xl sm:border sm:pb-0"
+        // 폰: 높이는 내용만큼(결과가 많으면 화면 아래까지), 빈 자리는 어두운 배경이 보인다(사용자 결정, 꽉 찬 시트의 흰 여백 대신).
+        // 올라오는 애니메이션은 시트 높이가 아니라 화면 높이만큼 아래에서 시작한다(짧은 시트가 제자리 바로 밑에서 솟지 않게).
+        className="border-line bg-surface relative flex max-h-full w-full flex-col overflow-hidden rounded-2xl border shadow-2xl outline-none max-sm:motion-safe:animate-sheet-far-in sm:max-w-xl sm:rounded-xl"
       >
         {/* 쓸어내려 닫을 수 있다는 표시. 끌기는 시트 어디서든 된다(위 touchmove). */}
         <div aria-hidden="true" className="flex justify-center pt-2 sm:hidden">
@@ -338,44 +341,42 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
           className="flex min-h-0 flex-1 flex-col sm:max-h-80 sm:flex-none"
         >
           <div ref={scrollerRef} className="min-h-0 overflow-y-auto p-1.5">
-            <div role="group" aria-labelledby={`${listId}-nav`}>
-              <p
-                id={`${listId}-nav`}
-                role="presentation"
-                className="text-subtle px-2.5 pt-2 pb-1 text-[11px] font-semibold tracking-wide uppercase"
-              >
-                화면 이동
-              </p>
-              {navItems.length === 0 && (
-                <p aria-hidden="true" className="text-muted px-2.5 py-6 text-center text-sm">
-                  일치하는 화면이 없습니다.
+            {/* 검색어가 화면 이름과 안 맞으면 묶음을 통째로 뺀다. 빈 안내가 본문 결과를 밀어 내렸다(폰에서 48px). */}
+            {navItems.length > 0 && (
+              <div role="group" aria-labelledby={`${listId}-nav`}>
+                <p
+                  id={`${listId}-nav`}
+                  role="presentation"
+                  className="text-subtle px-2.5 pt-2 pb-1 text-[11px] font-semibold tracking-wide uppercase"
+                >
+                  화면 이동
                 </p>
-              )}
-              {navItems.map((item, i) => {
-                const Icon = item.icon
-                return (
-                  <button
-                    key={item.to}
-                    ref={i === active ? activeRow : undefined}
-                    role="option"
-                    id={optionId(i)}
-                    aria-selected={i === active}
-                    tabIndex={-1}
-                    type="button"
-                    onMouseEnter={() => setCursor(i)}
-                    onClick={() => go(item.to)}
-                    className={cn(
-                      'flex w-full cursor-pointer items-center gap-3 rounded-lg px-2.5 py-2 text-sm',
-                      i === active ? 'bg-accent-soft text-accent' : 'text-muted',
-                    )}
-                  >
-                    <Icon className="size-4.5 shrink-0" />
-                    <span>{item.label}</span>
-                    {i === active && <CornerDownLeft className="ml-auto size-3.5" />}
-                  </button>
-                )
-              })}
-            </div>
+                {navItems.map((item, i) => {
+                  const Icon = item.icon
+                  return (
+                    <button
+                      key={item.to}
+                      ref={i === active ? activeRow : undefined}
+                      role="option"
+                      id={optionId(i)}
+                      aria-selected={i === active}
+                      tabIndex={-1}
+                      type="button"
+                      onMouseEnter={() => setCursor(i)}
+                      onClick={() => go(item.to)}
+                      className={cn(
+                        'flex w-full cursor-pointer items-center gap-3 rounded-lg px-2.5 py-2 text-sm',
+                        i === active ? 'bg-accent-soft text-accent' : 'text-muted',
+                      )}
+                    >
+                      <Icon className="size-4.5 shrink-0" />
+                      <span>{item.label}</span>
+                      {i === active && <CornerDownLeft className="ml-auto size-3.5" />}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
 
             {rooms.length > 0 && (
               <div role="group" aria-labelledby={`${listId}-rooms`}>

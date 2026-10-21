@@ -53,7 +53,9 @@ export function useFocusTrap(
     // 이름 입력창을 열고 바로 쳐도 글자가 안 들어간다.
     if (!panel?.contains(opener)) {
       const first = panel?.querySelector<HTMLElement>(FOCUSABLE)
-      ;(first ?? panel)?.focus()
+      // preventScroll: 폰 시트는 아래에서 올라오는 중(화면 밖)에 초점을 받는다. 굴리게 두면 아이폰 사파리가
+      // 그 자리를 보이려고 화면을 위로 밀고, 시트가 제자리에 온 뒤에도 밀린 채 남는다. 창은 고정이라 굴릴 일이 없다.
+      ;(first ?? panel)?.focus({ preventScroll: true })
     }
 
     const token = Symbol()
