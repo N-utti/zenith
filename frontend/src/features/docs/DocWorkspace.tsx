@@ -15,7 +15,6 @@ import DragHandle, { type DragHandleProps } from '@tiptap/extension-drag-handle-
 import {
   ChevronDown,
   GripVertical,
-  Maximize2,
   MessageSquarePlus,
   PanelRightClose,
   PanelRightOpen,
@@ -47,6 +46,7 @@ import { DocAskPanel } from './DocAskPanel'
 import { DocCheckPanel } from './DocCheckPanel'
 import { DocBreadcrumb } from './DocBreadcrumb'
 import { DocWidthMenu } from './DocWidthMenu'
+import { SplitActions } from './SplitActions'
 import { clampPanelHeight, halfHeight, releaseSpeed, sheetStop, touchIntent } from './docPanel'
 import { findText } from './findText'
 import { tableBleedRef } from './tableBleed'
@@ -385,8 +385,6 @@ function DocSidebar({
             ...(dragHeight !== null && { height: dragHeight, transition: 'none' }),
           } as CSSProperties
         }
-        // 화면을 나눴을 때 왼쪽 칸이 이걸 보고 두 본문 폭을 다시 맞춘다(DocEditorPage).
-        data-panel-hidden={hidden || undefined}
         className={cn(
           'border-line bg-surface flex min-h-0 w-full flex-col border-t max-lg:shrink-0 max-lg:pointer-coarse:rounded-t-xl lg:w-80 lg:border-t-0 lg:border-l',
           hidden && 'lg:hidden',
@@ -837,36 +835,6 @@ function AiSourceToggle({ docId, on }: { docId: string; on: boolean }) {
   )
 }
 
-/**
- * 화면을 나눠 오른쪽에 연 문서의 버튼 둘. 크게 열면 그 문서만 남고(옆 패널도 돌아온다), 닫으면 왼쪽만 남는다.
- * 문서를 못 불러온 자리(권한 없음·없음·휴지통)에서도 닫을 수 있게 따로 꺼내 둔다.
- */
-export function SplitActions({ docId, onClose }: { docId: string; onClose: () => void }) {
-  const navigate = useNavigate()
-  return (
-    <>
-      <button
-        type="button"
-        aria-label="이 문서만 크게 열기"
-        title="크게 열기"
-        onClick={() => void navigate(`/docs/${docId}`)}
-        className="text-subtle hover:text-fg grid size-7 cursor-pointer place-items-center rounded transition-colors"
-      >
-        <Maximize2 className="size-4" />
-      </button>
-      <button
-        type="button"
-        aria-label="오른쪽 문서 닫기"
-        title="닫기"
-        onClick={onClose}
-        className="text-subtle hover:text-fg grid size-7 cursor-pointer place-items-center rounded transition-colors"
-      >
-        <X className="size-4" />
-      </button>
-    </>
-  )
-}
-
 function DocSurface({
   session,
   meta,
@@ -874,8 +842,7 @@ function DocSurface({
 }: {
   session: CollabSession
   meta: DocDetail
-  /** `replace`: 방문 기록을 남기지 않고 닫는다(휴지통으로 보낸 문서가 뒤로 가기로 되살아나지 않게). */
-  onCloseSplit?: (replace?: boolean) => void
+  onCloseSplit?: () => void
 }) {
   const user = useCurrentUser()
   const { doc, provider } = session
@@ -1189,7 +1156,7 @@ function DocSurface({
               )}
             </button>
           )}
-          {onCloseSplit && <SplitActions docId={meta.id} onClose={() => onCloseSplit()} />}
+          {onCloseSplit && <SplitActions docId={meta.id} onClose={onCloseSplit} />}
         </div>
       </div>
 
@@ -1199,9 +1166,7 @@ function DocSurface({
           title={title || UNTITLED_DOC}
           onClose={() => setConfirmTrash(false)}
           // 휴지통으로 보내면 문서 목록으로 나간다. 오른쪽에 연 문서는 그 자리만 닫는다.
-          onTrashed={() =>
-            onCloseSplit ? onCloseSplit(true) : void navigate('/docs', { replace: true })
-          }
+          onTrashed={onCloseSplit ?? (() => void navigate('/docs', { replace: true }))}
         />
       )}
 
@@ -1359,8 +1324,7 @@ export function DocWorkspace({
   onCloseSplit,
 }: {
   meta: DocDetail
-  /** `replace`: 방문 기록을 남기지 않고 닫는다(휴지통으로 보낸 문서가 뒤로 가기로 되살아나지 않게). */
-  onCloseSplit?: (replace?: boolean) => void
+  onCloseSplit?: () => void
 }) {
   const session = useCollabSession(meta.id)
 
@@ -1370,7 +1334,7 @@ export function DocWorkspace({
         {/* 세션이 붙기 전에도(브라우저 사본 열기가 막히는 경우 등) 오른쪽 문서는 닫을 수 있어야 한다. */}
         {onCloseSplit && (
           <div className="border-line bg-surface flex h-11 shrink-0 items-center justify-end gap-1 border-b px-4">
-            <SplitActions docId={meta.id} onClose={() => onCloseSplit()} />
+            <SplitActions docId={meta.id} onClose={onCloseSplit} />
           </div>
         )}
         <div className="grid flex-1 place-items-center">
