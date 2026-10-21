@@ -276,7 +276,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-10 pb-4 sm:px-4 sm:pt-[12vh]">
+    <div className="fixed inset-0 z-50 flex items-start justify-center px-3 pt-10 pb-4 sm:px-4 sm:pt-[12vh]">
       <button
         type="button"
         aria-label="닫기"
@@ -303,7 +303,8 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
           e.preventDefault()
           e.stopPropagation()
         }}
-        // 폰: 높이는 내용만큼(결과가 많으면 화면 아래까지), 빈 자리는 어두운 배경이 보인다(사용자 결정, 꽉 찬 시트의 흰 여백 대신).
+        // 폰: 양옆 12px 띄운 카드. 높이는 내용만큼(결과가 많으면 화면 아래까지), 빈 자리는 어두운 배경이 보인다.
+        // 사용자 결정: 꽉 찬 시트는 흰 여백이 크고, 여백 없이 모서리만 둥글면 귀퉁이가 화면에 잘려 어색했다.
         // 올라오는 애니메이션은 시트 높이가 아니라 화면 높이만큼 아래에서 시작한다(짧은 시트가 제자리 바로 밑에서 솟지 않게).
         className="border-line bg-surface relative flex max-h-full w-full flex-col overflow-hidden rounded-2xl border shadow-2xl outline-none max-sm:motion-safe:animate-sheet-far-in sm:max-w-xl sm:rounded-xl"
       >
