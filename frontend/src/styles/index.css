@@ -32,8 +32,12 @@
   --animate-flash: zenith-flash 2s ease-out;
 
   /* 폰 바텀시트(`Modal` 의 sheet)가 아래에서 올라온다. 곡선은 iOS 시트처럼 빨리 출발해 천천히 멈춘다.
-     폰 검색 시트(CommandPalette)도 같이 쓴다. 닫힐 때는 Modal 이 transition 으로 되돌린다. 뒤 그림자는 페이드하지 않는다(Modal 주석: 아이폰 막대). */
-  --animate-sheet-in: zenith-sheet-in 280ms cubic-bezier(0.32, 0.72, 0, 1);
+     시간은 문서 패널 바텀시트(DocWorkspace, 노션 0.5s)와 같다. 280ms 는 폰에서 너무 빨랐다(사용자 실기기).
+     닫힐 때는 Modal 이 transition 으로 되돌린다. 뒤 그림자는 페이드하지 않는다(Modal 주석: 아이폰 막대). */
+  --animate-sheet-in: zenith-sheet-in 500ms cubic-bezier(0.32, 0.72, 0, 1);
+
+  /* 폰 검색 시트(CommandPalette). 높이가 내용만큼이라 제 높이(100%)가 아니라 화면 높이만큼 아래에서 올라온다. */
+  --animate-sheet-far-in: zenith-sheet-far-in 500ms cubic-bezier(0.32, 0.72, 0, 1);
 
   /* 꾹 눌러 연 메뉴가 iOS 컨텍스트 메뉴처럼 작게 시작해 튀어나온다. 곡선은 시트와 같다. */
   --animate-menu-pop: zenith-menu-pop 240ms cubic-bezier(0.32, 0.72, 0, 1);
@@ -49,6 +53,12 @@
 @keyframes zenith-sheet-in {
   from {
     transform: translateY(100%);
+  }
+}
+
+@keyframes zenith-sheet-far-in {
+  from {
+    transform: translateY(100dvh);
   }
 }
 
