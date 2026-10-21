@@ -119,15 +119,16 @@ export function DocEditorPage() {
 
   return (
     <div
-      className="relative flex h-full"
+      className="group relative flex h-full"
       // 본문 편집기가 끌기 신호를 먼저 가로챌 수 있어 잡는 단계에서 본다.
       onDragEnterCapture={(e) => isDocDrag(e) && setDropping(true)}
       onDragLeave={(e) => {
         if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDropping(false)
       }}
     >
-      {/* 왼쪽만 옆 패널(320px)을 가진다. 그 폭을 기본 크기로 깔고 남는 폭을 반씩 나눠 두 본문 폭을 맞춘다. */}
-      <div className="flex min-w-0 flex-1 basis-80 flex-col">
+      {/* 왼쪽만 옆 패널(320px)을 가진다. 그 폭을 기본 크기로 깔고 남는 폭을 반씩 나눠 두 본문 폭을 맞춘다.
+          패널을 닫아 두면(`data-panel-hidden`) 깔 폭이 없다. */}
+      <div className="flex min-w-0 flex-1 basis-80 flex-col has-data-panel-hidden:basis-0">
         <DocPane docId={docId} seed={seed} />
       </div>
       {/* ponytail: 1280px 아래에서는 두 본문이 다 좁아져 오른쪽을 감춘다(주소에는 남는다). 넓히면 다시 보인다.
@@ -159,6 +160,8 @@ export function DocEditorPage() {
           className={cn(
             'border-accent bg-surface/90 text-accent absolute inset-y-2 right-2 z-30 grid place-items-center rounded-lg border-2 border-dashed text-sm font-medium max-xl:hidden',
             splitId ? 'w-[calc(50%-10.75rem)]' : 'w-[calc(50%-0.75rem)]',
+            // 왼쪽 패널을 닫아 두면 오른쪽 칸이 정확히 반이다(왼쪽 칸의 `has-data-panel-hidden` 과 같은 표식).
+            'group-has-data-panel-hidden:w-[calc(50%-0.75rem)]',
           )}
         >
           {splitId ? '여기에 놓으면 오른쪽 문서를 바꿉니다' : '여기에 놓으면 오른쪽에 엽니다'}
