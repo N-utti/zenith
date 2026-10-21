@@ -103,9 +103,6 @@ export function PostComments({ postId }: { postId: string }) {
             {error}
           </p>
         )}
-        <p className="text-subtle mt-2 hidden text-right text-[11px] sm:block">
-          Enter 등록 · Shift+Enter 줄바꿈
-        </p>
       </form>
     </Card>
   )

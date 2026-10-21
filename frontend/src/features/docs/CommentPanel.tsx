@@ -223,12 +223,6 @@ export function CommentPanel({
             {addComment.isPending ? <Spinner className="border-t-on-accent" /> : '등록'}
           </Button>
         </div>
-        {/* 안내를 자리글에 같이 넣으면 좁은 화면에서 두 줄이 되며 아랫줄이 잘린다.
-            컴포저들과 같이 입력창 아래로 뺐다. 좁은 폭에서는 줄째 감춘다(물리 키보드가 없고,
-            이 패널은 모바일에서 화면의 45% 안에서 접었다 편다). */}
-        <p className="text-subtle mt-2 hidden text-right text-[11px] sm:block">
-          Enter 등록 · Shift+Enter 줄바꿈
-        </p>
       </form>
     </>
   )
