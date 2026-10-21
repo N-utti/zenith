@@ -163,8 +163,10 @@ function DocRow({
   const active = useParams().docId === id
   return (
     <div
-      // 줄 어디서든 우클릭하면 이 줄의 메뉴가 뜬다(`data-row`). 끄는 것은 이름 링크다.
+      // 줄 어디서든 우클릭하면(손가락은 꾹 누르면) 이 줄의 메뉴가 뜬다(`data-row`). 끄는 것은 이름 링크다.
+      // 꾹 누르는 동안 줄째 눌려 들어간다(`data-long-press`).
       data-row
+      data-long-press
       className={cn(
         ROW,
         rowTone(active, actions.menuId === id),
@@ -262,7 +264,11 @@ function FolderRow({
       )}
     >
       {/* 굵기는 줄에 둔다. 링크에 두면 지금 보는 폴더의 semibold 가 링크의 medium 에 가려진다. */}
-      <div data-row className={cn(ROW, 'font-medium', rowTone(current, actions.menuId === id))}>
+      <div
+        data-row
+        data-long-press
+        className={cn(ROW, 'font-medium', rowTone(current, actions.menuId === id))}
+      >
         {/*
           앞자리 하나가 아이콘과 화살표를 겸한다(노션). 평소엔 폴더 아이콘, 줄에 마우스를 올리거나
           키보드 초점이 오면 화살표로 바뀐다. 터치 기기는 hover 가 없어 늘 화살표다.
