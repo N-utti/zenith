@@ -21,7 +21,8 @@ import { DocTree } from './DocTree'
 
 const ROW = 'flex items-center gap-2 rounded-md px-2.5 py-2 text-[15px] transition-colors'
 const ROW_IDLE = 'text-muted hover:bg-surface-hover hover:text-fg'
-const ROW_ACTIVE = 'bg-accent-soft text-accent font-semibold'
+// 폰 서랍은 누르면 닫히고 지금 자리는 하단 탭이 보여 주므로, 하단 탭처럼 글자색만 바꾸고 바탕은 칠하지 않는다.
+const ROW_ACTIVE = 'md:bg-accent-soft text-accent font-semibold'
 
 const SECTIONS_KEY = 'zenith.sidebarSectionsCollapsed'
 
@@ -317,7 +318,7 @@ export function Sidebar({
         inert={collapsed}
         style={{ width: collapsed ? 0 : panel.width, maxWidth: panel.maxWidth }}
         className={cn(
-          'border-line bg-sunken hidden shrink-0 overflow-hidden md:block',
+          'border-line bg-surface hidden shrink-0 overflow-hidden md:block',
           'motion-safe:transition-[width,border-color] motion-safe:duration-200 motion-safe:ease-out',
           collapsed ? 'border-r border-transparent' : 'border-r',
         )}
@@ -347,7 +348,7 @@ export function Sidebar({
             aria-modal="true"
             aria-label="메뉴"
             tabIndex={-1}
-            className="border-line bg-sunken absolute inset-y-0 left-0 w-[300px] border-r shadow-xl outline-none"
+            className="border-line bg-surface absolute inset-y-0 left-0 w-[300px] border-r shadow-xl outline-none"
           >
             <Button
               variant="ghost"

@@ -85,7 +85,8 @@
   --zenith-canvas: oklch(0.985 0.002 265);
   --zenith-surface: oklch(1 0 0);
   --zenith-surface-hover: oklch(0.965 0.004 265);
-  --zenith-sunken: oklch(0.955 0.005 265);
+  /* 네이버웍스처럼 푸른 기 없는 회색. 푸른 회색은 Tailwind 기본 gray 와 같아 데모처럼 보였다. */
+  --zenith-sunken: oklch(0.958 0 0);
   --zenith-line: oklch(0.915 0.005 265);
   --zenith-line-strong: oklch(0.84 0.008 265);
 
@@ -118,7 +119,7 @@
     --zenith-canvas: oklch(0.18 0.008 265);
     --zenith-surface: oklch(0.22 0.01 265);
     --zenith-surface-hover: oklch(0.26 0.012 265);
-    --zenith-sunken: oklch(0.15 0.008 265);
+    --zenith-sunken: oklch(0.15 0 0);
     --zenith-line: oklch(0.3 0.012 265);
     --zenith-line-strong: oklch(0.4 0.015 265);
 
