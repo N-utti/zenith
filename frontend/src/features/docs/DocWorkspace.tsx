@@ -17,6 +17,8 @@ import {
   GripVertical,
   Maximize2,
   MessageSquarePlus,
+  PanelRightClose,
+  PanelRightOpen,
   Sparkles,
   Trash2,
   WifiOff,
@@ -141,6 +143,7 @@ function DocSidebar({
   full,
   onFullChange,
   onCollapse,
+  hidden,
   children,
 }: {
   tab: SidebarTab
@@ -153,6 +156,8 @@ function DocSidebar({
   onFullChange: (full: boolean) => void
   /** 좁은 폭에서 접을 때. 본문을 넓게 보려는 것이므로 본문을 가린 미리보기도 같이 닫는다. */
   onCollapse: () => void
+  /** 넓은 화면에서 닫아 뒀는지(상단 줄의 패널 버튼). 좁은 폭은 위의 open 이 따로 여닫는다. */
+  hidden: boolean
   children: ReactNode
 }) {
   const TABS: { key: SidebarTab; label: string }[] = [
@@ -178,7 +183,9 @@ function DocSidebar({
     const box = asideRef.current?.parentElement
     if (!head || !box) return
     const measure = () => {
-      setHeadHeight(head.getBoundingClientRect().height)
+      // 넓은 화면에서 닫아 둔 동안(display:none)은 0 으로 잰다. 그 값을 쓰면 좁은 폭으로 돌아올 때 한 프레임 튄다.
+      const height = head.getBoundingClientRect().height
+      if (height) setHeadHeight(height)
       setBoxHeight(box.clientHeight)
     }
     measure()
@@ -378,8 +385,11 @@ function DocSidebar({
             ...(dragHeight !== null && { height: dragHeight, transition: 'none' }),
           } as CSSProperties
         }
+        // 화면을 나눴을 때 왼쪽 칸이 이걸 보고 두 본문 폭을 다시 맞춘다(DocEditorPage).
+        data-panel-hidden={hidden || undefined}
         className={cn(
           'border-line bg-surface flex min-h-0 w-full flex-col border-t max-lg:shrink-0 max-lg:pointer-coarse:rounded-t-xl lg:w-80 lg:border-t-0 lg:border-l',
+          hidden && 'lg:hidden',
           'motion-safe:max-lg:transition-[height] motion-safe:max-lg:duration-500 motion-safe:max-lg:ease-[cubic-bezier(0.32,0.72,0,1)]',
           !full && 'max-lg:pointer-coarse:touch-none max-lg:pointer-coarse:[&_*]:touch-none',
           !open
@@ -539,6 +549,36 @@ function afterPanelSettles(fn: () => void) {
     void Promise.allSettled(running.map((a) => a.finished)).then(check)
   }
   requestAnimationFrame(check)
+}
+
+/** 패널 안에 초점이 있으면 푼다. 패널을 접거나 닫을 때. */
+function blurPanel() {
+  const active = document.activeElement
+  if (active instanceof HTMLElement && document.getElementById('doc-side-panel')?.contains(active))
+    active.blur()
+}
+
+const HIDDEN_KEY = 'zenith.docPanelHidden'
+
+/** 넓은 화면에서 패널을 닫아 뒀는지. 앱 사이드바 접기처럼 이 브라우저에 남겨 다른 문서에서도 따른다. */
+function usePanelHidden(persist: boolean) {
+  const [hidden, setHidden] = useState(() => {
+    try {
+      return localStorage.getItem(HIDDEN_KEY) === '1'
+    } catch {
+      return false
+    }
+  })
+  useEffect(() => {
+    if (!persist) return
+    try {
+      if (hidden) localStorage.setItem(HIDDEN_KEY, '1')
+      else localStorage.removeItem(HIDDEN_KEY)
+    } catch {
+      // 저장소를 못 열면 이 화면에서만 따른다.
+    }
+  }, [hidden, persist])
+  return [hidden, setHidden] as const
 }
 
 const HEIGHT_KEY = 'zenith.docPanelHeight'
@@ -852,6 +892,8 @@ function DocSurface({
   const [sideOpen, setSideOpen] = useState(false)
   /** 좁은 폭에서 패널을 맨 위까지 펼쳤는지. 그동안 본문은 안 보인다. */
   const [sideFull, setSideFull] = useState(false)
+  // 오른쪽에 연 문서는 패널이 없다. 처음 읽은 값을 다시 써서 왼쪽이 바꾼 저장값을 덮지 않게 저장을 끈다.
+  const [panelHidden, setPanelHidden] = usePanelHidden(!onCloseSplit)
   // 멘션 알림(`?comment=`)으로 들어오면 댓글 탭으로 옮기고 좁은 폭에서도 펼친다. 같은 문서를 연 채로
   // 알림을 눌러도 오도록 값이 바뀔 때마다 본다(렌더 중 상태 조정). 파라미터는 CommentPanel 이
   // 댓글을 찾아 밝힌 뒤 걷는다.
@@ -864,6 +906,8 @@ function DocSurface({
     if (focusComment) {
       setTab('comments')
       setSideOpen(true)
+      // 넓은 화면에서 닫아 뒀어도 연다. 오른쪽에 연 문서는 패널이 없어 저장된 값만 바꾸게 되니 건드리지 않는다.
+      if (!onCloseSplit) setPanelHidden(false)
       // 다 펼친 높이에서 그 댓글로 굴린 뒤 블록으로 가며 내려오면 굴려 둔 줄이 잘린다. 먼저 내린다.
       setSideFull(false)
     }
@@ -1119,6 +1163,32 @@ function DocSurface({
           >
             <Trash2 className="size-4" />
           </button>
+          {/* 넓은 화면에서만. 좁은 폭은 패널의 탭 줄이 여닫는다(같은 일을 하는 버튼을 둘 두지 않는다).
+              오른쪽에 연 문서는 패널이 없다. 닫으면 본문을 넓게 보려는 것이라 버전 미리보기도 같이 닫는다. */}
+          {!onCloseSplit && (
+            <button
+              type="button"
+              aria-label="댓글·버전 기록·AI 질문·팩트체크 패널"
+              aria-expanded={!panelHidden}
+              aria-controls="doc-side-panel"
+              title={panelHidden ? '패널 열기' : '패널 닫기'}
+              onClick={() => {
+                if (!panelHidden) {
+                  closePreview()
+                  // 마우스로 누른 버튼이 초점을 안 받는 브라우저(사파리 등)는 숨긴 입력칸에 초점이 남는다.
+                  blurPanel()
+                }
+                setPanelHidden(!panelHidden)
+              }}
+              className="text-subtle hover:text-fg grid size-7 cursor-pointer place-items-center rounded transition-colors max-lg:hidden"
+            >
+              {panelHidden ? (
+                <PanelRightOpen className="size-4" />
+              ) : (
+                <PanelRightClose className="size-4" />
+              )}
+            </button>
+          )}
           {onCloseSplit && <SplitActions docId={meta.id} onClose={() => onCloseSplit()} />}
         </div>
       </div>
@@ -1242,16 +1312,12 @@ function DocSurface({
               // 접었다 다시 펼치면 원래 높이부터.
               setSideFull(false)
               // 접힌 패널 안에 초점이 남으면 화상 키보드가 그대로고, 친 글이 안 보이는 입력칸에 들어간다.
-              const active = document.activeElement
-              if (
-                active instanceof HTMLElement &&
-                document.getElementById('doc-side-panel')?.contains(active)
-              )
-                active.blur()
+              blurPanel()
             }}
             full={sideFull}
             onFullChange={changeSideFull}
             onCollapse={closePreview}
+            hidden={panelHidden}
           >
             {tab === 'comments' ? (
               <CommentPanel docId={meta.id} editor={editor} onJump={jumpToBlock} />
