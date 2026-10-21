@@ -10,14 +10,12 @@ import {
 import { Link, useLocation, useSearchParams } from 'react-router'
 import { ArrowDown, Download, FileText, Paperclip, Pencil, Sparkles, Trash2 } from 'lucide-react'
 import { AuthImg, DownloadLink } from '@/components/ui/AuthMedia'
-import { Avatar } from '@/components/ui/Avatar'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { ImageViewer } from '@/components/ui/ImageViewer'
 import { Spinner } from '@/components/ui/Spinner'
 import { Textarea } from '@/components/ui/Textarea'
 import { useToast } from '@/components/ui/ToastContext'
-import { hueOf } from '@/lib/avatar'
 import { cn } from '@/lib/cn'
 import { formatDay, formatRelative, formatTime } from '@/lib/datetime'
 import { formatBytes } from '@/lib/format'
@@ -31,6 +29,7 @@ import { isImage } from './attachments'
 import { MAX_BODY_CHARS, useMessages, useOlderMessages } from './api'
 import { useChatSocketContext } from './ChatSocketContext'
 import { countAfter } from './newMessages'
+import { ProfileAvatar } from './ProfileMenu'
 import type { ChatAttachment, ChatMessage } from './types'
 
 /** 같은 사람이 5분 안에 이어서 보낸 메시지는 아바타·이름을 반복하지 않는다. */
@@ -538,7 +537,7 @@ const MessageRow = memo(function MessageRow({
             <Sparkles className="size-4" />
           </span>
         ) : (
-          <Avatar name={message.author.name} hue={hueOf(message.author.id)} size="md" />
+          <ProfileAvatar person={message.author} />
         )}
 
         <div className="min-w-0 flex-1">
