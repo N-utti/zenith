@@ -3,6 +3,7 @@ import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-quer
 import { resetThread } from '@/features/ai/store'
 import { clearDrafts } from '@/features/chat/drafts'
 import { claimDocCaches, disownDocCaches } from '@/features/docs/localCache'
+import { setSplitDoc } from '@/features/docs/splitDoc'
 import { setOnboardingOwner } from '@/features/home/onboarding'
 import { api, ApiError } from '@/lib/api'
 import { clearNotifications } from '@/lib/desktop'
@@ -25,7 +26,7 @@ async function fetchMe(): Promise<User | null> {
 
 /**
  * 앞사람이 이 탭에 남긴 것을 버린다: 서버에서 받아 둔 쿼리 캐시(프로필 제외), AI 대화, 쓰다 만 채팅 글,
- * 데스크톱 앱이면 Windows 알림 센터의 채팅 알림(본문이 들어 있다).
+ * 데스크톱 앱이면 Windows 알림 센터의 채팅 알림(본문이 들어 있다), 화면을 나눠 오른쪽에 띄운 문서.
  * 결재 본문·가려지기 전 게시글 제목·AI 근거 인용문처럼 등급마다 다른 내용이 섞여 있다.
  */
 function forgetPreviousUser(qc: QueryClient) {
@@ -33,6 +34,7 @@ function forgetPreviousUser(qc: QueryClient) {
   resetThread()
   clearDrafts()
   clearNotifications()
+  setSplitDoc(null)
 }
 
 /**
@@ -69,7 +71,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // 같은 사람이 다른 탭에서 다시 로그인한 것이면 이 탭의 대화·쓰던 글을 날릴 이유가 없다.
       // 첫 `/me` 가 도는 중이면 `current` 가 아직 null 이라 누가 로그인했든 다시 연다. 그 요청은
       // 바뀌기 전 쿠키로 나갔을 수 있다. 다시 연 탭은 알리지 않으므로 되풀이되지 않는다.
-      if (e.data?.userId !== current) location.replace('/')
+      // 오른쪽 문서는 이 탭 저장소에 남아 다시 열어도 뜬다. 앞사람이 보던 것이라 먼저 비운다.
+      if (e.data?.userId !== current) {
+        setSplitDoc(null)
+        location.replace('/')
+      }
     }
     tabs.addEventListener('message', onMessage)
     return () => tabs.removeEventListener('message', onMessage)

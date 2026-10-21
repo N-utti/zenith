@@ -4,6 +4,7 @@ import {
   ChevronDown,
   ChevronRight,
   CornerLeftUp,
+  Columns2,
   ExternalLink,
   FilePlus2,
   FileText,
@@ -31,6 +32,7 @@ import { FolderAccessModal } from '@/features/docs/FolderAccessModal'
 import { FolderNameModal } from '@/features/docs/FolderNameModal'
 import { MoveNodeModal } from '@/features/docs/MoveNodeModal'
 import { TrashDocModal } from '@/features/docs/TrashDocModal'
+import { setSplitDoc } from '@/features/docs/splitDoc'
 import { DOC_DRAG_TYPE } from '@/features/docs/types'
 import {
   UNTITLED_DOC,
@@ -768,6 +770,14 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
                   icon={ExternalLink}
                   label="새 탭에서 열기"
                   onSelect={() => window.open(menu.href, '_blank', 'noopener')}
+                />
+              )}
+              {/* 끌어 놓기와 같은 일. 키보드(Shift+F10)로도 화면을 나눌 수 있게. 오른쪽 칸이 뜨는 폭(1280px)에서만. */}
+              {window.matchMedia('(min-width: 80rem)').matches && (
+                <ContextMenuItem
+                  icon={Columns2}
+                  label="오른쪽에 열기"
+                  onSelect={() => setSplitDoc(menu.item.id)}
                 />
               )}
               <ContextMenuItem

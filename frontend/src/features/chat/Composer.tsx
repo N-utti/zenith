@@ -98,6 +98,9 @@ export function Composer({
   const fromPage = useRef(false)
   const onFileDrag = useEffectEvent((e: DragEvent) => {
     if (fromPage.current || !e.dataTransfer?.types.includes('Files')) return
+    // 화면을 나눠 오른쪽에 띄운 문서에 놓는 파일은 그 문서 것이다(편집기가 받는다). 대화에 같이 붙이지 않는다.
+    if (e.target instanceof Element && e.target.closest('[data-split-doc]'))
+      return setDragging(false)
     e.preventDefault()
     if (e.type === 'dragover') return setDragging(true)
     setDragging(false)
