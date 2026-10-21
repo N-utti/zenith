@@ -188,7 +188,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-[12vh]">
+    <div className="fixed inset-0 z-50 flex items-start justify-center pt-[12vh] sm:px-4">
       <button
         type="button"
         aria-label="닫기"
@@ -205,7 +205,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
         aria-label="통합 검색"
         tabIndex={-1}
         onKeyDown={onKeyDown}
-        className="border-line bg-surface relative w-full max-w-xl overflow-hidden rounded-xl border shadow-2xl outline-none"
+        className="border-line bg-surface relative w-full overflow-hidden border-y shadow-2xl outline-none sm:max-w-xl sm:rounded-xl sm:border"
       >
         <div className="border-line flex items-center gap-3 border-b px-4">
           <Search className="text-subtle size-4.5 shrink-0" />
