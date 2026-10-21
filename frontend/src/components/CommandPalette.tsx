@@ -302,7 +302,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
           e.preventDefault()
           e.stopPropagation()
         }}
-        className="border-line bg-surface relative flex h-full w-full flex-col overflow-hidden rounded-t-2xl border-t pb-[env(safe-area-inset-bottom)] shadow-2xl outline-none sm:h-auto sm:max-w-xl sm:rounded-xl sm:border sm:pb-0"
+        className="border-line bg-surface relative flex h-full w-full flex-col overflow-hidden rounded-t-2xl border-t pb-[env(safe-area-inset-bottom)] shadow-2xl outline-none max-sm:motion-safe:animate-sheet-in sm:h-auto sm:max-w-xl sm:rounded-xl sm:border sm:pb-0"
       >
         {/* 쓸어내려 닫을 수 있다는 표시. 끌기는 시트 어디서든 된다(위 touchmove). */}
         <div aria-hidden="true" className="flex justify-center pt-2 sm:hidden">

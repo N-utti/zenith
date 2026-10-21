@@ -32,7 +32,7 @@
   --animate-flash: zenith-flash 2s ease-out;
 
   /* 폰 바텀시트(`Modal` 의 sheet)가 아래에서 올라온다. 곡선은 iOS 시트처럼 빨리 출발해 천천히 멈춘다.
-     닫힐 때는 Modal 이 transition 으로 되돌린다. 뒤 그림자는 페이드하지 않는다(Modal 주석: 아이폰 막대). */
+     폰 검색 시트(CommandPalette)도 같이 쓴다. 닫힐 때는 Modal 이 transition 으로 되돌린다. 뒤 그림자는 페이드하지 않는다(Modal 주석: 아이폰 막대). */
   --animate-sheet-in: zenith-sheet-in 280ms cubic-bezier(0.32, 0.72, 0, 1);
 
   /* 꾹 눌러 연 메뉴가 iOS 컨텍스트 메뉴처럼 작게 시작해 튀어나온다. 곡선은 시트와 같다. */
