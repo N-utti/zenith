@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react'
+import { useEffect, useEffectEvent, useId, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
 import {
   AtSign,
@@ -22,9 +22,14 @@ import { hitRows, matchRooms, paletteRows, roomRows } from '@/features/search/ro
 import { parseSnippet } from '@/features/search/snippet'
 import { SEARCH_TYPE_LABEL, type SearchHit } from '@/features/search/types'
 import type { AskState } from '@/features/ai/types'
+import { releaseSpeed, touchIntent } from '@/features/docs/docPanel'
 
 /** 글자를 칠 때마다 서버를 부르지 않는다. 멈춘 뒤에 한 번. */
 const TYPING_PAUSE_MS = 200
+
+/** 폰 시트를 이만큼 넘게 내렸다 놓으면 닫는다. 덜 내렸으면 빠르게 튕겼을 때만. */
+const SWIPE_CLOSE_PX = 120
+const SNAP_BACK = 'transform 200ms ease-out'
 
 const HIT_ICONS = { doc: FileText, chat: MessagesSquare, post: Megaphone }
 
@@ -96,6 +101,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
   const timer = useRef<number | undefined>(undefined)
   const activeRow = useRef<HTMLButtonElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
+  const scrollerRef = useRef<HTMLDivElement>(null)
   // 스크린리더용 이름표. 포커스는 입력칸에 둔 채 커서가 가리키는 줄을 id 로 알린다(콤보박스 패턴).
   const listId = useId()
   const optionId = (index: number) => `${listId}-${index}`
@@ -105,6 +111,87 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
   useFocusTrap(true, panelRef, onClose)
 
   useEffect(() => () => window.clearTimeout(timer.current), [])
+
+  // 폰 폭의 시트는 쓸어내리면 닫힌다(노션 앱). 목록이 맨 위가 아니면 먼저 목록이 굴러간다(`touchIntent`).
+  // 브라우저 스크롤을 막아야 해서 passive 가 아닌 touchmove 를 직접 단다(문서 패널 바텀시트와 같은 방식).
+  const [closing, setClosing] = useState(false)
+  const justDragged = useRef(false)
+  const close = useEffectEvent(onClose)
+  useEffect(() => {
+    const el = panelRef.current
+    if (!el) return
+    let mode: 'idle' | 'wait' | ReturnType<typeof touchIntent> = 'idle'
+    let id = 0
+    let startX = 0
+    let startY = 0
+    let samples: { y: number; t: number }[] = []
+    const same = (list: TouchList) => [...list].find((t) => t.identifier === id)
+    const slide = (dy: number, transition = '') => {
+      el.style.transition = transition
+      el.style.transform = dy ? `translateY(${dy}px)` : ''
+    }
+    let leaving = false
+    const onStart = (e: TouchEvent) => {
+      // 끌던 줄이 목록에서 빠지면 touchend 가 여기까지 안 올라온다. 새 손짓이 오면 끌던 시트부터 돌려놓는다.
+      if (mode === 'sheet') slide(0, SNAP_BACK)
+      mode = 'idle'
+      if (leaving || e.touches.length > 1 || !matchMedia('(max-width: 639.98px)').matches) return
+      const touch = e.changedTouches[0]
+      id = touch.identifier
+      startX = touch.clientX
+      startY = touch.clientY
+      samples = []
+      mode = 'wait'
+    }
+    const onMove = (e: TouchEvent) => {
+      const touch = same(e.touches)
+      if (!touch || mode === 'idle' || mode === 'scroll') return
+      const dx = touch.clientX - startX
+      const dy = touch.clientY - startY
+      if (mode === 'wait') {
+        if (Math.hypot(dx, dy) < 8) return
+        const list = scrollerRef.current
+        mode = touchIntent(dx, dy, list?.contains(e.target as Node) ? list : null)
+        if (mode === 'scroll') return
+      }
+      e.preventDefault()
+      if (mode !== 'sheet') return
+      const t = performance.now()
+      samples = [...samples.filter((s) => t - s.t < 200), { y: touch.clientY, t }]
+      slide(Math.max(0, dy))
+    }
+    const onEnd = (e: TouchEvent) => {
+      const touch = same(e.changedTouches)
+      if (!touch || mode === 'idle') return
+      const dragged = mode === 'sheet'
+      mode = 'idle'
+      if (!dragged) return
+      // 10~15px 짧게 끌어도 사파리는 탭으로 쳐 click 을 보낼 수 있다. 그 줄로 넘어가지 않게 삼킨다(아래 onClickCapture).
+      justDragged.current = true
+      // 속도는 위로 + 다. 위로 튕겼으면 많이 내렸어도 되돌리고, 아래로 튕겼거나 충분히 내렸으면 닫는다.
+      const v = e.type === 'touchcancel' ? 0 : releaseSpeed(samples, performance.now())
+      const dy = touch.clientY - startY
+      if (e.type === 'touchcancel' || v > 0.5 || (dy < SWIPE_CLOSE_PX && v > -0.5)) {
+        return slide(0, SNAP_BACK)
+      }
+      leaving = true
+      if (matchMedia('(prefers-reduced-motion: reduce)').matches) return close()
+      setClosing(true)
+      el.style.transition = 'transform 200ms ease-in'
+      el.style.transform = 'translateY(100%)'
+      window.setTimeout(close, 200)
+    }
+    el.addEventListener('touchstart', onStart, { passive: true })
+    el.addEventListener('touchmove', onMove, { passive: false })
+    el.addEventListener('touchend', onEnd)
+    el.addEventListener('touchcancel', onEnd)
+    return () => {
+      el.removeEventListener('touchstart', onStart)
+      el.removeEventListener('touchmove', onMove)
+      el.removeEventListener('touchend', onEnd)
+      el.removeEventListener('touchcancel', onEnd)
+    }
+  }, [])
 
   const { data, isFetching, isError } = useSearch(settled)
   const { data: channels } = useChannels()
@@ -195,7 +282,8 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
         tabIndex={-1}
         onClick={onClose}
         // fixed: 아이폰 사파리가 시간 표시 줄도 같이 어둡게 칠한다(Modal 의 그림자 주석).
-        className="fixed inset-0 bg-black/40"
+        // 시트가 내려가기 시작하면 바로 뺀다(같은 주석, 페이드하면 막대 색이 끊기며 따라온다).
+        className={cn('fixed inset-0 bg-black/40', closing && 'hidden')}
       />
 
       <div
@@ -205,8 +293,21 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
         aria-label="통합 검색"
         tabIndex={-1}
         onKeyDown={onKeyDown}
-        className="border-line bg-surface relative flex h-full w-full flex-col overflow-hidden rounded-t-2xl border-t shadow-2xl outline-none sm:h-auto sm:max-w-xl sm:rounded-xl sm:border"
+        onPointerDownCapture={() => {
+          justDragged.current = false
+        }}
+        onClickCapture={(e) => {
+          if (!justDragged.current) return
+          justDragged.current = false
+          e.preventDefault()
+          e.stopPropagation()
+        }}
+        className="border-line bg-surface relative flex h-full w-full flex-col overflow-hidden rounded-t-2xl border-t pb-[env(safe-area-inset-bottom)] shadow-2xl outline-none sm:h-auto sm:max-w-xl sm:rounded-xl sm:border sm:pb-0"
       >
+        {/* 쓸어내려 닫을 수 있다는 표시. 끌기는 시트 어디서든 된다(위 touchmove). */}
+        <div aria-hidden="true" className="flex justify-center pt-2 sm:hidden">
+          <span className="bg-line-strong h-1 w-9 rounded-full" />
+        </div>
         <div className="border-line flex items-center gap-3 border-b px-4">
           <Search className="text-subtle size-4.5 shrink-0" />
           <input
@@ -219,7 +320,8 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
             aria-autocomplete="list"
             aria-activedescendant={optionId(active)}
             placeholder="문서·채팅·게시글 검색, 채팅방·화면 이동…"
-            className="text-fg placeholder:text-subtle h-13 flex-1 bg-transparent text-sm outline-none"
+            // 터치 기기에서 16px: 아이폰 사파리는 그보다 작은 글자의 입력칸을 누르면 화면을 확대한다(공용 Input 과 같은 이유).
+            className="text-fg placeholder:text-subtle h-13 flex-1 bg-transparent text-sm outline-none pointer-coarse:text-base"
           />
         </div>
 
@@ -235,7 +337,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
           aria-label="검색 결과"
           className="flex min-h-0 flex-1 flex-col sm:max-h-80 sm:flex-none"
         >
-          <div className="min-h-0 overflow-y-auto p-1.5">
+          <div ref={scrollerRef} className="min-h-0 overflow-y-auto p-1.5">
             <div role="group" aria-labelledby={`${listId}-nav`}>
               <p
                 id={`${listId}-nav`}
