@@ -81,6 +81,9 @@ def create_app() -> FastAPI:
             allow_credentials=True,
             allow_methods=["*"],
             allow_headers=["*"],
+            expose_headers=[
+                "X-CSRF-Token"
+            ],  # 셸은 csrf 쿠키를 못 읽는다 — security.set_auth_cookies
         )
 
     @app.middleware("http")

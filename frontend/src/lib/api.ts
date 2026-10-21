@@ -38,8 +38,14 @@ const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
  */
 function csrfToken(): string | null {
   const match = document.cookie.match(/(?:^|;\s*)csrf=([^;]*)/)
-  return match ? decodeURIComponent(match[1]) : null
+  return match ? decodeURIComponent(match[1]) : issuedCsrf
 }
+
+/**
+ * 데스크탑 셸(오리진 tauri.localhost)은 서버 도메인의 csrf 쿠키를 document.cookie 로 못 읽는다.
+ * 서버가 로그인·refresh·/me 응답에 같은 값을 X-CSRF-Token 헤더로도 주므로 받아 둔다(브라우저는 쿠키가 먼저).
+ */
+let issuedCsrf: string | null = null
 
 async function send(path: string, init: RequestInit): Promise<Response> {
   const headers = new Headers(init.headers)
@@ -53,7 +59,9 @@ async function send(path: string, init: RequestInit): Promise<Response> {
     if (token) headers.set('X-CSRF-Token', token)
   }
   // 세션은 HttpOnly 쿠키에 있다. 데스크탑 셸처럼 오리진이 다를 때도 쿠키를 실어 보낸다.
-  return fetch(httpUrl(`/api${path}`), { ...init, headers, credentials: 'include' })
+  const res = await fetch(httpUrl(`/api${path}`), { ...init, headers, credentials: 'include' })
+  issuedCsrf = res.headers.get('X-CSRF-Token') ?? issuedCsrf
+  return res
 }
 
 async function read(res: Response): Promise<unknown> {
