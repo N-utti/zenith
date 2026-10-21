@@ -188,7 +188,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-[12vh] sm:px-4">
+    <div className="fixed inset-0 z-50 flex items-start justify-center pt-3 sm:px-4 sm:pt-[12vh]">
       <button
         type="button"
         aria-label="닫기"
@@ -205,7 +205,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
         aria-label="통합 검색"
         tabIndex={-1}
         onKeyDown={onKeyDown}
-        className="border-line bg-surface relative w-full overflow-hidden border-y shadow-2xl outline-none sm:max-w-xl sm:rounded-xl sm:border"
+        className="border-line bg-surface relative flex h-full w-full flex-col overflow-hidden rounded-t-2xl border-t shadow-2xl outline-none sm:h-auto sm:max-w-xl sm:rounded-xl sm:border"
       >
         <div className="border-line flex items-center gap-3 border-b px-4">
           <Search className="text-subtle size-4.5 shrink-0" />
@@ -229,7 +229,12 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
           {summary}
         </p>
 
-        <div id={listId} role="listbox" aria-label="검색 결과" className="flex max-h-80 flex-col">
+        <div
+          id={listId}
+          role="listbox"
+          aria-label="검색 결과"
+          className="flex min-h-0 flex-1 flex-col sm:max-h-80 sm:flex-none"
+        >
           <div className="min-h-0 overflow-y-auto p-1.5">
             <div role="group" aria-labelledby={`${listId}-nav`}>
               <p
