@@ -15,6 +15,7 @@ import DragHandle, { type DragHandleProps } from '@tiptap/extension-drag-handle-
 import {
   ChevronDown,
   GripVertical,
+  Maximize2,
   MessageSquarePlus,
   Sparkles,
   Trash2,
@@ -796,7 +797,46 @@ function AiSourceToggle({ docId, on }: { docId: string; on: boolean }) {
   )
 }
 
-function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail }) {
+/**
+ * 화면을 나눠 오른쪽에 연 문서의 버튼 둘. 크게 열면 그 문서만 남고(옆 패널도 돌아온다), 닫으면 왼쪽만 남는다.
+ * 문서를 못 불러온 자리(권한 없음·없음·휴지통)에서도 닫을 수 있게 따로 꺼내 둔다.
+ */
+export function SplitActions({ docId, onClose }: { docId: string; onClose: () => void }) {
+  const navigate = useNavigate()
+  return (
+    <>
+      <button
+        type="button"
+        aria-label="이 문서만 크게 열기"
+        title="크게 열기"
+        onClick={() => void navigate(`/docs/${docId}`)}
+        className="text-subtle hover:text-fg grid size-7 cursor-pointer place-items-center rounded transition-colors"
+      >
+        <Maximize2 className="size-4" />
+      </button>
+      <button
+        type="button"
+        aria-label="오른쪽 문서 닫기"
+        title="닫기"
+        onClick={onClose}
+        className="text-subtle hover:text-fg grid size-7 cursor-pointer place-items-center rounded transition-colors"
+      >
+        <X className="size-4" />
+      </button>
+    </>
+  )
+}
+
+function DocSurface({
+  session,
+  meta,
+  onCloseSplit,
+}: {
+  session: CollabSession
+  meta: DocDetail
+  /** `replace`: 방문 기록을 남기지 않고 닫는다(휴지통으로 보낸 문서가 뒤로 가기로 되살아나지 않게). */
+  onCloseSplit?: (replace?: boolean) => void
+}) {
   const user = useCurrentUser()
   const { doc, provider } = session
   const { title, setTitle } = useCollabTitle(doc, meta.title)
@@ -1079,6 +1119,7 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
           >
             <Trash2 className="size-4" />
           </button>
+          {onCloseSplit && <SplitActions docId={meta.id} onClose={() => onCloseSplit()} />}
         </div>
       </div>
 
@@ -1087,8 +1128,10 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
           id={meta.id}
           title={title || UNTITLED_DOC}
           onClose={() => setConfirmTrash(false)}
-          // 휴지통으로 보내면 문서 목록으로 나간다.
-          onTrashed={() => void navigate('/docs', { replace: true })}
+          // 휴지통으로 보내면 문서 목록으로 나간다. 오른쪽에 연 문서는 그 자리만 닫는다.
+          onTrashed={() =>
+            onCloseSplit ? onCloseSplit(true) : void navigate('/docs', { replace: true })
+          }
         />
       )}
 
@@ -1135,10 +1178,7 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
               </p>
             )}
 
-            <div
-              ref={scrollRef}
-              className="min-h-0 flex-1 overflow-y-auto"
-            >
+            <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
               <div ref={tableBleedRef} className={cn('mx-auto px-6 py-8', width.className)}>
                 <p className="text-subtle mb-1 text-xs">
                   <Avatar
@@ -1186,74 +1226,93 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
           </div>
         )}
 
-        <DocSidebar
-          tab={tab}
-          onTabChange={(next) => {
-            // 탭을 옮기면 도는 요청의 결과도 버린다. 댓글을 보는데 본문이 바뀌면 안 된다.
-            dropPendingPreview()
-            setTab(next)
-          }}
-          open={sideOpen}
-          onOpenChange={(next) => {
-            setSideOpen(next)
-            if (next) return
-            // 접었다 다시 펼치면 원래 높이부터.
-            setSideFull(false)
-            // 접힌 패널 안에 초점이 남으면 화상 키보드가 그대로고, 친 글이 안 보이는 입력칸에 들어간다.
-            const active = document.activeElement
-            if (
-              active instanceof HTMLElement &&
-              document.getElementById('doc-side-panel')?.contains(active)
-            )
-              active.blur()
-          }}
-          full={sideFull}
-          onFullChange={changeSideFull}
-          onCollapse={closePreview}
-        >
-          {tab === 'comments' ? (
-            <CommentPanel docId={meta.id} editor={editor} onJump={jumpToBlock} />
-          ) : tab === 'ask' || tab === 'check' ? null : (
-            <>
-              {previewError && (
-                <p
-                  role="alert"
-                  className="text-danger bg-danger/10 m-2 rounded-lg px-3 py-2 text-xs"
-                >
-                  {previewError}
-                </p>
-              )}
-              <VersionPanel
-                docId={meta.id}
-                selectedId={preview?.version.id ?? pendingVersionId}
-                pendingId={pendingVersionId}
-                onSelect={openPreview}
-              />
-            </>
-          )}
-          {/* 다른 탭을 보는 동안에도 숨긴 채 둔다. 받던 답변의 요청 상태와 쓰던 질문이 탭을 옮겨도 남는다. */}
-          <div hidden={tab !== 'ask'} className="flex min-h-0 flex-1 flex-col">
-            <DocAskPanel docId={meta.id} aiSource={meta.ai_source} />
-          </div>
-          <div hidden={tab !== 'check'} className="flex min-h-0 flex-1 flex-col">
-            <DocCheckPanel docId={meta.id} editor={editor} onJump={jumpToText} />
-          </div>
-        </DocSidebar>
+        {/* 오른쪽에 연 문서는 본문만. 패널까지 두 벌이면 양쪽 본문이 너무 좁다(사용자 결정). */}
+        {!onCloseSplit && (
+          <DocSidebar
+            tab={tab}
+            onTabChange={(next) => {
+              // 탭을 옮기면 도는 요청의 결과도 버린다. 댓글을 보는데 본문이 바뀌면 안 된다.
+              dropPendingPreview()
+              setTab(next)
+            }}
+            open={sideOpen}
+            onOpenChange={(next) => {
+              setSideOpen(next)
+              if (next) return
+              // 접었다 다시 펼치면 원래 높이부터.
+              setSideFull(false)
+              // 접힌 패널 안에 초점이 남으면 화상 키보드가 그대로고, 친 글이 안 보이는 입력칸에 들어간다.
+              const active = document.activeElement
+              if (
+                active instanceof HTMLElement &&
+                document.getElementById('doc-side-panel')?.contains(active)
+              )
+                active.blur()
+            }}
+            full={sideFull}
+            onFullChange={changeSideFull}
+            onCollapse={closePreview}
+          >
+            {tab === 'comments' ? (
+              <CommentPanel docId={meta.id} editor={editor} onJump={jumpToBlock} />
+            ) : tab === 'ask' || tab === 'check' ? null : (
+              <>
+                {previewError && (
+                  <p
+                    role="alert"
+                    className="text-danger bg-danger/10 m-2 rounded-lg px-3 py-2 text-xs"
+                  >
+                    {previewError}
+                  </p>
+                )}
+                <VersionPanel
+                  docId={meta.id}
+                  selectedId={preview?.version.id ?? pendingVersionId}
+                  pendingId={pendingVersionId}
+                  onSelect={openPreview}
+                />
+              </>
+            )}
+            {/* 다른 탭을 보는 동안에도 숨긴 채 둔다. 받던 답변의 요청 상태와 쓰던 질문이 탭을 옮겨도 남는다. */}
+            <div hidden={tab !== 'ask'} className="flex min-h-0 flex-1 flex-col">
+              <DocAskPanel docId={meta.id} aiSource={meta.ai_source} />
+            </div>
+            <div hidden={tab !== 'check'} className="flex min-h-0 flex-1 flex-col">
+              <DocCheckPanel docId={meta.id} editor={editor} onJump={jumpToText} />
+            </div>
+          </DocSidebar>
+        )}
       </div>
     </div>
   )
 }
 
-export function DocWorkspace({ meta }: { meta: DocDetail }) {
+/** `onCloseSplit` 이 있으면 화면을 나눠 오른쪽에 연 문서다. */
+export function DocWorkspace({
+  meta,
+  onCloseSplit,
+}: {
+  meta: DocDetail
+  /** `replace`: 방문 기록을 남기지 않고 닫는다(휴지통으로 보낸 문서가 뒤로 가기로 되살아나지 않게). */
+  onCloseSplit?: (replace?: boolean) => void
+}) {
   const session = useCollabSession(meta.id)
 
   if (!session) {
     return (
-      <div className="grid flex-1 place-items-center">
-        <Spinner className="size-6" />
-      </div>
+      <>
+        {/* 세션이 붙기 전에도(브라우저 사본 열기가 막히는 경우 등) 오른쪽 문서는 닫을 수 있어야 한다. */}
+        {onCloseSplit && (
+          <div className="border-line bg-surface flex h-11 shrink-0 items-center justify-end gap-1 border-b px-4">
+            <SplitActions docId={meta.id} onClose={() => onCloseSplit()} />
+          </div>
+        )}
+        <div className="grid flex-1 place-items-center">
+          <Spinner className="size-6" />
+        </div>
+      </>
     )
   }
 
-  return <DocSurface session={session} meta={meta} />
+  return <DocSurface session={session} meta={meta} onCloseSplit={onCloseSplit} />
 }

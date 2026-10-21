@@ -31,6 +31,7 @@ import { FolderAccessModal } from '@/features/docs/FolderAccessModal'
 import { FolderNameModal } from '@/features/docs/FolderNameModal'
 import { MoveNodeModal } from '@/features/docs/MoveNodeModal'
 import { TrashDocModal } from '@/features/docs/TrashDocModal'
+import { DOC_DRAG_TYPE } from '@/features/docs/types'
 import {
   UNTITLED_DOC,
   useCreateDoc,
@@ -490,6 +491,7 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
       if (moveNode.isPending) return e.preventDefault()
       setDrag({ kind: row.dataset.drag === 'folder' ? 'folder' : 'doc', id })
       e.dataTransfer.setData(DRAG_TYPE, id)
+      if (row.dataset.drag === 'doc') e.dataTransfer.setData(DOC_DRAG_TYPE, id)
       setDragCard(e, row)
     },
     onDragOver: (e: DragEvent) => {

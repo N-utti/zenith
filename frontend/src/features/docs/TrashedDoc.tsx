@@ -20,7 +20,8 @@ import { purgeAt, type DocDetail } from './types'
  * 되돌리는 상시 경로는 휴지통 화면(`/docs/trash`)이다. 여기는 문서 주소로 바로 들어왔을 때의
  * 자리고, 되돌리기 버튼을 같이 둔다. 옮긴 직후 토스트의 되돌리기는 10초면 사라진다.
  */
-export function TrashedDoc({ meta }: { meta: DocDetail }) {
+/** `stay`: 화면을 나눠 오른쪽에 연 문서. 되돌려도 이동하지 않는다(캐시가 바뀌어 그 자리가 편집기로 바뀐다). */
+export function TrashedDoc({ meta, stay }: { meta: DocDetail; stay?: boolean }) {
   const navigate = useNavigate()
   const toast = useToast()
   const [restoring, setRestoring] = useState(false)
@@ -30,7 +31,7 @@ export function TrashedDoc({ meta }: { meta: DocDetail }) {
     untrashDoc(meta.id)
       .then(() => {
         toast.success('문서를 되돌렸습니다.')
-        void navigate(`/docs/${meta.id}`, { replace: true })
+        if (!stay) void navigate(`/docs/${meta.id}`, { replace: true })
       })
       .catch((err: unknown) => {
         setRestoring(false)
