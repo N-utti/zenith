@@ -76,7 +76,7 @@ export function ProfileAvatar({ person }: { person: Person }) {
             ? close()
             : show(e.detail === 0)
         }
-        className="shrink-0 cursor-pointer self-start rounded-full transition-opacity hover:opacity-80"
+        className="shrink-0 cursor-pointer self-start rounded-full"
       >
         <Avatar name={person.name} hue={hueOf(person.id)} size="md" />
       </button>
