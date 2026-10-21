@@ -1135,11 +1135,9 @@ function DocSurface({ session, meta }: { session: CollabSession; meta: DocDetail
               </p>
             )}
 
-            {/* 스크롤바 자리를 늘 비워 둔다. 패널을 열어 본문 칸이 짧아지면 스크롤바가 생기는데, 그때
-                가운데 놓인 문서가 스크롤바 폭의 절반만큼 왼쪽으로 밀리지 않게(AppLayout 의 main 과 같다). */}
             <div
               ref={scrollRef}
-              className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]"
+              className="min-h-0 flex-1 overflow-y-auto"
             >
               <div ref={tableBleedRef} className={cn('mx-auto px-6 py-8', width.className)}>
                 <p className="text-subtle mb-1 text-xs">
