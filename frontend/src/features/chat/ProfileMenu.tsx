@@ -14,7 +14,7 @@ import { useChannels, useCreateChannel } from './api'
 type Person = { id: string; name: string }
 
 /** 아바타 위를 스쳐 지나가는 것으로는 뜨지 않게 잠깐 머문 뒤에 띄운다. */
-const OPEN_MS = 300
+const OPEN_MS = 150
 /** 아바타에서 카드로 마우스를 옮기는 사이 닫히지 않게 잠깐 기다린다. */
 const CLOSE_MS = 150
 /** 화면 끝에서 띄울 틈. */
