@@ -800,6 +800,7 @@ export const handlers = [
   /**
    * 사람 고르는 자리가 쓰는 명단(#117). 계정 목록(`/admin/users`)과 달리 로그인하면 누구나.
    * `role` 은 서버 계약에 아직 없다. 결재 참조자를 사원·임원으로 가르려고 요청한 칸이다.
+   * `team` 도 아직 없다. 채팅 프로필 카드에 팀을 보이려고 요청한 칸이다.
    *
    * 관리 화면과 같은 저장소를 본다. 두 벌이면 계정을 비활성으로 바꿔도 대화 상대 목록에
    * 그대로 남는다 — 실서버에서는 안 생기는 차이다.
@@ -811,7 +812,13 @@ export const handlers = [
     '/api/people',
     authed(() =>
       HttpResponse.json({
-        items: listAccounts().map(({ id, name, active, role }) => ({ id, name, active, role })),
+        items: listAccounts().map(({ id, name, active, role, team_id }) => ({
+          id,
+          name,
+          active,
+          role,
+          team: MOCK_TEAM_LIST.find((team) => team.id === team_id) ?? null,
+        })),
       }),
     ),
   ),
