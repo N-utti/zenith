@@ -32,7 +32,10 @@ export function ContextMenu({
   useLayoutEffect(() => {
     const menu = ref.current
     if (!menu) return
-    const { width, height } = menu.getBoundingClientRect()
+    // offset 은 transform 을 안 탄다. 손가락 기기는 0.85 배에서 튀어나오는 첫 프레임이라
+    // getBoundingClientRect 로 재면 작게 잡혀 화면 끝에서 메뉴가 잘린다.
+    const width = menu.offsetWidth
+    const height = menu.offsetHeight
     menu.style.left = `${Math.max(EDGE, Math.min(at.x, window.innerWidth - width - EDGE))}px`
     menu.style.top = `${Math.max(EDGE, Math.min(at.y, window.innerHeight - height - EDGE))}px`
   }, [at.x, at.y])
@@ -114,7 +117,8 @@ export function ContextMenu({
       onClick={onClose}
       // 메뉴 위에서 다시 우클릭해도 브라우저 메뉴가 겹쳐 뜨지 않게 한다.
       onContextMenu={(e) => e.preventDefault()}
-      className="border-line bg-surface fixed z-50 w-52 max-w-[calc(100vw-1rem)] rounded-xl border p-1 shadow-lg"
+      // 손가락 기기(꾹 눌러 연 메뉴)만 튀어나온다. 마우스 우클릭 메뉴는 바로 뜨는 게 익숙하다.
+      className="border-line bg-surface fixed z-50 w-52 max-w-[calc(100vw-1rem)] origin-top-left rounded-xl border p-1 shadow-lg pointer-coarse:motion-safe:animate-menu-pop"
     >
       {children}
     </div>,

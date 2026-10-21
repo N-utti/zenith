@@ -74,6 +74,48 @@ test('두 손가락(확대)은 꾹 누르기가 아니다', () => {
   expect(onPress).not.toHaveBeenCalled()
 })
 
+test('열면 진동하고, 짧게 누르거나 연 게 없으면 진동하지 않는다', () => {
+  const vibrate = vi.fn(() => true)
+  Object.defineProperty(navigator, 'vibrate', { value: vibrate, configurable: true })
+  try {
+    handlers.onTouchStart(touch(10, 20))
+    vi.advanceTimersByTime(200)
+    handlers.onTouchEnd(touch(10, 20))
+    onPress.mockReturnValueOnce(false)
+    handlers.onTouchStart(touch(10, 20))
+    vi.advanceTimersByTime(500)
+    handlers.onTouchEnd(touch(10, 20))
+    expect(vibrate).not.toHaveBeenCalled()
+
+    handlers.onTouchStart(touch(10, 20))
+    vi.advanceTimersByTime(500)
+    expect(vibrate).toHaveBeenCalledTimes(1)
+  } finally {
+    delete (navigator as { vibrate?: unknown }).vibrate
+  }
+})
+
+test('누르는 동안 data-long-press 줄이 눌려 들어가고, 접으면 지금 모양에서 돌아온다', () => {
+  // jsdom 에는 Web Animations 와 matchMedia 가 없다. 부른 것만 본다.
+  const sink = { cancel: vi.fn() }
+  const animate = vi.fn<(keyframes: Keyframe[]) => typeof sink>(() => sink)
+  const pill = document.createElement('div')
+  pill.dataset.longPress = ''
+  pill.append(row)
+  pill.animate = animate as unknown as typeof pill.animate
+  vi.stubGlobal('matchMedia', () => ({ matches: false }))
+  try {
+    handlers.onTouchStart(touch(10, 20))
+    expect(animate.mock.calls[0][0]).toEqual([{ transform: 'none' }, { transform: 'scale(0.96)' }])
+    handlers.onTouchMove(touch(10, 40))
+    expect(sink.cancel).toHaveBeenCalled()
+    expect(animate.mock.calls[1][0]).toEqual([{ transform: 'none' }, { transform: 'none' }])
+  } finally {
+    row.remove()
+    vi.unstubAllGlobals()
+  }
+})
+
 test('줄이 아닌 곳이라 연 게 없으면 클릭을 막지 않는다', () => {
   onPress.mockReturnValue(false)
   handlers.onTouchStart(touch(10, 20))
