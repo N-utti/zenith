@@ -15,9 +15,12 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-opener = "2"
 tauri-plugin-notification = "2"
+# 창을 닫아도 트레이에 남기고, PC 켤 때 같이 켜고, 두 번 실행하면 떠 있는 창을 앞으로.
+tauri-plugin-autostart = "2"
+tauri-plugin-single-instance = "2"
 # 사내 CA(Caddy `tls internal`) 인증서를 믿으려면 Windows 인증서 저장소를 봐야 한다.
 # 기본값 rustls 는 내장 루트만 믿어서 사내 서버의 매니페스트를 못 받는다.
 tauri-plugin-updater = { version = "2", default-features = false, features = ["native-tls"] }

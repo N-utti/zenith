@@ -101,6 +101,9 @@ export function checkForUpdate(): void {
   void (async () => {
     const version = await tauri.core.invoke('check_update', { origin })
     if (typeof version !== 'string') return
+    // PC 켤 때 트레이로만 뜬 경우 창이 숨어 있다. 안 보이는 창에 물으면 답할 사람이 없고 그동안 페이지가 멈춘다.
+    if (!document.hasFocus())
+      await new Promise((resolve) => window.addEventListener('focus', resolve, { once: true }))
     if (
       !window.confirm(
         `새 버전 ${version} 이 있습니다. 지금 설치할까요?\n앱이 닫혔다가 다시 열립니다.`,
