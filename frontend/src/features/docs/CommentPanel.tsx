@@ -213,7 +213,7 @@ export function CommentPanel({
             maxLength={COMMENT_BODY_MAX}
             aria-label="문서 전체에 댓글"
             placeholder="문서 전체에 댓글…"
-            className="min-h-11 w-full lg:min-h-16"
+            className="min-h-11 w-full"
           />
           <Button
             type="submit"
