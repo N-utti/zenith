@@ -69,8 +69,9 @@ VITE_SERVER_ORIGIN=https://zenith.example.co.kr
 웹앱이 켜질 때 지금 붙은 서버 주소로 정책을 하나 더 건다(`frontend/src/lib/desktop.ts` 의 `restrictImageSources`).
 문서·채팅에 섞여 든 바깥 그림 주소가 사내망 밖으로 요청을 내지 못하게 하려는 것이다. 웹은 Caddy 헤더가 같은 일을 한다.
 
-> **지금은 붙을 서버가 없다.** `backend/`에 코드가 없어 프로덕션 빌드는 로그인 화면에서
-> 멈춘다. 실제로 쓸 수 있는 건 위의 `npm run dev`(MSW 목) 쪽이다.
+> **서버 주소는 https 여야 로그인된다.** 셸은 서버와 오리진이 달라 세션 쿠키가 `SameSite=None; Secure` 로
+> 와야 실리고(#503), 서버는 셸 오리진에서 평문으로 온 로그인을 400 `SHELL_NEEDS_HTTPS` 로 거절한다.
+> 서버 `.env` 의 `CORS_ORIGINS` 에 `http://tauri.localhost` 가 들어 있어야 한다. 실제 설치본 로그인은 아직 확인 전이다.
 
 ---
 
