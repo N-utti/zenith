@@ -418,7 +418,7 @@ export function ApprovalNewPage() {
           </Field>
           <Field
             label="첨부"
-            hint={`영수증·견적서. 파일당 10MB, ${MAX_ATTACHMENTS}개까지. 이 문서를 열 수 있는 사람만 받습니다.`}
+            hint={`파일당 10MB, ${MAX_ATTACHMENTS}개까지. 이 문서를 열 수 있는 사람만 받습니다.`}
           >
             {(slot) => (
               <div role="group" aria-label="첨부" className="space-y-2">
