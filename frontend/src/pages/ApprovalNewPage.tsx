@@ -199,7 +199,9 @@ export function ApprovalNewPage() {
     setPending((prev) => [...prev, ...chosen])
   }
 
-  const amountNumber = amountValue.trim() === '' ? null : Number(amountValue.replace(/,/g, ''))
+  // 다른 서식에서 적은 금액이 숨긴 칸에 남아 저장되지 않게 한다.
+  const amountNumber =
+    form.noAmount || amountValue.trim() === '' ? null : Number(amountValue.replace(/,/g, ''))
   const amountError =
     amountNumber !== null && (!Number.isFinite(amountNumber) || amountNumber < 0)
       ? '금액은 0 이상의 숫자입니다.'
@@ -324,22 +326,24 @@ export function ApprovalNewPage() {
               />
             )}
           </Field>
-          <Field
-            label="금액"
-            required={form.amountRequired}
-            hint={form.amountRequired ? undefined : '지출이 없으면 비웁니다.'}
-            error={amountError}
-          >
-            {(slot) => (
-              <Input
-                {...slot}
-                inputMode="numeric"
-                placeholder="0"
-                value={amountValue}
-                onChange={(e) => setAmount(e.target.value)}
-              />
-            )}
-          </Field>
+          {!form.noAmount && (
+            <Field
+              label="금액"
+              required={form.amountRequired}
+              hint={form.amountRequired ? undefined : '지출이 없으면 비웁니다.'}
+              error={amountError}
+            >
+              {(slot) => (
+                <Input
+                  {...slot}
+                  inputMode="numeric"
+                  placeholder="0"
+                  value={amountValue}
+                  onChange={(e) => setAmount(e.target.value)}
+                />
+              )}
+            </Field>
+          )}
           {structured ? (
             <div className="grid gap-4 sm:grid-cols-2">
               {form.fields.map((field) => (
