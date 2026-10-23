@@ -9,4 +9,9 @@
   const saved = localStorage.getItem('zenith.theme')
   const dark = saved ? saved === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches
   document.documentElement.classList.toggle('dark', dark)
+  // 홈 화면 앱·모바일 브라우저 막대 색. index.html 의 media 는 OS 설정만 보니 앱 테마로 덮는다.
+  // 값은 헤더 바탕(--zenith-surface)이고 lib/theme.ts 의 토글과 같다.
+  for (const m of document.querySelectorAll('meta[name="theme-color"]')) {
+    m.content = dark ? '#181b1f' : '#ffffff'
+  }
 })()

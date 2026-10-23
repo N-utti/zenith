@@ -103,6 +103,7 @@
      박힌다. 다크는 아래 .dark 가 덮고, 인쇄는 늘 밝게 남는다. */
   color-scheme: light;
   --zenith-canvas: oklch(0.985 0.002 265);
+  /* surface 를 바꾸면 막대 색(theme-color #ffffff/#181b1f)도: index.html·public/theme.js·lib/theme.ts */
   --zenith-surface: oklch(1 0 0);
   --zenith-surface-hover: oklch(0.965 0.004 265);
   /* 네이버웍스처럼 푸른 기 없는 회색. 푸른 회색은 Tailwind 기본 gray 와 같아 데모처럼 보였다. */

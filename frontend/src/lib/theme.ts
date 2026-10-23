@@ -19,6 +19,10 @@ function subscribe(fn: () => void) {
 export function setTheme(theme: Theme) {
   current = theme
   document.documentElement.classList.toggle('dark', theme === 'dark')
+  // 막대 색을 헤더 바탕(--zenith-surface)에 맞춘다. 초기값은 public/theme.js 가 같은 값으로 깐다.
+  document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]').forEach((m) => {
+    m.content = theme === 'dark' ? '#181b1f' : '#ffffff'
+  })
   localStorage.setItem(KEY, theme)
   listeners.forEach((fn) => fn())
 }
