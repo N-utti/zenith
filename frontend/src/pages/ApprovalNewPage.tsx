@@ -351,7 +351,7 @@ export function ApprovalNewPage() {
                   key={field.key}
                   label={field.label}
                   required={field.required}
-                  className={field.kind === 'textarea' ? 'sm:col-span-2' : 'min-w-0'}
+                  className={field.kind === 'textarea' || field.wide ? 'sm:col-span-2' : 'min-w-0'}
                 >
                   {(slot) => {
                     const control = {

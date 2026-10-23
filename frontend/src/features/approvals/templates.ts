@@ -17,6 +17,8 @@ interface TemplateField {
   required?: boolean
   /** `select` 의 보기. 값과 보이는 글이 같다. */
   options?: string[]
+  /** 두 칸씩 놓는 줄에서 한 줄을 다 쓴다. 여러 줄 칸은 원래 다 쓴다. */
+  wide?: boolean
 }
 
 interface Template {
@@ -105,7 +107,7 @@ export const APPROVAL_TEMPLATES: Record<ApprovalTemplate, Template> = {
         required: true,
         options: ['1부', '2부', '3부'],
       },
-      { key: 'purpose', label: '용도', kind: 'text', required: true },
+      { key: 'purpose', label: '용도', kind: 'text', required: true, wide: true },
       { key: 'note', label: '요청 사항', kind: 'textarea' },
     ],
   },
