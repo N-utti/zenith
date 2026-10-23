@@ -24,6 +24,8 @@ interface Template {
   prefix: string
   /** 금액 없이는 상신할 수 없는 서식. */
   amountRequired?: boolean
+  /** 돈이 나가지 않는 서식. 금액 칸을 안 그리고 금액을 비워 보낸다. */
+  noAmount?: boolean
   fields: TemplateField[]
 }
 
@@ -87,6 +89,7 @@ export const APPROVAL_TEMPLATES: Record<ApprovalTemplate, Template> = {
   certificate: {
     label: '증명서 신청',
     prefix: '[증명서] ',
+    noAmount: true,
     fields: [
       {
         key: 'kind',
