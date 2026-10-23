@@ -7,7 +7,8 @@
  * 바꾼다. 필수 칸과 금액 필수는 화면이 상신을 잠그는 편의일 뿐 서버는 서식을 모른다. 서식마다
  * 결재선이나 서버 검증이 갈려야 하면 그때 서버 양식(13 §1.3 고정 양식)으로 옮긴다.
  */
-export type ApprovalTemplate = 'general' | 'expense' | 'proposal' | 'purchase' | 'trip'
+export type ApprovalTemplate =
+  'general' | 'expense' | 'proposal' | 'purchase' | 'trip' | 'certificate'
 
 interface TemplateField {
   key: string
@@ -79,6 +80,32 @@ export const APPROVAL_TEMPLATES: Record<ApprovalTemplate, Template> = {
       { key: 'vendor', label: '구매처', kind: 'text' },
       { key: 'needed', label: '필요 일자', kind: 'date' },
       { key: 'reason', label: '구매 사유', kind: 'textarea', required: true },
+    ],
+  },
+  // ponytail: 신청만 받는다. 승인되면 담당자가 회사 양식으로 발급한다. 화면에서 증명서 PDF 를 만들면
+  // 누구나 고쳐 뽑을 수 있어서, 발급번호·직인이 붙는 발급은 서버가 만들어야 한다.
+  certificate: {
+    label: '증명서 신청',
+    prefix: '[증명서] ',
+    fields: [
+      {
+        key: 'kind',
+        label: '증명서 종류',
+        kind: 'select',
+        required: true,
+        options: ['재직증명서', '경력증명서'],
+      },
+      {
+        key: 'copies',
+        label: '부수',
+        kind: 'select',
+        required: true,
+        options: ['1부', '2부', '3부'],
+      },
+      { key: 'submit_to', label: '제출처', kind: 'text', required: true },
+      { key: 'purpose', label: '용도', kind: 'text', required: true },
+      { key: 'needed', label: '필요 일자', kind: 'date' },
+      { key: 'note', label: '요청 사항', kind: 'textarea' },
     ],
   },
 }
