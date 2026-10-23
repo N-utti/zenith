@@ -110,7 +110,7 @@ function DocsList({ folderId }: { folderId: string | null }) {
           folderId
             ? folder &&
               `${subfolders.length ? `폴더 ${subfolders.length}개 · ` : ''}문서 ${docs.length}개 · 최근 수정순`
-            : '사내 위키와 회의록. 여러 명이 동시에 편집할 수 있습니다.'
+            : undefined
         }
         actions={
           <>

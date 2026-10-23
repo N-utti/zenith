@@ -757,7 +757,7 @@ export function DealFormModal({
             />
           )}
         </Field>
-        <Field label="금액(억 원)" hint="모르면 비워 둡니다.">
+        <Field label="금액(억 원)">
           {(slot) => (
             <Input
               {...slot}

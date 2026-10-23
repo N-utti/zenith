@@ -34,7 +34,6 @@ const EXEC_TABS = [
 
 export function AttendancePage() {
   const user = useCurrentUser()
-  const canSeeOthers = ROLE_RANK[user.role] >= ROLE_RANK.lead
   const isExec = ROLE_RANK[user.role] >= ROLE_RANK.exec
   // 탭은 URL 에 둔다(`?tab=leave`). 알림에서 휴가 탭으로 바로 들어오고, 새로고침해도 그 자리다.
   const [params, setParams] = useSearchParams()
@@ -42,12 +41,7 @@ export function AttendancePage() {
 
   return (
     <>
-      <PageHeader
-        title="근태"
-        description={
-          canSeeOthers ? '본인 근태와 전사 근태를 확인합니다.' : '본인 근태만 조회할 수 있습니다.'
-        }
-      />
+      <PageHeader title="근태" />
       <Tabs
         items={isExec ? EXEC_TABS : TABS}
         value={tab}

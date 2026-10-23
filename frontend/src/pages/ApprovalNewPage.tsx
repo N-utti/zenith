@@ -285,7 +285,7 @@ export function ApprovalNewPage() {
             ? `${tripPeriod} 출장에 딸린 지출 결의서입니다.`
             : source.data
               ? '끝난 문서의 내용을 가져온 새 기안입니다. 첨부는 가져오지 않으니 다시 붙여 주세요.'
-              : `일반 기안. 결재선은 상신할 때 정해집니다. 기안자: ${user.name}`
+              : '결재선은 상신할 때 정해집니다.'
         }
       />
       <Card>
@@ -298,7 +298,7 @@ export function ApprovalNewPage() {
                 // 여기서 쓰면 출장 신청에 안 걸려서, 근태의 출장 행에는 결의서를 안 쓴 것으로 남는다.
                 active === 'trip'
                   ? '출장 신청이 있으면 근태의 예외 근무 탭에서 그 출장의 「결의서 작성」으로 여세요. 여기서 쓰면 출장 신청과 이어지지 않습니다.'
-                  : '서식마다 적는 칸이 다릅니다. 결재선은 서식과 상관없이 같습니다.'
+                  : undefined
               }
             >
               {(slot) => (
@@ -327,11 +327,7 @@ export function ApprovalNewPage() {
           <Field
             label="금액"
             required={form.amountRequired}
-            hint={
-              form.amountRequired
-                ? '전결 판정에 쓰입니다.'
-                : '지출이 없으면 비웁니다. 전결 판정에 쓰입니다.'
-            }
+            hint={form.amountRequired ? undefined : '지출이 없으면 비웁니다.'}
             error={amountError}
           >
             {(slot) => (
@@ -396,7 +392,7 @@ export function ApprovalNewPage() {
           )}
           <Field
             label="참조"
-            hint="결재는 하지 않지만 문서를 볼 사람입니다. 결재선에 오른 사람은 빠집니다."
+            hint="결재선에 오른 사람은 목록에서 빠집니다."
             error={peopleError ? '참조자 목록을 불러오지 못했습니다.' : null}
           >
             {(slot) => (

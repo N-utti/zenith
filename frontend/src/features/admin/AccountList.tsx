@@ -40,9 +40,6 @@ export function AccountList() {
   return (
     <>
       <div className="mb-3 flex items-center gap-2">
-        <p className="text-subtle text-xs">
-          가입 화면은 없습니다. 계정은 여기서 만들고 여기서 잠급니다.
-        </p>
         <Button size="sm" className="ml-auto" onClick={() => setEditing('new')}>
           <UserPlus className="size-4" />새 계정
         </Button>
