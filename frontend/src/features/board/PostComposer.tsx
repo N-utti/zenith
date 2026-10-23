@@ -165,11 +165,7 @@ export function PostComposer({
           )}
         </Field>
 
-        <Field
-          label="첨부"
-          hint={`파일당 10MB, ${MAX_ATTACHMENTS}개까지. 이 게시판을 볼 수 있는 사람만 받습니다.`}
-          error={fileError}
-        >
+        <Field label="첨부" hint={`파일당 10MB, ${MAX_ATTACHMENTS}개까지.`} error={fileError}>
           {(slot) => (
             <div role="group" aria-label="첨부" className="space-y-2">
               <AttachmentList
