@@ -155,11 +155,7 @@ export function DelegationSection() {
             />
           )}
         </Field>
-        <Field
-          label="문서 유형"
-          hint="위임할 수 있는 유형만 나옵니다."
-          error={types.isError ? '문서 유형을 불러오지 못했습니다.' : null}
-        >
+        <Field label="문서 유형" error={types.isError ? '문서 유형을 불러오지 못했습니다.' : null}>
           {(slot) => (
             <Select
               {...slot}

@@ -73,9 +73,6 @@ export function AiHistoryPanel({
                 <span className="truncate">{folder.title}</span>
               </div>
             ))}
-            <p className="text-subtle mt-2 px-2.5 text-[11px] leading-relaxed">
-              권한 밖 문서의 문장은 서버가 답변 근거에서 자동으로 뺍니다.
-            </p>
           </section>
         </div>
       </nav>

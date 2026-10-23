@@ -35,7 +35,7 @@ export function AdminPage() {
 
   return (
     <>
-      <PageHeader title="관리자" description="계정·팀·기록은 임원만 볼 수 있습니다." />
+      <PageHeader title="관리자" />
       <Tabs
         items={TABS}
         value={tab}

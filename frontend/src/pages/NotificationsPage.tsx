@@ -66,7 +66,6 @@ export function NotificationsPage() {
     <>
       <PageHeader
         title="받은 알림"
-        description="멘션·댓글·새 글·결재를 한곳에서 봅니다. 누르면 그 자리로 갑니다."
         actions={
           <>
             {readIds.length > 0 && (

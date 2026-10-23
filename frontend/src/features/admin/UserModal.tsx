@@ -147,7 +147,6 @@ export function UserModal({
       open
       onClose={close}
       title={user ? `${user.name} 계정` : '새 계정'}
-      description={user ? undefined : '가입 화면은 없습니다. 계정은 관리자가 여기서만 만듭니다.'}
       footer={
         <>
           <Button variant="secondary" size="sm" onClick={close} disabled={pending}>
@@ -231,11 +230,7 @@ export function UserModal({
             )}
           </Field>
 
-          <Field
-            label="소속 팀"
-            hint="비워 두면 소속 없음입니다."
-            error={teams.isError ? '팀 목록을 불러오지 못했습니다.' : null}
-          >
+          <Field label="소속 팀" error={teams.isError ? '팀 목록을 불러오지 못했습니다.' : null}>
             {(slot) => (
               <Select
                 {...slot}
@@ -247,7 +242,7 @@ export function UserModal({
             )}
           </Field>
 
-          <Field label="입사일" hint="연차 계산 기준입니다. 비워 둘 수 있습니다.">
+          <Field label="입사일" hint="연차 계산 기준입니다.">
             {(slot) => (
               <Input
                 {...slot}
