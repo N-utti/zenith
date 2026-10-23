@@ -26,6 +26,7 @@ import {
   switchTemplate,
   templateContent,
   templateOf,
+  titleOf,
   type ApprovalTemplate,
   type TemplateValues,
 } from '@/features/approvals/templates'
@@ -175,7 +176,8 @@ export function ApprovalNewPage() {
     (trip ? { period: tripPeriod, purpose: trip.reason } : {})
   const pickTemplate = (next: ApprovalTemplate) => {
     const switched = switchTemplate(next, {
-      title: titleValue,
+      // 제목 칸이 숨은 서식에서 나가면 그 전에 적어 둔, 화면에 없던 제목을 되살리지 않는다.
+      title: form.autoTitle ? '' : titleValue,
       body: bodyValue,
       values: fieldValues,
     })
@@ -207,7 +209,8 @@ export function ApprovalNewPage() {
       ? '금액은 0 이상의 숫자입니다.'
       : null
   const busy = saving
-  const filled = filledFields(active, { title: titleValue, body: bodyValue, values: fieldValues })
+  const titleText = titleOf(active, titleValue, fieldValues)
+  const filled = filledFields(active, { title: titleText, body: bodyValue, values: fieldValues })
   const canSave = filled.title && !amountError && !busy
   // 임시저장은 덜 채워도 된다. 상신은 그 서식의 필수 칸과 금액까지 본다.
   // 금액 필수 서식은 0원도 안 쓴 것으로 친다.
@@ -215,7 +218,7 @@ export function ApprovalNewPage() {
 
   const input = {
     type_code: 'general' as const,
-    title: titleValue.trim(),
+    title: titleText.trim(),
     subject: {
       ...templateContent(active, { body: bodyValue, values: fieldValues }),
       amount: amountNumber,
@@ -316,16 +319,18 @@ export function ApprovalNewPage() {
               )}
             </Field>
           )}
-          <Field label="제목" required>
-            {(slot) => (
-              <Input
-                {...slot}
-                value={titleValue}
-                maxLength={200}
-                onChange={(e) => setTitle(e.target.value)}
-              />
-            )}
-          </Field>
+          {!form.autoTitle && (
+            <Field label="제목" required>
+              {(slot) => (
+                <Input
+                  {...slot}
+                  value={titleValue}
+                  maxLength={200}
+                  onChange={(e) => setTitle(e.target.value)}
+                />
+              )}
+            </Field>
+          )}
           {!form.noAmount && (
             <Field
               label="금액"

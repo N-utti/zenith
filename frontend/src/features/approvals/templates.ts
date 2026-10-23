@@ -28,6 +28,8 @@ interface Template {
   amountRequired?: boolean
   /** 돈이 나가지 않는 서식. 금액 칸을 안 그리고 금액을 비워 보낸다. */
   noAmount?: boolean
+  /** 칸 값으로 제목이 정해지는 서식. 제목 칸을 안 그리고 머리말 뒤에 이 값을 붙인다(`titleOf`). */
+  autoTitle?: (values: TemplateValues) => string
   fields: TemplateField[]
 }
 
@@ -46,9 +48,8 @@ export const APPROVAL_TEMPLATES: Record<ApprovalTemplate, Template> = {
     prefix: '[지출결의] ',
     amountRequired: true,
     fields: [
-      { key: 'purpose', label: '지출 목적', kind: 'text', required: true },
+      // 목적은 제목이, 지출처는 지출 내역과 영수증이 말한다.
       { key: 'date', label: '지출 일자', kind: 'date', required: true },
-      { key: 'payee', label: '지출처', kind: 'text' },
       PAYMENT,
       { key: 'items', label: '지출 내역', kind: 'textarea', required: true },
     ],
@@ -72,12 +73,12 @@ export const APPROVAL_TEMPLATES: Record<ApprovalTemplate, Template> = {
     fields: [
       { key: 'reason', label: '품의 사유', kind: 'textarea', required: true },
       { key: 'content', label: '품의 내용', kind: 'textarea', required: true },
-      { key: 'effect', label: '기대 효과', kind: 'textarea' },
     ],
   },
   purchase: {
     label: '구매요청서',
     prefix: '[구매요청] ',
+    amountRequired: true,
     fields: [
       { key: 'item', label: '구매 품목', kind: 'text', required: true },
       { key: 'quantity', label: '수량·단가', kind: 'text' },
@@ -92,6 +93,7 @@ export const APPROVAL_TEMPLATES: Record<ApprovalTemplate, Template> = {
     label: '증명서 신청',
     prefix: '[증명서] ',
     noAmount: true,
+    autoTitle: (values) => [values.kind, values.copies].filter(Boolean).join(' '),
     fields: [
       {
         key: 'kind',
@@ -133,6 +135,12 @@ const PREFIXES = Object.values(APPROVAL_TEMPLATES)
 const stripPrefix = (title: string) => {
   const prefix = PREFIXES.find((each) => title.startsWith(each))
   return prefix ? title.slice(prefix.length).trimStart() : title
+}
+
+/** 저장할 제목. 칸 값으로 정해지는 서식이면 적어 둔 제목 대신 그 값을 쓴다. */
+export function titleOf(template: ApprovalTemplate, typed: string, values: TemplateValues) {
+  const { prefix, autoTitle } = APPROVAL_TEMPLATES[template]
+  return autoTitle ? prefix + autoTitle(values) : typed
 }
 
 /** 폼에 지금 적혀 있는 것. */
