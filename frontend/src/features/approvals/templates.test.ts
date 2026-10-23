@@ -48,6 +48,10 @@ it('머리말만 있는 제목은 안 쓴 칸이고, 내용은 필수 칸이 다
   expect(filledFields('expense', { ...blank, values: { ...required, items: ' ' } }).body).toBe(
     false,
   )
+  // 선택 칸(수량·단가, 구매처, 필요 일자)은 비어 있어도 찬 것이다.
+  expect(
+    filledFields('purchase', { ...blank, values: { item: '모니터', reason: '교체' } }).body,
+  ).toBe(true)
   // 기안서는 칸이 없어 본문을 본다.
   expect(filledFields('general', { title: ' ', body: '', values: {} })).toEqual({
     title: false,
