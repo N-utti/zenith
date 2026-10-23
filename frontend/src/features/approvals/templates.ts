@@ -102,7 +102,6 @@ export const APPROVAL_TEMPLATES: Record<ApprovalTemplate, Template> = {
         required: true,
         options: ['1부', '2부', '3부'],
       },
-      { key: 'submit_to', label: '제출처', kind: 'text' },
       { key: 'purpose', label: '용도', kind: 'text', required: true },
       { key: 'needed', label: '필요 일자', kind: 'date' },
       { key: 'note', label: '요청 사항', kind: 'textarea' },
