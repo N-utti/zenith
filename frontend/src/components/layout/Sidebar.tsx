@@ -8,6 +8,7 @@ import { useCurrentUser } from '@/features/auth/AuthContext'
 import { useBoards } from '@/features/board/api'
 import { BOARD_BADGE } from '@/features/board/types'
 import { useChannels } from '@/features/chat/api'
+import { useChannelMenu } from '@/features/chat/useChannelMenu'
 import { useHasDraft } from '@/features/chat/drafts'
 import { NewChatModal } from '@/features/chat/NewChatModal'
 import { DmAvatar, WorkStatus } from '@/features/chat/WorkStatus'
@@ -16,6 +17,7 @@ import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { MaskedRow } from '@/components/ui/MaskedRow'
 import { ResizeHandle } from '@/components/ui/ResizeHandle'
+import { useLongPress } from '@/lib/useLongPress'
 import { usePanelWidth } from '@/lib/usePanelWidth'
 import { DocTree } from './DocTree'
 
@@ -134,37 +136,63 @@ function NavRow({ item, onNavigate }: { item: NavItem; onNavigate?: () => void }
 
 function ChannelRow({ channel, onNavigate }: { channel: ChatChannel; onNavigate?: () => void }) {
   const hasDraft = useHasDraft(channel.id)
+  // 머리줄 더보기와 같은 메뉴. 손가락 기기는 꾹 눌러 연다(아이폰은 우클릭이 안 온다).
+  const menu = useChannelMenu(channel)
+  const longPress = useLongPress((_, x, y) => {
+    menu.openAt({ x, y })
+    return true
+  })
   return (
-    <NavLink
-      to={`/chat/${channel.id}`}
-      onClick={onNavigate}
-      className={({ isActive }) => cn(ROW, 'group', isActive ? ROW_ACTIVE : ROW_IDLE)}
-    >
-      {/* 아이콘 칸은 셋 다 아바타 폭(24px)이다. 다르면 채널과 DM 의 이름이 서로 어긋난다. */}
-      {channel.is_dm ? (
-        <DmAvatar
-          channel={channel}
-          dotRing="ring-surface group-hover:ring-surface-hover group-aria-[current=page]:ring-surface md:group-aria-[current=page]:ring-accent-soft"
-        />
-      ) : channel.is_private ? (
-        <Lock role="img" aria-label="비공개" className="text-subtle h-4 w-6 shrink-0" />
-      ) : (
-        <span className="text-subtle w-6 shrink-0 text-center">#</span>
-      )}
-      <span className="flex min-w-0 items-center gap-1.5">
-        <span className="truncate">{channel.name}</span>
-        <WorkStatus channel={channel} />
-        {/* 쓰다 만 글이 있는 방. 지금 보고 있는 방은 입력창에 글이 보이므로 감춘다. */}
-        {hasDraft && (
-          <Pencil
-            role="img"
-            aria-label="작성 중"
-            className="text-subtle size-3.5 shrink-0 group-aria-[current=page]:hidden"
+    <>
+      <NavLink
+        to={`/chat/${channel.id}`}
+        onClick={onNavigate}
+        {...longPress}
+        onContextMenu={(e) => {
+          e.preventDefault()
+          // 키보드(Shift+F10, 메뉴 키)로 열면 포인터 좌표가 없다. 줄 바로 아래에 띄운다.
+          const rect = e.currentTarget.getBoundingClientRect()
+          menu.openAt({ x: e.clientX || rect.left, y: e.clientY || rect.bottom })
+        }}
+        data-long-press
+        className={({ isActive }) =>
+          cn(
+            ROW,
+            'group pointer-coarse:select-none pointer-coarse:[-webkit-touch-callout:none]',
+            isActive ? ROW_ACTIVE : ROW_IDLE,
+            // 어느 줄의 메뉴인지 보이게 메뉴가 떠 있는 동안 줄을 칠해 둔다.
+            menu.isOpen && !isActive && 'bg-surface-hover text-fg',
+          )
+        }
+      >
+        {/* 아이콘 칸은 셋 다 아바타 폭(24px)이다. 다르면 채널과 DM 의 이름이 서로 어긋난다. */}
+        {channel.is_dm ? (
+          <DmAvatar
+            channel={channel}
+            dotRing="ring-surface group-hover:ring-surface-hover group-aria-[current=page]:ring-surface md:group-aria-[current=page]:ring-accent-soft"
           />
+        ) : channel.is_private ? (
+          <Lock role="img" aria-label="비공개" className="text-subtle h-4 w-6 shrink-0" />
+        ) : (
+          <span className="text-subtle w-6 shrink-0 text-center">#</span>
         )}
-      </span>
-      {channel.unread > 0 && <UnreadPill count={channel.unread} />}
-    </NavLink>
+        <span className="flex min-w-0 items-center gap-1.5">
+          <span className="truncate">{channel.name}</span>
+          <WorkStatus channel={channel} />
+          {/* 쓰다 만 글이 있는 방. 지금 보고 있는 방은 입력창에 글이 보이므로 감춘다. */}
+          {hasDraft && (
+            <Pencil
+              role="img"
+              aria-label="작성 중"
+              className="text-subtle size-3.5 shrink-0 group-aria-[current=page]:hidden"
+            />
+          )}
+        </span>
+        {channel.unread > 0 && <UnreadPill count={channel.unread} />}
+      </NavLink>
+      {/* 줄 밖에 둔다. 포털이어도 React 이벤트는 위로 올라가서, 줄 안에 두면 메뉴를 누를 때 방이 열린다. */}
+      {menu.element}
+    </>
   )
 }
 

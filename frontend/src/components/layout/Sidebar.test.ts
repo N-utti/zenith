@@ -3,6 +3,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router'
 import { afterEach, expect, test, vi } from 'vitest'
+import { ToastContext, type ToastApi } from '@/components/ui/ToastContext'
 import { AuthContext, type AuthValue } from '@/features/auth/AuthContext'
 import { chatKeys } from '@/features/chat/api'
 import { ChatSocketContext } from '@/features/chat/ChatSocketContext'
@@ -30,6 +31,9 @@ const room = (id: string, extra: Partial<ChatChannel> = {}) =>
     ...extra,
   }) as ChatChannel
 
+const toast = { success: vi.fn(), error: vi.fn(), info: vi.fn() } satisfies ToastApi
+const sendRead = vi.fn()
+
 let root: Root | undefined
 afterEach(() => act(() => root?.unmount()))
 
@@ -40,7 +44,7 @@ function render(online: ReadonlySet<string> = new Set()) {
     items: [
       room('c-1'),
       room('c-2'),
-      room('c-3', { unread: 2 }),
+      room('c-3', { unread: 2, can_delete: true }),
       room('d-1', {
         is_dm: true,
         members: [
@@ -62,11 +66,15 @@ function render(online: ReadonlySet<string> = new Set()) {
           { value: auth },
           createElement(
             ChatSocketContext,
-            { value: { online } as unknown as ChatSocket },
+            { value: { online, sendRead, connected: true } as unknown as ChatSocket },
             createElement(
-              MemoryRouter,
-              { initialEntries: ['/chat/c-2'] },
-              createElement(ChannelSection),
+              ToastContext,
+              { value: toast },
+              createElement(
+                MemoryRouter,
+                { initialEntries: ['/chat/c-2'] },
+                createElement(ChannelSection),
+              ),
             ),
           ),
         ),
@@ -104,4 +112,67 @@ test('DM 상대가 접속해 있으면 그 줄에 초록 점이 붙는다', () =
   expect(dot(render())).toBeNull()
   act(() => root!.unmount())
   expect(dot(render(new Set(['u-2'])))).not.toBeNull()
+})
+
+// jsdom 에는 없다. 메뉴가 구르는 영역을 찾을 때 쓴다.
+document.elementsFromPoint = () => []
+
+/** `href` 줄을 우클릭해 뜬 메뉴의 항목 이름들. */
+function rightClick(container: HTMLElement, href: string) {
+  const row = container.querySelector(`a[href="${href}"]`)!
+  act(() =>
+    row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 10, clientY: 10 })),
+  )
+  return [...document.querySelectorAll('[role="menu"] [role="menuitem"]')] as HTMLElement[]
+}
+
+test('DM 줄을 우클릭하면 목록에서 숨기기 메뉴가 뜨고, 고르면 숨기기를 보낸다', async () => {
+  api.mockResolvedValue({ items: [] })
+  const container = render()
+  const items = rightClick(container, '/chat/d-1')
+  // 안 읽은 게 없는 방이라 읽음 표시는 없다.
+  expect(items.map((item) => item.textContent)).toEqual(['목록에서 숨기기'])
+
+  act(() => items[0].click())
+  expect(document.querySelector('[role="menu"]')).toBeNull()
+  // 메뉴를 고른 클릭이 줄까지 올라가 그 방을 열지 않는다. 숨긴 뒤 목록을 다시 받기 전에 본다.
+  expect(container.querySelector('a[aria-current="page"]')?.getAttribute('href')).toBe('/chat/c-2')
+  await act(async () => {})
+  expect(api).toHaveBeenCalledWith('/channels/d-1/hide', { method: 'POST' })
+})
+
+test('안 읽은 방은 우클릭 메뉴에 읽음으로 표시가 있고, 고르면 소켓으로 읽음을 보낸다', () => {
+  api.mockResolvedValue({ items: [] })
+  const items = rightClick(render(), '/chat/c-3')
+  expect(items.map((item) => item.textContent)).toEqual([
+    '읽음으로 표시',
+    '이름 바꾸기',
+    '채널 지우기',
+  ])
+  act(() => items[0].click())
+  expect(sendRead).toHaveBeenCalledWith('c-3')
+})
+
+test('메뉴에서 이름 바꾸기를 고르면 메뉴만 닫히고 창이 뜬다', () => {
+  api.mockResolvedValue({ items: [] })
+  const items = rightClick(render(), '/chat/c-2')
+  act(() => items.find((item) => item.textContent === '이름 바꾸기')!.click())
+  expect(document.querySelector('[role="menu"]')).toBeNull()
+  expect(document.querySelector('[role="dialog"]')?.textContent).toContain('채널 이름 바꾸기')
+})
+
+test('채널을 지우면 목록을 다시 받기 전에 확인 창이 닫힌다', async () => {
+  // 지우기 뒤 목록 다시 받기는 끝나지 않는다. 줄이 남아 있어도 창은 닫혀야 한다.
+  api.mockImplementation((_path: string, init?: RequestInit) =>
+    init?.method === 'DELETE' ? Promise.resolve() : new Promise(() => {}),
+  )
+  const items = rightClick(render(), '/chat/c-3')
+  act(() => items.find((item) => item.textContent === '채널 지우기')!.click())
+  const confirm = [...document.querySelectorAll('[role="dialog"] button')].find(
+    (b) => b.textContent === '지우기',
+  ) as HTMLElement
+  await act(async () => confirm.click())
+  expect(api).toHaveBeenCalledWith('/channels/c-3', { method: 'DELETE' })
+  expect(document.querySelector('[role="dialog"]')).toBeNull()
+  expect(toast.success).toHaveBeenCalledWith('c-3 채널을 지웠습니다.')
 })
