@@ -42,9 +42,6 @@ export type ChatChannel = Schema<'ChannelOut'>
 
 /**
  * 서버가 WebSocket 으로 밀어 주는 이벤트(04 §4.1). 봉투 키는 `ev` 이고 필드는 snake_case 다.
- *
- * `presence`(재실)도 같은 소켓으로 오지만 여기에 없다. 받을 화면이 없어서 받아서 버린다.
- * 재실은 근태 모듈이 판정한다(`WorkStatus.tsx`). 화면이 생기면 union 에 더한다.
  */
 export type ChatEvent =
   | { ev: 'msg'; channel_id: string; message: ChatMessage }
@@ -64,6 +61,11 @@ export type ChatEvent =
    */
   | { ev: 'channels' }
   | { ev: 'typing'; channel_id: string; user_id: string; name: string }
+  /**
+   * 누가 접속했거나(첫 탭을 열었다) 나갔다(마지막 탭을 닫았다). 붙은 직후에는 이미 접속한 사람마다
+   * `online: true` 가 한 번씩 온다. 나는 안 온다.
+   */
+  | { ev: 'presence'; user_id: string; online: boolean }
   /**
    * 보낸 것이 거절됐다. 소켓은 닫히지 않는다.
    *

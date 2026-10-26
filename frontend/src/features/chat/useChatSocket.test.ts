@@ -296,3 +296,14 @@ test('끊겼다 다시 붙으면 기다림 표시를 끈다(놓친 봇 답은 �
   })
   expect(waiting()).toEqual([])
 })
+
+test('접속·나감을 받아 접속한 사람을 들고 있다가 끊기면 비운다', async () => {
+  const { close } = await mount()
+  await receive({ ev: 'presence', user_id: 'u-2', online: true })
+  await receive({ ev: 'presence', user_id: 'u-3', online: true })
+  await receive({ ev: 'presence', user_id: 'u-2', online: false })
+  expect([...hook.online]).toEqual(['u-3'])
+  // 끊긴 사이 나간 사람은 알 수 없다. 다시 붙으면 서버가 처음부터 보낸다.
+  await close(1006)
+  expect(hook.online.size).toBe(0)
+})

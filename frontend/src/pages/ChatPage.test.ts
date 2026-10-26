@@ -49,6 +49,7 @@ const people = [
 const auth = { user: people[0], status: 'authenticated' } as unknown as AuthValue
 const socket = {
   connected: true,
+  online: new Set(),
   typingByChannel: {},
   notifyTyping: () => {},
   sendRead: () => {},

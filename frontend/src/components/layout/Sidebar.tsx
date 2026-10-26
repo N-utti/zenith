@@ -10,7 +10,7 @@ import { BOARD_BADGE } from '@/features/board/types'
 import { useChannels } from '@/features/chat/api'
 import { useHasDraft } from '@/features/chat/drafts'
 import { NewChatModal } from '@/features/chat/NewChatModal'
-import { WorkStatus } from '@/features/chat/WorkStatus'
+import { OnlineDot, WorkStatus } from '@/features/chat/WorkStatus'
 import type { ChatChannel } from '@/features/chat/types'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -150,6 +150,7 @@ function ChannelRow({ channel, onNavigate }: { channel: ChatChannel; onNavigate?
       )}
       <span className="flex min-w-0 items-center gap-1.5">
         <span className="truncate">{channel.name}</span>
+        <OnlineDot channel={channel} />
         <WorkStatus channel={channel} />
         {/* 쓰다 만 글이 있는 방. 지금 보고 있는 방은 입력창에 글이 보이므로 감춘다. */}
         {hasDraft && (
