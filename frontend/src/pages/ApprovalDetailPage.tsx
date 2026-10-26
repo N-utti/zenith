@@ -69,7 +69,9 @@ export function ApprovalDetailPage() {
     const message =
       doc.error instanceof ApiError && doc.error.status === 403
         ? '열람 권한이 없습니다. 기안자 · 결재선에 오른 사람 · 임원만 볼 수 있습니다.'
-        : '문서를 불러오지 못했습니다.'
+        : doc.error instanceof ApiError && doc.error.status === 404
+          ? '없거나 삭제된 문서입니다.'
+          : '문서를 불러오지 못했습니다.'
     return (
       <div className="py-16 text-center">
         <p className="text-muted text-sm">{message}</p>
