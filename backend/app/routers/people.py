@@ -61,7 +61,7 @@ async def list_people(db: AsyncSession = Depends(get_db)) -> Items[PersonOut]:
                 name=name,
                 active=active,
                 role=role,
-                team=TeamOut(id=team_id, name=team_name) if team_id else None,
+                team=TeamOut(id=team_id, name=team_name) if team_id is not None else None,
             )
             for uid, name, active, role, team_id, team_name in rows
         ]
