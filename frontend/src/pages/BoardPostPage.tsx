@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
-import { Pencil, Pin, Trash2 } from 'lucide-react'
+import { Pencil, Pin, PinOff, Trash2 } from 'lucide-react'
 import { Forbidden } from '@/components/Forbidden'
 import { Avatar } from '@/components/ui/Avatar'
 import { BackLink } from '@/components/ui/BackLink'
@@ -11,7 +11,7 @@ import { Spinner } from '@/components/ui/Spinner'
 import { useToast } from '@/components/ui/ToastContext'
 import { ApiError } from '@/lib/api'
 import { formatRelative } from '@/lib/datetime'
-import { useBoards, useDeletePost, usePost } from '@/features/board/api'
+import { useBoards, useDeletePost, usePost, useUpdatePost } from '@/features/board/api'
 import { AttachmentList } from '@/features/approvals/AttachmentList'
 import { PostComments } from '@/features/board/PostComments'
 import { PostComposer } from '@/features/board/PostComposer'
@@ -28,6 +28,7 @@ export function BoardPostPage() {
   const navigate = useNavigate()
   const toast = useToast()
   const remove = useDeletePost(postBoardId, postId)
+  const pin = useUpdatePost(postBoardId, postId)
   const [editing, setEditing] = useState(false)
   const [confirming, setConfirming] = useState(false)
 
@@ -46,6 +47,15 @@ export function BoardPostPage() {
         toast.error(err instanceof ApiError ? err.message : '글을 지우지 못했습니다.')
       },
     })
+
+  const togglePin = () =>
+    pin.mutate(
+      { pinned: !post?.pinned },
+      {
+        onError: (err) =>
+          toast.error(err instanceof ApiError ? err.message : '고정을 바꾸지 못했습니다.'),
+      },
+    )
 
   if (isPending) {
     return (
@@ -85,6 +95,13 @@ export function BoardPostPage() {
           </h1>
           {canEdit && (
             <div className="flex shrink-0 gap-2">
+              {/* 서버가 `pinned` 를 줄 때만 띄운다. 지금 실서버는 모르는 칸을 버려서 눌러도 그대로다(#528). */}
+              {post.pinned !== undefined && (
+                <Button variant="secondary" size="sm" onClick={togglePin} disabled={pin.isPending}>
+                  {post.pinned ? <PinOff className="size-4" /> : <Pin className="size-4" />}
+                  {post.pinned ? '고정 해제' : '고정'}
+                </Button>
+              )}
               <Button
                 variant="secondary"
                 size="sm"

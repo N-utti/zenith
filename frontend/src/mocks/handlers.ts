@@ -606,10 +606,19 @@ export const handlers = [
     const user = authenticate()
     if (!user) return unauthorized()
 
-    const body = await readJson<{ title?: unknown; body?: unknown; attachments?: unknown }>(request)
+    const body = await readJson<{
+      title?: unknown
+      body?: unknown
+      attachments?: unknown
+      pinned?: unknown
+    }>(request)
     if (!body) return validationError('본문이 JSON 이 아닙니다.')
     const shapeError = checkPostFields(body)
     if (shapeError) return shapeError
+    // 서버에는 아직 칸이 없다(이슈 #528). 고정할 수 있는 사람은 글을 고칠 수 있는 사람으로 둔다.
+    if (body.pinned !== undefined && typeof body.pinned !== 'boolean') {
+      return validationError('pinned 는 참·거짓이어야 합니다.')
+    }
 
     const post = findPost(String(params.postId))
     if (!post) return notFound()
@@ -634,6 +643,7 @@ export const handlers = [
         title: typeof body.title === 'string' ? body.title.trim() : undefined,
         body: typeof body.body === 'string' ? body.body.trim() : undefined,
         attachments: body.attachments as PostAttachment[] | undefined,
+        pinned: body.pinned as boolean | undefined,
       }),
     )
   }),

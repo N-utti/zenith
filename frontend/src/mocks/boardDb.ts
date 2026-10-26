@@ -181,9 +181,10 @@ export function canEdit(user: User, post: StoredPost): boolean {
 
 export function updatePost(
   post: StoredPost,
-  input: { title?: string; body?: string; attachments?: PostAttachment[] },
+  input: { title?: string; body?: string; attachments?: PostAttachment[]; pinned?: boolean },
 ): BoardPostDetail {
   if (input.title !== undefined) post.title = input.title
+  if (input.pinned !== undefined) post.pinned = input.pinned
   if (input.body !== undefined) post.body = input.body
   // 보낼 때는 늘 전체 목록이다. 빈 목록은 전부 뗀다는 뜻이고, 안 보내면 그대로 둔다.
   if (input.attachments !== undefined) post.attachments = input.attachments

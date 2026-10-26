@@ -37,7 +37,10 @@ export type Person = Schema<'app__routers__boards__Person'>
  */
 export type BoardPost = Omit<Schema<'PostOut'>, 'min_role'> & {
   min_role: Role
-  /** 목만 싣는 고정 표시. 서버에는 `pinned` 컬럼이 없다(backend/README "설계와 어긋나는 것" 14 (g)). */
+  /**
+   * 목만 싣는 고정 표시. 서버에는 `pinned` 컬럼이 없다(backend/README "설계와 어긋나는 것" 14 (g)).
+   * 칸을 여는 제안은 이슈 #528. 없으면 고정 버튼을 띄우지 않는다.
+   */
   pinned?: boolean
 }
 
