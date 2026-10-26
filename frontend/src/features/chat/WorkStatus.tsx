@@ -22,16 +22,17 @@ export function DmAvatar({ channel, dotRing }: { channel: ChatChannel; dotRing: 
   const me = useCurrentUser()
   const { online } = useChatSocketContext()
   const other = dmPartner(channel, me.id)
-  if (!other) return <span className="w-5 shrink-0" />
+  if (!other) return <span className="w-6 shrink-0" />
   return (
-    <span className="relative shrink-0">
+    // 아바타(24px)가 글자 줄보다 1px 높다. 위아래로 조금 겹쳐 채널 줄과 높이를 맞춘다.
+    <span className="relative -my-0.5 shrink-0">
       <Avatar name={other.name} hue={hueOf(other.id)} size="xs" />
       {online.has(other.id) && (
         <span
           role="img"
           aria-label="접속 중"
           className={cn(
-            'bg-success absolute -right-0.5 -bottom-0.5 size-2.5 rounded-full ring-2',
+            'bg-success absolute -right-0.5 -bottom-0.5 size-2 rounded-full ring-2',
             dotRing,
           )}
         />

@@ -140,16 +140,16 @@ function ChannelRow({ channel, onNavigate }: { channel: ChatChannel; onNavigate?
       onClick={onNavigate}
       className={({ isActive }) => cn(ROW, 'group', isActive ? ROW_ACTIVE : ROW_IDLE)}
     >
-      {/* 아이콘 칸은 셋 다 아바타 폭(20px)이다. 다르면 채널과 DM 의 이름이 서로 어긋난다. */}
+      {/* 아이콘 칸은 셋 다 아바타 폭(24px)이다. 다르면 채널과 DM 의 이름이 서로 어긋난다. */}
       {channel.is_dm ? (
         <DmAvatar
           channel={channel}
           dotRing="ring-surface group-hover:ring-surface-hover group-aria-[current=page]:ring-surface md:group-aria-[current=page]:ring-accent-soft"
         />
       ) : channel.is_private ? (
-        <Lock role="img" aria-label="비공개" className="text-subtle h-4 w-5 shrink-0" />
+        <Lock role="img" aria-label="비공개" className="text-subtle h-4 w-6 shrink-0" />
       ) : (
-        <span className="text-subtle w-5 shrink-0 text-center">#</span>
+        <span className="text-subtle w-6 shrink-0 text-center">#</span>
       )}
       <span className="flex min-w-0 items-center gap-1.5">
         <span className="truncate">{channel.name}</span>

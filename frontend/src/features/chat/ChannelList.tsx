@@ -33,7 +33,7 @@ function Row({ channel }: { channel: ChatChannel }) {
         <Icon
           role={isPrivate ? 'img' : undefined}
           aria-label={isPrivate ? '비공개' : undefined}
-          className="text-subtle h-4 w-5 shrink-0"
+          className="text-subtle h-4 w-6 shrink-0"
         />
       )}
       <div className="min-w-0 flex-1">
