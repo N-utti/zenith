@@ -1,19 +1,22 @@
 import { useState, type DragEvent } from 'react'
-import { useNavigate, useParams } from 'react-router'
+import { useNavigate, useParams, useSearchParams } from 'react-router'
 import { Plus } from 'lucide-react'
 import { BackLink } from '@/components/ui/BackLink'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { SkeletonRows } from '@/components/ui/Skeleton'
+import { Tabs } from '@/components/ui/Tabs'
 import { useToast } from '@/components/ui/ToastContext'
 import { useDeleteProject, useProject, useTasks, useUpdateTask } from '@/features/projects/api'
 import { ProjectFormModal, TaskFormModal } from '@/features/projects/ProjectForms'
 import { ProjectProgress } from '@/features/projects/ProjectProgress'
+import { ProjectTimeline } from '@/features/projects/ProjectTimeline'
+import { formatTaskDate, isOverdue } from '@/features/projects/timeline'
 import { personName, TASK_STAGES, type Task, type TaskStage } from '@/features/projects/types'
 import { ApiError } from '@/lib/api'
 import { cn } from '@/lib/cn'
-import { formatISODate, formatISOYearDate, toISODate } from '@/lib/datetime'
+import { toISODate } from '@/lib/datetime'
 
 /** 끌어 옮기는 카드의 id 를 싣는 형식. 다른 곳에서 끌어 온 글자·파일은 무시한다. */
 const DRAG_TYPE = 'application/x-zenith-task'
@@ -46,9 +49,10 @@ function refocus(selector: string) {
   })
 }
 
-/** 마감일. 올해가 아니면 연도를 붙인다. 업무 마감은 해를 넘긴다. */
-const formatDue = (iso: string) =>
-  iso.startsWith(`${new Date().getFullYear()}-`) ? formatISODate(iso) : formatISOYearDate(iso)
+const VIEWS = [
+  { key: 'board', label: '보드' },
+  { key: 'timeline', label: '일정' },
+]
 
 type Dialog = { kind: 'project' } | { kind: 'new'; stage: TaskStage } | { kind: 'task'; task: Task }
 
@@ -60,6 +64,8 @@ export function ProjectBoardPage() {
   const project = useProject(projectId)
   const remove = useDeleteProject()
   const [dialog, setDialog] = useState<Dialog | null>(null)
+  // 보기는 주소에 둔다. 새로고침해도 뒤로 가기를 해도 그 자리다(관리자 탭과 같은 규약).
+  const [params, setParams] = useSearchParams()
 
   if (project.isPending) return <SkeletonRows rows={4} />
   if (!project.data) {
@@ -114,11 +120,33 @@ export function ProjectBoardPage() {
       <div className="mb-4 max-w-sm">
         <ProjectProgress project={data} />
       </div>
-      <Board
-        projectId={data.id}
-        onOpen={(task) => setDialog({ kind: 'task', task })}
-        onAdd={(stage) => setDialog({ kind: 'new', stage })}
-      />
+      <Tabs
+        items={VIEWS}
+        value={params.get('view') ?? 'board'}
+        // 다른 파라미터는 남기고 `view` 만 바꾼다.
+        onChange={(view) =>
+          setParams(
+            (prev) => {
+              if (view === 'board') prev.delete('view')
+              else prev.set('view', view)
+              return prev
+            },
+            { replace: true },
+          )
+        }
+      >
+        {(view) =>
+          view === 'timeline' ? (
+            <Timeline projectId={data.id} onOpen={(task) => setDialog({ kind: 'task', task })} />
+          ) : (
+            <Board
+              projectId={data.id}
+              onOpen={(task) => setDialog({ kind: 'task', task })}
+              onAdd={(stage) => setDialog({ kind: 'new', stage })}
+            />
+          )
+        }
+      </Tabs>
       {dialog?.kind === 'project' && (
         <ProjectFormModal project={data} onClose={() => setDialog(null)} />
       )}
@@ -227,10 +255,18 @@ function Board({
   )
 }
 
+function Timeline({ projectId, onOpen }: { projectId: string; onOpen: (task: Task) => void }) {
+  const tasks = useTasks(projectId)
+  if (tasks.isPending) return <SkeletonRows rows={4} />
+  if (!tasks.data) {
+    return <p className="text-danger py-8 text-center text-sm">업무를 불러오지 못했습니다.</p>
+  }
+  return <ProjectTimeline tasks={tasks.data.items} onOpen={onOpen} />
+}
+
 function TaskCard({ task, onOpen }: { task: Task; onOpen: (task: Task) => void }) {
   const done = task.stage === 'done'
-  // 오늘 마감은 아직 안 지났다. 끝낸 업무는 지나도 빨갛게 하지 않는다.
-  const overdue = !done && task.due_date !== null && task.due_date < toISODate(new Date())
+  const overdue = isOverdue(task, toISODate(new Date()))
   return (
     <li
       draggable={CAN_DRAG}
@@ -267,7 +303,7 @@ function TaskCard({ task, onOpen }: { task: Task; onOpen: (task: Task) => void }
             className={cn('whitespace-nowrap', overdue ? 'text-danger font-medium' : 'text-subtle')}
           >
             {overdue ? '기한 지남 ' : ''}
-            {formatDue(task.due_date)}
+            {formatTaskDate(task.due_date)}
           </span>
         )}
       </p>
