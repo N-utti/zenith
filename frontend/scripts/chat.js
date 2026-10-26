@@ -69,6 +69,13 @@ const CHANNELS = [
   { id: 'dm-u2-u5', is_dm: true, name: '', memberIds: ['u-2', 'u-5'] },
 ]
 
+/**
+ * 소켓 없이도 늘 접속 중으로 치는 사람. DM 줄의 초록 점을 보여 주는 용도다. u-1 로 들어가면 정성운 DM 에,
+ * u-2 로 들어가면 안재호 DM 에만 점이 붙어 점이 있는 줄과 없는 줄을 같이 볼 수 있다.
+ * 이 사람으로 로그인해도 첫 접속·마지막 탭 알림이 안 나간다(이미 접속 중이라).
+ */
+const MOCK_ONLINE = ['u-2', 'u-5']
+
 const minutesAgo = (m) => new Date(Date.now() - m * 60_000).toISOString()
 
 let nextChannelId = 1
@@ -293,7 +300,7 @@ function replyAsBot(channel) {
 export function handleChatConnection(conn, userId) {
   if (!USERS[userId]) return conn.close(4401, 'unknown user')
 
-  const online = () => [...sockets.values()]
+  const online = () => [...MOCK_ONLINE, ...sockets.values()]
   const first = !online().includes(userId)
   sockets.set(conn, userId)
   console.log(`[chat] 접속: ${USERS[userId].name} (${sockets.size}명)`)
