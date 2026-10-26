@@ -1228,7 +1228,7 @@ function DocSurface({
                 <input
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  // 제목 끝에서 엔터는 본문으로 내려간다. 한글 조합을 끝내는 엔터는 그대로 둔다.
+                  // 제목에서 엔터는 본문 맨 앞으로 내려간다. 한글 조합을 끝내는 엔터는 그대로 둔다.
                   onKeyDown={(e) => {
                     if (e.key !== 'Enter' || e.nativeEvent.isComposing) return
                     e.preventDefault()

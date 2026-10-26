@@ -22,13 +22,21 @@ import {
 } from '@/features/approvals/api'
 import { AttachmentList } from '@/features/approvals/AttachmentList'
 import { StepTimeline } from '@/features/approvals/StepTimeline'
-import { APPROVAL_TYPE_LABEL, statusLabel, statusTone } from '@/features/approvals/types'
+import {
+  APPROVAL_TYPE_LABEL,
+  statusLabel,
+  statusTone,
+  type StepStatus,
+} from '@/features/approvals/types'
 import { useCurrentUser } from '@/features/auth/AuthContext'
 import { ApiError } from '@/lib/api'
 import { formatDateTime } from '@/lib/datetime'
 import { ROLE_RANK } from '@/types'
 
 const won = new Intl.NumberFormat('ko-KR')
+
+/** 누가 손댄 단계. 서버(`approvals.py` 의 `DECIDED`)는 이런 단계가 있으면 회수를 409 로 거절한다. */
+const DECIDED_STEPS = new Set<StepStatus>(['approved', 'rejected', 'delegated_done'])
 
 /** 사유를 받아야 끝나는 두 동작. 문구만 다르고 폼은 같다. */
 const REASON_FORM = {
@@ -199,10 +207,10 @@ export function ApprovalDetailPage() {
                 다시 작성
               </Button>
             )}
-            {/* 누가 손댄 단계(승인·대결)가 있으면 서버가 회수를 409 로 거절한다. 반려를 요청할 일이다. */}
+            {/* 손댄 단계가 있으면 회수할 수 없다. 반려를 요청할 일이다. */}
             {isDrafter &&
               d.status === 'pending' &&
-              d.steps.every((s) => s.status === 'waiting' || s.status === 'skipped') && (
+              !d.steps.some((s) => DECIDED_STEPS.has(s.status)) && (
                 <Button
                   variant="secondary"
                   size="sm"

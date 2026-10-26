@@ -3,8 +3,8 @@ import { toISODate } from '@/lib/datetime'
 import {
   attendanceMonth,
   attendanceRange,
+  cancelException,
   createOvertime,
-  listOvertime,
   workdaysInYear,
 } from './attendanceDb'
 import { MOCK_USERS } from './db'
@@ -98,19 +98,26 @@ describe('근무 달력 재생성', () => {
 
 describe('연장근로 신청', () => {
   // 목에 겹침 검사가 없으면 개발 화면에서는 겹치는 신청이 들어가고 실서버에서만 409 가 난다.
-  const day = '2027-06-15'
-  const ask = (start_time: string, end_time: string) =>
+  // 테스트마다 날짜를 달리 해 앞 테스트가 넣은 신청에 기대지 않는다.
+  const ask = (day: string, start_time: string, end_time: string) =>
     createOvertime(user, { work_date: day, start_time, end_time, reason: '시험' })
 
   it('같은 날 시간이 겹치면 409, 맞닿기만 하면 받는다', () => {
-    expect(ask('18:00', '20:00')).toHaveProperty('item')
-    expect(ask('19:00', '21:00')).toMatchObject({ status: 409, code: 'CONFLICT' })
-    expect(ask('20:00', '22:00')).toHaveProperty('item')
+    expect(ask('2027-06-15', '18:00', '20:00')).toHaveProperty('item')
+    expect(ask('2027-06-15', '19:00', '21:00')).toMatchObject({ status: 409, code: 'CONFLICT' })
+    expect(ask('2027-06-15', '20:00', '22:00')).toHaveProperty('item')
   })
 
   it('자정을 넘긴 구간과도 겹침을 본다', () => {
-    expect(ask('23:00', '01:00')).toHaveProperty('item')
-    expect(ask('22:30', '23:30')).toMatchObject({ status: 409 })
-    expect(listOvertime(user, day, day).items).toHaveLength(3)
+    expect(ask('2027-06-16', '23:00', '01:00')).toHaveProperty('item')
+    expect(ask('2027-06-16', '22:30', '23:30')).toMatchObject({ status: 409 })
+  })
+
+  it('다른 날이거나 취소한 신청과는 겹치지 않는다', () => {
+    const first = ask('2027-06-17', '18:00', '20:00')
+    if (!('item' in first)) throw new Error(first.error)
+    expect(ask('2027-06-18', '18:00', '20:00')).toHaveProperty('item')
+    cancelException(user, 'overtime', first.item.id)
+    expect(ask('2027-06-17', '18:00', '20:00')).toHaveProperty('item')
   })
 })
