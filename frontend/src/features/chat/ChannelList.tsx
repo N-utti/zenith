@@ -1,16 +1,16 @@
 import { NavLink } from 'react-router'
-import { AtSign, Hash, Lock, Pencil } from 'lucide-react'
+import { Hash, Lock, Pencil } from 'lucide-react'
 import { Spinner } from '@/components/ui/Spinner'
 import { cn } from '@/lib/cn'
 import { formatRelative } from '@/lib/datetime'
 import { useChannels } from './api'
 import { useHasDraft } from './drafts'
 import type { ChatChannel } from './types'
-import { OnlineDot, WorkStatus } from './WorkStatus'
+import { DmAvatar, WorkStatus } from './WorkStatus'
 
 function Row({ channel }: { channel: ChatChannel }) {
   const isPrivate = !channel.is_dm && channel.is_private === true
-  const Icon = channel.is_dm ? AtSign : isPrivate ? Lock : Hash
+  const Icon = isPrivate ? Lock : Hash
   const last = channel.last_message
   const hasDraft = useHasDraft(channel.id)
 
@@ -19,16 +19,23 @@ function Row({ channel }: { channel: ChatChannel }) {
       to={`/chat/${channel.id}`}
       className={({ isActive }) =>
         cn(
-          'flex items-center gap-2.5 rounded-lg px-2.5 py-2 transition-colors',
+          'group flex items-center gap-2.5 rounded-lg px-2.5 py-2 transition-colors',
           isActive ? 'bg-accent-soft' : 'hover:bg-surface-hover',
         )
       }
     >
-      <Icon
-        role={isPrivate ? 'img' : undefined}
-        aria-label={isPrivate ? '비공개' : undefined}
-        className="text-subtle size-4 shrink-0"
-      />
+      {channel.is_dm ? (
+        <DmAvatar
+          channel={channel}
+          dotRing="ring-surface group-hover:ring-surface-hover group-aria-[current=page]:ring-accent-soft"
+        />
+      ) : (
+        <Icon
+          role={isPrivate ? 'img' : undefined}
+          aria-label={isPrivate ? '비공개' : undefined}
+          className="text-subtle h-4 w-5 shrink-0"
+        />
+      )}
       <div className="min-w-0 flex-1">
         <p className="flex items-center gap-1.5">
           <span
@@ -39,7 +46,6 @@ function Row({ channel }: { channel: ChatChannel }) {
           >
             {channel.name}
           </span>
-          <OnlineDot channel={channel} />
           <WorkStatus channel={channel} />
           {hasDraft && (
             <Pencil role="img" aria-label="작성 중" className="text-subtle size-3.5 shrink-0" />
