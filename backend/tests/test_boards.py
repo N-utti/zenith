@@ -231,6 +231,12 @@ async def test_pin_exec_only_and_pinned_first(client: AsyncClient, users: Users,
         f"/api/boards/{s['notice'].id}/posts?limit=3&cursor={r.json()['next_cursor']}"
     )
     assert titles(r) == ["공지 4", "공지 3", "공지 2"] and r.json()["next_cursor"] is None
+    # 고정 구간 안(첫 고정글 뒤)에서 끊겨도 남은 고정글 → 비고정글로 이어진다
+    r = await client.get(f"/api/boards/{s['notice'].id}/posts?limit=1")
+    r = await client.get(
+        f"/api/boards/{s['notice'].id}/posts?limit=2&cursor={r.json()['next_cursor']}"
+    )
+    assert titles(r) == ["공지 0", "내 글"]
     assert (await client.get(f"/api/posts/{old0.id}")).json()["pinned"] is True
 
     # 해제하면 제자리로, 같은 값으로 다시 보내면 감사 없음
