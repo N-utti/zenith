@@ -56,7 +56,9 @@ def _clean_name(value: str) -> str:
 
     `str.strip()` 은 앞뒤 공백만 벗겨서 `"공지\u200b"`(제로폭 공백)·전각 문자·RTL 제어문자가 눈으로는 같은
     이름으로 통과해 공개 채널 이름 유일성(`uq_channels_public_name`)을 피해 갔고, `"\x00"` 은 Postgres 가 거절해 500 이었다."""
-    value = unicodedata.normalize("NFKC", value).strip()
+    # 한글 호환 자모(U+3131~U+318E, 입력기가 넣는 「ㅇㅇ」)는 NFKC 가 조합용 자모로 바꿔 위에 작게 깨져 보인다(#439).
+    # 그 구간만 건너뛰고 나머지는 접는다 — ㅇ(U+3147)과 ᄋ(U+110B)은 눈으로도 다른 글자라 #283 의 목적은 그대로.
+    value = re.sub(r"[^ㄱ-ㆎ]+", lambda m: unicodedata.normalize("NFKC", m.group()), value).strip()
     # C*(제어·서식·대리·사용자 정의·미할당)와 줄·문단 구분자(Zl·Zp). ZWJ 이모지(👨‍👩‍👧)도 Cf 라 막힌다 —
     # 허용하면 `공지\u200d` 우회가 생긴다. 변형 선택자(Mn)·한글 채움(U+3164) 같은 잔여 우회는 README 26.
     if any(
