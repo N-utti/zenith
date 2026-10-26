@@ -355,7 +355,8 @@ function validate(input: DraftInput, docId?: string): Failure | null {
   if (input.type_code !== 'general')
     return fail('v1 은 일반 기안만 기안할 수 있습니다.', 422, 'VALIDATION')
   if (!input.title?.trim()) return fail('제목을 입력해 주세요.', 422, 'VALIDATION')
-  if (input.subject.amount !== null && !(input.subject.amount >= 0)) {
+  const amount = input.subject.amount
+  if (amount !== null && !(Number.isInteger(amount) && amount >= 0 && amount <= 10 ** 13)) {
     return fail('금액이 올바르지 않습니다.', 422, 'VALIDATION')
   }
   const files = input.subject.attachments

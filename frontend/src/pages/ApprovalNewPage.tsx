@@ -204,9 +204,11 @@ export function ApprovalNewPage() {
   // 다른 서식에서 적은 금액이 숨긴 칸에 남아 저장되지 않게 한다.
   const amountNumber =
     form.noAmount || amountValue.trim() === '' ? null : Number(amountValue.replace(/,/g, ''))
+  // 서버 스키마와 같은 범위(원 단위 정수, 0 ~ 10조). 넘기면 서버 422 가 일반 실패로만 보인다.
   const amountError =
-    amountNumber !== null && (!Number.isFinite(amountNumber) || amountNumber < 0)
-      ? '금액은 0 이상의 숫자입니다.'
+    amountNumber !== null &&
+    !(Number.isInteger(amountNumber) && amountNumber >= 0 && amountNumber <= 10 ** 13)
+      ? '금액은 0원부터 10조 원까지, 원 단위 숫자로 적습니다.'
       : null
   const busy = saving
   const titleText = titleOf(active, titleValue, fieldValues)
