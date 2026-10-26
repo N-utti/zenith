@@ -423,6 +423,7 @@ class ProjectTask(Base):
     title: Mapped[str] = mapped_column(Text, nullable=False)
     stage: Mapped[str] = mapped_column(Text, nullable=False, server_default="todo")
     assignee_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
+    start_date: Mapped[date | None] = mapped_column(Date)  # 일정 탭 간트 막대의 왼쪽 끝 (#520)
     due_date: Mapped[date | None] = mapped_column(Date)
     priority: Mapped[str] = mapped_column(Text, nullable=False, server_default="normal")
     note: Mapped[str] = mapped_column(Text, nullable=False, server_default="")

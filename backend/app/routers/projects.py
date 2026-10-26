@@ -73,6 +73,7 @@ class TaskOut(BaseModel):
     title: str
     stage: Stage
     assignee: Person | None
+    start_date: date | None  # 일정 탭 간트 막대 (#520) — 2026-10-26 이전 업무는 null
     due_date: date | None
     priority: Priority
     note: str
@@ -83,6 +84,7 @@ class TaskIn(BaseModel):
     title: Title
     stage: Stage = "todo"
     assignee_id: uuid.UUID | None = None
+    start_date: date | None = None
     due_date: date | None = None
     priority: Priority = "normal"
     note: Note = ""
@@ -92,6 +94,7 @@ class TaskPatch(BaseModel):
     title: Title | None = None
     stage: Stage | None = None
     assignee_id: uuid.UUID | None = None
+    start_date: date | None = None
     due_date: date | None = None
     priority: Priority | None = None
     note: Note | None = None
@@ -102,6 +105,12 @@ class TaskPatch(BaseModel):
 
 def _invalid(detail: str) -> NoReturn:
     raise ApiError(422, "VALIDATION", detail)
+
+
+def _check_dates(start: date | None, due: date | None) -> None:
+    """둘 다 있을 때만 비교한다 — 같은 날은 하루짜리 업무라 허용 (#520)."""
+    if start and due and start > due:
+        _invalid("시작일이 마감일보다 늦습니다.")
 
 
 async def _deny(db: AsyncSession, request: Request, user: User, target_id: uuid.UUID) -> NoReturn:
@@ -198,6 +207,7 @@ async def _tasks_out(db: AsyncSession, tasks: list[ProjectTask]) -> list[TaskOut
             assignee=Person(id=t.assignee_id, name=names.get(t.assignee_id, ""))
             if t.assignee_id
             else None,
+            start_date=t.start_date,
             due_date=t.due_date,
             priority=t.priority,
             note=t.note,
@@ -326,11 +336,12 @@ async def list_tasks(id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> Items
     "/projects/{id}/tasks",
     status_code=201,
     response_model=TaskOut,
-    summary="업무 만들기 {title, stage?, assignee_id?, due_date?, priority?, note?} — 담당자는 활성 사용자만(422)",
+    summary="업무 만들기 {title, stage?, assignee_id?, start_date?, due_date?, priority?, note?} — 담당자는 활성 사용자만, 시작일 > 마감일이면 422",
 )
 async def create_task(id: uuid.UUID, body: TaskIn, db: AsyncSession = Depends(get_db)) -> TaskOut:
     await _project(db, id, lock="share")
     await _check_assignee(db, body.assignee_id)
+    _check_dates(body.start_date, body.due_date)
     task = ProjectTask(project_id=id, created_at=datetime.now(UTC), **body.model_dump())
     db.add(task)
     await db.commit()
@@ -341,7 +352,7 @@ async def create_task(id: uuid.UUID, body: TaskIn, db: AsyncSession = Depends(ge
 @router.patch(
     "/project-tasks/{id}",
     response_model=TaskOut,
-    summary="업무 고치기·단계 옮기기 — 바뀐 칸만 보낸다. assignee_id·due_date 만 null 로 비울 수 있다",
+    summary="업무 고치기·단계 옮기기 — 바뀐 칸만 보낸다. assignee_id·start_date·due_date 만 null 로 비울 수 있다. 한쪽 날짜만 보내도 저장된 다른 쪽과 비교(422)",
 )
 async def update_task(
     id: uuid.UUID, body: TaskPatch, db: AsyncSession = Depends(get_db)
@@ -349,10 +360,11 @@ async def update_task(
     task = await _task(db, id)
     changes = body.model_dump(exclude_unset=True)
     for key, value in changes.items():
-        if value is None and key not in ("assignee_id", "due_date"):
+        if value is None and key not in ("assignee_id", "start_date", "due_date"):
             _invalid(f"{key} 는 null 일 수 없습니다.")
     if "assignee_id" in changes:
         await _check_assignee(db, changes["assignee_id"])
+    _check_dates(changes.get("start_date", task.start_date), changes.get("due_date", task.due_date))
     for key, value in changes.items():
         setattr(task, key, value)
     await db.commit()

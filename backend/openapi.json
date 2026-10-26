@@ -1830,7 +1830,7 @@
         "tags": [
           "projects"
         ],
-        "summary": "업무 만들기 {title, stage?, assignee_id?, due_date?, priority?, note?} — 담당자는 활성 사용자만(422)",
+        "summary": "업무 만들기 {title, stage?, assignee_id?, start_date?, due_date?, priority?, note?} — 담당자는 활성 사용자만, 시작일 > 마감일이면 422",
         "operationId": "create_task_api_projects__id__tasks_post",
         "parameters": [
           {
@@ -1883,7 +1883,7 @@
         "tags": [
           "projects"
         ],
-        "summary": "업무 고치기·단계 옮기기 — 바뀐 칸만 보낸다. assignee_id·due_date 만 null 로 비울 수 있다",
+        "summary": "업무 고치기·단계 옮기기 — 바뀐 칸만 보낸다. assignee_id·start_date·due_date 만 null 로 비울 수 있다. 한쪽 날짜만 보내도 저장된 다른 쪽과 비교(422)",
         "operationId": "update_task_api_project_tasks__id__patch",
         "parameters": [
           {
@@ -13698,6 +13698,18 @@
             ],
             "title": "Assignee Id"
           },
+          "start_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Date"
+          },
           "due_date": {
             "anyOf": [
               {
@@ -13769,6 +13781,18 @@
               }
             ]
           },
+          "start_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Date"
+          },
           "due_date": {
             "anyOf": [
               {
@@ -13807,6 +13831,7 @@
           "title",
           "stage",
           "assignee",
+          "start_date",
           "due_date",
           "priority",
           "note",
@@ -13857,6 +13882,18 @@
               }
             ],
             "title": "Assignee Id"
+          },
+          "start_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Date"
           },
           "due_date": {
             "anyOf": [
