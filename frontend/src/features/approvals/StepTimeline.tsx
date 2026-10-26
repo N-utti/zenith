@@ -24,18 +24,25 @@ const STATUS: Record<StepStatus, { label: string; icon: typeof Check; tone: stri
 export function StepTimeline({
   steps,
   currentStep,
+  draft = false,
 }: {
   steps: ApprovalStep[]
   currentStep: number | null
+  /** 상신 전(임시저장). 결재선은 상신할 때 정해져 아직 없다. */
+  draft?: boolean
 }) {
   // 결재자가 없으면 기안과 동시에 확정된 문서다(임원 기안). 참조만 걸린 경우에도 그 줄은
-  // 그려야 하므로, 개수가 아니라 **결재 단계가 있는지**로 가른다.
+  // 그려야 하므로, 개수가 아니라 **결재 단계가 있는지**로 가른다. 상신 전이면 아직 안 정해진 것이다.
   const hasApprover = steps.some((step) => step.role === 'approve')
 
   return (
     <>
       {!hasApprover && (
-        <p className="text-subtle text-sm">결재선이 없습니다. 기안과 동시에 확정된 문서입니다.</p>
+        <p className="text-subtle text-sm">
+          {draft
+            ? '결재선은 상신할 때 정해집니다.'
+            : '결재선이 없습니다. 기안과 동시에 확정된 문서입니다.'}
+        </p>
       )}
       {steps.length > 0 && (
         <ol className={cn('space-y-3', !hasApprover && 'mt-3')}>

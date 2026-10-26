@@ -175,7 +175,8 @@ export function ApprovalDetailPage() {
                 </Button>
                 <Button
                   size="sm"
-                  disabled={busy}
+                  // 서버는 본문 없는 상신을 422 로 거절한다. 새 기안 화면과 같이 버튼부터 끈다.
+                  disabled={busy || !d.subject.body.trim()}
                   onClick={() =>
                     submit.mutate(d.id, {
                       onSuccess: () => toast.success('상신했습니다.'),
@@ -268,7 +269,11 @@ export function ApprovalDetailPage() {
         <Card>
           <CardHeader title="결재선" />
           <div className="px-5 pb-5">
-            <StepTimeline steps={d.steps} currentStep={d.current_step} />
+            <StepTimeline
+              steps={d.steps}
+              currentStep={d.current_step}
+              draft={d.status === 'draft'}
+            />
           </div>
         </Card>
       </div>
