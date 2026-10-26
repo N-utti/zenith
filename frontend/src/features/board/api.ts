@@ -71,10 +71,11 @@ function invalidateLists(qc: ReturnType<typeof useQueryClient>, boardId: string)
   void qc.invalidateQueries({ queryKey: homeKeys.home })
 }
 
+/** 고정 표시만 바꿀 때는 `pinned` 하나만 보낸다(이슈 #528, 서버에는 아직 칸이 없다). */
 export function useUpdatePost(boardId: string, postId: string) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (input: PostInput) =>
+    mutationFn: (input: PostInput | { pinned: boolean }) =>
       api<BoardPostDetail>(`/posts/${postId}`, {
         method: 'PATCH',
         body: JSON.stringify(input),
