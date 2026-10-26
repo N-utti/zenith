@@ -66,6 +66,7 @@ class PostOut(BaseModel):
     title: str
     masked: bool
     author: Person | None
+    pinned: bool  # 고정글은 목록 맨 위 (#528) — 마스킹돼도 그대로(순서가 이미 드러낸다)
     created_at: datetime
 
 
@@ -87,6 +88,7 @@ class PostPatchIn(BaseModel):
     title: Title | None = None
     body: Body | None = None
     attachments: Attachments | None = None  # 보낼 때는 전체 목록, 안 보내면 그대로, [] 는 전부 뗌
+    pinned: bool | None = None  # 고정·해제는 exec 만(403) — 글쓴이라도 안 된다 (#528)
 
 
 class Items[T](BaseModel):
@@ -132,8 +134,21 @@ def _post_out(post: Post, board: Board, author: User | None, allowed: bool) -> P
         title=post.title if allowed else MASKED_TITLE,
         masked=not allowed,
         author=Person.model_validate(author) if (author and allowed) else None,
+        pinned=post.pinned,
         created_at=post.created_at,
     )
+
+
+def _post_cursor(post: Post) -> str:
+    """목록 커서 = 고정 여부 한 글자 + (created_at, id) 공용 커서 (#528). 고정글이 앞에 서므로 정렬 키에 들어간다."""
+    return ("1" if post.pinned else "0") + encode_cursor(post.created_at, post.id)
+
+
+def _decode_post_cursor(cursor: str) -> tuple[bool, datetime, uuid.UUID]:
+    if cursor[:1] not in ("0", "1"):
+        raise ApiError(422, "VALIDATION", "cursor 형식이 잘못됐습니다.")
+    at, pid = decode_cursor(cursor[1:])
+    return cursor[0] == "1", at, pid
 
 
 async def _deny(
@@ -284,18 +299,18 @@ async def list_posts(
         select(Post, User)
         .outerjoin(User, User.id == Post.author_id)
         .where(Post.board_id == board.id)
-        .order_by(Post.created_at.desc(), Post.id.desc())
+        .order_by(Post.pinned.desc(), Post.created_at.desc(), Post.id.desc())  # 고정글 먼저 (#528)
         .limit(limit + 1)
     )
     if cursor:
-        at, pid = decode_cursor(cursor)
-        stmt = stmt.where(tuple_(Post.created_at, Post.id) < (at, pid))
+        pinned, at, pid = _decode_post_cursor(cursor)
+        stmt = stmt.where(tuple_(Post.pinned, Post.created_at, Post.id) < (pinned, at, pid))
     rows = (await db.execute(stmt)).all()
     more = len(rows) > limit
     rows = rows[:limit]
     return PostPage(
         items=[_post_out(p, board, a, allowed) for p, a in rows],
-        next_cursor=encode_cursor(rows[-1][0].created_at, rows[-1][0].id) if more else None,
+        next_cursor=_post_cursor(rows[-1][0]) if more else None,
     )
 
 
@@ -390,9 +405,20 @@ async def update_post(
     if not _can_edit(user, post):
         await _deny(db, request, user, board, "edit", post)
     changes = body.model_dump(exclude_unset=True)
+    if "pinned" in changes and user.role != "exec":  # 공지 성격이라 글쓴이라도 임원만 (#528)
+        await _deny(db, request, user, board, "pin", post)
     for key, value in changes.items():
         if value is None:  # me.py 의 todo PATCH 와 같은 계약 — null 은 "지움" 이 아니라 422
             raise ApiError(422, "VALIDATION", f"{key} 는 null 일 수 없습니다.")
+        if key == "pinned" and value != post.pinned:  # 누가 무엇을 공지로 세웠는지는 남긴다
+            audit.record(
+                db,
+                "boards.post_pinned",
+                request=request,
+                actor_id=user.id,
+                target_id=board.id,
+                detail={"post_id": str(post.id), "pinned": value},
+            )
         if key == "attachments":  # [] 는 전부 뗀다
             value = await _checked_attachments(db, board, user, body.attachments, post.attachments)
             before = {x["url"] for x in post.attachments or []}
