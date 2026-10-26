@@ -152,6 +152,10 @@ async def test_create_public_channel_and_dm(client: AsyncClient, users: Users, a
         "/api/channels", json={"name": "\u00a0한글 👍\u00a0"}, headers=csrf(client)
     )
     assert r.status_code == 201 and r.json()["name"] == "한글 👍"
+    # #439: 자음·모음만 친 이름은 호환 자모(U+3147) 그대로 — NFKC 가 조합용 자모(U+110B)로 바꾸면 깨져 보인다.
+    # 그 바깥은 여전히 접는다(전각 Ａ → A)
+    r = await client.post("/api/channels", json={"name": "ㅇㅇＡ"}, headers=csrf(client))
+    assert r.status_code == 201 and r.json()["name"] == "ㅇㅇA"
     # 바꾸기도 같은 규칙
     r = await client.patch(
         f"/api/channels/{r.json()['id']}", json={"name": "공지\u200b"}, headers=csrf(client)
