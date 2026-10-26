@@ -19,14 +19,14 @@ export function BoardPage() {
 
   // /board 로 들어오면 첫 게시판(전체 공지)으로 보낸다. 사이드바가 게시판을 나열하므로
   // 통합 목록 화면을 따로 두지 않는다 (05 SCR-05는 게시판 화면 하나만 정의한다).
-  if (!boardId) {
-    if (boardsPending) return <SkeletonRows rows={5} />
-    return <Navigate to="/board/all" replace />
-  }
+  // id 는 서버가 정한다(실서버는 UUID). 서버가 전체 공지를 맨 앞에 정렬해 준다.
+  if (!boardId && boardsPending) return <SkeletonRows rows={5} />
+  const first = boards?.items[0]
+  if (!boardId && first) return <Navigate to={`/board/${first.id}`} replace />
 
   const board = boards?.items.find((b) => b.id === boardId)
 
-  if (!boardsPending && !board) {
+  if (!boardId || (!boardsPending && !board)) {
     return <PageHeader title="게시판을 찾을 수 없습니다" description="주소를 다시 확인해 주세요." />
   }
 
