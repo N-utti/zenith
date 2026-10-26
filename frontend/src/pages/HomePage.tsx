@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router'
 import { Plus } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { AnnouncementsCard } from '@/features/home/AnnouncementsCard'
@@ -12,6 +11,7 @@ import { useMentions } from '@/features/home/api'
 import { countUnread } from '@/features/notifications/view'
 import { useCurrentUser } from '@/features/auth/AuthContext'
 import { NewDocModal } from '@/features/docs/NewDocModal'
+import { NewChatModal } from '@/features/chat/NewChatModal'
 
 function greeting(): string {
   const hour = new Date().getHours()
@@ -30,8 +30,8 @@ const TODAY = new Intl.DateTimeFormat('ko-KR', {
 
 export function HomePage() {
   const user = useCurrentUser()
-  const navigate = useNavigate()
   const [creatingDoc, setCreatingDoc] = useState(false)
+  const [creatingChat, setCreatingChat] = useState(false)
 
   // 청사진의 "안 읽은 항목 N". 홈 멘션 카드에 실리는 알림 중 안 읽은 것만 센다. 서버는 읽은
   // 알림까지 최근 열 건을 주므로 개수를 그대로 쓰면 다 읽어도 숫자가 남는다. 채팅 안 읽음은
@@ -55,7 +55,7 @@ export function HomePage() {
           <Button onClick={() => setCreatingDoc(true)}>
             <Plus className="size-4" />새 문서
           </Button>
-          <Button variant="secondary" onClick={() => void navigate('/chat')}>
+          <Button variant="secondary" onClick={() => setCreatingChat(true)}>
             <Plus className="size-4" />새 메시지
           </Button>
         </div>
@@ -97,6 +97,13 @@ export function HomePage() {
 
       {/* 헤더 버튼과 "이어서 작업"의 빈 목록 버튼이 같이 연다. */}
       {creatingDoc && <NewDocModal onClose={() => setCreatingDoc(false)} />}
+      {creatingChat && (
+        <NewChatModal
+          mode="dm"
+          onClose={() => setCreatingChat(false)}
+          onCreated={() => setCreatingChat(false)}
+        />
+      )}
     </>
   )
 }

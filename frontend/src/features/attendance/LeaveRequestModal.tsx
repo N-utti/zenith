@@ -104,7 +104,7 @@ export function LeaveRequestModal({
       open
       onClose={close}
       title="휴가 신청"
-      description={`${balance.year}년 잔여 연차 ${balance.remaining}일. 결재가 끝나면 반영됩니다.`}
+      description={`${balance.year}년 잔여 연차 ${balance.remaining}일. 신청하면 바로 차감되고 반려·취소되면 돌아옵니다.`}
       footer={
         <>
           <Button variant="secondary" size="sm" onClick={close}>

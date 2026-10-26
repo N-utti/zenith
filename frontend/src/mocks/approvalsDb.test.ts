@@ -548,3 +548,21 @@ describe('임시저장 지우기', () => {
     expect(getApproval(member, pending.id)).toMatchObject({ id: pending.id })
   })
 })
+
+describe('금액 검증', () => {
+  // 서버 스키마는 원 단위 정수 0 ~ 10^13 이다. 목이 더 느슨하면 실서버에서만 422 가 난다.
+  const draftWith = (amount: number) =>
+    createDraft(member, {
+      type_code: 'general',
+      title: '금액',
+      subject: { body: '본문', amount, related: null },
+    })
+
+  it('소수·음수·상한 초과는 422, 상한까지는 받는다', () => {
+    expect(draftWith(1.5)).toMatchObject({ code: 'VALIDATION' })
+    expect(draftWith(-1)).toMatchObject({ code: 'VALIDATION' })
+    expect(draftWith(10 ** 13 + 1)).toMatchObject({ code: 'VALIDATION' })
+    expect(draftWith(10 ** 13)).not.toHaveProperty('error')
+    expect(draftWith(0)).not.toHaveProperty('error')
+  })
+})

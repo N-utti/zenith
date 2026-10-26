@@ -72,7 +72,11 @@ export function ProjectBoardPage() {
     return (
       <>
         <BackLink to="/projects">협업 공간</BackLink>
-        <p className="text-danger py-8 text-center text-sm">프로젝트를 불러오지 못했습니다.</p>
+        <p className="text-danger py-8 text-center text-sm">
+          {project.error instanceof ApiError && project.error.status === 404
+            ? '없거나 삭제된 프로젝트입니다.'
+            : '프로젝트를 불러오지 못했습니다.'}
+        </p>
       </>
     )
   }

@@ -226,6 +226,24 @@ export function createOvertime(user: User, input: OvertimeInput): { item: Overti
   if (overtimeMinutes(input.start_time, input.end_time, isDayOff(input.work_date)).minutes === 0) {
     return invalid('소정 종업 시각(18:00) 이후 구간이 없습니다.')
   }
+  // 서버처럼 같은 날 대기·승인 신청과 시간이 겹치면 409. 자정을 넘기면 끝이 다음 날로 간다.
+  const range = (start: string, end: string) => {
+    const from = Number(start.slice(0, 2)) * 60 + Number(start.slice(3, 5))
+    return [from, from + overtimeSpan(start, end)] as const
+  }
+  const [from, to] = range(input.start_time, input.end_time)
+  const overlaps = overtimesFor(user).some((r) => {
+    if (r.work_date !== input.work_date || !['pending', 'approved'].includes(r.status)) return false
+    const [a, b] = range(r.start_time, r.end_time)
+    return a < to && from < b
+  })
+  if (overlaps) {
+    return {
+      error: '같은 날 시간이 겹치는 연장근로 신청이 있습니다.',
+      status: 409,
+      code: 'CONFLICT',
+    }
+  }
   if (isClosedRange(input.work_date)) return MONTH_CLOSED
   const item = overtime(
     input.work_date,

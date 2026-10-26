@@ -22,13 +22,21 @@ import {
 } from '@/features/approvals/api'
 import { AttachmentList } from '@/features/approvals/AttachmentList'
 import { StepTimeline } from '@/features/approvals/StepTimeline'
-import { APPROVAL_TYPE_LABEL, statusLabel, statusTone } from '@/features/approvals/types'
+import {
+  APPROVAL_TYPE_LABEL,
+  statusLabel,
+  statusTone,
+  type StepStatus,
+} from '@/features/approvals/types'
 import { useCurrentUser } from '@/features/auth/AuthContext'
 import { ApiError } from '@/lib/api'
 import { formatDateTime } from '@/lib/datetime'
 import { ROLE_RANK } from '@/types'
 
 const won = new Intl.NumberFormat('ko-KR')
+
+/** 누가 손댄 단계. 서버(`approvals.py` 의 `DECIDED`)는 이런 단계가 있으면 회수를 409 로 거절한다. */
+const DECIDED_STEPS = new Set<StepStatus>(['approved', 'rejected', 'delegated_done'])
 
 /** 사유를 받아야 끝나는 두 동작. 문구만 다르고 폼은 같다. */
 const REASON_FORM = {
@@ -69,7 +77,9 @@ export function ApprovalDetailPage() {
     const message =
       doc.error instanceof ApiError && doc.error.status === 403
         ? '열람 권한이 없습니다. 기안자 · 결재선에 오른 사람 · 임원만 볼 수 있습니다.'
-        : '문서를 불러오지 못했습니다.'
+        : doc.error instanceof ApiError && doc.error.status === 404
+          ? '없거나 삭제된 문서입니다.'
+          : '문서를 불러오지 못했습니다.'
     return (
       <div className="py-16 text-center">
         <p className="text-muted text-sm">{message}</p>
@@ -175,7 +185,8 @@ export function ApprovalDetailPage() {
                 </Button>
                 <Button
                   size="sm"
-                  disabled={busy}
+                  // 서버는 본문 없는 상신을 422 로 거절한다. 새 기안 화면과 같이 버튼부터 끈다.
+                  disabled={busy || !d.subject.body.trim()}
                   onClick={() =>
                     submit.mutate(d.id, {
                       onSuccess: () => toast.success('상신했습니다.'),
@@ -196,19 +207,25 @@ export function ApprovalDetailPage() {
                 다시 작성
               </Button>
             )}
-            {isDrafter && d.status === 'pending' && (
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={busy}
-                onClick={() => {
-                  if (!confirm('이 문서를 회수할까요? 결재자의 결재함에서 사라집니다.')) return
-                  cancel.mutate(d.id, { onSuccess: () => toast.success('회수했습니다.'), onError })
-                }}
-              >
-                회수
-              </Button>
-            )}
+            {/* 손댄 단계가 있으면 회수할 수 없다. 반려를 요청할 일이다. */}
+            {isDrafter &&
+              d.status === 'pending' &&
+              !d.steps.some((s) => DECIDED_STEPS.has(s.status)) && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={busy}
+                  onClick={() => {
+                    if (!confirm('이 문서를 회수할까요? 결재자의 결재함에서 사라집니다.')) return
+                    cancel.mutate(d.id, {
+                      onSuccess: () => toast.success('회수했습니다.'),
+                      onError,
+                    })
+                  }}
+                >
+                  회수
+                </Button>
+              )}
             {actingForOther && <Badge tone="warning">{current?.approver.name} 님 대신</Badge>}
             {myTurn && current && (
               <>
@@ -268,7 +285,11 @@ export function ApprovalDetailPage() {
         <Card>
           <CardHeader title="결재선" />
           <div className="px-5 pb-5">
-            <StepTimeline steps={d.steps} currentStep={d.current_step} />
+            <StepTimeline
+              steps={d.steps}
+              currentStep={d.current_step}
+              draft={d.status === 'draft'}
+            />
           </div>
         </Card>
       </div>

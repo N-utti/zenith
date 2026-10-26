@@ -1228,6 +1228,12 @@ function DocSurface({
                 <input
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
+                  // 제목에서 엔터는 본문 맨 앞으로 내려간다. 한글 조합을 끝내는 엔터는 그대로 둔다.
+                  onKeyDown={(e) => {
+                    if (e.key !== 'Enter' || e.nativeEvent.isComposing) return
+                    e.preventDefault()
+                    editor?.commands.focus('start')
+                  }}
                   placeholder={UNTITLED_DOC}
                   aria-label="문서 제목"
                   className="text-fg placeholder:text-subtle w-full bg-transparent py-2 text-3xl font-bold tracking-tight outline-none"
