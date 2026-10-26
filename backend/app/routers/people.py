@@ -10,24 +10,27 @@ ponytail: 15명 사내라 페이징·검색 없이 전부 준다. 수백 명이 
 import uuid
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai import chat_command
 from app.db import get_db
 from app.deps import current_user
-from app.models import User
+from app.models import Team, User
+from app.routers.auth import TeamOut
 
 router = APIRouter(tags=["people"], dependencies=[Depends(current_user)])
 
 
 class PersonOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
     id: uuid.UUID
     name: str
     active: bool
+    # 등급·팀(2026-10-26, 이슈 #526 — README 18 이 일부러 뺐던 칸): 결재 참조 칸의 임원·사원 줄 가르기, 프로필 카드 팀 이름.
+    # `GET /me` 와 같은 값(member·lead·exec)·같은 모양. 15명 사내라 누가 임원이고 어느 팀인지는 조직도로 이미 알려져 있다.
+    role: str
+    team: TeamOut | None
 
 
 class Items[T](BaseModel):
@@ -37,17 +40,29 @@ class Items[T](BaseModel):
 @router.get(
     "/people",
     response_model=Items[PersonOut],
-    summary="사람 목록 — DM 상대·참조자·위임 대상 고르기. 이름순, 비활성 포함(active 로 구분)",
+    summary="사람 목록 — DM 상대·참조자·위임 대상 고르기. 이름순, 비활성 포함(active 로 구분), 등급·팀 포함",
 )
 async def list_people(db: AsyncSession = Depends(get_db)) -> Items[PersonOut]:
     # 전사 공개가 성립하는 전제: 공개 채널에 전원이 들어가 `GET /channels` 의 members[] 가 이미 같은
     # 명단을 준다(channels.join_public_channels — 비공개 채널(README 12)은 건너뛰지만 공개 채널엔 여전히 전원). 초대제로 바꾸면 이
     # 경로도 같이 좁혀야 한다 — 안 그러면 좁힌 멤버십이 여기로 그대로 샌다.
     # 비활성도 준다: 감춰도 `/channels` members[] 와의 차집합으로 드러나므로 숨기는 대신 명시한다.
-    # 세 칸만 — 로그인하면 누구나 부르는 경로라 비밀번호 해시까지 메모리로 끌어올 이유가 없다.
+    # 필요한 칸만 — 로그인하면 누구나 부르는 경로라 비밀번호 해시·이메일까지 메모리로 끌어올 이유가 없다.
     rows = await db.execute(
-        select(User.id, User.name, User.active)
+        select(User.id, User.name, User.active, User.role, Team.id, Team.name)
+        .outerjoin(Team, Team.id == User.team_id)
         .where(User.email != chat_command.AI_EMAIL)  # AI 시스템 계정(README 52)은 사람 목록에 없다
         .order_by(User.name)
     )
-    return Items(items=[PersonOut.model_validate(r) for r in rows])
+    return Items(
+        items=[
+            PersonOut(
+                id=uid,
+                name=name,
+                active=active,
+                role=role,
+                team=TeamOut(id=team_id, name=team_name) if team_id is not None else None,
+            )
+            for uid, name, active, role, team_id, team_name in rows
+        ]
+    )

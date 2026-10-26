@@ -1580,7 +1580,7 @@
         "tags": [
           "people"
         ],
-        "summary": "사람 목록 — DM 상대·참조자·위임 대상 고르기. 이름순, 비활성 포함(active 로 구분)",
+        "summary": "사람 목록 — DM 상대·참조자·위임 대상 고르기. 이름순, 비활성 포함(active 로 구분), 등급·팀 포함",
         "operationId": "list_people_api_people_get",
         "responses": {
           "200": {
@@ -12642,13 +12642,29 @@
           "active": {
             "type": "boolean",
             "title": "Active"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role"
+          },
+          "team": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TeamOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
         "required": [
           "id",
           "name",
-          "active"
+          "active",
+          "role",
+          "team"
         ],
         "title": "PersonOut"
       },
