@@ -1,6 +1,5 @@
 import { lazy, Suspense } from 'react'
 import { Route, Routes } from 'react-router'
-import { CRM_ENABLED, PROJECTS_ENABLED } from '@/app/navigation'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { Spinner } from '@/components/ui/Spinner'
 import { LoginPage } from '@/features/auth/LoginPage'
@@ -83,22 +82,12 @@ export function AppRoutes() {
             <Route path="approvals" element={<ApprovalsPage />} />
             <Route path="approvals/new" element={<ApprovalNewPage />} />
             <Route path="approvals/:approvalId" element={<ApprovalDetailPage />} />
-            {/* CRM 은 v1.1. 운영 빌드에서는 라우트째 빠진다(navigation.ts `CRM_ENABLED`). */}
-            {CRM_ENABLED && (
-              <>
-                <Route path="crm" element={<CrmBoardPage />} />
-                <Route path="crm/deals/:dealId" element={<CrmDealPage />} />
-                <Route path="crm/orgs" element={<CrmOrgsPage />} />
-                <Route path="crm/orgs/:orgId" element={<CrmOrgPage />} />
-              </>
-            )}
-            {/* 협업 공간은 실서버 확인 전이라 운영 빌드에서 라우트째 빠진다(navigation.ts `PROJECTS_ENABLED`). */}
-            {PROJECTS_ENABLED && (
-              <>
-                <Route path="projects" element={<ProjectsPage />} />
-                <Route path="projects/:projectId" element={<ProjectBoardPage />} />
-              </>
-            )}
+            <Route path="crm" element={<CrmBoardPage />} />
+            <Route path="crm/deals/:dealId" element={<CrmDealPage />} />
+            <Route path="crm/orgs" element={<CrmOrgsPage />} />
+            <Route path="crm/orgs/:orgId" element={<CrmOrgPage />} />
+            <Route path="projects" element={<ProjectsPage />} />
+            <Route path="projects/:projectId" element={<ProjectBoardPage />} />
             <Route path="archive" element={<ArchivePage />} />
             <Route path="notifications" element={<NotificationsPage />} />
             <Route path="settings" element={<SettingsPage />} />
