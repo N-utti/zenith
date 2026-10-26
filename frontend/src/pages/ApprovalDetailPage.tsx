@@ -199,19 +199,25 @@ export function ApprovalDetailPage() {
                 다시 작성
               </Button>
             )}
-            {isDrafter && d.status === 'pending' && (
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={busy}
-                onClick={() => {
-                  if (!confirm('이 문서를 회수할까요? 결재자의 결재함에서 사라집니다.')) return
-                  cancel.mutate(d.id, { onSuccess: () => toast.success('회수했습니다.'), onError })
-                }}
-              >
-                회수
-              </Button>
-            )}
+            {/* 누가 손댄 단계(승인·대결)가 있으면 서버가 회수를 409 로 거절한다. 반려를 요청할 일이다. */}
+            {isDrafter &&
+              d.status === 'pending' &&
+              d.steps.every((s) => s.status === 'waiting' || s.status === 'skipped') && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={busy}
+                  onClick={() => {
+                    if (!confirm('이 문서를 회수할까요? 결재자의 결재함에서 사라집니다.')) return
+                    cancel.mutate(d.id, {
+                      onSuccess: () => toast.success('회수했습니다.'),
+                      onError,
+                    })
+                  }}
+                >
+                  회수
+                </Button>
+              )}
             {actingForOther && <Badge tone="warning">{current?.approver.name} 님 대신</Badge>}
             {myTurn && current && (
               <>
