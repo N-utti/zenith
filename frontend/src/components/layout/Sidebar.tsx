@@ -1,5 +1,5 @@
 import { memo, useRef, useState, type ReactNode } from 'react'
-import { NavLink, useLocation, useMatch } from 'react-router'
+import { NavLink, useLocation } from 'react-router'
 import { ChevronDown, ChevronRight, Lock, Pencil, Plus, X } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { useFocusTrap } from '@/lib/useFocusTrap'
@@ -203,14 +203,14 @@ export function ChannelSection({ onNavigate }: { onNavigate?: () => void }) {
   const [creating, setCreating] = useState<'channel' | 'dm' | null>(null)
   const [channelsCollapsed, toggleChannels] = useSectionCollapsed('channels')
   const [dmsCollapsed, toggleDms] = useSectionCollapsed('dms')
-  const activeId = useMatch('/chat/:channelId')?.params.channelId
   const channels = (data?.items ?? []).filter((channel) => !channel.is_dm)
   const dms = (data?.items ?? []).filter((channel) => channel.is_dm)
   if (data === undefined) return null
 
-  // 접어도 안 읽은 방과 지금 보고 있는 방은 남긴다. 통째로 숨기면 새 메시지가 온 줄 모른다.
+  // 접어도 안 읽은 방은 남긴다. 통째로 숨기면 새 메시지가 온 줄 모른다.
+  // 보고 있는 방은 남기지 않는다. 방 이름은 화면 머리에 이미 나온다.
   const shown = (rooms: ChatChannel[], collapsed: boolean) =>
-    collapsed ? rooms.filter((room) => room.unread > 0 || room.id === activeId) : rooms
+    collapsed ? rooms.filter((room) => room.unread > 0) : rooms
 
   return (
     <>

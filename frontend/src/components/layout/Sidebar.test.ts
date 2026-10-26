@@ -89,20 +89,25 @@ const rooms = (container: HTMLElement) =>
 const label = (container: HTMLElement, text: string) =>
   [...container.querySelectorAll('button')].find((b) => b.textContent === text)!
 
-test('채널 구획을 접으면 안 읽은 방과 보고 있는 방만 남고, 다시 그려도 접혀 있다', () => {
+test('채널 구획을 접으면 안 읽은 방만 남고(보고 있는 방도 접힌다), 다시 그려도 접혀 있다', () => {
   api.mockResolvedValue({ items: [] })
   const first = render()
   expect(rooms(first)).toEqual(['/chat/c-1', '/chat/c-2', '/chat/c-3', '/chat/d-1'])
 
   act(() => label(first, '채널').click())
-  // c-1 만 빠진다. c-2 는 보고 있는 방, c-3 은 안 읽은 방, d-1 은 접지 않은 DM 구획이다.
-  expect(rooms(first)).toEqual(['/chat/c-2', '/chat/c-3', '/chat/d-1'])
+  // c-3 은 안 읽은 방, d-1 은 접지 않은 DM 구획이다. 보고 있는 c-2 도 빠진다.
+  expect(rooms(first)).toEqual(['/chat/c-3', '/chat/d-1'])
   expect(label(first, '채널').getAttribute('aria-expanded')).toBe('false')
   expect(localStorage.getItem('zenith.sidebarSectionsCollapsed')).toBe('["channels"]')
 
   // 편집 화면을 드나들 때처럼 사이드바가 새로 마운트돼도 접힘이 남는다.
   act(() => root!.unmount())
-  expect(rooms(render())).toEqual(['/chat/c-2', '/chat/c-3', '/chat/d-1'])
+  const second = render()
+  expect(rooms(second)).toEqual(['/chat/c-3', '/chat/d-1'])
+
+  // 접힘은 모듈에 남는다. 뒤 테스트가 펼친 채로 시작하게 되돌린다.
+  act(() => label(second, '채널').click())
+  expect(rooms(second)).toEqual(['/chat/c-1', '/chat/c-2', '/chat/c-3', '/chat/d-1'])
 })
 
 test('DM 상대가 접속해 있으면 그 줄에 초록 점이 붙는다', () => {
