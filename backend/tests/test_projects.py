@@ -228,3 +228,44 @@ async def test_task_crud_and_validation(
     assert r.status_code == 204
     r = await client.get(f"{API}/projects/{project['id']}", headers=h)
     assert r.json()["task_count"] == 1 and r.json()["done_count"] == 1
+
+
+async def test_task_start_date(client: AsyncClient, users: Users) -> None:
+    """#520: 시작일은 마감일과 같은 꼴 — 기본 null, 같은 날 허용, 시작 > 마감은 만들 때도 고칠 때도(한쪽만 보내도) 422."""
+    h = await _as(client, "sujin@zenith.co.kr")
+    project = await _project(client, h)
+
+    task = await _task(client, h, project["id"])
+    assert task["start_date"] is None
+    same = await _task(client, h, project["id"], start_date="2026-11-02", due_date="2026-11-02")
+    assert same["start_date"] == same["due_date"] == "2026-11-02"
+    r = await client.post(
+        f"{API}/projects/{project['id']}/tasks",
+        json={"title": "a", "start_date": "2026-11-03", "due_date": "2026-11-02"},
+        headers=h,
+    )
+    assert (r.status_code, r.json()["code"]) == (422, "VALIDATION")
+    assert r.json()["detail"] == "시작일이 마감일보다 늦습니다."
+
+    # 고치기: 저장된 마감(11-02)보다 늦은 시작만 보내도, 저장된 시작보다 이른 마감만 보내도 422
+    for bad in ({"start_date": "2026-11-03"}, {"due_date": "2026-11-01"}):
+        r = await client.patch(f"{API}/project-tasks/{same['id']}", json=bad, headers=h)
+        assert r.status_code == 422, (bad, r.text)
+    # 둘을 같이 옮기면 되고, 시작일은 null 로 비울 수 있다
+    r = await client.patch(
+        f"{API}/project-tasks/{same['id']}",
+        json={"start_date": "2026-11-10", "due_date": "2026-11-12"},
+        headers=h,
+    )
+    assert r.status_code == 200 and r.json()["start_date"] == "2026-11-10"
+    r = await client.patch(
+        f"{API}/project-tasks/{same['id']}", json={"start_date": None}, headers=h
+    )
+    assert r.status_code == 200 and r.json()["start_date"] is None
+    # 시작일만 있는 업무에서 마감을 비워도 된다
+    r = await client.patch(
+        f"{API}/project-tasks/{same['id']}",
+        json={"start_date": "2026-11-20", "due_date": None},
+        headers=h,
+    )
+    assert r.status_code == 200 and r.json()["due_date"] is None
