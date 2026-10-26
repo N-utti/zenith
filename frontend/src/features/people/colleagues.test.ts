@@ -1,10 +1,18 @@
 import { expect, it } from 'vitest'
 import { byTier, pickable, type Colleague } from './colleagues'
 
+const person = (id: string, name: string, active: boolean, role = 'member'): Colleague => ({
+  id,
+  name,
+  active,
+  role,
+  team: null,
+})
+
 const people: Colleague[] = [
-  { id: 'u-1', name: '진수연', active: true },
-  { id: 'u-2', name: '정성운', active: true },
-  { id: 'u-9', name: '퇴사자', active: false },
+  person('u-1', '진수연', true),
+  person('u-2', '정성운', true),
+  person('u-9', '퇴사자', false),
 ]
 
 it('자기 자신과 비활성 계정은 고를 수 없다', () => {
@@ -17,16 +25,19 @@ it('서버가 준 순서를 그대로 둔다. 이름순은 서버가 정한다',
   expect(pickable(people, 'x').map((p) => p.name)).toEqual(['진수연', '정성운'])
 })
 
-it('임원·사원으로 가른다. 등급이 없으면 가르지 않는다', () => {
-  expect(byTier(people)).toBeNull()
-  const tiered: Colleague[] = [
-    { id: 'a', name: '가', active: true, role: 'member' },
-    { id: 'b', name: '나', active: true, role: 'exec' },
-    { id: 'c', name: '다', active: true, role: 'lead' },
+it('임원·사원으로 가른다', () => {
+  const tiered = [
+    person('a', '가', true),
+    person('b', '나', true, 'exec'),
+    person('c', '다', true, 'lead'),
   ]
   expect(byTier(tiered)).toEqual([
     { label: '임원', people: [tiered[1]] },
     // 등급은 두 단이다. 죽은 lead 는 사원 쪽.
     { label: '사원', people: [tiered[0], tiered[2]] },
   ])
+})
+
+it('없는 쪽 묶음은 뺀다. 임원이 없으면 사원 줄 하나', () => {
+  expect(byTier(people)).toEqual([{ label: '사원', people }])
 })

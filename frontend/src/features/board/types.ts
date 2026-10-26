@@ -35,14 +35,7 @@ export type Person = Schema<'app__routers__boards__Person'>
  * `masked` 는 권한 밖 글이다. **목록에서 지우지 않고 제목을 가린 채 남긴다**.
  * PRD 성공 기준이 "제목 마스킹 + 본문 API 403"이다.
  */
-export type BoardPost = Omit<Schema<'PostOut'>, 'min_role'> & {
-  min_role: Role
-  /**
-   * 목만 싣는 고정 표시. 서버에는 `pinned` 컬럼이 없다(backend/README "설계와 어긋나는 것" 14 (g)).
-   * 칸을 여는 제안은 이슈 #528. 없으면 고정 버튼을 띄우지 않는다.
-   */
-  pinned?: boolean
-}
+export type BoardPost = Omit<Schema<'PostOut'>, 'min_role'> & { min_role: Role }
 
 /**
  * 게시글 첨부(백엔드 #306). 채팅 첨부(`AttachmentOut`)와 같은 모양이다.

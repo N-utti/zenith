@@ -95,8 +95,8 @@ export function BoardPostPage() {
           </h1>
           {canEdit && (
             <div className="flex shrink-0 gap-2">
-              {/* 서버가 `pinned` 를 줄 때만 띄운다. 지금 실서버는 모르는 칸을 버려서 눌러도 그대로다(#528). */}
-              {post.pinned !== undefined && (
+              {/* 고정은 글쓴이라도 임원만 한다. */}
+              {me.role === 'exec' && (
                 <Button variant="secondary" size="sm" onClick={togglePin} disabled={pin.isPending}>
                   {post.pinned ? <PinOff className="size-4" /> : <Pin className="size-4" />}
                   {post.pinned ? '고정 해제' : '고정'}

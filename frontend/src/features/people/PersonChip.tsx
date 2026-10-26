@@ -33,8 +33,6 @@ export function PersonChip({
 
 /**
  * 고를 사람들의 칩 묶음. 임원과 사원을 두 줄로 가른다(`byTier`).
- *
- * 등급은 서버가 줄 때만 안다. 안 주는 동안에는 가르지 않고 한 줄로 그린다.
  */
 export function PersonChips({
   people,
@@ -47,18 +45,11 @@ export function PersonChips({
 }) {
   return (
     <div className="flex flex-col gap-2">
-      {(byTier(people) ?? [{ label: null, people }]).map((group) => (
-        <div
-          key={group.label ?? 'all'}
-          role={group.label ? 'group' : undefined}
-          aria-label={group.label ?? undefined}
-          className="flex gap-2"
-        >
-          {group.label && (
-            <span aria-hidden className="text-subtle w-8 shrink-0 pt-1.5 text-xs">
-              {group.label}
-            </span>
-          )}
+      {byTier(people).map((group) => (
+        <div key={group.label} role="group" aria-label={group.label} className="flex gap-2">
+          <span aria-hidden className="text-subtle w-8 shrink-0 pt-1.5 text-xs">
+            {group.label}
+          </span>
           <div className="flex flex-wrap gap-1.5">
             {group.people.map((each) => (
               <PersonChip

@@ -21,7 +21,6 @@ import {
   personName,
   PROJECT_DESCRIPTION_MAX,
   PROJECT_NAME_MAX,
-  START_DATE_ENABLED,
   TASK_NOTE_MAX,
   TASK_PRIORITIES,
   TASK_STAGES,
@@ -179,7 +178,7 @@ export function TaskFormModal({
       title: task.title,
       stage: task.stage,
       assignee_id: task.assignee?.id ?? null,
-      start_date: task.start_date ?? null,
+      start_date: task.start_date,
       due_date: task.due_date,
       priority: task.priority,
       note: task.note,
@@ -233,19 +232,17 @@ export function TaskFormModal({
             />
           )}
         </Field>
-        {START_DATE_ENABLED && (
-          <Field label="시작일">
-            {(slot) => (
-              <Input
-                {...slot}
-                type="date"
-                value={start}
-                max={due || undefined}
-                onChange={(e) => setStart(e.target.value)}
-              />
-            )}
-          </Field>
-        )}
+        <Field label="시작일">
+          {(slot) => (
+            <Input
+              {...slot}
+              type="date"
+              value={start}
+              max={due || undefined}
+              onChange={(e) => setStart(e.target.value)}
+            />
+          )}
+        </Field>
         <Field label="마감일">
           {(slot) => (
             <Input

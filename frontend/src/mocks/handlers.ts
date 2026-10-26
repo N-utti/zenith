@@ -38,6 +38,7 @@ import {
   addPostComment,
   canDownloadPostAttachment,
   canEdit,
+  canPin,
   canRead,
   checkPostAttachments,
   createPost,
@@ -615,14 +616,14 @@ export const handlers = [
     if (!body) return validationError('본문이 JSON 이 아닙니다.')
     const shapeError = checkPostFields(body)
     if (shapeError) return shapeError
-    // 서버에는 아직 칸이 없다(이슈 #528). 고정할 수 있는 사람은 글을 고칠 수 있는 사람으로 둔다.
-    if (body.pinned !== undefined && typeof body.pinned !== 'boolean') {
+    if (body.pinned != null && typeof body.pinned !== 'boolean') {
       return validationError('pinned 는 참·거짓이어야 합니다.')
     }
-
     const post = findPost(String(params.postId))
     if (!post) return notFound()
     if (!canRead(user, post.min_role) || !canEdit(user, post)) return forbidden()
+    // 같은 값을 보내도 403 이다(#534).
+    if (body.pinned !== undefined && !canPin(user)) return forbidden()
 
     // 첨부는 그 글이 있는 게시판에 올린 파일이어야 한다.
     const filesError = checkPostAttachments(
@@ -634,8 +635,20 @@ export const handlers = [
     if (filesError) return validationError(filesError)
 
     // 보내지 않은 값은 그대로 둔다. null 은 "지움" 이 아니라 422 다.
-    for (const key of ['title', 'body'] as const) {
+    for (const key of ['title', 'body', 'pinned'] as const) {
       if (body[key] === null) return validationError(`${key} 는 null 일 수 없습니다.`)
+    }
+
+    // 서버도 값이 실제로 바뀔 때만 남긴다.
+    if (typeof body.pinned === 'boolean' && body.pinned !== post.pinned) {
+      recordAudit({
+        kind: 'boards.post_pinned',
+        actor_id: user.id,
+        target_id: post.board_id,
+        ip: '127.0.0.1',
+        user_agent: navigator.userAgent,
+        detail: { post_id: post.id, pinned: body.pinned },
+      })
     }
 
     return HttpResponse.json(
@@ -809,8 +822,7 @@ export const handlers = [
   // ── 사람 목록 ─────────────────────────────────────────────
   /**
    * 사람 고르는 자리가 쓰는 명단(#117). 계정 목록(`/admin/users`)과 달리 로그인하면 누구나.
-   * `role` 은 서버 계약에 아직 없다. 결재 참조자를 사원·임원으로 가르려고 요청한 칸이다.
-   * `team` 도 아직 없다. 채팅 프로필 카드에 팀을 보이려고 요청한 칸이다.
+   * 등급 `role`·팀 `team` 은 #533 으로 들어왔다.
    *
    * 관리 화면과 같은 저장소를 본다. 두 벌이면 계정을 비활성으로 바꿔도 대화 상대 목록에
    * 그대로 남는다 — 실서버에서는 안 생기는 차이다.

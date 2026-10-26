@@ -211,7 +211,7 @@ function ProfileCard({
             {person.name}
             {mine && <span className="text-subtle ml-1 text-xs font-normal">(나)</span>}
           </p>
-          {/* 남의 팀은 사람 목록의 `team` 이다. 계약에 아직 없어 서버가 안 주는 동안은 줄째 없다(`Colleague`). */}
+          {/* 남의 팀은 사람 목록의 `team` 이다. 소속이 없으면 줄째 없다. */}
           {team && <p className="text-muted truncate text-xs">{team.name}</p>}
           {kind && (
             <span className="text-info bg-info/12 mt-1 inline-block rounded-full px-2 py-px text-xs leading-4 font-medium">

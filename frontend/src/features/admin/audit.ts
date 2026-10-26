@@ -201,6 +201,13 @@ export function auditView(event: AuditEvent): AuditView {
     case 'boards.post_deleted':
       return { summary: '게시글 삭제', detail: text(detail, 'title'), tone: 'warning' }
 
+    // 서버는 글 id 만 남긴다(제목 없음).
+    case 'boards.post_pinned':
+      return {
+        summary: detail?.pinned === false ? '게시글 고정 해제' : '게시글 고정',
+        tone: 'neutral',
+      }
+
     case 'docs.ai_source':
       return {
         summary: detail?.ai_source === false ? 'AI 근거에서 문서 제외' : 'AI 근거로 문서 다시 사용',

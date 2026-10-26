@@ -71,7 +71,10 @@ function invalidateLists(qc: ReturnType<typeof useQueryClient>, boardId: string)
   void qc.invalidateQueries({ queryKey: homeKeys.home })
 }
 
-/** 고정 표시만 바꿀 때는 `pinned` 하나만 보낸다(이슈 #528, 서버에는 아직 칸이 없다). */
+/**
+ * 고정 표시만 바꿀 때는 `pinned` 하나만 보낸다. 고정은 임원만 되고, 값이 같아도 다른 사람이
+ * 보내면 403 이라 글 수정에는 절대 싣지 않는다.
+ */
 export function useUpdatePost(boardId: string, postId: string) {
   const qc = useQueryClient()
   return useMutation({
