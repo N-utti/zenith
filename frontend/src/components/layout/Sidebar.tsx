@@ -1,6 +1,6 @@
 import { memo, useRef, useState, type ReactNode } from 'react'
 import { NavLink, useLocation, useMatch } from 'react-router'
-import { AtSign, ChevronDown, ChevronRight, Lock, Pencil, Plus, X } from 'lucide-react'
+import { ChevronDown, ChevronRight, Lock, Pencil, Plus, X } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { useFocusTrap } from '@/lib/useFocusTrap'
 import { SECONDARY_NAV, TOP_NAV, visibleNav, type NavItem } from '@/app/navigation'
@@ -10,7 +10,7 @@ import { BOARD_BADGE } from '@/features/board/types'
 import { useChannels } from '@/features/chat/api'
 import { useHasDraft } from '@/features/chat/drafts'
 import { NewChatModal } from '@/features/chat/NewChatModal'
-import { OnlineDot, WorkStatus } from '@/features/chat/WorkStatus'
+import { DmAvatar, WorkStatus } from '@/features/chat/WorkStatus'
 import type { ChatChannel } from '@/features/chat/types'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -140,17 +140,19 @@ function ChannelRow({ channel, onNavigate }: { channel: ChatChannel; onNavigate?
       onClick={onNavigate}
       className={({ isActive }) => cn(ROW, 'group', isActive ? ROW_ACTIVE : ROW_IDLE)}
     >
+      {/* 아이콘 칸은 셋 다 아바타 폭(20px)이다. 다르면 채널과 DM 의 이름이 서로 어긋난다. */}
       {channel.is_dm ? (
-        <AtSign className="text-subtle size-4 shrink-0" />
+        <DmAvatar
+          channel={channel}
+          dotRing="ring-surface group-hover:ring-surface-hover group-aria-[current=page]:ring-surface md:group-aria-[current=page]:ring-accent-soft"
+        />
       ) : channel.is_private ? (
-        <Lock role="img" aria-label="비공개" className="text-subtle size-4 shrink-0" />
+        <Lock role="img" aria-label="비공개" className="text-subtle h-4 w-5 shrink-0" />
       ) : (
-        // 자물쇠와 같은 폭을 준다. 글자 폭대로 두면 공개·비공개 행의 이름이 서로 어긋난다.
-        <span className="text-subtle w-4 shrink-0 text-center">#</span>
+        <span className="text-subtle w-5 shrink-0 text-center">#</span>
       )}
       <span className="flex min-w-0 items-center gap-1.5">
         <span className="truncate">{channel.name}</span>
-        <OnlineDot channel={channel} />
         <WorkStatus channel={channel} />
         {/* 쓰다 만 글이 있는 방. 지금 보고 있는 방은 입력창에 글이 보이므로 감춘다. */}
         {hasDraft && (

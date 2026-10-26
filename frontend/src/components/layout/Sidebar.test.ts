@@ -43,7 +43,10 @@ function render(online: ReadonlySet<string> = new Set()) {
       room('c-3', { unread: 2 }),
       room('d-1', {
         is_dm: true,
-        members: [{ id: 'me' }, { id: 'u-2' }] as ChatChannel['members'],
+        members: [
+          { id: 'me', name: '나' },
+          { id: 'u-2', name: '정성운' },
+        ] as ChatChannel['members'],
       }),
     ],
   })

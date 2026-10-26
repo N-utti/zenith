@@ -13,11 +13,12 @@ function initials(name: string) {
 interface Props {
   name: string
   hue: number
-  size?: 'sm' | 'md' | 'lg'
+  size?: 'xs' | 'sm' | 'md' | 'lg'
   className?: string
 }
 
 const SIZES = {
+  xs: 'size-5 text-[9px]',
   sm: 'size-7 text-[11px]',
   md: 'size-9 text-xs',
   lg: 'size-12 text-sm',
