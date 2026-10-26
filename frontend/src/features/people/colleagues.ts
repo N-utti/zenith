@@ -2,18 +2,10 @@ import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useCurrentUser } from '@/features/auth/AuthContext'
 import { api } from '@/lib/api'
-import type { Role, Schema } from '@/types'
+import type { Schema } from '@/types'
 
-/**
- * 백엔드 `routers/people.py` 의 `Person`. 이메일은 주지 않는다.
- *
- * `role` 은 **계약에 아직 없다.** 결재 참조자를 사원·임원으로 갈라 보이려고 백엔드에 요청했고,
- * 목만 먼저 준다. 서버가 안 주는 동안에는 가르지 않고 한 줄로 보인다(`byTier`).
- *
- * `team` 도 계약에 아직 없다. 채팅 프로필 카드에 팀을 보이려고 요청했고 목만 먼저 준다.
- * 서버가 안 주는 동안 카드에는 팀 줄이 없다(`ProfileMenu`).
- */
-export type Colleague = Schema<'PersonOut'> & { role?: Role; team?: Schema<'TeamOut'> | null }
+/** 백엔드 `routers/people.py` 의 `Person`. 이메일은 주지 않는다. `team` 은 소속이 없으면 `null`. */
+export type Colleague = Schema<'PersonOut'>
 
 /**
  * 고를 수 있는 사람만 남긴다. 서버는 이름순으로, **자기 자신과 비활성 계정까지** 준다.
@@ -26,12 +18,8 @@ export function pickable(people: Colleague[], meId: string): Colleague[] {
 
 /**
  * 임원과 사원으로 가른다. 등급은 사원·임원 두 단이라 `lead` 도 사원 쪽이다.
- * 등급을 아무도 안 들고 있으면(서버가 아직 안 줌) 가르지 않고 `null`.
  */
-export function byTier(
-  people: Colleague[],
-): { label: '임원' | '사원'; people: Colleague[] }[] | null {
-  if (!people.some((person) => person.role)) return null
+export function byTier(people: Colleague[]): { label: '임원' | '사원'; people: Colleague[] }[] {
   return [
     { label: '임원' as const, people: people.filter((person) => person.role === 'exec') },
     { label: '사원' as const, people: people.filter((person) => person.role !== 'exec') },

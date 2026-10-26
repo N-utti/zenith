@@ -1,4 +1,3 @@
-import { MSW_ENABLED } from '@/mocks/accounts'
 import type { Schema } from '@/types'
 
 /** 협업 공간(프로젝트 칸반보드)의 타입. 모양은 서버 계약에서 끌어오고, 화면 라벨과 길이 상한만 여기 둔다. */
@@ -35,20 +34,9 @@ export const TASK_NOTE_MAX = 2000
 /** `can_delete` 는 만든 사람과 임원에게만 참이다. 판정은 서버가 한다. */
 export type Project = Schema<'ProjectOut'>
 
-/**
- * `start_date`·`due_date` 는 `YYYY-MM-DD`.
- *
- * `start_date` 는 **계약에 아직 없다.** 일정 탭(간트)의 막대 시작점이라 목만 먼저 준다. 서버가
- * 안 주는 동안 막대는 마감일 하루짜리로 그려진다(`timeline.ts`).
- */
-export type Task = Schema<'TaskOut'> & { start_date?: string | null }
-
-/**
- * 업무 창의 시작일 칸은 목에서만 보인다. 실서버는 모르는 칸을 버리고 200 을 줘서, 칸을 보이면
- * 저장했다는 토스트 뒤에 시작일이 사라진다. 서버에 칸이 생기면 이 스위치를 걷는다.
- */
-export const START_DATE_ENABLED = MSW_ENABLED
+/** `start_date`·`due_date` 는 `YYYY-MM-DD`. 시작일이 없으면 일정 탭 막대는 마감일 하루짜리다(`timeline.ts`). */
+export type Task = Schema<'TaskOut'>
 
 // 서버는 이름·제목 말고는 기본값을 채워 주지만, 화면은 늘 전부 보낸다.
 export type ProjectInput = Required<Schema<'ProjectIn'>>
-export type TaskInput = Required<Schema<'TaskIn'>> & { start_date: string | null }
+export type TaskInput = Required<Schema<'TaskIn'>>

@@ -69,6 +69,14 @@ describe('auditView', () => {
         }),
       ),
     ).toMatchObject({ summary: '게시글 첨부 변경', detail: '2개 붙임' })
+    expect(
+      auditView(event({ kind: 'boards.post_pinned', detail: { post_id: 'p-1', pinned: true } }))
+        .summary,
+    ).toBe('게시글 고정')
+    expect(
+      auditView(event({ kind: 'boards.post_pinned', detail: { post_id: 'p-1', pinned: false } }))
+        .summary,
+    ).toBe('게시글 고정 해제')
     // 쓴 사람과 지운 사람이 다르면 임원이 남의 댓글을 지운 것이다.
     expect(
       auditView(

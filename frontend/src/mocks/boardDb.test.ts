@@ -4,6 +4,7 @@ import {
   addPostComment,
   canDownloadPostAttachment,
   canEdit,
+  canPin,
   checkPostAttachments,
   createPost,
   deletePost,
@@ -142,4 +143,21 @@ it('첨부는 살아 있는 글이 싣고 있을 때만 받는다', () => {
   expect(canDownloadPostAttachment('all', url)).toBe(true)
   deletePost(post.id)
   expect(canDownloadPostAttachment('all', url)).toBe(false)
+})
+
+it('권한 밖 고정 글도 고정 표시를 단 채 맨 위에 온다. 백엔드와 같다', () => {
+  // 고정 안 된 더 새 글이 있어도 오래된 고정 글(p-4)이 위다.
+  const newer = createPost(exec, 'lead', { title: '새 글', body: '본문' })
+  const [first, second] = listPosts(member, 'lead')
+  expect(first).toMatchObject({ id: 'p-4', masked: true, pinned: true })
+  expect(second.id).toBe(newer.id)
+  deletePost(newer.id)
+})
+
+it('고정은 글쓴이라도 임원만', () => {
+  const mine = findPost(createPost(member, 'all', { title: '내 글', body: '본문' }).id)!
+  expect(canEdit(member, mine)).toBe(true)
+  expect(canPin(member)).toBe(false)
+  expect(canPin(exec)).toBe(true)
+  deletePost(mine.id)
 })

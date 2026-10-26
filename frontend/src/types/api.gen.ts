@@ -548,7 +548,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 사람 목록 — DM 상대·참조자·위임 대상 고르기. 이름순, 비활성 포함(active 로 구분) */
+        /** 사람 목록 — DM 상대·참조자·위임 대상 고르기. 이름순, 비활성 포함(active 로 구분), 등급·팀 포함 */
         get: operations["list_people_api_people_get"];
         put?: never;
         post?: never;
@@ -605,7 +605,7 @@ export interface paths {
         /** 프로젝트의 업무 전부 — 만든 순 */
         get: operations["list_tasks_api_projects__id__tasks_get"];
         put?: never;
-        /** 업무 만들기 {title, stage?, assignee_id?, due_date?, priority?, note?} — 담당자는 활성 사용자만(422) */
+        /** 업무 만들기 {title, stage?, assignee_id?, start_date?, due_date?, priority?, note?} — 담당자는 활성 사용자만, 시작일 > 마감일이면 422 */
         post: operations["create_task_api_projects__id__tasks_post"];
         delete?: never;
         options?: never;
@@ -627,7 +627,7 @@ export interface paths {
         delete: operations["delete_task_api_project_tasks__id__delete"];
         options?: never;
         head?: never;
-        /** 업무 고치기·단계 옮기기 — 바뀐 칸만 보낸다. assignee_id·due_date 만 null 로 비울 수 있다 */
+        /** 업무 고치기·단계 옮기기 — 바뀐 칸만 보낸다. assignee_id·start_date·due_date 만 null 로 비울 수 있다. 한쪽 날짜만 보내도 저장된 다른 쪽과 비교(422) */
         patch: operations["update_task_api_project_tasks__id__patch"];
         trace?: never;
     };
@@ -4144,6 +4144,9 @@ export interface components {
             name: string;
             /** Active */
             active: boolean;
+            /** Role */
+            role: string;
+            team: components["schemas"]["TeamOut"] | null;
         };
         /** PostCommentIn */
         PostCommentIn: {
@@ -4201,6 +4204,8 @@ export interface components {
             /** Masked */
             masked: boolean;
             author: components["schemas"]["app__routers__boards__Person"] | null;
+            /** Pinned */
+            pinned: boolean;
             /**
              * Created At
              * Format: date-time
@@ -4232,6 +4237,8 @@ export interface components {
             /** Masked */
             masked: boolean;
             author: components["schemas"]["app__routers__boards__Person"] | null;
+            /** Pinned */
+            pinned: boolean;
             /**
              * Created At
              * Format: date-time
@@ -4253,6 +4260,8 @@ export interface components {
             body?: string | null;
             /** Attachments */
             attachments?: components["schemas"]["AttachmentOut-Input"][] | null;
+            /** Pinned */
+            pinned?: boolean | null;
         };
         /** Preferences */
         Preferences: {
@@ -4547,6 +4556,8 @@ export interface components {
             stage: "todo" | "doing" | "review" | "done";
             /** Assignee Id */
             assignee_id?: string | null;
+            /** Start Date */
+            start_date?: string | null;
             /** Due Date */
             due_date?: string | null;
             /**
@@ -4581,6 +4592,8 @@ export interface components {
              */
             stage: "todo" | "doing" | "review" | "done";
             assignee: components["schemas"]["app__routers__projects__Person"] | null;
+            /** Start Date */
+            start_date: string | null;
             /** Due Date */
             due_date: string | null;
             /**
@@ -4604,6 +4617,8 @@ export interface components {
             stage?: ("todo" | "doing" | "review" | "done") | null;
             /** Assignee Id */
             assignee_id?: string | null;
+            /** Start Date */
+            start_date?: string | null;
             /** Due Date */
             due_date?: string | null;
             /** Priority */

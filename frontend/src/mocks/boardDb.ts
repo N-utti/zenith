@@ -127,7 +127,10 @@ function toListShape(post: StoredPost): BoardPost {
   }
 }
 
-/** 권한 밖 글은 제목·작성자를 가린 채로 내려간다. 목록에서 지우지 않는다. */
+/**
+ * 권한 밖 글은 제목·작성자를 가린 채로 내려간다. 목록에서 지우지 않는다.
+ * 고정 표시는 가리지 않는다. 맨 위라는 순서가 이미 드러낸다(백엔드 `PostOut.pinned`).
+ */
 function toListItem(user: User, post: StoredPost): BoardPost {
   if (canRead(user, post.min_role)) return toListShape(post)
   return {
@@ -135,7 +138,6 @@ function toListItem(user: User, post: StoredPost): BoardPost {
     title: '＿'.repeat(6),
     // 백엔드도 마스킹된 행에는 글쓴이를 싣지 않는다(routers/boards.py `_post_out`).
     author: null,
-    pinned: false,
     masked: true,
   }
 }
@@ -144,7 +146,12 @@ function toListItem(user: User, post: StoredPost): BoardPost {
 export function listPosts(user: User, boardId?: string): BoardPost[] {
   return POSTS.filter((post) => !boardId || post.board_id === boardId)
     .map((post) => toListItem(user, post))
-    .sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.created_at.localeCompare(a.created_at))
+    .sort(
+      (a, b) =>
+        Number(b.pinned) - Number(a.pinned) ||
+        b.created_at.localeCompare(a.created_at) ||
+        b.id.localeCompare(a.id),
+    )
 }
 
 /**
@@ -177,6 +184,11 @@ export function findPost(id: string): StoredPost | undefined {
 /** 글쓴이 본인 또는 임원. 백엔드 `routers/boards.py` 의 `_can_edit` 과 같은 판정이다. */
 export function canEdit(user: User, post: StoredPost): boolean {
   return post.author?.id === user.id || user.role === 'exec'
+}
+
+/** 고정·해제는 공지 성격이라 글쓴이라도 임원만. 백엔드 `update_post` 의 `pin` 거부와 같다. */
+export function canPin(user: User): boolean {
+  return user.role === 'exec'
 }
 
 export function updatePost(
