@@ -21,6 +21,7 @@ import {
   personName,
   PROJECT_DESCRIPTION_MAX,
   PROJECT_NAME_MAX,
+  START_DATE_ENABLED,
   TASK_NOTE_MAX,
   TASK_PRIORITIES,
   TASK_STAGES,
@@ -135,6 +136,7 @@ export function TaskFormModal({
   const [title, setTitle] = useState(task?.title ?? '')
   const [stage, setStage] = useState<TaskStage>(task?.stage ?? presetStage)
   const [assignee, setAssignee] = useState(task?.assignee?.id ?? '')
+  const [start, setStart] = useState(task?.start_date ?? '')
   const [due, setDue] = useState(task?.due_date ?? '')
   const [priority, setPriority] = useState<TaskPriority>(task?.priority ?? 'normal')
   const [note, setNote] = useState(task?.note ?? '')
@@ -161,10 +163,12 @@ export function TaskFormModal({
       title: title.trim(),
       stage,
       assignee_id: assignee || null,
+      start_date: start || null,
       due_date: due || null,
       priority,
       note: note.trim(),
     }
+    if (start && due && start > due) return setError('시작일이 마감일보다 늦습니다.')
     if (!task) {
       create.mutate(fields, { onSuccess: done('업무를 등록했습니다.'), onError })
       return
@@ -175,6 +179,7 @@ export function TaskFormModal({
       title: task.title,
       stage: task.stage,
       assignee_id: task.assignee?.id ?? null,
+      start_date: task.start_date ?? null,
       due_date: task.due_date,
       priority: task.priority,
       note: task.note,
@@ -228,9 +233,28 @@ export function TaskFormModal({
             />
           )}
         </Field>
+        {START_DATE_ENABLED && (
+          <Field label="시작일">
+            {(slot) => (
+              <Input
+                {...slot}
+                type="date"
+                value={start}
+                max={due || undefined}
+                onChange={(e) => setStart(e.target.value)}
+              />
+            )}
+          </Field>
+        )}
         <Field label="마감일">
           {(slot) => (
-            <Input {...slot} type="date" value={due} onChange={(e) => setDue(e.target.value)} />
+            <Input
+              {...slot}
+              type="date"
+              value={due}
+              min={start || undefined}
+              onChange={(e) => setDue(e.target.value)}
+            />
           )}
         </Field>
         <Field label="중요도">

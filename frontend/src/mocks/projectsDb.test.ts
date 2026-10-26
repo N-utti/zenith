@@ -47,6 +47,20 @@ describe('projectsDb', () => {
     })
   })
 
+  it('시작일이 마감일보다 늦으면 한쪽만 고쳐도 422 다', () => {
+    const project = ok(createProject(staff, { name: '일정', description: '' }))
+    expect(
+      createTask(project.id, { title: '거꾸로', start_date: '2026-11-02', due_date: '2026-11-01' }),
+    ).toMatchObject({ status: 422 })
+    const task = ok(
+      createTask(project.id, { title: '업무', start_date: '2026-11-01', due_date: '2026-11-05' }),
+    )
+    expect(updateTask(task.id, { start_date: '2026-11-06' })).toMatchObject({ status: 422 })
+    expect(updateTask(task.id, { due_date: '2026-10-31' })).toMatchObject({ status: 422 })
+    // 같은 날은 하루짜리 업무다.
+    expect(ok(updateTask(task.id, { start_date: '2026-11-05' })).start_date).toBe('2026-11-05')
+  })
+
   it('담당자가 비활성이 돼도 담당자를 안 건드리는 수정은 된다', () => {
     const project = ok(createProject(staff, { name: '비활성', description: '' }))
     const task = ok(createTask(project.id, { title: '업무', assignee_id: other.id }))

@@ -59,6 +59,7 @@ const seed = (
   title: string,
   stage: Task['stage'],
   assignee_id: string | null,
+  start: number | null,
   due: number | null,
   priority: Task['priority'] = 'normal',
 ): TaskRow => ({
@@ -67,6 +68,7 @@ const seed = (
   title,
   stage,
   assignee_id,
+  start_date: start === null ? null : day(start),
   due_date: due === null ? null : day(due),
   priority,
   note: '',
@@ -74,13 +76,13 @@ const seed = (
 })
 
 const TASKS: TaskRow[] = [
-  seed('tk-1', 'pj-1', '계정 일괄 발급', 'done', 'u-5', -7),
-  seed('tk-2', 'pj-1', '팀별 사용 교육 일정 잡기', 'doing', 'u-4', 3, 'high'),
-  seed('tk-3', 'pj-1', '공유 폴더 자료 이관', 'review', 'u-5', -1, 'high'),
-  seed('tk-4', 'pj-1', '결재 서식 점검', 'todo', null, 14),
-  seed('tk-5', 'pj-1', '사용 설문 만들기', 'todo', 'u-4', null, 'low'),
-  seed('tk-6', 'pj-2', '이사 업체 견적 받기', 'doing', 'u-4', 2),
-  seed('tk-7', 'pj-2', '인터넷 회선 이전 신청', 'todo', null, 9),
+  seed('tk-1', 'pj-1', '계정 일괄 발급', 'done', 'u-5', -12, -7),
+  seed('tk-2', 'pj-1', '팀별 사용 교육 일정 잡기', 'doing', 'u-4', -2, 3, 'high'),
+  seed('tk-3', 'pj-1', '공유 폴더 자료 이관', 'review', 'u-5', -6, -1, 'high'),
+  seed('tk-4', 'pj-1', '결재 서식 점검', 'todo', null, 7, 14),
+  seed('tk-5', 'pj-1', '사용 설문 만들기', 'todo', 'u-4', null, null, 'low'),
+  seed('tk-6', 'pj-2', '이사 업체 견적 받기', 'doing', 'u-4', -3, 2),
+  seed('tk-7', 'pj-2', '인터넷 회선 이전 신청', 'todo', null, null, 9),
 ]
 
 let serial = 100
@@ -149,6 +151,12 @@ function cleanTask(input: Partial<TaskInput>): Partial<TaskInput> | Failure {
       if (!account || !account.active) return invalid('담당자로 지정할 수 없는 사람입니다.')
     }
     out.assignee_id = input.assignee_id
+  }
+  if (input.start_date !== undefined) {
+    if (input.start_date !== null && !isDate(String(input.start_date))) {
+      return invalid('시작일이 올바르지 않습니다.')
+    }
+    out.start_date = input.start_date
   }
   if (input.due_date !== undefined) {
     if (input.due_date !== null && !isDate(String(input.due_date))) {
@@ -232,20 +240,28 @@ export function createTask(projectId: string, input: Partial<TaskInput>): Task |
     title: clean.title!,
     stage: clean.stage ?? 'todo',
     assignee_id: clean.assignee_id ?? null,
+    start_date: clean.start_date ?? null,
     due_date: clean.due_date ?? null,
     priority: clean.priority ?? 'normal',
     note: clean.note ?? '',
     created_at: new Date().toISOString(),
   }
+  if (reversed(row)) return reversedFailure
   TASKS.push(row)
   return toTask(row)
 }
+
+/** 시작일·마감일 중 한쪽만 고쳐도 남은 쪽과 비교한다. */
+const reversed = (row: Pick<TaskRow, 'start_date' | 'due_date'>) =>
+  !!row.start_date && !!row.due_date && row.start_date > row.due_date
+const reversedFailure = invalid('시작일이 마감일보다 늦습니다.')
 
 export function updateTask(id: string, patch: Partial<TaskInput>): Task | Failure {
   const row = TASKS.find((t) => t.id === id)
   if (!row) return notFound('업무를')
   const clean = cleanTask(patch)
   if ('error' in clean) return clean
+  if (reversed({ ...row, ...clean })) return reversedFailure
   Object.assign(row, clean)
   return toTask(row)
 }
