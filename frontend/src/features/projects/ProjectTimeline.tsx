@@ -4,8 +4,13 @@ import { formatMonth, toISODate } from '@/lib/datetime'
 import { buildTimeline, dayDate, formatTaskDate, isOverdue } from './timeline'
 import { personName, TASK_STAGES, type Task, type TaskStage } from './types'
 
-/** 하루 칸의 폭(px). 막대 위치를 이 값으로 곱해 놓는다. */
-const DAY_W = 32
+/**
+ * 하루 칸의 최소 폭(px). 날짜 숫자와 오늘 동그라미(20px)가 들어가는 폭이다. 칸은 표의 남는 폭을
+ * 똑같이 나눠 가지고, 이 폭 밑으로 줄어야 할 만큼 기간이 길 때만 가로로 스크롤된다.
+ *
+ * ponytail: 넓은 화면에서도 6주쯤 넘는 기간은 스크롤된다. 그보다 긴 프로젝트가 흔해지면 주 단위로 접는다.
+ */
+const MIN_DAY_W = 20
 
 const STAGE_BAR: Record<TaskStage, string> = {
   todo: 'bg-line-strong',
@@ -42,8 +47,12 @@ export function ProjectTimeline({
     if (scrolled.current || !el) return
     scrolled.current = true
     const visible = el.clientWidth - (labels.current?.offsetWidth ?? 0)
-    el.scrollLeft = Math.max(0, timeline.today * DAY_W - visible / 3)
+    // 스크롤이 생기는 건 칸이 최소 폭에 걸렸을 때뿐이라, 그때 하루 칸은 MIN_DAY_W 다.
+    el.scrollLeft = Math.max(0, timeline.today * MIN_DAY_W - visible / 3)
   }, [timeline.today])
+
+  /** 표 첫날부터 `day` 칸만큼의 위치를 날짜 쪽 폭에 대한 비율로. 칸 폭이 정해져 있지 않아 px 로 못 놓는다. */
+  const at = (day: number) => `${(day / timeline.length) * 100}%`
 
   return (
     <div className="space-y-2">
@@ -93,14 +102,15 @@ export function ProjectTimeline({
               </div>
             ))}
           </div>
-          <div className="relative" style={{ width: timeline.length * DAY_W }}>
+          <div className="relative flex-1" style={{ minWidth: timeline.length * MIN_DAY_W }}>
             <div className="border-line h-12 border-b">
               <div className="flex h-6">
                 {monthSpans(days).map(({ key, label, length }) => (
                   <div
                     key={key}
-                    className="shrink-0 overflow-clip"
-                    style={{ width: length * DAY_W }}
+                    className="min-w-0 overflow-clip"
+                    // 날 수만큼 늘어난다. 바탕 폭이 0 이라 달마다 정확히 하루 칸의 배수가 된다.
+                    style={{ flex: `${length} 0 0%` }}
                   >
                     {/* 달 이름은 스크롤해도 제목 열 바로 옆에 붙어 있다. 그 달 칸이 다 지나가면 같이 밀려난다.
                         붙는 자리는 제목 열 폭(LABEL_COL)과 같아야 한다. 하루이틀뿐인 달은 이름이 잘린다.
@@ -113,11 +123,7 @@ export function ProjectTimeline({
               </div>
               <div className="flex h-6">
                 {days.map((d, i) => (
-                  <span
-                    key={i}
-                    className="grid shrink-0 place-items-center text-[11px]"
-                    style={{ width: DAY_W }}
-                  >
+                  <span key={i} className="grid min-w-0 flex-1 place-items-center text-[11px]">
                     <span
                       className={cn(
                         'grid size-5 place-items-center rounded-full',
@@ -142,13 +148,13 @@ export function ProjectTimeline({
                     <div
                       key={i}
                       className="bg-sunken absolute inset-y-0"
-                      style={{ left: i * DAY_W, width: DAY_W }}
+                      style={{ left: at(i), width: at(1) }}
                     />
                   ) : null,
                 )}
                 <div
                   className="bg-accent absolute inset-y-0 w-px"
-                  style={{ left: timeline.today * DAY_W + DAY_W / 2 }}
+                  style={{ left: at(timeline.today + 0.5) }}
                 />
               </div>
               {timeline.rows.map(({ task, from, to }) => (
@@ -165,7 +171,10 @@ export function ProjectTimeline({
                         'absolute top-2 h-5 cursor-pointer rounded-md hover:opacity-80',
                         isOverdue(task, todayIso) ? 'bg-danger' : STAGE_BAR[task.stage],
                       )}
-                      style={{ left: from * DAY_W + 2, width: (to - from + 1) * DAY_W - 4 }}
+                      style={{
+                        left: `calc(${at(from)} + 2px)`,
+                        width: `calc(${at(to - from + 1)} - 4px)`,
+                      }}
                     />
                   )}
                 </div>
