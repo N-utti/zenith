@@ -184,6 +184,69 @@ async def test_edit_delete_by_author_or_exec_only(
     assert {n.user_id for n in notes} == {users.member.id, users.lead.id}  # 전원(글쓴이 제외)
 
 
+async def test_pin_exec_only_and_pinned_first(client: AsyncClient, users: Users, app_db) -> None:
+    """#528: 고정·해제는 exec 만(글쓴이라도 403 + 감사 reason=pin). 고정글은 목록 맨 위, 커서가 경계를 넘어도 빠짐·겹침 없음."""
+    s = await _seed(app_db, users)
+    titles = lambda r: [p["title"] for p in r.json()["items"]]  # noqa: E731
+
+    await login(client, "sujin@zenith.co.kr")
+    r = await client.post(
+        f"/api/boards/{s['notice'].id}/posts",
+        json={"title": "내 글", "body": "본문"},
+        headers=csrf(client),
+    )
+    mine = r.json()["id"]
+    assert r.json()["pinned"] is False
+    r = await client.patch(f"/api/posts/{mine}", json={"pinned": True}, headers=csrf(client))
+    assert r.status_code == 403  # 글쓴이여도 못 세운다
+    denied = (
+        (await app_db.execute(select(AuditEvent).where(AuditEvent.kind == "acl.denied")))
+        .scalars()
+        .all()
+    )
+    assert [d.detail["reason"] for d in denied] == ["pin"]
+
+    await login(client, "jaeho@zenith.co.kr")
+    old0, old1 = s["posts"][2], s["posts"][3]  # 공지 0·공지 1 — 가장 오래된 둘을 고정
+    for p in (old0, old1):
+        r = await client.patch(f"/api/posts/{p.id}", json={"pinned": True}, headers=csrf(client))
+        assert r.status_code == 200 and r.json()["pinned"] is True
+    r = await client.patch(f"/api/posts/{old0.id}", json={"pinned": None}, headers=csrf(client))
+    assert r.status_code == 422
+    pins = (
+        (await app_db.execute(select(AuditEvent).where(AuditEvent.kind == "boards.post_pinned")))
+        .scalars()
+        .all()
+    )
+    assert [(a.detail["post_id"], a.detail["pinned"]) for a in pins] == [
+        (str(old0.id), True),
+        (str(old1.id), True),
+    ]
+
+    # 고정글이 먼저(그 안에서 최신순), 그 뒤 나머지 최신순 — 3개씩 끊어도 경계가 맞는다
+    r = await client.get(f"/api/boards/{s['notice'].id}/posts?limit=3")
+    assert titles(r) == ["공지 1", "공지 0", "내 글"]
+    assert [p["pinned"] for p in r.json()["items"]] == [True, True, False]
+    r = await client.get(
+        f"/api/boards/{s['notice'].id}/posts?limit=3&cursor={r.json()['next_cursor']}"
+    )
+    assert titles(r) == ["공지 4", "공지 3", "공지 2"] and r.json()["next_cursor"] is None
+    assert (await client.get(f"/api/posts/{old0.id}")).json()["pinned"] is True
+
+    # 해제하면 제자리로, 같은 값으로 다시 보내면 감사 없음
+    r = await client.patch(f"/api/posts/{old1.id}", json={"pinned": False}, headers=csrf(client))
+    assert r.status_code == 200 and r.json()["pinned"] is False
+    await client.patch(f"/api/posts/{old1.id}", json={"pinned": False}, headers=csrf(client))
+    r = await client.get(f"/api/boards/{s['notice'].id}/posts?limit=2")
+    assert titles(r) == ["공지 0", "내 글"]
+    pins = (
+        (await app_db.execute(select(AuditEvent).where(AuditEvent.kind == "boards.post_pinned")))
+        .scalars()
+        .all()
+    )
+    assert len(pins) == 3 and pins[-1].detail["pinned"] is False
+
+
 async def test_post_comments(client: AsyncClient, users: Users, app_db) -> None:
     """이슈 #292: 열람·작성은 글과 같은 등급(403+감사), 고치기는 쓴 사람만, 지우기는 쓴 사람·exec. 글을 지우면 같이 사라진다."""
     s = await _seed(app_db, users)

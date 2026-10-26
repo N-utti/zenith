@@ -324,6 +324,10 @@ class Post(Base):
     title: Mapped[str] = mapped_column(Text, nullable=False)
     body: Mapped[str] = mapped_column(Text, nullable=False)
     author_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    # 고정글(2026-10-26, 이슈 #528 — 03 에 없는 칸): 목록 맨 위, 임원만 세운다
+    pinned: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=sql_text("false")
+    )  # default 도 둔다 — eager_defaults=False 라 INSERT 뒤 지연 로드가 MissingGreenlet
     # 채팅 첨부와 같은 모양 (#299, README 34). none_as_null — 없는 글은 SQL NULL(JSON null 이면 IS NULL 로 못 거른다)
     attachments: Mapped[list | None] = mapped_column(JSONB(none_as_null=True))
     created_at: Mapped[datetime] = created_at_col()

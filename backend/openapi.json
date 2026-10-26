@@ -12802,6 +12802,10 @@
               }
             ]
           },
+          "pinned": {
+            "type": "boolean",
+            "title": "Pinned"
+          },
           "created_at": {
             "type": "string",
             "format": "date-time",
@@ -12828,6 +12832,7 @@
           "title",
           "masked",
           "author",
+          "pinned",
           "created_at",
           "body",
           "attachments"
@@ -12872,6 +12877,10 @@
               }
             ]
           },
+          "pinned": {
+            "type": "boolean",
+            "title": "Pinned"
+          },
           "created_at": {
             "type": "string",
             "format": "date-time",
@@ -12887,6 +12896,7 @@
           "title",
           "masked",
           "author",
+          "pinned",
           "created_at"
         ],
         "title": "PostOut"
@@ -12961,6 +12971,17 @@
               }
             ],
             "title": "Attachments"
+          },
+          "pinned": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pinned"
           }
         },
         "type": "object",
