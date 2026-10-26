@@ -18,8 +18,8 @@
  *
  * 보내기·읽음은 REST 가 아니라 소켓 op 이다(04 §4.1). 실서버가 그렇게만 받으므로 릴레이도
  * 같게 맞춘다. 갈라 두면 목 모드에서 되는 것이 실서버에서 405 로 죽는다(이슈 #128).
- * presence · notice 는 실서버가 보내지만 릴레이는 보내지 않는다. 알림 목록은 MSW 가 들고
- * 있어 릴레이가 notice 를 보내도 다시 받은 목록이 그대로다. 실시간 알림은 실서버로 확인한다.
+ * notice 는 실서버가 보내지만 릴레이는 보내지 않는다. 알림 목록은 MSW 가 들고 있어 릴레이가
+ * notice 를 보내도 다시 받은 목록이 그대로다. 실시간 알림은 실서버로 확인한다.
  *
  * 인증은 MSW 로그인이 심는 세션 쿠키(zenith.mock.session=<userId>)로만 한다. 실제 백엔드가
  * HttpOnly 쿠키의 JWT 에서 사용자를 꺼내는 것과 같은 자리다. URL·본문의 userId 는 보지 않는다
@@ -293,8 +293,18 @@ function replyAsBot(channel) {
 export function handleChatConnection(conn, userId) {
   if (!USERS[userId]) return conn.close(4401, 'unknown user')
 
+  const online = () => [...sockets.values()]
+  const first = !online().includes(userId)
   sockets.set(conn, userId)
   console.log(`[chat] 접속: ${USERS[userId].name} (${sockets.size}명)`)
+  // 실서버(`realtime/chat.py`)처럼 이미 접속한 사람을 알려 주고, 첫 탭이면 다른 사람들에게 알린다.
+  for (const uid of new Set(online())) {
+    if (uid !== userId) conn.send(JSON.stringify({ ev: 'presence', user_id: uid, online: true }))
+  }
+  if (first) {
+    const others = online().filter((uid) => uid !== userId)
+    publishTo(others, { ev: 'presence', user_id: userId, online: true })
+  }
 
   // 보내기·읽음·타이핑은 전부 여기로 온다(04 §4.1). 실서버(`realtime/chat.py`)와 같은 규약이라야
   // 목 모드에서 되는 것이 실서버에서도 된다. 갈라지면 실서버에서만 터지는 버그가 생긴다(이슈 #128).
@@ -414,6 +424,9 @@ export function handleChatConnection(conn, userId) {
   conn.on('close', () => {
     sockets.delete(conn)
     console.log(`[chat] 해제: ${USERS[userId].name} (${sockets.size}명)`)
+    if (!online().includes(userId)) {
+      publishTo(online(), { ev: 'presence', user_id: userId, online: false })
+    }
   })
 }
 

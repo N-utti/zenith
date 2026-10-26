@@ -6,7 +6,7 @@ import { formatRelative } from '@/lib/datetime'
 import { useChannels } from './api'
 import { useHasDraft } from './drafts'
 import type { ChatChannel } from './types'
-import { WorkStatus } from './WorkStatus'
+import { OnlineDot, WorkStatus } from './WorkStatus'
 
 function Row({ channel }: { channel: ChatChannel }) {
   const isPrivate = !channel.is_dm && channel.is_private === true
@@ -39,6 +39,7 @@ function Row({ channel }: { channel: ChatChannel }) {
           >
             {channel.name}
           </span>
+          <OnlineDot channel={channel} />
           <WorkStatus channel={channel} />
           {hasDraft && (
             <Pencil role="img" aria-label="작성 중" className="text-subtle size-3.5 shrink-0" />

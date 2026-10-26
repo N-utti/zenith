@@ -5,6 +5,8 @@ import { MemoryRouter } from 'react-router'
 import { afterEach, expect, test, vi } from 'vitest'
 import { AuthContext, type AuthValue } from '@/features/auth/AuthContext'
 import { chatKeys } from '@/features/chat/api'
+import { ChatSocketContext } from '@/features/chat/ChatSocketContext'
+import type { ChatSocket } from '@/features/chat/useChatSocket'
 import type { ChatChannel } from '@/features/chat/types'
 import { ChannelSection } from './Sidebar'
 
@@ -32,10 +34,18 @@ let root: Root | undefined
 afterEach(() => act(() => root?.unmount()))
 
 /** `/chat/c-2` 를 보고 있는 사이드바의 채널·DM 구획. */
-function render() {
+function render(online: ReadonlySet<string> = new Set()) {
   const qc = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: false } } })
   qc.setQueryData(chatKeys.channels, {
-    items: [room('c-1'), room('c-2'), room('c-3', { unread: 2 }), room('d-1', { is_dm: true })],
+    items: [
+      room('c-1'),
+      room('c-2'),
+      room('c-3', { unread: 2 }),
+      room('d-1', {
+        is_dm: true,
+        members: [{ id: 'me' }, { id: 'u-2' }] as ChatChannel['members'],
+      }),
+    ],
   })
   const container = document.createElement('div')
   root = createRoot(container)
@@ -48,9 +58,13 @@ function render() {
           AuthContext,
           { value: auth },
           createElement(
-            MemoryRouter,
-            { initialEntries: ['/chat/c-2'] },
-            createElement(ChannelSection),
+            ChatSocketContext,
+            { value: { online } as unknown as ChatSocket },
+            createElement(
+              MemoryRouter,
+              { initialEntries: ['/chat/c-2'] },
+              createElement(ChannelSection),
+            ),
           ),
         ),
       ),
@@ -78,4 +92,13 @@ test('채널 구획을 접으면 안 읽은 방과 보고 있는 방만 남고, 
   // 편집 화면을 드나들 때처럼 사이드바가 새로 마운트돼도 접힘이 남는다.
   act(() => root!.unmount())
   expect(rooms(render())).toEqual(['/chat/c-2', '/chat/c-3', '/chat/d-1'])
+})
+
+test('DM 상대가 접속해 있으면 그 줄에 초록 점이 붙는다', () => {
+  api.mockResolvedValue({ items: [] })
+  const dot = (container: HTMLElement) =>
+    container.querySelector('a[href="/chat/d-1"] [aria-label="접속 중"]')
+  expect(dot(render())).toBeNull()
+  act(() => root!.unmount())
+  expect(dot(render(new Set(['u-2'])))).not.toBeNull()
 })

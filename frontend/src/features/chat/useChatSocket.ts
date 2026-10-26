@@ -71,6 +71,8 @@ function notifyIncoming(qc: QueryClient, message: ChatMessage, currentUserId: st
 
 export interface ChatSocket {
   connected: boolean
+  /** 지금 접속한 사람 id. 본인은 빠진다. 끊겨 있는 동안은 비어 있다. */
+  online: ReadonlySet<string>
   /** 채널별로 지금 입력 중인 사람 이름. 본인은 빠진다. */
   typingByChannel: Record<string, string[]>
   notifyTyping: (channelId: string) => void
@@ -113,6 +115,7 @@ export function useChatSocket(): ChatSocket {
   const toast = useToast()
 
   const [connected, setConnected] = useState(false)
+  const [online, setOnline] = useState<ReadonlySet<string>>(new Set())
   const [typingByChannel, setTypingByChannel] = useState<Record<string, string[]>>({})
 
   const socketRef = useRef<WebSocket | null>(null)
@@ -205,6 +208,8 @@ export function useChatSocket(): ChatSocket {
       socket.onclose = (event) => {
         window.clearTimeout(settleTimer)
         setConnected(false)
+        // 끊긴 사이 나간 사람은 알 길이 없다. 다시 붙으면 서버가 지금 접속한 사람을 처음부터 보낸다.
+        setOnline((current) => (current.size ? new Set() : current))
         if (closed) return
         const delay = Math.min(RECONNECT_MS * 2 ** failures, RECONNECT_MAX_MS)
         failures += 1
@@ -359,7 +364,17 @@ export function useChatSocket(): ChatSocket {
           return
         }
 
-        // presence 는 받을 화면이 없어 여기서 떨어진다(`types.ts` 의 ChatEvent).
+        if (event.ev === 'presence') {
+          const { user_id, online } = event
+          setOnline((current) => {
+            if (current.has(user_id) === online) return current
+            const next = new Set(current)
+            if (online) next.add(user_id)
+            else next.delete(user_id)
+            return next
+          })
+          return
+        }
       }
     }
 
@@ -435,6 +450,7 @@ export function useChatSocket(): ChatSocket {
 
   return {
     connected,
+    online,
     typingByChannel,
     notifyTyping,
     sendMessage,
