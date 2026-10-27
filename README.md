@@ -9,6 +9,12 @@
 - **권한은 서버가 판정한다** — 프론트의 마스킹·메뉴 숨김은 편의일 뿐, 실제 차단은 API 의 403.
 - **FE↔BE 계약** — `backend/openapi.json` 을 커밋하고 최신성 테스트가 지킨다. 프론트는 거기서 타입을 생성한다.
 
+## 🎬 시연 영상
+
+[![제니스 시연 영상 (7분)](docs/media/zenith-demo.jpg)](https://github.com/N-utti/zenith/releases/download/demo-2026-10/zenith-demo.mp4)
+
+문서 공동편집 · 채팅 `/ai` 근거 각주 · 등급별 게시판 · 전자결재 흐름을 테스트 계정으로 돌린 7분 영상. 720p, 클릭하면 재생·내려받기. (Release `demo-2026-10` 자산)
+
 ## 아키텍처
 
 FastAPI 프로세스 하나가 REST · WebSocket(채팅·알림·presence) · Yjs 릴레이(pycrdt)를 함께 담고, PostgreSQL 16(FTS + pgvector) · Redis · MinIO 를 쓴다. Caddy 가 TLS 와 정적 프론트를 맡는다. AI 는 provider 모듈 뒤의 Claude API, 임베딩은 bge-m3.
