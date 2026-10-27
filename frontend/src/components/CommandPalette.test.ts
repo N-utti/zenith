@@ -3,19 +3,38 @@ import { createRoot, type Root } from 'react-dom/client'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
+import { ToastProvider } from '@/components/ui/Toast'
 import { AuthContext, type AuthValue } from '@/features/auth/AuthContext'
 import { CommandPalette } from './CommandPalette'
 
-vi.mock('@/lib/api', () => ({
-  ApiError: class extends Error {},
-  api: (path: string) =>
-    Promise.resolve(
-      path === '/channels'
+const api = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/api', () => ({ ApiError: class extends Error {}, api }))
+
+/** 방 셋과 DM 하나(이지원). 명단에는 이지원과 아직 대화한 적 없는 박서준이 있다. */
+function fakeApi(path: string, init?: RequestInit) {
+  if (path === '/channels' && init?.method === 'POST') return Promise.resolve({ id: 'd-new' })
+  return Promise.resolve(
+    path === '/channels'
+      ? {
+          items: [
+            { id: 'c-1', name: '개발팀', is_dm: false },
+            { id: 'c-2', name: '영업팀', is_dm: false },
+            { id: 'c-3', name: '채팅 규칙', is_dm: false },
+            {
+              id: 'd-1',
+              name: '이지원',
+              is_dm: true,
+              members: [{ id: 'u1' }, { id: 'u-2' }],
+            },
+          ],
+        }
+      : path === '/people'
         ? {
             items: [
-              { id: 'c-1', name: '개발팀', is_dm: false },
-              { id: 'c-2', name: '영업팀', is_dm: false },
-              { id: 'c-3', name: '채팅 규칙', is_dm: false },
+              { id: 'u1', name: '나', active: true, team: null },
+              { id: 'u-2', name: '이지원', active: true, team: { id: 't-1', name: '영업팀' } },
+              { id: 'u-3', name: '박서준', active: true, team: null },
+              { id: 'u-4', name: '박퇴사', active: false, team: null },
             ],
           }
         : [
@@ -29,8 +48,8 @@ vi.mock('@/lib/api', () => ({
               at: '2026-09-28T00:00:00Z',
             },
           ],
-    ),
-}))
+  )
+}
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -51,6 +70,7 @@ let root: Root
 beforeEach(async () => {
   // jsdom 에는 없다. 커서가 움직일 때마다 부른다.
   Element.prototype.scrollIntoView = vi.fn()
+  api.mockReset().mockImplementation(fakeApi)
   container = document.createElement('div')
   document.body.append(container)
   root = createRoot(container)
@@ -60,21 +80,25 @@ beforeEach(async () => {
         QueryClientProvider,
         { client: new QueryClient() },
         createElement(
-          AuthContext,
-          { value: auth },
+          ToastProvider,
+          null,
           createElement(
-            MemoryRouter,
-            null,
+            AuthContext,
+            { value: auth },
             createElement(
-              Routes,
+              MemoryRouter,
               null,
-              createElement(Route, {
-                path: '*',
-                element: [
-                  createElement(CommandPalette, { key: 'p', onClose: () => {} }),
-                  createElement(Where, { key: 'w' }),
-                ],
-              }),
+              createElement(
+                Routes,
+                null,
+                createElement(Route, {
+                  path: '*',
+                  element: [
+                    createElement(CommandPalette, { key: 'p', onClose: () => {} }),
+                    createElement(Where, { key: 'w' }),
+                  ],
+                }),
+              ),
             ),
           ),
         ),
@@ -158,7 +182,9 @@ test('스크린리더에 입력칸이 결과 목록을 조종하는 콤보박스
 
   await search()
   const live = container.querySelector('[aria-live="polite"]')!
-  await vi.waitFor(() => expect(live.textContent).toBe('화면 0개, 채팅방 1개, 검색 결과 1개'))
+  await vi.waitFor(() =>
+    expect(live.textContent).toBe('화면 0개, 사람 0명, 채팅방 1개, 검색 결과 1개'),
+  )
 })
 
 test('Tab 과 Shift+Tab 이 팔레트 밖으로 나가지 않고 입력칸에 머문다', () => {
@@ -178,5 +204,30 @@ test('Tab 과 Shift+Tab 이 팔레트 밖으로 나가지 않고 입력칸에 �
 test('검색어 끝에 공백이 있어도 찾기가 끝나면 개수를 알린다', async () => {
   act(() => type('개발 '))
   const live = container.querySelector('[aria-live="polite"]')!
-  await vi.waitFor(() => expect(live.textContent).toBe('화면 0개, 채팅방 1개, 검색 결과 1개'))
+  await vi.waitFor(() =>
+    expect(live.textContent).toBe('화면 0개, 사람 0명, 채팅방 1개, 검색 결과 1개'),
+  )
+})
+
+test('대화한 적 있는 사람은 사람 줄 하나로만 걸리고 Enter 로 그 DM 에 간다', async () => {
+  act(() => type('지원'))
+  await vi.waitFor(() => expect(highlighted()).toContain('이지원'))
+  // 같은 사람이 DM 방 줄로 또 나오지 않는다. 팀이 이름 옆에 붙는다.
+  expect(container.querySelectorAll('[role="option"]')).toHaveLength(2)
+  expect(highlighted()).toContain('영업팀')
+  act(() => press('Enter'))
+  expect(where()).toBe('/chat/d-1')
+  expect(api).not.toHaveBeenCalledWith('/channels', expect.objectContaining({ method: 'POST' }))
+})
+
+test('대화한 적 없는 사람을 고르면 DM 을 열고 그리로 간다. 비활성 계정과 나는 안 걸린다', async () => {
+  act(() => type('박'))
+  await vi.waitFor(() => expect(highlighted()).toContain('박서준'))
+  expect(container.textContent).not.toContain('박퇴사')
+  await act(async () => press('Enter'))
+  expect(api).toHaveBeenCalledWith('/channels', {
+    method: 'POST',
+    body: JSON.stringify({ dm_user_id: 'u-3' }),
+  })
+  await vi.waitFor(() => expect(where()).toBe('/chat/d-new'))
 })

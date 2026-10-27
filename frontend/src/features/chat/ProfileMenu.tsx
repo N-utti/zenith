@@ -1,16 +1,15 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
-import { useNavigate, useParams } from 'react-router'
+import { useParams } from 'react-router'
 import { MessageCircle } from 'lucide-react'
 import { Avatar } from '@/components/ui/Avatar'
-import { useToast } from '@/components/ui/ToastContext'
 import { useCurrentUser } from '@/features/auth/AuthContext'
 import { useTodayArrangementKinds } from '@/features/attendance/api'
 import { useColleagues } from '@/features/people/colleagues'
 import { ATTENDANCE_STATUS_LABEL } from '@/features/attendance/types'
-import { ApiError } from '@/lib/api'
 import { hueOf } from '@/lib/avatar'
-import { useChannels, useCreateChannel } from './api'
+import { useChannels } from './api'
+import { findDm, useOpenDm } from './useOpenDm'
 
 type Person = { id: string; name: string }
 
@@ -116,10 +115,8 @@ function ProfileCard({
 }) {
   const me = useCurrentUser()
   const { channelId } = useParams()
-  const navigate = useNavigate()
-  const toast = useToast()
-  const create = useCreateChannel()
   const { data: channels } = useChannels()
+  const openDm = useOpenDm()
   const kind = useTodayArrangementKinds().get(person.id)
   const { people } = useColleagues()
   const mine = person.id === me.id
@@ -127,9 +124,7 @@ function ProfileCard({
   const team = mine ? me.team : people.find((each) => each.id === person.id)?.team
   const ref = useRef<HTMLDivElement>(null)
   // 이미 있는 DM 이면 서버에 묻지 않고 그리로 간다. 지금 그 DM 안이면 보낼 곳이 여기라 버튼을 뺀다.
-  const dm = channels?.items.find(
-    (channel) => channel.is_dm && channel.members.some((member) => member.id === person.id),
-  )
+  const dm = findDm(channels?.items ?? [], person.id)
 
   // 아바타 아래에 둔다. 화면 아래가 모자라면(마지막 메시지) 위로 뒤집는다. 그린 뒤에야 높이를 안다.
   // 뒤집으면 아랫변을 붙인다. 채널 목록이 늦게 와 버튼이 빠져도 카드가 아바타에서 뜨지 않는다.
@@ -167,22 +162,6 @@ function ProfileCard({
       document.removeEventListener('scroll', onClose, true)
     }
   }, [onClose, opener])
-
-  const openDm = () => {
-    onClose()
-    if (dm) return void navigate(`/chat/${dm.id}`)
-    // 약속으로 받는다. 카드가 먼저 닫혀 이 훅도 사라지는데, `mutate` 의 콜백은 그 뒤로 불리지 않는다.
-    create.mutateAsync({ dm_user_id: person.id }).then(
-      (channel) => void navigate(`/chat/${channel.id}`),
-      // 비활성 계정은 422 다(`NewChatModal`).
-      (err: unknown) =>
-        toast.error(
-          err instanceof ApiError && err.status === 422
-            ? '지금은 이 사람과 대화를 시작할 수 없습니다. 비활성 계정일 수 있습니다.'
-            : '대화를 열지 못했습니다.',
-        ),
-    )
-  }
 
   return createPortal(
     <div
@@ -225,7 +204,10 @@ function ProfileCard({
           <div className="border-line my-1 border-t" />
           <button
             type="button"
-            onClick={openDm}
+            onClick={() => {
+              onClose()
+              openDm(person.id)
+            }}
             className="text-fg hover:bg-surface-hover flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 text-left text-sm transition-colors"
           >
             <MessageCircle className="size-4 shrink-0 opacity-70" />
