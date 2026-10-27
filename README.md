@@ -1,25 +1,48 @@
-# 🧩 제니스(Zenith) — 사내 협업툴
+# 제니스(Zenith) — 사내 협업툴
 
-채팅·문서·등급별 게시판·사내 AI를 **회사 서버 안에서 동작하는 하나의 앱**(Windows·Android·iOS)으로 통합한다.
-슬랙 + 노션 + 등급 게시판 + 로컬 LLM을 **온프레미스**로.
+> **상태: 라이브 테스트 중** · 사내 계정 7개 · 사내망 전용 · 2인 팀(백엔드·PM 정성운 / 프론트 진수연)
+>
+> 포트폴리오: [AX(AI 활용)](https://wjdtjddns98.github.io/) · [개발자](https://wjdtjddns98.github.io/dev/)
 
-> 약 15명 규모 · 온프레미스 · 데이터·AI 추론이 사내망 밖으로 나가지 않음.
+약 15명 규모 자산운용사의 채팅·문서·게시판·결재·근태·AI 를 **회사 서버 안에서 도는 앱 하나**로 합쳤다.
 
-## 🎯 개요
+## 왜 만들었나 → 무엇이 됐나
 
-- **목표** — 흩어진 업무 대화·문서·공지를 사내 서버 하나로 일원화하고, 사내 위키를 근거로 답하는 로컬 AI를 붙인다. (외부 SaaS 구독·데이터 유출 경로 제거)
-- **핵심 모듈** — 문서(실시간 공동편집) · 채팅(채널·DM) · 등급별 게시판 · ⌘K 통합검색 · AI 어시스턴트(위키 RAG) · 문서 인라인 AI · **전자결재** · 근태(휴가·연차 · 예외 근무 신청·승인)
-- **범위 In** — 전자결재, 휴가·연차 관리, 문서 공동편집, 채팅, 게시판 3등급 열람통제, RAG AI + 권한필터, Win/Android/iOS 앱
-- **범위 Out (v1)** — 공인전자서명·타임스탬프, 화상회의, 이메일 대체, 외부 게스트·앱스토어 공개 배포
+- **문제** — 업무 대화·문서·공지가 외부 SaaS 여러 곳에 흩어져 있었고, 금융사라 데이터가 사내망 밖으로 나가면 안 된다.
+- **결과** — 채팅 · Yjs 실시간 공동편집 문서 · 등급 게시판 · ⌘K 통합검색 · 전자결재 · 근태 · 협업 공간 · CRM · AI 어시스턴트를 온프레미스 하나로. 서버의 외부 호출은 AI 공급자(Claude API) 하나뿐이다.
+
+| 지표 | 값 |
+| --- | --- |
+| 커밋 · PR | 484 · 487 (본인 PR 99) |
+| 백엔드 테스트 | 343 |
+| ⌘K 검색 | 56 ms @ 6만 건 |
+| 채팅 전달 p95 | 14.7 ms (로컬 측정) |
+
+## 역할
+
+- **정성운** — 백엔드 전부(FastAPI·DB·실시간·AI)·인프라·CI, PM(Notion 정본 관리·일정·FE↔BE 계약)
+- **진수연** — 프론트(React)·데스크톱 셸
+
+## 핵심 설계 결정
+
+1. **권한은 서버가 판정한다** — 임원 게시판 본문은 API 가 403, 결재 문서는 역할이 아니라 기안자·결재선 **관계**로 열람을 판정한다. 프론트의 마스킹·메뉴 숨김은 편의일 뿐.
+2. **AI 근거는 하이브리드 검색** — FTS + pgvector(bge-m3) 를 RRF 로 합쳐 답변 문장에 각주로 붙인다. Claude tool use 로 사내 검색·문서 열람 도구를 호출하고, 권한 밖 문서는 근거에서 빠진다.
+3. **AI 공급자는 모듈 한 곳 뒤에** — `app/ai/provider.py` 경계 하나. Ollama → Claude API 전환(2026-09-04)을 그 모듈만 바꿔서 했고, 스트리밍과 HTTP 연결 수명을 분리했다.
+4. **계약은 코드로 검사한다** — `backend/openapi.json` 을 커밋하고 최신성 테스트가 지킨다. 프론트는 거기서 타입을 생성한다.
+5. **보안은 기본값으로** — CSP, 로그아웃 시 Clear-Site-Data, 첨부 회수(살아 있는 글에 실린 파일만·올린 사람만), 보안민감 변경은 Claude + Codex 교차 리뷰.
+
+## 아키텍처
+
+FastAPI 프로세스 하나가 REST · WebSocket(채팅·알림·presence) · Yjs 릴레이(pycrdt)를 함께 담고, PostgreSQL 16(FTS + pgvector) · Redis · MinIO 를 쓴다. Caddy 가 TLS 와 정적 프론트를 맡는다. AI 는 provider 모듈 뒤의 Claude API, 임베딩은 bge-m3.
 
 ## 🧱 스택
 
 | 영역 | 기술 |
 | --- | --- |
 | **FE** | React 19 · Vite · Tailwind v4 · TipTap + Yjs |
-| **BE** | FastAPI · PostgreSQL 16 + pgvector · Redis · MinIO |
-| **AI** | Mac mini M4 · Ollama(8B Q4) · bge-m3 → **Claude API로 전환 예정** (2026-09-04 결정 · [backend/README](backend/README.md) "설계와 어긋나는 것") |
-| **앱** | Tauri 2(Win) · Capacitor 8(And/iOS) |
+| **BE** | FastAPI · PostgreSQL 16 + pgvector · Redis · MinIO · Caddy |
+| **AI** | Claude API(tool use) · bge-m3 임베딩 — 공급자 경계는 `app/ai/provider.py` |
+| **앱** | Tauri 2(Win) · Capacitor 8(And/iOS, v1.1) |
 
 ## 📁 모노레포 구조
 
@@ -37,9 +60,7 @@ zenith/
 
 ## 🚀 실행 — 개발 서버
 
-**화면을 볼 수 있는 경로는 개발 서버뿐이다.** `backend/`에 코드가 없어서 설치본 `.msi`는
-로그인 화면에서 멈춘다 — 배포 빌드에서는 MSW 목이 통째로 빠지고 `/api` 요청이 실제
-사내 서버로 나가기 때문이다. 데모는 목이 살아 있는 개발 모드에서 한다.
+데모는 MSW 목이 켜진 프론트 개발 서버로 본다. 실제 백엔드까지 띄우는 법은 [backend/README.md](backend/README.md).
 
 터미널 두 개가 필요하다.
 
@@ -65,8 +86,7 @@ npm run dev
 로그인 비밀번호는 목 계정 셋 다 `zenith1234`이고, 로그인 화면 하단 버튼으로 사원·팀장·임원을
 바로 채울 수 있다. 계정 목록과 역할은 [`frontend/README.md`](frontend/README.md#목-계정) 참조.
 
-> ⚠️ `VITE_DISABLE_MSW=true`는 켜지 말 것. 목을 끄고 `/api`를 FastAPI(:8000)로 보내는
-> 스위치인데, 붙을 그 서버가 아직 없어서 개발 모드에서도 로그인이 막힌다.
+> `VITE_DISABLE_MSW=true` 는 목을 끄고 `/api` 를 FastAPI(:8000)로 보내는 스위치다 — 백엔드를 띄운 뒤에만 켠다.
 
 자세한 사항은 [`frontend/README.md`](frontend/README.md) · [`apps/desktop/README.md`](apps/desktop/README.md).
 
@@ -80,7 +100,7 @@ npm run dev
 - **M2 — 커뮤니케이션** · `/api/ws` 채팅·알림·presence, 채팅 REST·첨부(MinIO), 멘션 알림, ⌘K 통합검색(FTS + 권한 SQL) — 기능은 다 됐고, 게이트인 **채팅 전달 P95 실측**이 남았다
 - **M3 — 게시판·앱** · 등급별 게시판(마스킹·403) ✅ / **`.msi` 서명은 미착수.** Capacitor Android·iOS 는 v1.1 로 미뤘다(2026-09-22)
 - **M4 — 마감** · caddy(TLS·리버스 프록시·정적 web) · 일일 `pg_dump` 백업 · `/metrics` · CSP 실적용 ✅ / **prod 브랜치·파일럿이 남았다**
-- **보류** · AI 나머지(04 §8 RAG·근거) · 근태(04 §10) · 전자결재(13 §9) — 백엔드는 501 스텁이고 프론트 화면은 있다. 목으로만 돈다
+- **AI · 근태 · 전자결재** · 2026-09-22 보류 해제, 2026-10 초 백엔드 구현 완료(결재함·근태·AI 어시스턴트·협업 공간·CRM) — 라이브 테스트 중
 
 > 🔴 **기간은 다시 잡지 않았다.** 8주 계획(2026-08-03 ~ 09-25)은 무효다.
 >
