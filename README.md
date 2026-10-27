@@ -11,7 +11,9 @@
 
 ## 🎬 시연 영상
 
-[![제니스 시연 영상 (7분)](docs/media/zenith-demo.jpg)](https://github.com/N-utti/zenith/releases/download/demo-2026-10/zenith-demo.mp4)
+[![제니스 시연 영상 (7분)](docs/media/zenith-demo.jpg)](
+https://github.com/user-attachments/assets/061e3fc0-de8c-4282-bb3a-e2969c63801a
+)
 
 문서 공동편집 · 채팅 `/ai` 근거 각주 · 등급별 게시판 · 전자결재 흐름을 테스트 계정으로 돌린 7분 영상. 720p, 클릭하면 재생·내려받기. (Release `demo-2026-10` 자산)
 
