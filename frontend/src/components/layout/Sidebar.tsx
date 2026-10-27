@@ -1,6 +1,6 @@
 import { memo, useRef, useState, type ReactNode } from 'react'
 import { NavLink, useLocation } from 'react-router'
-import { ChevronDown, ChevronRight, Lock, Pencil, Plus, X } from 'lucide-react'
+import { ChevronDown, ChevronRight, Lock, Megaphone, Pencil, Plus, X } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { useFocusTrap } from '@/lib/useFocusTrap'
 import { SECONDARY_NAV, TOP_NAV, visibleNav, type NavItem } from '@/app/navigation'
@@ -21,10 +21,12 @@ import { useLongPress } from '@/lib/useLongPress'
 import { usePanelWidth } from '@/lib/usePanelWidth'
 import { DocTree } from './DocTree'
 
-const ROW = 'flex items-center gap-2 rounded-md px-2.5 py-2 text-[15px] transition-colors'
+// 문서 트리 줄(28px·text-sm)과 한 벌로 보이게 같은 글자 단계에 높이만 조금 더(32px). 손가락 기기는 키운다.
+const ROW =
+  'flex items-center gap-2 rounded-md px-2.5 py-1.5 text-sm transition-colors pointer-coarse:py-2'
 const ROW_IDLE = 'text-muted hover:bg-surface-hover hover:text-fg'
 // 폰 서랍은 누르면 닫히고 지금 자리는 하단 탭이 보여 주므로, 하단 탭처럼 글자색만 바꾸고 바탕은 칠하지 않는다.
-const ROW_ACTIVE = 'md:bg-accent-soft text-accent font-semibold'
+const ROW_ACTIVE = 'md:bg-accent-selected text-accent md:text-accent-hover font-semibold'
 
 const SECTIONS_KEY = 'zenith.sidebarSectionsCollapsed'
 
@@ -76,7 +78,7 @@ function SectionLabel({
     // 구획마다 위에 선을 긋는다. 아래 보조 메뉴의 선과 달리 끝까지 닿지 않고 nav 의 좌우 여백(8px)
     // 안에 선다. 줄의 hover 바탕과 같은 폭이라 목록이 잘려 보이지 않는다.
     // 왼쪽 여백은 화살표가 문서 트리의 폴더 화살표와 같은 세로줄에 서게 맞춘 값이다(DocTree 의 indent).
-    <div className="text-muted border-line mt-2.5 mb-1.5 flex items-center gap-1 border-t pt-2.5 pr-2.5 pl-[11px] text-[13px] font-bold tracking-[0.08em]">
+    <div className="text-muted border-line mt-2.5 mb-1.5 flex items-center gap-1 border-t pt-2.5 pr-2.5 pl-[11px] text-[13px] font-bold">
       <button
         type="button"
         onClick={onToggle}
@@ -162,6 +164,8 @@ function ChannelRow({ channel, onNavigate }: { channel: ChatChannel; onNavigate?
             ROW,
             'group pointer-coarse:select-none pointer-coarse:[-webkit-touch-callout:none]',
             isActive ? ROW_ACTIVE : ROW_IDLE,
+            // 안 읽은 방은 이름을 진하게. 숫자 알약만으로는 목록을 훑을 때 안 걸린다.
+            !isActive && channel.unread > 0 && 'text-fg font-semibold',
             // 어느 줄의 메뉴인지 보이게 메뉴가 떠 있는 동안 줄을 칠해 둔다.
             menu.isOpen && !isActive && 'bg-surface-hover text-fg',
           )
@@ -171,10 +175,15 @@ function ChannelRow({ channel, onNavigate }: { channel: ChatChannel; onNavigate?
         {channel.is_dm ? (
           <DmAvatar
             channel={channel}
-            dotRing="ring-surface group-hover:ring-surface-hover group-aria-[current=page]:ring-surface md:group-aria-[current=page]:ring-accent-soft"
+            dotRing="ring-surface group-hover:ring-surface-hover group-aria-[current=page]:ring-surface md:group-aria-[current=page]:ring-accent-selected"
           />
         ) : channel.is_private ? (
-          <Lock role="img" aria-label="비공개" className="text-subtle h-4 w-6 shrink-0" />
+          // 뜻 있는 아이콘이라 선택 줄 바탕 위에서도 3:1 을 넘게 한 단계 진하게.
+          <Lock
+            role="img"
+            aria-label="비공개"
+            className="text-subtle h-4 w-6 shrink-0 md:group-aria-[current=page]:text-muted"
+          />
         ) : (
           <span className="text-subtle w-6 shrink-0 text-center">#</span>
         )}
@@ -281,9 +290,14 @@ function BoardSection({ onNavigate }: { onNavigate?: () => void }) {
             onNavigate={onNavigate}
             className={cn(ROW, board.allowed && (active ? ROW_ACTIVE : ROW_IDLE))}
           >
+            {/* 아이콘 칸은 채널 줄과 같은 24px 이다. 없으면 이름이 바로 위 채널·DM 이름과 어긋난다. */}
+            <Megaphone className="text-subtle h-4 w-6 shrink-0" />
             <span className="truncate">{board.name}</span>
-            {/* 등급 배지는 공용 Badge 하나로만 그린다(12 §4.1). 게시판 목록과 같은 톤. */}
-            <Badge className="ml-auto shrink-0">{BOARD_BADGE[board.min_role]}</Badge>
+            {/* 등급 배지는 공용 Badge 하나로만 그린다(12 §4.1). 게시판 목록과 같은 톤.
+                누구나 보는 게시판(전체)은 줄마다 같은 말이 반복될 뿐이라 사이드바에서는 뺀다. */}
+            {board.min_role !== 'member' && (
+              <Badge className="ml-auto shrink-0">{BOARD_BADGE[board.min_role]}</Badge>
+            )}
           </MaskedRow>
         )
       })}
