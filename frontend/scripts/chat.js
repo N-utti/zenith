@@ -82,7 +82,7 @@ let nextChannelId = 1
 
 let nextId = 1
 /** 백엔드 `MessageOut` 과 같은 모양(04 §5). 소켓의 `msg` 이벤트도 같은 것을 싣는다. */
-function makeMessage(channelId, authorId, body, createdAt, files) {
+function makeMessage(channelId, authorId, body, createdAt, files, docRef = null) {
   const author = USERS[authorId]
   // 모르는 id 로 만들면 `author: undefined` 가 그대로 실려 화면이 메시지를 그리다 죽는다.
   if (!author) throw new Error(`모르는 사용자: ${authorId}`)
@@ -91,7 +91,7 @@ function makeMessage(channelId, authorId, body, createdAt, files) {
     channel_id: channelId,
     author,
     body,
-    doc_ref: null,
+    doc_ref: docRef,
     attachments: files?.length ? files : null,
     created_at: createdAt ?? new Date().toISOString(),
     // 고친 적이 없으면 null. 실서버 `MessageOut` 과 같은 칸이다(#284).
@@ -342,12 +342,17 @@ export function handleChatConnection(conn, userId) {
       }
       const checked = checkAttachments(op.attachments, channelId, userId)
       if (checked.error) return sendError(conn, 'VALIDATION', checked.error, channelId)
+      // 문서 카드. 릴레이는 문서 목록을 몰라 있는지·볼 수 있는지는 못 본다(실서버는 본다). 모양만 본다.
+      const docRef = op.doc_ref ?? null
+      if (docRef !== null && (typeof docRef !== 'string' || !docRef || docRef.length > 100)) {
+        return sendError(conn, 'VALIDATION', '카드로 붙일 문서가 없습니다.', channelId)
+      }
       // 첨부만 보내는 메시지도 있다. 둘 다 없을 때만 막는다.
       if (!body && checked.files.length === 0) {
         return sendError(conn, 'VALIDATION', '본문이나 첨부 중 하나는 있어야 한다.', channelId)
       }
 
-      const message = makeMessage(channelId, userId, body, undefined, checked.files)
+      const message = makeMessage(channelId, userId, body, undefined, checked.files, docRef)
       // 질문에 「잦」이 들어 있으면 실서버의 요청 과다 거절을 흉내 낸다. 실서버처럼 내 글을 뿌리기 전에 보낸다.
       const asksAi = body === '/ai' || body.startsWith('/ai ')
       const throttled = asksAi && body.includes('잦')
