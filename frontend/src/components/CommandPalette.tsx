@@ -11,14 +11,25 @@ import {
   Search,
   Sparkles,
 } from 'lucide-react'
+import { Avatar } from '@/components/ui/Avatar'
+import { hueOf } from '@/lib/avatar'
 import { cn } from '@/lib/cn'
 import { formatRelative } from '@/lib/datetime'
 import { useFocusTrap } from '@/lib/useFocusTrap'
 import { ALL_NAV, visibleNav } from '@/app/navigation'
 import { useCurrentUser } from '@/features/auth/AuthContext'
 import { useChannels } from '@/features/chat/api'
+import { useOpenDm } from '@/features/chat/useOpenDm'
+import { useColleagues } from '@/features/people/colleagues'
 import { useSearch } from '@/features/search/api'
-import { hitRows, matchRooms, paletteRows, roomRows } from '@/features/search/rows'
+import {
+  hitRows,
+  matchPeople,
+  matchRooms,
+  paletteRows,
+  personRows,
+  roomRows,
+} from '@/features/search/rows'
 import { parseSnippet } from '@/features/search/snippet'
 import { SEARCH_TYPE_LABEL, type SearchHit } from '@/features/search/types'
 import type { AskState } from '@/features/ai/types'
@@ -81,8 +92,9 @@ function HitRow({ hit, active }: { hit: SearchHit; active: boolean }) {
 }
 
 /**
- * ⌘K 통합검색. 화면 이동·채팅방 이름·본문 검색(`GET /search`)을 한 목록에 놓는다.
- * 채팅방은 사이드바가 받아 둔 방 목록에서 이름으로 고른다. 서버를 따로 부르지 않고 타자 즉시 걸린다.
+ * ⌘K 통합검색. 화면 이동·사람·채팅방 이름·본문 검색(`GET /search`)을 한 목록에 놓는다.
+ * 사람과 채팅방은 받아 둔 명단(`GET /people`)과 방 목록에서 이름으로 고른다. 타자 즉시 걸린다.
+ * 사람을 고르면 그 사람과의 DM 으로 간다. 없으면 연다.
  *
  * 열릴 때마다 부모가 새로 마운트하므로 초기화용 effect가 필요 없다.
  *
@@ -196,6 +208,8 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
 
   const { data, isFetching, isError } = useSearch(settled)
   const { data: channels } = useChannels()
+  const { people: colleagues } = useColleagues()
+  const openDm = useOpenDm()
   const searching = query.trim().length > 0
   // 타자가 멈추기 전에는 아직 보내지도 않았다. 그 사이 "없습니다" 가 번쩍이면 안 된다.
   const pending = isFetching || settled !== query.trim()
@@ -211,11 +225,15 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
    * 사라지는데 직전 결과는 캐시에 남으므로(`keepPreviousData` 는 꺼진 쿼리에도 걸린다),
    * 둘을 따로 세면 아무것도 강조되지 않는 구간이 생기고 거기서 Enter 가 안 보이는 문서로 간다.
    */
+  // DM 은 사람 줄에 실제로 보이는 사람의 것만 뺀다. 다섯 명에서 잘린 사람의 DM 은 방 줄로 남아야 찾는다.
+  const matchedPeople = matchPeople(colleagues, query)
   const rows = paletteRows(
     navItems,
-    matchRooms(channels?.items ?? [], query),
+    matchedPeople,
+    matchRooms(channels?.items ?? [], query, matchedPeople),
     searching ? (data ?? []) : [],
   )
+  const people = personRows(rows)
   const rooms = roomRows(rows)
   const hits = hitRows(rows)
   const askIndex = rows.length - 1
@@ -235,14 +253,18 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
     : pending
       ? '찾는 중'
       : isError
-        ? `화면 ${navItems.length}개, 채팅방 ${rooms.length}개. 본문 검색에 실패했습니다.`
-        : `화면 ${navItems.length}개, 채팅방 ${rooms.length}개, 검색 결과 ${hits.length}개`
+        ? `화면 ${navItems.length}개, 사람 ${people.length}명, 채팅방 ${rooms.length}개. 본문 검색에 실패했습니다.`
+        : `화면 ${navItems.length}개, 사람 ${people.length}명, 채팅방 ${rooms.length}개, 검색 결과 ${hits.length}개`
 
   const go = (to: string, state?: AskState) => {
     onClose()
     void navigate(to, { state })
   }
   const ask = () => go('/ai', query.trim() ? { ask: query.trim() } : undefined)
+  const dmWith = (personId: string) => {
+    onClose()
+    openDm(personId)
+  }
 
   // 입력값 자체는 자르지 않는다. 이 값은 검색에만 쓰이는 게 아니라 "AI에게 물어보기" 가
   // 그대로 넘기는 문장이기도 하다. 검색 API 의 200자 제한은 `useSearch` 가 혼자 본다.
@@ -270,6 +292,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
       const row = rows[active]
       if (row.kind === 'ask') ask()
       else if (row.kind === 'nav') go(row.nav.to)
+      else if (row.kind === 'person') dmWith(row.person.id)
       else if (row.kind === 'room') go(`/chat/${row.room.id}`)
       else go(row.hit.to)
     }
@@ -323,7 +346,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
             aria-controls={listId}
             aria-autocomplete="list"
             aria-activedescendant={optionId(active)}
-            placeholder="문서·채팅·게시글 검색, 채팅방·화면 이동…"
+            placeholder="문서·채팅·게시글 검색, 사람·채팅방·화면 이동…"
             // 터치 기기에서 16px: 아이폰 사파리는 그보다 작은 글자의 입력칸을 누르면 화면을 확대한다(공용 Input 과 같은 이유).
             className="text-fg placeholder:text-subtle h-13 flex-1 bg-transparent text-sm outline-none pointer-coarse:text-base"
           />
@@ -379,6 +402,51 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
               </div>
             )}
 
+            {people.length > 0 && (
+              <div role="group" aria-labelledby={`${listId}-people`}>
+                <p
+                  id={`${listId}-people`}
+                  role="presentation"
+                  className="text-subtle px-2.5 pt-3 pb-1 text-[11px] font-semibold tracking-wide uppercase"
+                >
+                  사람
+                </p>
+                {people.map((person, i) => {
+                  const index = navItems.length + i
+                  return (
+                    <button
+                      key={person.id}
+                      ref={index === active ? activeRow : undefined}
+                      role="option"
+                      id={optionId(index)}
+                      aria-selected={index === active}
+                      tabIndex={-1}
+                      type="button"
+                      onMouseEnter={() => setCursor(index)}
+                      onClick={() => dmWith(person.id)}
+                      className={cn(
+                        'flex w-full cursor-pointer items-center gap-3 rounded-lg px-2.5 py-2 text-sm',
+                        index === active ? 'bg-accent-soft text-accent' : 'text-muted',
+                      )}
+                    >
+                      {/* 다른 줄의 아이콘(18px)보다 크다. 사이드바 DM 줄의 아바타와 같은 크기로 맞춘다. */}
+                      <Avatar
+                        name={person.name}
+                        hue={hueOf(person.id)}
+                        size="xs"
+                        className="-my-0.5"
+                      />
+                      <span className="truncate">{person.name}</span>
+                      {person.team && (
+                        <span className="text-subtle shrink-0 text-[11px]">{person.team.name}</span>
+                      )}
+                      {index === active && <CornerDownLeft className="ml-auto size-3.5 shrink-0" />}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+
             {rooms.length > 0 && (
               <div role="group" aria-labelledby={`${listId}-rooms`}>
                 <p
@@ -389,7 +457,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
                   채팅방
                 </p>
                 {rooms.map((room, i) => {
-                  const index = navItems.length + i
+                  const index = navItems.length + people.length + i
                   const Icon = room.is_dm ? AtSign : room.is_private ? Lock : Hash
                   return (
                     <button
@@ -444,7 +512,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
                   </p>
                 )}
                 {hits.map((hit, i) => {
-                  const index = navItems.length + rooms.length + i
+                  const index = navItems.length + people.length + rooms.length + i
                   return (
                     <button
                       key={`${hit.type}-${hit.id}`}
