@@ -73,8 +73,10 @@ function SectionLabel({
 }) {
   const Chevron = collapsed ? ChevronRight : ChevronDown
   return (
+    // 구획마다 위에 선을 긋는다. 아래 보조 메뉴의 선과 달리 끝까지 닿지 않고 nav 의 좌우 여백(8px)
+    // 안에 선다. 줄의 hover 바탕과 같은 폭이라 목록이 잘려 보이지 않는다.
     // 왼쪽 여백은 화살표가 문서 트리의 폴더 화살표와 같은 세로줄에 서게 맞춘 값이다(DocTree 의 indent).
-    <div className="text-subtle mt-4 mb-1.5 flex items-center gap-1 pr-2.5 pl-[11px] text-[13px] font-bold tracking-[0.08em]">
+    <div className="text-muted border-line mt-2.5 mb-1.5 flex items-center gap-1 border-t pt-2.5 pr-2.5 pl-[11px] text-[13px] font-bold tracking-[0.08em]">
       <button
         type="button"
         onClick={onToggle}

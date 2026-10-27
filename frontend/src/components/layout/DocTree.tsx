@@ -147,11 +147,14 @@ const rowTone = (active: boolean, menuOpen: boolean) =>
       : 'text-muted hover:bg-surface-hover hover:text-fg'
 
 /**
- * 줄 왼쪽 여백. 기본 8px 에 한 단계마다 14px. 28px 줄에서 계단이 보이는 비율이고, 기본값은 최상위
- * 문서 아이콘이 상단 메뉴 아이콘과 같은 세로줄(사이드바 왼쪽에서 18px)에 서는 값이다(Sidebar 의
- * 구획 제목 화살표도 여기에 맞춰 서 있다).
+ * 줄 왼쪽 여백. 기본 8px 에 한 단계마다 16px. 한 단계 안쪽 아이콘이 부모 폴더의 안내선(아래 guideLeft)
+ * 과 붙어 보이지 않을 만큼 떨어지는 값이다. 기본값은 최상위 문서 아이콘이 상단 메뉴 아이콘과 같은 세로줄
+ * (사이드바 왼쪽에서 18px)에 서는 값이다(Sidebar 의 구획 제목 화살표도 여기에 맞춰 서 있다).
  */
-const indent = (depth: number) => 8 + depth * 14
+const indent = (depth: number) => 8 + depth * 16
+
+/** 펼친 폴더 안쪽을 따라 내려가는 세로선. 폴더 화살표(20px 칸)의 가운데에 선다. */
+const guideLeft = (depth: number) => indent(depth) + 10
 
 function DocRow({
   node,
@@ -341,7 +344,14 @@ function FolderRow({
       </div>
 
       {expanded && (
-        <>
+        // 안내선은 안쪽 줄의 바탕(hover·지금 문서) 밑에 깐다(isolate 안의 -z-10). 위에 그리면 칠한 알약을
+        // 선이 가로지른다. 끌어 놓기의 자리 찾기를 가리지 않게 포인터는 통과시킨다.
+        <div className="relative isolate">
+          <span
+            aria-hidden
+            className="bg-line pointer-events-none absolute inset-y-0 -z-10 w-px"
+            style={{ left: guideLeft(depth) }}
+          />
           {node.children.map(
             (child) =>
               child.kind === 'folder' && (
@@ -372,7 +382,7 @@ function FolderRow({
               </Link>
             </div>
           )}
-        </>
+        </div>
       )}
     </div>
   )
