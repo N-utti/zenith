@@ -7,11 +7,15 @@ import { MentionTextarea } from '@/features/people/MentionTextarea'
 import { ApiError } from '@/lib/api'
 import { cn } from '@/lib/cn'
 import { formatBytes } from '@/lib/format'
+import { useDoc } from '@/features/docs/api'
+import { docIdOf, internalPath } from '@/lib/links'
+import { serverOrigin } from '@/lib/serverOrigin'
 import { MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, MAX_BODY_CHARS, uploadAttachment } from './api'
 import { isImage, reorder } from './attachments'
 import { isAiCommand } from './aiCommand'
 import { useChatSocketContext } from './ChatSocketContext'
 import { getDraft, setDraft } from './drafts'
+import { DocCard } from './MessageList'
 import type { ChatAttachment, Person } from './types'
 
 /** 끊겨서 못 보냈다는 문구. 다시 연결되면 이 문구만 지운다. */
@@ -47,6 +51,14 @@ export function Composer({
    * canvas 로 줄여서 든다.
    */
   const [previews, setPreviews] = useState<Record<string, string>>({})
+  /**
+   * 붙여 넣은 문서 주소로 단 카드(`doc_ref`). 메시지 하나에 하나라 새로 붙여 넣으면 바꾼다.
+   * 주소(`url`)를 들고 있는 것은 카드를 못 달 때 글로 되돌리려고다.
+   */
+  const [doc, setDoc] = useState<{ id: string; url: string } | null>(null)
+  // 카드를 조회하는 동안은 보내지 않는다. 서버가 카드를 거절하면 메시지째 버려지는데 입력창은 이미 비운 뒤다.
+  const docQuery = useDoc(doc?.id ?? '', doc !== null)
+  const docGone = doc !== null && (docQuery.isError || Boolean(docQuery.data?.deleted_at))
   const [error, setError] = useState<string | null>(null)
   /**
    * 끊겨서 못 보낸 적이 있는지. 문구를 상태에 담지 않고 이 깃발과 `connected` 로 만든다.
@@ -140,7 +152,7 @@ export function Composer({
   const dispatch = () => {
     const text = body.trim()
     // 첨부만 보내는 메시지도 있다. 둘 다 없을 때만 막는다.
-    if ((!text && files.length === 0) || uploading > 0) return
+    if ((!text && files.length === 0) || busy) return
 
     // 상한은 서버도 강제하지만, 넘겨 보내면 입력창을 비운 뒤에 거절당해 쓴 글이 사라진다.
     if (text.length > MAX_BODY_CHARS) {
@@ -152,6 +164,7 @@ export function Composer({
     const sent = sendMessage(channelId, {
       body: text,
       attachments: files.length > 0 ? files : undefined,
+      doc_ref: doc?.id,
     })
     if (!sent) return setTriedOffline(true)
     markOnboarding('chat')
@@ -163,6 +176,23 @@ export function Composer({
     setDraft(channelId, '')
     setFiles([])
     setPreviews({})
+    setDoc(null)
+  }
+
+  // 카드를 떼면 붙여 넣은 주소를 글 끝에 되돌린다. 주소를 링크 글로 보내는 길이 이것이다.
+  const unpin = () => {
+    if (!doc) return
+    const next = body.trim() ? `${body.trimEnd()} ${doc.url}` : doc.url
+    setBody(next)
+    setDraft(channelId, next)
+    setDoc(null)
+  }
+
+  // 지워졌거나 열람 권한이 없는 문서는 서버가 카드를 거절한다. 미리 떼고 왜 주소로 바뀌었는지 알린다.
+  // 효과가 아니라 렌더 중에 맞춘다(React 의 「이전 렌더의 값으로 상태 맞추기」). 떼면 `docGone` 이 꺼져 한 번만 돈다.
+  if (docGone) {
+    unpin()
+    setError('열 수 없는 문서라 카드 대신 주소로 넣었습니다.')
   }
 
   const change = (next: string) => {
@@ -182,15 +212,27 @@ export function Composer({
   // 끊겼다고 보내기 버튼을 잠그지 않는다. 잠그면 누른 사람은 아무 반응도 못 보고, Enter 로
   // 보낸 사람만 이유를 읽는다. 눌러 보고 실패 문구를 읽는 쪽으로 통일한다. 끊겼다는 사실
   // 자체는 헤더 배너가 이미 알린다(`ChatPage`).
-  const busy = uploading > 0
+  const busy = uploading > 0 || (doc !== null && docQuery.isPending)
 
   return (
     <form
       onSubmit={submit}
       // 캡처한 화면이나 탐색기에서 복사한 파일을 붙여 넣으면 첨부로 올린다. 글이 같이 든 클립보드
       // (엑셀 칸을 복사하면 글과 그림이 함께 온다)는 글로 붙게 둔다.
+      // 붙여 넣은 글이 통째로 제니스 문서 주소 하나면 카드로 단다. 글 속에 섞인 주소는 글로 둔다(링크 칩).
       onPaste={(e) => {
         const data = e.clipboardData
+        const pasted = data.getData('text/plain').trim()
+        const docId = /\s/.test(pasted)
+          ? null
+          : docIdOf(internalPath(pasted, [location.origin, serverOrigin()]) ?? '')
+        if (docId) {
+          e.preventDefault()
+          setError(null)
+          // 카드는 하나다. 앞 카드의 주소는 글로 되돌리고 새 카드로 바꾼다.
+          unpin()
+          return setDoc({ id: docId, url: pasted })
+        }
         if (data.files.length === 0 || data.types.includes('text/plain')) return
         e.preventDefault()
         void pick(data.files)
@@ -227,8 +269,21 @@ export function Composer({
 
           {/* 첨부와 글을 테두리 하나로 감싼다. 입력칸 안에 사진이 든 모양이 되어 무엇을 보내는지 보인다. */}
           <div className="border-line bg-canvas focus-within:border-accent min-w-0 flex-1 rounded-lg border transition-colors">
-            {files.length > 0 && (
+            {(doc || files.length > 0) && (
               <ul className="flex flex-wrap gap-2 px-2.5 pt-2.5">
+                {doc && (
+                  <li className="relative">
+                    <DocCard docId={doc.id} className="mt-0" />
+                    <button
+                      type="button"
+                      aria-label="문서 카드 떼기"
+                      onClick={unpin}
+                      className="border-line bg-surface text-subtle hover:text-fg absolute -top-1.5 -right-1.5 grid size-5 cursor-pointer place-items-center rounded-full border"
+                    >
+                      <X className="size-3" />
+                    </button>
+                  </li>
+                )}
                 {files.map((file, index) => (
                   <li
                     key={file.url}

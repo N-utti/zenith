@@ -1,10 +1,26 @@
 import { act, createElement } from 'react'
 import { createRoot } from 'react-dom/client'
+import { MemoryRouter } from 'react-router'
 import { expect, test, vi } from 'vitest'
 import { ChatSocketContext } from './ChatSocketContext'
 import { Composer } from './Composer'
 import { getDraft } from './drafts'
 import type { ChatSocket } from './useChatSocket'
+
+// 문서 카드는 문서 상세를 조회한다. d-gone 은 못 보는 문서, d-trash 는 휴지통, d-wait 은 아직 조회 중이다.
+vi.mock('@/features/docs/api', async (original) => ({
+  ...(await original<typeof import('@/features/docs/api')>()),
+  useDoc: (id: string) => {
+    if (id === 'd-gone') return { data: undefined, isPending: false, isError: true }
+    if (id === 'd-wait') return { data: undefined, isPending: true, isError: false }
+    const deleted_at = id === 'd-trash' ? '2026-10-27T00:00:00Z' : null
+    return {
+      data: { title: '3분기 계획', updated_at: '2026-10-27T00:00:00Z', deleted_at },
+      isPending: false,
+      isError: false,
+    }
+  },
+}))
 
 // @ 자동완성은 동료 목록 쿼리를 부른다. 여기서 보는 건 입력값이 어디 남느냐뿐이라 맨 textarea 로 바꾼다.
 vi.mock('@/features/people/MentionTextarea', () => ({
@@ -110,7 +126,9 @@ test('파일을 붙여 넣거나 창에 끌어 놓으면 첨부로 올라가고,
   )
   const carry = (type: string, key: string, name: string, types: string[]) => {
     const event = new Event(type, { bubbles: true, cancelable: true })
-    Object.defineProperty(event, key, { value: { files: [new File(['x'], name)], types } })
+    Object.defineProperty(event, key, {
+      value: { files: [new File(['x'], name)], types, getData: () => '' },
+    })
     return event
   }
 
@@ -219,5 +237,91 @@ test('Tab 을 누르면 쓰던 글 앞에 /ai 가 붙고, 이미 붙어 있으�
   expect(container.querySelector('[aria-hidden] span')).toBeNull()
   expect(tab()).toBe(true)
   expect(box.value).toBe('/ai ')
+  act(() => root.unmount())
+})
+
+test('문서 주소만 붙여 넣으면 카드가 붙고, 글과 함께 doc_ref 로 나간다', () => {
+  const container = document.createElement('div')
+  const root = createRoot(container)
+  act(() =>
+    root.render(
+      createElement(
+        MemoryRouter,
+        null,
+        createElement(
+          ChatSocketContext,
+          { value: socket },
+          createElement(Composer, {
+            channelId: 'a',
+            channelName: 'a',
+            hash: true,
+            mentionCandidates: [],
+            onTyping: () => {},
+          }),
+        ),
+      ),
+    ),
+  )
+  const paste = (text: string) => {
+    const event = new Event('paste', { bubbles: true, cancelable: true })
+    Object.defineProperty(event, 'clipboardData', {
+      value: { files: [], types: ['text/plain'], getData: () => text },
+    })
+    act(() => void container.querySelector('textarea')!.dispatchEvent(event))
+    return event
+  }
+  const box = () => container.querySelector('textarea')!.value
+  const sendButton = () => container.querySelector<HTMLButtonElement>('[aria-label="보내기"]')!
+
+  // 글 속에 섞인 주소는 글로 둔다.
+  expect(paste(`이거 보세요 ${location.origin}/docs/d-1`).defaultPrevented).toBe(false)
+  // 문서 목록 주소는 문서 하나가 아니다.
+  expect(paste(`${location.origin}/docs`).defaultPrevented).toBe(false)
+
+  expect(paste(`  ${location.origin}/docs/d-1  `).defaultPrevented).toBe(true)
+  expect(container.textContent).toContain('3분기 계획')
+  // 서버는 글 없는 카드를 거절한다. 글을 써야 보낸다.
+  expect(sendButton().disabled).toBe(true)
+  act(() => type(container, '검토 부탁드립니다'))
+  act(() => container.querySelector('form')!.requestSubmit())
+  expect(sendMessage).toHaveBeenLastCalledWith('a', {
+    body: '검토 부탁드립니다',
+    attachments: undefined,
+    doc_ref: 'd-1',
+  })
+  expect(container.textContent).not.toContain('3분기 계획')
+
+  // 떼면 주소가 글로 돌아온다. 문서 주소를 링크 글로 보내는 길이다.
+  paste(`${location.origin}/docs/d-1`)
+  act(() => container.querySelector<HTMLButtonElement>('[aria-label="문서 카드 떼기"]')!.click())
+  expect(container.textContent).not.toContain('3분기 계획')
+  expect(box()).toBe(`${location.origin}/docs/d-1`)
+  act(() => type(container, ''))
+
+  // 조회 중에는 글이 있어도 못 보낸다. 서버가 카드를 거절하면 비운 글이 사라진다.
+  act(() => type(container, '확인'))
+  paste(`${location.origin}/docs/d-wait`)
+  expect(sendButton().disabled).toBe(true)
+  sendMessage.mockClear()
+  act(() => container.querySelector('form')!.requestSubmit())
+  expect(sendMessage).not.toHaveBeenCalled()
+
+  // 다른 문서를 붙여 넣으면 카드가 바뀌고 앞 주소는 글로 돌아온다.
+  paste(`${location.origin}/docs/d-1`)
+  expect(box()).toBe(`확인 ${location.origin}/docs/d-wait`)
+  expect(sendButton().disabled).toBe(false)
+  act(() => type(container, '참고'))
+  act(() => container.querySelector<HTMLButtonElement>('[aria-label="문서 카드 떼기"]')!.click())
+  act(() => type(container, '참고'))
+
+  // 열 수 없는 문서(못 보는 문서·휴지통)면 카드를 떼고 주소를 글 끝에 되돌린다.
+  for (const id of ['d-gone', 'd-trash']) {
+    act(() => type(container, '참고'))
+    paste(`${location.origin}/docs/${id}`)
+    expect(box()).toBe(`참고 ${location.origin}/docs/${id}`)
+    expect(container.querySelector('[aria-label="문서 카드 떼기"]')).toBeNull()
+    expect(container.querySelector('[role="alert"]')!.textContent).toContain('카드 대신 주소로')
+  }
+
   act(() => root.unmount())
 })

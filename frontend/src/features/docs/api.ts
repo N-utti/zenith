@@ -105,10 +105,12 @@ export function useMoveNode() {
   })
 }
 
-export function useDoc(docId: string) {
+/** `enabled` 는 붙일 문서가 생길 때까지 부르지 않는 자리(채팅 입력창의 카드)가 쓴다. */
+export function useDoc(docId: string, enabled = true) {
   return useQuery({
     queryKey: docKeys.detail(docId),
     queryFn: () => api<DocDetail>(`/docs/${docId}`),
+    enabled,
   })
 }
 

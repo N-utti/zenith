@@ -84,7 +84,8 @@ export interface ChatSocket {
    */
   sendMessage: (
     channelId: string,
-    input: { body: string; attachments?: ChatAttachment[] },
+    /** `doc_ref` 는 문서 카드로 붙일 문서 id. 서버가 못 보는 문서면 `VALIDATION` 으로 거절한다. */
+    input: { body: string; attachments?: ChatAttachment[]; doc_ref?: string },
   ) => boolean
   /**
    * 여기까지 읽었다고 알린다(04 §4.1 `read`). 닫혀 있으면 버린다. 다시 열릴 때 호출부가
@@ -409,9 +410,9 @@ export function useChatSocket(): ChatSocket {
   }, [])
 
   const sendMessage = useCallback<ChatSocket['sendMessage']>(
-    (channelId, { body, attachments }) => {
-      // attachments 가 undefined 면 JSON 에서 키가 빠진다. 서버 기본값이 None 이라 그대로 맞다.
-      const sent = sendOp({ op: 'msg', channel_id: channelId, body, attachments })
+    (channelId, { body, attachments, doc_ref }) => {
+      // attachments·doc_ref 가 undefined 면 JSON 에서 키가 빠진다. 서버 기본값이 None 이라 그대로 맞다.
+      const sent = sendOp({ op: 'msg', channel_id: channelId, body, attachments, doc_ref })
       // 내 글이 돌아올 때가 아니라 보낼 때 켠다. 서버는 거절(`AI_THROTTLED`)을 내 글을 뿌리기 전에 보내서,
       // 돌아올 때 켜면 거절에 꺼진 뒤 다시 켜져 상한까지 남는다.
       if (sent && isAiCommand(body)) showTyping(channelId, AI_NAME, AI_REPLY_TTL_MS)

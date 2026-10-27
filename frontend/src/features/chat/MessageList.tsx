@@ -129,18 +129,27 @@ function Attachments({ files }: { files: ChatAttachment[] | null }) {
  * 휴지통 문서도 열어 주고, 영구 삭제되면 서버가 `doc_ref` 를 비운다.
  * 한계: 카드 하나에 문서 상세(본문 Yjs 상태 포함)를 통째로 받는다. 무거운 문서가 걸린
  * 채널이 느려지면 백엔드에 메시지 응답에 제목을 실어 달라고 한다(계약 변경).
+ *
+ * 입력창의 보내기 전 미리보기(`Composer`)도 이것을 그린다.
  */
-function DocCard({ docId }: { docId: string }) {
+export function DocCard({ docId, className }: { docId: string; className?: string }) {
   const { data: doc, isPending, isError } = useDoc(docId)
   // 조회 중에도 카드 높이를 잡아 둔다. 늦게 뜨면 채널을 연 직후 맨 아래가 가려진다.
   if (isPending)
-    return <div className="bg-sunken mt-1.5 h-[50px] max-w-xs animate-pulse rounded-lg" />
+    return (
+      <div
+        className={cn('bg-sunken mt-1.5 h-[50px] max-w-xs animate-pulse rounded-lg', className)}
+      />
+    )
   if (isError || doc.deleted_at) return null
 
   return (
     <Link
       to={`/docs/${docId}`}
-      className="border-line bg-sunken hover:border-line-strong mt-1.5 flex max-w-xs items-center gap-2.5 rounded-lg border px-3 py-2 transition-colors"
+      className={cn(
+        'border-line bg-sunken hover:border-line-strong mt-1.5 flex max-w-xs items-center gap-2.5 rounded-lg border px-3 py-2 transition-colors',
+        className,
+      )}
     >
       <FileText className="text-subtle size-4 shrink-0" />
       <div className="min-w-0">
