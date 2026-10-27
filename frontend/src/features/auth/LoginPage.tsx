@@ -50,7 +50,7 @@ export function LoginPage() {
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
           <ZenithMark className="mx-auto mb-3 size-11" />
-          <h1 className="text-fg text-xl font-semibold tracking-tight">제니스에 로그인</h1>
+          <h1 className="text-fg text-xl font-semibold tracking-tight">제니스 자산운용</h1>
           <p className="text-muted mt-1 text-sm">사내 계정으로 로그인하세요.</p>
         </div>
 
