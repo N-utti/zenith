@@ -347,7 +347,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
             aria-autocomplete="list"
             aria-activedescendant={optionId(active)}
             placeholder="문서·채팅·게시글 검색, 사람·채팅방·화면 이동…"
-            // 터치 기기에서 16px: 아이폰 사파리는 그보다 작은 글자의 입력칸을 누르면 화면을 확대한다(공용 Input 과 같은 이유).
+            // 터치 기기에서 16px 이상: 아이폰 사파리는 그보다 작은 글자의 입력칸을 누르면 화면을 확대한다(공용 Input 과 같은 이유).
             className="text-fg placeholder:text-subtle h-13 flex-1 bg-transparent text-sm outline-none pointer-coarse:text-base"
           />
         </div>

@@ -8,7 +8,7 @@ import { cn } from '@/lib/cn'
  * 이미 테두리가 있어서, 그 위에 outline을 더하면 두 겹이 된다.
  */
 /*
- * pointer-coarse:text-base — 터치 기기에서는 16px 로 키운다.
+ * pointer-coarse:text-base — 터치 기기에서는 16px 이상으로 키운다(지금은 17px, index.css 의 손가락 기기 단계).
  * iOS Safari 는 글자가 16px 보다 작은 입력칸에 포커스가 가면 화면을 확대한다. 그 순간 좌우가
  * 잘리고, 확대 애니메이션 중에 탭 좌표가 어긋나 첫 탭이 먹지 않는 일까지 생긴다. 마우스를
  * 쓰는 화면은 14px 그대로다.
