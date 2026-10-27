@@ -141,7 +141,7 @@ const ROW_LINK =
 /** 줄의 색. 지금 화면이거나, 올려 뒀거나, 이 줄의 메뉴가 열려 있을 때. */
 const rowTone = (active: boolean, menuOpen: boolean) =>
   active
-    ? 'md:bg-accent-soft text-accent font-semibold' // 폰은 바탕 없이 글자색만(Sidebar 의 ROW_ACTIVE)
+    ? 'md:bg-accent-selected text-accent md:text-accent-hover font-semibold' // 폰은 바탕 없이 글자색만(Sidebar 의 ROW_ACTIVE)
     : menuOpen
       ? 'bg-surface-hover text-fg'
       : 'text-muted hover:bg-surface-hover hover:text-fg'

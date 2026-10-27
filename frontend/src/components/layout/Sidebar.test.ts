@@ -37,8 +37,8 @@ const sendRead = vi.fn()
 let root: Root | undefined
 afterEach(() => act(() => root?.unmount()))
 
-/** `/chat/c-2` 를 보고 있는 사이드바의 채널·DM 구획. */
-function render(online: ReadonlySet<string> = new Set()) {
+/** `current`(기본 `/chat/c-2`)를 보고 있는 사이드바의 채널·DM 구획. */
+function render(online: ReadonlySet<string> = new Set(), current = '/chat/c-2') {
   const qc = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: false } } })
   qc.setQueryData(chatKeys.channels, {
     items: [
@@ -72,7 +72,7 @@ function render(online: ReadonlySet<string> = new Set()) {
               { value: toast },
               createElement(
                 MemoryRouter,
-                { initialEntries: ['/chat/c-2'] },
+                { initialEntries: [current] },
                 createElement(ChannelSection),
               ),
             ),
@@ -117,6 +117,17 @@ test('DM 상대가 접속해 있으면 그 줄에 초록 점이 붙는다', () =
   expect(dot(render())).toBeNull()
   act(() => root!.unmount())
   expect(dot(render(new Set(['u-2'])))).not.toBeNull()
+})
+
+test('안 읽은 방은 이름이 진하다. 보고 있는 방이면 선택 줄 색을 따른다', () => {
+  api.mockResolvedValue({ items: [] })
+  const bold = (container: HTMLElement, href: string) =>
+    container.querySelector(`a[href="${href}"]`)!.classList.contains('text-fg')
+  const viewingOther = render()
+  expect(bold(viewingOther, '/chat/c-3')).toBe(true)
+  expect(bold(viewingOther, '/chat/c-1')).toBe(false)
+  act(() => root!.unmount())
+  expect(bold(render(new Set(), '/chat/c-3'), '/chat/c-3')).toBe(false)
 })
 
 // jsdom 에는 없다. 메뉴가 구르는 영역을 찾을 때 쓴다.
