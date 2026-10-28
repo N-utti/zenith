@@ -1,9 +1,9 @@
 import { useRef, useState } from 'react'
-import { Paperclip } from 'lucide-react'
+import { ArrowUp, Paperclip, Sparkles } from 'lucide-react'
 import { Link, useNavigate, useSearchParams } from 'react-router'
 import { BackLink } from '@/components/ui/BackLink'
 import { Button } from '@/components/ui/Button'
-import { Card, CardHeader } from '@/components/ui/Card'
+import { Card } from '@/components/ui/Card'
 import { Field } from '@/components/ui/Field'
 import { Input } from '@/components/ui/Input'
 import { PageHeader } from '@/components/ui/PageHeader'
@@ -14,6 +14,7 @@ import { Textarea } from '@/components/ui/Textarea'
 import { useToast } from '@/components/ui/ToastContext'
 import {
   uploadApprovalAttachment,
+  useAiDraft,
   useApproval,
   useCreateDraft,
   useSubmitApproval,
@@ -23,6 +24,7 @@ import { AttachmentList } from '@/features/approvals/AttachmentList'
 import {
   APPROVAL_TEMPLATES,
   filledFields,
+  fromAiDraft,
   switchTemplate,
   templateContent,
   templateOf,
@@ -68,6 +70,8 @@ export function ApprovalNewPage() {
   const create = useCreateDraft()
   const update = useUpdateDraft()
   const submit = useSubmitApproval()
+  const aiDraft = useAiDraft()
+  const [aiRequest, setAiRequest] = useState('')
 
   const trip = arrangementId
     ? arrangements.data?.items.find((a) => a.id === arrangementId && a.kind === 'trip')
@@ -210,9 +214,38 @@ export function ApprovalNewPage() {
     !(Number.isInteger(amountNumber) && amountNumber >= 0 && amountNumber <= 10 ** 13)
       ? '금액은 0원부터 10조 원까지, 원 단위 숫자로 적습니다.'
       : null
-  const busy = saving
+  // AI 초안이 도는 동안에도 잠근다. 그 사이 적은 글은 초안에 덮인다.
+  const busy = saving || aiDraft.isPending
   const titleText = titleOf(active, titleValue, fieldValues)
   const filled = filledFields(active, { title: titleText, body: bodyValue, values: fieldValues })
+
+  /** 한 줄 요청으로 서식·제목·금액·칸을 채운다. 써 둔 게 있으면 덮기 전에 묻는다. */
+  const fillWithAi = async () => {
+    const request = aiRequest.trim()
+    if (!request || busy) return
+    const written =
+      filled.title ||
+      // 금액 없는 서식으로 바꾸면 숨은 금액이 남는다. 안 보이는 값으로 묻지 않는다.
+      (!form.noAmount && amountValue.trim() !== '') ||
+      switchTemplate(active, { title: '', body: bodyValue, values: fieldValues }).overwrites
+    if (written && !confirm('쓰던 내용을 AI 초안으로 바꿀까요?')) return
+    let next
+    try {
+      next = fromAiDraft(await aiDraft.mutateAsync(request))
+    } catch {
+      return // 문구는 `aiDraft.error` 가 칸 아래에 띄운다.
+    }
+    setTemplate(next.template)
+    setTitle(next.title)
+    setAmount(next.amount)
+    setBody(next.body)
+    setValues(next.values)
+  }
+  const aiError = aiDraft.error
+    ? aiDraft.error instanceof ApiError
+      ? aiDraft.error.message
+      : 'AI 초안을 만들지 못했습니다.'
+    : null
   const canSave = filled.title && !amountError && !busy
   // 임시저장은 덜 채워도 된다. 상신은 그 서식의 필수 칸과 금액까지 본다.
   // 금액 필수 서식은 0원도 안 쓴 것으로 친다.
@@ -295,9 +328,52 @@ export function ApprovalNewPage() {
               : '결재선은 상신할 때 정해집니다.'
         }
       />
+      {/* 카드가 하나뿐이라 머리 라벨을 달지 않는다. 페이지 제목이 이미 무엇을 쓰는 곳인지 말한다. */}
       <Card>
-        <CardHeader title="내용" />
-        <fieldset disabled={busy} className="min-w-0 space-y-4 px-5 pb-5">
+        <fieldset disabled={busy} className="min-w-0 space-y-4 p-5">
+          {/* ponytail: 빈 폼에서만. 임시저장·다시 작성·출장비 결의서는 서식이 정해져 있어 칸만 채우는 길이 따로 필요하다. */}
+          {/* 폼의 한 칸이 아니라 폼을 채우는 도구라, 그라데이션 테두리 알약으로 다른 입력과 가른다. */}
+          {templatable && (
+            <Field label="AI 로 초안" error={aiError}>
+              {(slot) => (
+                // 테두리 그라데이션은 1px 바깥 틀의 배경이다. border 에는 그라데이션을 못 칠한다.
+                <div className="from-accent to-ai focus-within:ring-accent/25 rounded-full bg-linear-to-r p-px focus-within:ring-3">
+                  <div className="bg-surface flex items-center gap-2 rounded-full py-1 pr-1 pl-4">
+                    <Sparkles className="text-accent size-4 shrink-0" />
+                    <input
+                      {...slot}
+                      className="text-fg placeholder:text-subtle h-8 min-w-0 flex-1 bg-transparent text-sm outline-none disabled:cursor-not-allowed pointer-coarse:text-base"
+                      value={aiRequest}
+                      maxLength={1000}
+                      placeholder="예: 어제 거래처 점심 8만 4천원 법인카드"
+                      onChange={(e) => {
+                        setAiRequest(e.target.value)
+                        aiDraft.reset() // 지난 실패 문구는 고쳐 쓰기 시작하면 걷는다.
+                      }}
+                      onKeyDown={(e) => {
+                        // 한글 조합 중의 Enter 는 글자를 확정하는 것이라 보내지 않는다.
+                        if (e.key === 'Enter' && !e.nativeEvent.isComposing) void fillWithAi()
+                      }}
+                    />
+                    <button
+                      type="button"
+                      aria-label="채우기"
+                      title="채우기"
+                      disabled={!aiRequest.trim()}
+                      onClick={() => void fillWithAi()}
+                      className="from-accent to-ai text-on-accent grid size-8 shrink-0 cursor-pointer place-items-center rounded-full bg-linear-to-r transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-35"
+                    >
+                      {aiDraft.isPending ? (
+                        <Spinner className="border-t-on-accent size-3.5" />
+                      ) : (
+                        <ArrowUp className="size-4" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </Field>
+          )}
           {templatable && (
             <Field
               label="서식"
@@ -480,7 +556,7 @@ export function ApprovalNewPage() {
               임시저장
             </Button>
             <Button size="sm" disabled={!canSubmit} onClick={() => void save(true)}>
-              {busy ? <Spinner className="border-t-on-accent" /> : '상신'}
+              {saving ? <Spinner className="border-t-on-accent" /> : '상신'}
             </Button>
           </div>
         </fieldset>
