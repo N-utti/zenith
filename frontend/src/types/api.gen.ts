@@ -1046,6 +1046,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ai/approval-draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** {request, forms[]} → {form, title, amount, fields, body} AI 기안 초안 — 폼만 채우고 문서는 만들지 않는다 */
+        post: operations["approval_draft_api_ai_approval_draft_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ai/check": {
         parameters: {
             query?: never;
@@ -3175,18 +3192,62 @@ export interface components {
             /** Ai Source */
             ai_source?: boolean | null;
         };
-        /** DraftIn */
-        DraftIn: {
+        /** DraftField */
+        DraftField: {
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
             /**
-             * Type Code
-             * @constant
+             * Kind
+             * @enum {string}
              */
-            type_code: "general";
+            kind: "text" | "date" | "textarea" | "select";
+            /**
+             * Required
+             * @default false
+             */
+            required: boolean;
+            /** Options */
+            options?: string[] | null;
+        };
+        /** DraftForm */
+        DraftForm: {
+            /** Form */
+            form: string;
+            /** Label */
+            label: string;
+            /**
+             * Amount
+             * @default optional
+             * @enum {string}
+             */
+            amount: "required" | "optional" | "none";
+            /**
+             * Title
+             * @default true
+             */
+            title: boolean;
+            /**
+             * Fields
+             * @default []
+             */
+            fields: components["schemas"]["DraftField"][];
+        };
+        /** DraftOut */
+        DraftOut: {
+            /** Form */
+            form: string;
             /** Title */
             title: string;
-            subject: components["schemas"]["Subject-Input"];
-            /** References */
-            references?: string[] | null;
+            /** Amount */
+            amount: number | null;
+            /** Fields */
+            fields: {
+                [key: string]: string;
+            };
+            /** Body */
+            body: string;
         };
         /** DropIn */
         DropIn: {
@@ -4861,6 +4922,26 @@ export interface components {
             content_type: string;
             /** Chars */
             chars: number;
+        };
+        /** DraftIn */
+        app__routers__ai__DraftIn: {
+            /** Request */
+            request: string;
+            /** Forms */
+            forms: components["schemas"]["DraftForm"][];
+        };
+        /** DraftIn */
+        app__routers__approvals__DraftIn: {
+            /**
+             * Type Code
+             * @constant
+             */
+            type_code: "general";
+            /** Title */
+            title: string;
+            subject: components["schemas"]["Subject-Input"];
+            /** References */
+            references?: string[] | null;
         };
         /** Person */
         app__routers__approvals__Person: {
@@ -7554,6 +7635,39 @@ export interface operations {
             };
         };
     };
+    approval_draft_api_ai_approval_draft_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["app__routers__ai__DraftIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     check_api_ai_check_post: {
         parameters: {
             query?: never;
@@ -8426,7 +8540,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["DraftIn"];
+                "application/json": components["schemas"]["app__routers__approvals__DraftIn"];
             };
         };
         responses: {
@@ -8490,7 +8604,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["DraftIn"];
+                "application/json": components["schemas"]["app__routers__approvals__DraftIn"];
             };
         };
         responses: {

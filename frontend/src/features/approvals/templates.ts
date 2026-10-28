@@ -1,4 +1,5 @@
 import { toISODate } from '@/lib/datetime'
+import type { Schema } from '@/types'
 
 /**
  * 일반 기안의 서식. 서버에는 전부 일반 기안(`general`)으로 저장되고, 서식은 제목 머리말과 적는 칸을 정한다.
@@ -227,14 +228,8 @@ export function draftForms() {
   }))
 }
 
-/** AI 초안 응답. 결재 문서가 아니라 폼에 채울 값이다. */
-export interface AiDraft {
-  form: string
-  title: string
-  amount: number | null
-  fields: Record<string, string>
-  body: string
-}
+/** AI 초안 응답(백엔드 #553). 결재 문서가 아니라 폼에 채울 값이다. */
+export type AiDraft = Schema<'DraftOut'>
 
 /**
  * AI 초안을 폼 값으로. 모델이 만든 값이라 모양부터 믿지 않는다(`unknown`): 글자가 아닌 값은 빈 값,
