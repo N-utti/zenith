@@ -332,13 +332,16 @@ export function ApprovalNewPage() {
         <CardHeader title="내용" />
         <fieldset disabled={busy} className="min-w-0 space-y-4 px-5 pb-5">
           {/* ponytail: 빈 폼에서만. 임시저장·다시 작성·출장비 결의서는 서식이 정해져 있어 칸만 채우는 길이 따로 필요하다. */}
+          {/* 폼의 한 칸이 아니라 폼을 채우는 도구라, 옅은 강조색 상자로 다른 입력과 가른다. */}
           {templatable && (
-            <Field label="AI 로 초안" error={aiError}>
+            <Field label="AI 로 초안" error={aiError} className="bg-accent-soft rounded-xl p-3">
               {(slot) => (
                 <div className="flex gap-2">
                   <Input
                     {...slot}
+                    icon={<Wand2 className="text-accent size-4" />}
                     className="min-w-0 flex-1"
+                    inputClassName="bg-surface"
                     value={aiRequest}
                     maxLength={1000}
                     placeholder="예: 어제 거래처 점심 8만 4천원 법인카드"
@@ -353,11 +356,10 @@ export function ApprovalNewPage() {
                   />
                   <Button
                     type="button"
-                    variant="secondary"
                     disabled={!aiRequest.trim()}
                     onClick={() => void fillWithAi()}
                   >
-                    {aiDraft.isPending ? <Spinner /> : <Wand2 className="size-4" />}
+                    {aiDraft.isPending && <Spinner className="border-t-on-accent" />}
                     채우기
                   </Button>
                 </div>
