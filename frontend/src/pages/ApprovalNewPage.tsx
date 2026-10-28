@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { Paperclip, Wand2 } from 'lucide-react'
+import { ArrowUp, Paperclip, Sparkles } from 'lucide-react'
 import { Link, useNavigate, useSearchParams } from 'react-router'
 import { BackLink } from '@/components/ui/BackLink'
 import { Button } from '@/components/ui/Button'
@@ -332,36 +332,44 @@ export function ApprovalNewPage() {
       <Card>
         <fieldset disabled={busy} className="min-w-0 space-y-4 p-5">
           {/* ponytail: 빈 폼에서만. 임시저장·다시 작성·출장비 결의서는 서식이 정해져 있어 칸만 채우는 길이 따로 필요하다. */}
-          {/* 폼의 한 칸이 아니라 폼을 채우는 도구라, 옅은 강조색 상자로 다른 입력과 가른다. */}
+          {/* 폼의 한 칸이 아니라 폼을 채우는 도구라, 그라데이션 테두리 알약으로 다른 입력과 가른다. */}
           {templatable && (
-            <Field label="AI 로 초안" error={aiError} className="bg-accent-soft rounded-xl p-3">
+            <Field label="AI 로 초안" error={aiError}>
               {(slot) => (
-                <div className="flex gap-2">
-                  <Input
-                    {...slot}
-                    icon={<Wand2 className="text-accent size-4" />}
-                    className="min-w-0 flex-1"
-                    inputClassName="bg-surface"
-                    value={aiRequest}
-                    maxLength={1000}
-                    placeholder="예: 어제 거래처 점심 8만 4천원 법인카드"
-                    onChange={(e) => {
-                      setAiRequest(e.target.value)
-                      aiDraft.reset() // 지난 실패 문구는 고쳐 쓰기 시작하면 걷는다.
-                    }}
-                    onKeyDown={(e) => {
-                      // 한글 조합 중의 Enter 는 글자를 확정하는 것이라 보내지 않는다.
-                      if (e.key === 'Enter' && !e.nativeEvent.isComposing) void fillWithAi()
-                    }}
-                  />
-                  <Button
-                    type="button"
-                    disabled={!aiRequest.trim()}
-                    onClick={() => void fillWithAi()}
-                  >
-                    {aiDraft.isPending && <Spinner className="border-t-on-accent" />}
-                    채우기
-                  </Button>
+                // 테두리 그라데이션은 1px 바깥 틀의 배경이다. border 에는 그라데이션을 못 칠한다.
+                <div className="from-accent to-ai focus-within:ring-accent/25 rounded-full bg-linear-to-r p-px focus-within:ring-3">
+                  <div className="bg-surface flex items-center gap-2 rounded-full py-1 pr-1 pl-4">
+                    <Sparkles className="text-accent size-4 shrink-0" />
+                    <input
+                      {...slot}
+                      className="text-fg placeholder:text-subtle h-8 min-w-0 flex-1 bg-transparent text-sm outline-none disabled:cursor-not-allowed pointer-coarse:text-base"
+                      value={aiRequest}
+                      maxLength={1000}
+                      placeholder="예: 어제 거래처 점심 8만 4천원 법인카드"
+                      onChange={(e) => {
+                        setAiRequest(e.target.value)
+                        aiDraft.reset() // 지난 실패 문구는 고쳐 쓰기 시작하면 걷는다.
+                      }}
+                      onKeyDown={(e) => {
+                        // 한글 조합 중의 Enter 는 글자를 확정하는 것이라 보내지 않는다.
+                        if (e.key === 'Enter' && !e.nativeEvent.isComposing) void fillWithAi()
+                      }}
+                    />
+                    <button
+                      type="button"
+                      aria-label="채우기"
+                      title="채우기"
+                      disabled={!aiRequest.trim()}
+                      onClick={() => void fillWithAi()}
+                      className="from-accent to-ai text-on-accent grid size-8 shrink-0 cursor-pointer place-items-center rounded-full bg-linear-to-r transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-35"
+                    >
+                      {aiDraft.isPending ? (
+                        <Spinner className="border-t-on-accent size-3.5" />
+                      ) : (
+                        <ArrowUp className="size-4" />
+                      )}
+                    </button>
+                  </div>
                 </div>
               )}
             </Field>
