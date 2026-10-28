@@ -3405,6 +3405,47 @@
         }
       }
     },
+    "/api/ai/approval-draft": {
+      "post": {
+        "tags": [
+          "ai"
+        ],
+        "summary": "{request, forms[]} → {form, title, amount, fields, body} AI 기안 초안 — 폼만 채우고 문서는 만들지 않는다",
+        "operationId": "approval_draft_api_ai_approval_draft_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/app__routers__ai__DraftIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/ai/check": {
       "post": {
         "tags": [
@@ -4681,7 +4722,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/DraftIn"
+                "$ref": "#/components/schemas/app__routers__approvals__DraftIn"
               }
             }
           },
@@ -4735,7 +4776,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/DraftIn"
+                "$ref": "#/components/schemas/app__routers__approvals__DraftIn"
               }
             }
           }
@@ -10101,46 +10142,147 @@
         "type": "object",
         "title": "DocPatchIn"
       },
-      "DraftIn": {
+      "DraftField": {
         "properties": {
-          "type_code": {
+          "key": {
             "type": "string",
-            "const": "general",
-            "title": "Type Code"
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,39}$",
+            "title": "Key"
           },
-          "title": {
+          "label": {
             "type": "string",
-            "maxLength": 200,
+            "maxLength": 100,
             "minLength": 1,
-            "title": "Title"
+            "title": "Label"
           },
-          "subject": {
-            "$ref": "#/components/schemas/Subject-Input"
+          "kind": {
+            "type": "string",
+            "enum": [
+              "text",
+              "date",
+              "textarea",
+              "select"
+            ],
+            "title": "Kind"
           },
-          "references": {
+          "required": {
+            "type": "boolean",
+            "title": "Required",
+            "default": false
+          },
+          "options": {
             "anyOf": [
               {
                 "items": {
                   "type": "string",
-                  "format": "uuid"
+                  "maxLength": 100,
+                  "minLength": 1
                 },
                 "type": "array",
-                "maxItems": 50
+                "maxItems": 20
               },
               {
                 "type": "null"
               }
             ],
-            "title": "References"
+            "title": "Options"
           }
         },
         "type": "object",
         "required": [
-          "type_code",
-          "title",
-          "subject"
+          "key",
+          "label",
+          "kind"
         ],
-        "title": "DraftIn"
+        "title": "DraftField"
+      },
+      "DraftForm": {
+        "properties": {
+          "form": {
+            "type": "string",
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,39}$",
+            "title": "Form"
+          },
+          "label": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Label"
+          },
+          "amount": {
+            "type": "string",
+            "enum": [
+              "required",
+              "optional",
+              "none"
+            ],
+            "title": "Amount",
+            "default": "optional"
+          },
+          "title": {
+            "type": "boolean",
+            "title": "Title",
+            "default": true
+          },
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/DraftField"
+            },
+            "type": "array",
+            "maxItems": 20,
+            "title": "Fields",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "form",
+          "label"
+        ],
+        "title": "DraftForm"
+      },
+      "DraftOut": {
+        "properties": {
+          "form": {
+            "type": "string",
+            "title": "Form"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "amount": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount"
+          },
+          "fields": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Fields"
+          },
+          "body": {
+            "type": "string",
+            "title": "Body"
+          }
+        },
+        "type": "object",
+        "required": [
+          "form",
+          "title",
+          "amount",
+          "fields",
+          "body"
+        ],
+        "title": "DraftOut"
       },
       "DropIn": {
         "properties": {
@@ -14664,6 +14806,72 @@
           "chars"
         ],
         "title": "AttachmentOut"
+      },
+      "app__routers__ai__DraftIn": {
+        "properties": {
+          "request": {
+            "type": "string",
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Request"
+          },
+          "forms": {
+            "items": {
+              "$ref": "#/components/schemas/DraftForm"
+            },
+            "type": "array",
+            "maxItems": 10,
+            "minItems": 1,
+            "title": "Forms"
+          }
+        },
+        "type": "object",
+        "required": [
+          "request",
+          "forms"
+        ],
+        "title": "DraftIn"
+      },
+      "app__routers__approvals__DraftIn": {
+        "properties": {
+          "type_code": {
+            "type": "string",
+            "const": "general",
+            "title": "Type Code"
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Title"
+          },
+          "subject": {
+            "$ref": "#/components/schemas/Subject-Input"
+          },
+          "references": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "type": "array",
+                "maxItems": 50
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "References"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type_code",
+          "title",
+          "subject"
+        ],
+        "title": "DraftIn"
       },
       "app__routers__approvals__Person": {
         "properties": {
