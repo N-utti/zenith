@@ -3,7 +3,7 @@ import { Paperclip, Wand2 } from 'lucide-react'
 import { Link, useNavigate, useSearchParams } from 'react-router'
 import { BackLink } from '@/components/ui/BackLink'
 import { Button } from '@/components/ui/Button'
-import { Card, CardHeader } from '@/components/ui/Card'
+import { Card } from '@/components/ui/Card'
 import { Field } from '@/components/ui/Field'
 import { Input } from '@/components/ui/Input'
 import { PageHeader } from '@/components/ui/PageHeader'
@@ -328,9 +328,9 @@ export function ApprovalNewPage() {
               : '결재선은 상신할 때 정해집니다.'
         }
       />
+      {/* 카드가 하나뿐이라 머리 라벨을 달지 않는다. 페이지 제목이 이미 무엇을 쓰는 곳인지 말한다. */}
       <Card>
-        <CardHeader title="내용" />
-        <fieldset disabled={busy} className="min-w-0 space-y-4 px-5 pb-5">
+        <fieldset disabled={busy} className="min-w-0 space-y-4 p-5">
           {/* ponytail: 빈 폼에서만. 임시저장·다시 작성·출장비 결의서는 서식이 정해져 있어 칸만 채우는 길이 따로 필요하다. */}
           {/* 폼의 한 칸이 아니라 폼을 채우는 도구라, 옅은 강조색 상자로 다른 입력과 가른다. */}
           {templatable && (
