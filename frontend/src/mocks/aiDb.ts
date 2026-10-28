@@ -250,7 +250,7 @@ export function checkClaims(text: string, web = false) {
 }
 
 /**
- * AI 초안(`POST /ai/approval-draft`, 백엔드 계약 제안). 실제로는 Claude 가 보낸 서식 표에서 서식을 고르고
+ * AI 초안(`POST /ai/approval-draft`, 백엔드 #553). 실제로는 Claude 가 보낸 서식 표에서 서식을 고르고
  * 칸을 채운다. 목은 낱말로 서식을 고르고 금액·어제/오늘만 읽는다. 응답 모양을 보이는 게 목적이다.
  */
 export function approvalDraft(request: string, today = new Date()): AiDraft {

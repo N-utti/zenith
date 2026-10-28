@@ -2069,7 +2069,7 @@ export const handlers = [
     })
   }),
 
-  // AI 초안(백엔드 계약 제안). 서버가 서식을 몰라서 화면이 서식 표(`forms`)를 같이 보낸다. 문서는 만들지 않는다.
+  // AI 초안(백엔드 #553). 서버가 서식을 몰라서 화면이 서식 표(`forms`)를 같이 보낸다. 문서는 만들지 않는다.
   http.post('/api/ai/approval-draft', async ({ request }) => {
     if (!authenticate()) return unauthorized()
     const { request: text, forms } = (await request.json()) as {

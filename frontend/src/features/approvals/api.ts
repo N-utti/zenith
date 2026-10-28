@@ -185,7 +185,7 @@ export function useDeleteDelegation() {
 }
 
 /**
- * AI 초안(`POST /ai/approval-draft`, 백엔드 계약 제안). 한 줄 요청에서 서식과 칸 값을 받는다.
+ * AI 초안(`POST /ai/approval-draft`, 백엔드 #553). 한 줄 요청에서 서식과 칸 값을 받는다.
  * 결재 문서를 만들지 않는다. 폼에 채우고 상신은 사람이 누른다.
  */
 export function useAiDraft() {
