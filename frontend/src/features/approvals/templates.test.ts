@@ -2,6 +2,7 @@ import { expect, it } from 'vitest'
 import {
   composeBody,
   filledFields,
+  fromAiDraft,
   switchTemplate,
   templateContent,
   templateOf,
@@ -119,4 +120,45 @@ it('모르는 서식 이름은 기안서로 연다', () => {
   expect(templateOf('leave-form')).toBe('general')
   // 객체가 물려받은 이름에 속지 않는다.
   expect(templateOf('toString')).toBe('general')
+})
+
+it('AI 초안은 서식에 맞는 값만 폼에 들어간다', () => {
+  const draft = {
+    form: 'expense',
+    title: '[지출결의] 거래처 오찬',
+    amount: 84000,
+    fields: { date: '어제', method: '현금', items: '거래처 오찬 2인', stray: '없는 칸' },
+    body: '본문',
+  }
+  expect(fromAiDraft(draft)).toEqual({
+    template: 'expense',
+    // 머리말이 겹쳐 붙지 않는다.
+    title: '[지출결의] 거래처 오찬',
+    amount: '84000',
+    // 칸이 있는 서식은 본문을 안 쓴다. 날짜 꼴이 아닌 날짜, 보기에 없는 결제 방법, 없는 칸은 버린다.
+    body: '',
+    values: { items: '거래처 오찬 2인' },
+  })
+  // 모르는 서식은 기안서. 머리말이 없으면 붙이지 않고 본문을 쓴다.
+  expect(fromAiDraft({ ...draft, form: 'leave', title: '연차' })).toMatchObject({
+    template: 'general',
+    title: '연차',
+    body: '본문',
+    values: {},
+  })
+  // 금액을 안 받는 서식, 소수 금액은 비운다.
+  expect(fromAiDraft({ ...draft, form: 'certificate' }).amount).toBe('')
+  expect(fromAiDraft({ ...draft, amount: 1.5 }).amount).toBe('')
+  expect(
+    fromAiDraft({ ...draft, fields: { date: '2026-10-27', method: '법인카드' } }).values,
+  ).toEqual({ date: '2026-10-27', method: '법인카드' })
+})
+
+it('AI 응답 모양이 틀려도 던지지 않고 빈 값으로 채운다', () => {
+  const empty = { template: 'general', title: '', amount: '', body: '', values: {} }
+  expect(fromAiDraft(undefined)).toEqual(empty)
+  expect(fromAiDraft({ form: 'general', title: 3, body: 3, fields: null })).toEqual(empty)
+  expect(fromAiDraft({ form: 'expense', fields: { items: 5, date: '2026-02-30' } }).values).toEqual(
+    {},
+  )
 })

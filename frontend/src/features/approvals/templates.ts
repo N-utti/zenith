@@ -1,3 +1,5 @@
+import { toISODate } from '@/lib/datetime'
+
 /**
  * 일반 기안의 서식. 서버에는 전부 일반 기안(`general`)으로 저장되고, 서식은 제목 머리말과 적는 칸을 정한다.
  * 기안서는 칸 없이 본문을 자유롭게 쓴다. 나머지는 칸에 적은 값을 `subject.extra` 에 담고, 읽는 쪽이
@@ -203,6 +205,71 @@ export function composeBody(template: ApprovalTemplate, values: TemplateValues):
       return gap + (block ? `${each.label}:\n${each.value}` : `${each.label}: ${each.value}`)
     })
     .join('')
+}
+
+/**
+ * AI 초안 요청(`POST /ai/approval-draft`)에 싣는 서식 표. 서버는 서식을 몰라서 칸 정의를 같이 보낸다.
+ * `amount` 는 금액을 꼭 받는지(`required`), 받지 않는지(`none`), `title` 은 제목 칸이 있는지.
+ */
+export function draftForms() {
+  return Object.entries(APPROVAL_TEMPLATES).map(([form, each]) => ({
+    form,
+    label: each.label,
+    amount: each.noAmount ? 'none' : each.amountRequired ? 'required' : 'optional',
+    title: !each.autoTitle,
+    fields: each.fields.map(({ key, label, kind, required, options }) => ({
+      key,
+      label,
+      kind,
+      required: !!required,
+      ...(options && { options }),
+    })),
+  }))
+}
+
+/** AI 초안 응답. 결재 문서가 아니라 폼에 채울 값이다. */
+export interface AiDraft {
+  form: string
+  title: string
+  amount: number | null
+  fields: Record<string, string>
+  body: string
+}
+
+/**
+ * AI 초안을 폼 값으로. 모델이 만든 값이라 모양부터 믿지 않는다(`unknown`): 글자가 아닌 값은 빈 값,
+ * 모르는 서식은 기안서, 서식에 없는 칸, 보기에 없는 선택값, 달력에 없는 날짜는 버린다. 금액 없는
+ * 서식이나 원 단위 정수가 아닌 금액도 버린다. 제목 머리말은 서버가 붙였든 안 붙였든 그 서식의 것 하나로 맞춘다.
+ */
+export function fromAiDraft(reply: unknown) {
+  const draft = (reply && typeof reply === 'object' ? reply : {}) as Record<keyof AiDraft, unknown>
+  const given = (draft.fields && typeof draft.fields === 'object' ? draft.fields : {}) as Record<
+    string,
+    unknown
+  >
+  const text = (value: unknown) => (typeof value === 'string' ? value.trim() : '')
+  const template = templateOf(text(draft.form))
+  const { prefix, noAmount, fields } = APPROVAL_TEMPLATES[template]
+  const values: TemplateValues = {}
+  for (const field of fields) {
+    const value = text(given[field.key])
+    const ok =
+      field.kind === 'select'
+        ? field.options?.includes(value)
+        : field.kind === 'date'
+          ? // `2026-02-30` 은 꼴만 맞다. 날짜 칸은 그런 값을 빈칸으로 그려 안 보이는 채로 상신된다.
+            /^\d{4}-\d{2}-\d{2}$/.test(value) && toISODate(new Date(`${value}T00:00`)) === value
+          : value !== ''
+    if (ok) values[field.key] = value
+  }
+  const { amount } = draft
+  return {
+    template,
+    title: (prefix + stripPrefix(text(draft.title))).slice(0, TITLE_MAX),
+    amount: !noAmount && Number.isInteger(amount) && (amount as number) >= 0 ? String(amount) : '',
+    body: fields.length === 0 ? text(draft.body) : '',
+    values,
+  }
 }
 
 /**

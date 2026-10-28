@@ -25,6 +25,7 @@ import {
 } from './db'
 import {
   AI_MODELS,
+  approvalDraft,
   answer,
   checkClaims,
   DOC_ACTIONS,
@@ -2066,6 +2067,27 @@ export const handlers = [
       draft: docActionDraft(act, doc.title),
       citations: docActionCitations(act),
     })
+  }),
+
+  // AI 초안(백엔드 계약 제안). 서버가 서식을 몰라서 화면이 서식 표(`forms`)를 같이 보낸다. 문서는 만들지 않는다.
+  http.post('/api/ai/approval-draft', async ({ request }) => {
+    if (!authenticate()) return unauthorized()
+    const { request: text, forms } = (await request.json()) as {
+      request?: string
+      forms?: unknown[]
+    }
+    // 빈 요청·1,000자 초과·서식 표 없음은 스키마 검증이라 배열로 거절한다.
+    const reject = (field: string, msg: string) =>
+      HttpResponse.json(
+        { detail: [{ loc: ['body', field], msg, type: 'value_error' }], code: 'VALIDATION' },
+        { status: 422 },
+      )
+    if (!text?.trim() || text.length > 1000) {
+      return reject('request', 'String should have 1 to 1000 characters')
+    }
+    if (!forms?.length) return reject('forms', 'List should have at least 1 item')
+    await delay(800)
+    return HttpResponse.json(approvalDraft(text))
   }),
 
   // 팩트체크(백엔드 #382). 문서 id 와 글 중 하나는 보낸다. 둘 다면 글을 검사하고 문서 id 는 근거에서 빼는 데만 쓴다(#410). 응답은 스트림이 아니라 한 번에 온다.

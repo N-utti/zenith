@@ -1,4 +1,6 @@
 import type { AiModel, Citation } from '@/features/ai/types'
+import type { AiDraft } from '@/features/approvals/templates'
+import { toISODate } from '@/lib/datetime'
 import { ROLE_RANK, type User } from '@/types'
 
 /** 04 §8 `GET /ai/models`. 실제 서버는 설정된 Claude 모델 하나를 준다. */
@@ -245,4 +247,51 @@ export function checkClaims(text: string, web = false) {
         },
   )
   return { claims }
+}
+
+/**
+ * AI 초안(`POST /ai/approval-draft`, 백엔드 계약 제안). 실제로는 Claude 가 보낸 서식 표에서 서식을 고르고
+ * 칸을 채운다. 목은 낱말로 서식을 고르고 금액·어제/오늘만 읽는다. 응답 모양을 보이는 게 목적이다.
+ */
+export function approvalDraft(request: string, today = new Date()): AiDraft {
+  const has = (...words: string[]) => words.some((word) => request.includes(word))
+  const man = /(\d+)\s*만\s*(?:(\d+)\s*천)?/.exec(request)
+  const won = /(\d[\d,]*)\s*원/.exec(request)
+  const amount = man
+    ? Number(man[1]) * 10000 + Number(man[2] ?? 0) * 1000
+    : won
+      ? Number(won[1].replace(/,/g, ''))
+      : null
+  const form = has('출장')
+    ? 'trip'
+    : has('증명서')
+      ? 'certificate'
+      : has('구매', '구입', '사야')
+        ? 'purchase'
+        : has('품의')
+          ? 'proposal'
+          : amount !== null
+            ? 'expense'
+            : 'general'
+  const day = new Date(today)
+  if (has('어제')) day.setDate(day.getDate() - 1)
+  const method = has('개인') ? '개인 선지출' : has('카드', '법카') ? '법인카드' : ''
+  const fields: Record<string, Record<string, string>> = {
+    expense: { date: toISODate(day), method, items: request },
+    trip: { purpose: request, method, items: request },
+    purchase: { item: request, reason: request },
+    proposal: { reason: request, content: request },
+    certificate: {
+      kind: has('경력') ? '경력증명서' : '재직증명서',
+      copies: `${/([123])\s*부/.exec(request)?.[1] ?? '1'}부`,
+      purpose: request,
+    },
+  }
+  return {
+    form,
+    title: request.slice(0, 40),
+    amount: form === 'certificate' ? null : amount,
+    fields: fields[form] ?? {},
+    body: form === 'general' ? `${request}\n\n위와 같이 기안하오니 검토 바랍니다.` : '',
+  }
 }
