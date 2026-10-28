@@ -41,6 +41,8 @@ class ToolCalls:
     web_urls: list[str] = field(default_factory=list)
     # stop_reason == pause_turn — 서버측 도구가 턴을 끊었다. 라우터는 content 를 assistant 턴으로 붙이고 한 번 더 부른다
     paused: bool = False
+    # stop_reason == max_tokens — 도구 입력이 잘렸을 수 있다(README 59: 초안 경로는 503 으로 거부)
+    truncated: bool = False
 
 
 class LLMError(Exception):
@@ -134,9 +136,14 @@ class ClaudeProvider:
             if getattr(r, "type", "") == "web_search_result" and getattr(r, "url", None)
         ]
         paused = final.stop_reason == "pause_turn"
+        truncated = final.stop_reason == "max_tokens"
         if calls or paused or web_urls:
             yield ToolCalls(
-                calls=calls, content=list(final.content), web_urls=web_urls, paused=paused
+                calls=calls,
+                content=list(final.content),
+                web_urls=web_urls,
+                paused=paused,
+                truncated=truncated,
             )
 
 
