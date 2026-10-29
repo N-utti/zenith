@@ -6,11 +6,11 @@
 /* ── 1) 원시 토큰 ────────────────────────────────────────────────
    브랜드 팔레트와 타이포. 외부 폰트 CDN은 쓰지 않는다. 사내망 밖으로 나가도 되는 호출은
    서버의 AI 공급자 하나뿐이고 브라우저는 그 예외에 들지 않는다.
-   Noto Serif KR 은 npm 패키지에서 가져와 빌드에 같이 싣는다(`main.tsx` 의 import).
-   토큰 이름은 sans 그대로 둔다. Tailwind 기본 글꼴이 이 토큰을 읽는다. */
+   Pretendard는 npm 패키지에서 가져와 빌드에 같이 싣는다(`main.tsx` 의 import). */
 @theme {
   --font-sans:
-    'Noto Serif KR Variable', 'Noto Serif KR', AppleMyungjo, Batang, serif;
+    'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo',
+    'Segoe UI', 'Malgun Gothic', 'Noto Sans KR', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', 'D2Coding', ui-monospace, SFMono-Regular, Menlo, monospace;
 
   --color-brand-50: oklch(0.97 0.014 265);
