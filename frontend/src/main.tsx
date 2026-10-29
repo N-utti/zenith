@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { App } from './App'
 import { checkForUpdate, installExternalLinkHandler, restrictImageSources } from './lib/desktop'
 // 폰트 파일은 빌드 산출물에 같이 실린다(self-host). 글자 범위별로 쪼갠 woff2 라 화면에 나온 글자의 조각만 받는다.
-import 'pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css'
+import '@fontsource-variable/noto-serif-kr'
 import './styles/index.css'
 
 async function bootstrap() {
