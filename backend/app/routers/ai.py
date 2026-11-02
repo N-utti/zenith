@@ -104,6 +104,9 @@ SEARCH_TOOL = {
     },
 }
 MAX_TOOL_ROUNDS = 3  # 한 답변에 도구를 부를 수 있는 횟수 — 넘으면 tool_choice none 으로 답만 받는다
+# 마지막 라운드 앞에 사용자 메시지로 붙이는 안내 — 모델은 tool_choice none 을 모르고, 더 찾을 게 남았다고 여기면
+# thinking 만 하고 글 없이 턴을 끝낸다(주장 30개짜리 팩트체크 빈 답, 2026-11-02 재현)
+LAST_ROUND_NOTE = "도구 호출 횟수를 다 썼다. 더 찾지 말고 지금까지 모은 자료로 바로 답한다 — 못 찾은 것은 그렇다고 적는다."
 MAX_REF_DOCS = 5  # 한 질문의 참고 문서 수 상한(README 50) — 전문이 통째로 들어가므로
 MAX_ATTACHMENTS = 3  # 한 질문의 첨부 수 상한(README 51)
 ATTACH_MAX_BYTES = 10 * 1024 * 1024  # 채팅 첨부와 같은 10MB(main.py body_limit 12MB 안)
@@ -695,6 +698,13 @@ async def _turns(
     for round_ in range(MAX_TOOL_ROUNDS + 1):
         # 도구 정의는 늘 보낸다(앞 턴에 tool_use 블록이 있으면 API 가 요구) — 마지막 라운드는 부르지 못하게만
         tool_choice = {"type": "none"} if round_ == MAX_TOOL_ROUNDS else None
+        if round_ == MAX_TOOL_ROUNDS and messages[-1]["role"] == "user":
+            # 마지막 라운드 — 도구 결과 뒤에 「답만 하라」 안내. ponytail: 직전 턴이 pause_turn 이면 끝이 assistant 라
+            # 안내 없이 간다(이어 부르기 규약을 지킨다). 그 경로에서도 빈 답이 보이면 user 메시지로 따로 넣는다
+            messages[-1]["content"] = [
+                *messages[-1]["content"],
+                {"type": "text", "text": LAST_ROUND_NOTE},
+            ]
         turn_end: ToolCalls | None = None
         if parts and not parts[-1].endswith("\n"):
             parts.append("\n\n")  # 도구 앞에 쓴 글과 다음 턴의 글 사이

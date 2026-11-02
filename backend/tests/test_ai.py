@@ -606,6 +606,19 @@ async def test_chat_tool_rounds_are_capped_and_empty_search_is_reported(
         SearchingProvider.choices[-1] == {"type": "none"} and SearchingProvider.choices[0] is None
     )
     assert "찾은 자료가 없습니다." in SearchingProvider.turns[1][-1]["content"][0]["content"]
+    # 마지막 턴 앞에만 「더 찾지 말고 답하라」 안내 — 없으면 모델이 thinking 만 하고 글 없이 끝낸다(팩트체크 빈 답)
+    assert SearchingProvider.turns[-1][-1]["content"][-1] == {
+        "type": "text",
+        "text": ai.LAST_ROUND_NOTE,
+    }
+    tool_turns = [
+        m
+        for m in SearchingProvider.turns[-1]
+        if isinstance(m["content"], list) and m["content"][0].get("type") == "tool_result"
+    ]
+    assert [m["content"][-1]["type"] for m in tool_turns] == ["tool_result"] * (
+        ai.MAX_TOOL_ROUNDS - 1
+    ) + ["text"]
     assert next(d for e, d in ev if e == "citations") == []  # 근거가 없으니 [[1]] 도 카드 없음
     assert ev[-1][0] == "done"
 
