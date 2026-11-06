@@ -28,7 +28,7 @@ FastAPI 프로세스 하나가 REST · WebSocket(채팅·알림·presence) · Yj
 | **FE** | React 19 · Vite · Tailwind v4 · TipTap + Yjs |
 | **BE** | FastAPI · PostgreSQL 16 + pgvector · Redis · MinIO · Caddy |
 | **AI** | Claude API(tool use) · bge-m3 임베딩 — 공급자 경계는 `app/ai/provider.py` |
-| **앱** | Tauri 2(Win) · Capacitor 8(And/iOS, v1.1) |
+| **앱** | Tauri 2(Win) · Android WebView 셸(.apk) · iOS 는 홈 화면 웹앱 |
 
 ## 📁 모노레포 구조
 
@@ -36,8 +36,9 @@ FastAPI 프로세스 하나가 REST · WebSocket(채팅·알림·presence) · Yj
 zenith/
 ├─ backend/    FastAPI · 인증(JWT) · RAG · 실시간(WS/Yjs)
 ├─ frontend/   React 19 프로토타입 → API 연동
-├─ apps/       Tauri(Win) · Capacitor(Android/iOS) 패키징
-│  └─ desktop/   Windows 데스크탑 셸 → .msi  (npm run dev / npm run build)
+├─ apps/       Tauri(Win) · Android 패키징
+│  ├─ desktop/   Windows 데스크탑 셸 → .msi  (npm run dev / npm run build)
+│  └─ android/   Android 셸 → .apk  (ZENITH_URL=... ./build.sh)
 ├─ infra/      배포·온프레미스 설정(Postgres/Redis/MinIO/Ollama)
 └─ docs/       문서 인덱스 — 정본은 Notion, 여기엔 링크만 둔다
 ```
@@ -87,7 +88,7 @@ npm run dev
 - **M0 — 기반** · 스케폴딩 · 인증·계정·감사 로그 · 프론트 화면 세트(MSW) · CI — ✅ 완료
 - **M1 — 코어** · 문서 트리·CRUD·버전·댓글, `/api/yjs` 공동편집 영속화, 홈·할 일·알림함 — ✅ 완료. 게이트 **동시편집 반영 실측** 2026-10-28 통과(편집 P95 7.1ms·커서 P95 2.0ms, 기준 1초)
 - **M2 — 커뮤니케이션** · `/api/ws` 채팅·알림·presence, 채팅 REST·첨부(MinIO), 멘션 알림, ⌘K 통합검색(FTS + 권한 SQL) — ✅ 완료. 게이트 **채팅 전달 P95 실측** 2026-10-28 통과(15.4ms)
-- **M3 — 게시판·앱** · 등급별 게시판(마스킹·403) ✅ / **`.msi` 서명은 미착수.** Capacitor Android·iOS 는 v1.1 로 미뤘다(2026-09-22)
+- **M3 — 게시판·앱** · 등급별 게시판(마스킹·403) ✅ / **`.msi` 서명은 미착수.** Android 는 Capacitor 대신 WebView 셸 `.apk`(2026-11-06), iOS 는 홈 화면 웹앱으로 간다
 - **M4 — 마감** · caddy(TLS·리버스 프록시·정적 web) · 일일 `pg_dump` 백업 · `/metrics` · CSP 실적용 ✅ / **prod 브랜치·파일럿이 남았다**
 - **AI · 근태 · 전자결재** · 2026-09-22 보류 해제, 2026-10 초 백엔드 구현 완료(결재함·근태·AI 어시스턴트·협업 공간·CRM) — ✅ 실서버 가동 중(2026-10-15 배포 이후). 근태·결재의 **정책**(아래 🔴 2·3)은 아직 결정 대기
 

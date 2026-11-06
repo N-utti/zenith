@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- 어두운 테마를 부모로 둬야 웹 화면도 prefers-color-scheme: dark 를 받는다. 색은 index.html 의 theme-color. -->
+  <style name="Zenith" parent="android:Theme.Material.NoActionBar">
+    <item name="android:statusBarColor">#181b1f</item>
+    <item name="android:navigationBarColor">#181b1f</item>
+    <item name="android:windowBackground">@android:color/black</item>
+  </style>
+</resources>
