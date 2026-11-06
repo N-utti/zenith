@@ -27,7 +27,7 @@ const ALL_CITATIONS: (Citation & { minRole?: 'lead' | 'exec' })[] = [
     n: 3,
     type: 'post',
     to: '/board/all/p-2',
-    title: '제니스 사내 협업툴 파일럿 참여자 모집',
+    title: '제니스 사내 업무 플랫폼 파일럿 참여자 모집',
     quote: '기간은 2주이며, 기존 업무 방식과 병행합니다.',
     path: '전체 공지',
   },
@@ -70,7 +70,7 @@ export function answer(user: User, scoped = false): { body: string; citations: C
       `신규 입사자는 **입사 첫날** 사양에 맞춰 노트북을 지급받습니다.\n\n` +
       `- **개발 직군**: 고사양\n- **그 외 직군**: 표준 사양${mark(1)}\n\n` +
       `반납은 퇴사 시 총무팀에 하도록 규정되어 있습니다${mark(2)}.\n` +
-      `지급받은 장비로 2주 동안 협업툴 파일럿에 참여할 수 있습니다${mark(3)}.` +
+      `지급받은 장비로 2주 동안 업무 플랫폼 파일럿에 참여할 수 있습니다${mark(3)}.` +
       (mark(4) ? ` 내년 장비 예산은 인당 상향을 검토 중입니다${mark(4)}.` : ''),
     citations,
   }
