@@ -45,10 +45,22 @@ npm run dev      # = tauri dev
 ## 배포 빌드
 
 ```powershell
-npm run build    # = tauri build → src-tauri/target/release/bundle/msi/*.msi
+npm run build    # = tauri build → src-tauri/target/release/bundle/msi/Zenith_0.1.0_x64_ko-KR.msi
 ```
 
 `frontend`를 프로덕션 빌드한 뒤 `.msi`로 묶는다.
+
+### 만든 `.msi` 가 있는 곳
+
+본판과 시연판 모두 같은 폴더에 떨어진다. 레포 루트 기준 `apps/desktop/src-tauri/target/release/bundle/msi/` 이다.
+파일 이름의 `0.1.0` 은 `tauri.conf.json` 의 `version` 이다.
+
+| 판 | 명령 (`apps/desktop` 에서) | 파일 |
+| --- | --- | --- |
+| 본판(직원용) | `npm run build` | `Zenith_0.1.0_x64_ko-KR.msi` 와 업데이트 서명 `Zenith_0.1.0_x64_ko-KR.msi.sig` |
+| 사외 시연판 | `npm run build:demo` | `Zenith Demo_0.1.0_x64_ko-KR.msi` (서명 파일 없음) |
+
+같은 버전으로 다시 빌드하면 같은 이름의 파일을 덮어쓴다. 남겨 둘 판은 빌드 전에 다른 곳으로 옮긴다.
 
 ### ⚠️ 서버 주소를 반드시 지정할 것
 
@@ -110,7 +122,7 @@ npm run manifest -- https://zenith.example.co.kr
 ### 사외 시연판
 
 ```sh
-npm run build:demo   # → src-tauri/target/release/bundle/msi/Zenith Demo_*.msi
+npm run build:demo   # → src-tauri/target/release/bundle/msi/Zenith Demo_0.1.0_x64_ko-KR.msi
 ```
 
 회사 밖 사람 PC 에 깔아 보여 주는 판이다. 서버 없이 목 데이터로 돌고(`frontend` 의 `npm run demo` 빌드, 실명은 가명),
