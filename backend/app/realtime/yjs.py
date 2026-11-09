@@ -157,6 +157,12 @@ async def _open_room(doc_id: uuid.UUID) -> Room | None:
         return room
 
 
+def tsv_of(text: str):
+    """검색 벡터 — tsvector 는 1MB(바이트) 상한, 한글은 3바이트라 글자 수가 아니라 바이트로 자른다(#340 리뷰).
+    routers/docs.py 의 파일 가져오기도 같은 규칙으로 파생한다."""
+    return func.to_tsvector("simple", text.encode()[:900_000].decode(errors="ignore"))
+
+
 async def save_room(room: Room) -> None:
     """Y.Doc 전체 상태를 원본으로, 제목·평문·tsv 를 파생으로 적는다(03 §2.1). 더러워진 것이 없으면 아무것도 안 한다."""
     gone = False
@@ -170,7 +176,7 @@ async def save_room(room: Room) -> None:
                 "ydoc_snapshot": room.doc.get_update(),
                 "text_cache": text,
                 # tsvector 는 1MB(바이트) 상한 — 한글은 3바이트라 글자 수로 자르면 넘친다(#340 리뷰)
-                "tsv": func.to_tsvector("simple", text.encode()[:900_000].decode(errors="ignore")),
+                "tsv": tsv_of(text),
                 "updated_at": datetime.now(UTC),
             }
             if room.last_editor is not None:
