@@ -25,7 +25,9 @@ import {
   BlockMenu,
   ColorMenu,
   LinkMenu,
+  ParagraphMenu,
   TableMenu,
+  TextStyleMenu,
   ToolButton,
   ToolDivider,
 } from './editorControls'
@@ -89,10 +91,16 @@ export function EditorToolbar({
         onClick={() => editor.chain().focus().toggleCode().run()}
       />
       <ColorMenu editor={editor} color={state.color} highlight={state.highlight} />
+      <TextStyleMenu editor={editor} font={state.font} size={state.fontSize} />
 
       <ToolDivider />
 
       <AlignMenu editor={editor} align={state.align} />
+      <ParagraphMenu
+        editor={editor}
+        lineHeight={state.lineHeight}
+        canIndent={state.canIndent && !state.inList}
+      />
 
       <ToolDivider />
 

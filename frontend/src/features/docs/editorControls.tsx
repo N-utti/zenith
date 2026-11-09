@@ -9,16 +9,30 @@ import {
   ArrowUp,
   Check,
   ChevronDown,
+  IndentDecrease,
+  IndentIncrease,
   Link2,
   Link2Off,
+  Pilcrow,
   Table,
   Trash2,
+  Type,
   X,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { BLOCK_BY_KEY, EDITOR_BLOCKS } from './editorBlocks'
-import { ALIGNMENTS, HIGHLIGHT_COLORS, TEXT_COLORS } from './editorFormats'
+import {
+  ALIGNMENTS,
+  changeIndent,
+  FONT_FAMILIES,
+  FONT_SIZES,
+  HIGHLIGHT_COLORS,
+  LINE_HEIGHTS,
+  setBlockFormat,
+  setCellBackground,
+  TEXT_COLORS,
+} from './editorFormats'
 import { TableSizePicker } from './TableSizePicker'
 
 /* ── 공통 버튼 ──────────────────────────────────────────────── */
@@ -396,6 +410,136 @@ export function AlignMenu({ editor, align }: { editor: Editor; align: string }) 
   )
 }
 
+/* ── 글자 모양 · 문단 모양 (서식 3차) ──────────────────────── */
+
+function MenuHeading({ children }: { children: ReactNode }) {
+  return <p className="text-subtle px-2 pt-1.5 pb-1 text-xs font-medium">{children}</p>
+}
+
+/** 글꼴과 글자 크기. 「기본」 은 서식을 지워 본문 글꼴·크기로 돌린다. */
+export function TextStyleMenu({
+  editor,
+  font,
+  size,
+}: {
+  editor: Editor
+  font: string | null
+  size: number | null
+}) {
+  return (
+    <ToolMenu label="글꼴 · 글자 크기" className="w-56" trigger={<Type className="size-4" />}>
+      {(close) => {
+        const pick = (apply: () => void) => () => {
+          apply()
+          close()
+        }
+        return (
+          <>
+            <MenuHeading>글꼴</MenuHeading>
+            <MenuItem
+              label="기본"
+              active={!font}
+              onClick={pick(() => editor.chain().focus().unsetFontFamily().run())}
+            />
+            {FONT_FAMILIES.map((name) => (
+              <MenuItem
+                key={name}
+                label={name}
+                active={font === name}
+                onClick={pick(() => editor.chain().focus().setFontFamily(`'${name}'`).run())}
+              />
+            ))}
+            <div className="border-line mt-1 border-t pt-1">
+              <MenuHeading>크기</MenuHeading>
+              <div className="grid grid-cols-4 gap-0.5 px-1 pb-1">
+                {[null, ...FONT_SIZES].map((pt) => (
+                  <button
+                    key={pt ?? 'base'}
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={size === pt}
+                    aria-label={pt === null ? '기본 크기' : `${pt}pt`}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={pick(() =>
+                      pt === null
+                        ? editor.chain().focus().unsetFontSize().run()
+                        : editor.chain().focus().setFontSize(`${pt}pt`).run(),
+                    )}
+                    className={cn(
+                      'h-8 cursor-pointer rounded-md text-sm transition-colors',
+                      size === pt ? 'bg-accent-soft text-accent' : 'text-fg hover:bg-surface-hover',
+                    )}
+                  >
+                    {pt ?? '기본'}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </>
+        )
+      }}
+    </ToolMenu>
+  )
+}
+
+/**
+ * 줄 간격과 들여쓰기. 목록 안에서는 들여쓰기를 끈다(목록은 Tab 으로 한 단계씩 들인다).
+ * 줄이기는 따로 끄지 않는다. 고른 문단 중 하나라도 들여 쓰여 있을 수 있고, 0 이면 아무 일도 없다.
+ */
+export function ParagraphMenu({
+  editor,
+  lineHeight,
+  canIndent,
+}: {
+  editor: Editor
+  lineHeight: number | null
+  canIndent: boolean
+}) {
+  return (
+    <ToolMenu label="줄 간격 · 들여쓰기" className="w-48" trigger={<Pilcrow className="size-4" />}>
+      {(close) => {
+        const pick = (apply: () => void) => () => {
+          apply()
+          close()
+        }
+        return (
+          <>
+            <MenuHeading>줄 간격</MenuHeading>
+            <MenuItem
+              label="기본"
+              active={lineHeight === null}
+              onClick={pick(() => setBlockFormat(editor, 'lineHeight', null))}
+            />
+            {LINE_HEIGHTS.map(({ value, label }) => (
+              <MenuItem
+                key={value}
+                label={label}
+                active={lineHeight === Number(value)}
+                onClick={pick(() => setBlockFormat(editor, 'lineHeight', value))}
+              />
+            ))}
+            <div className="border-line mt-1 border-t pt-1">
+              <MenuHeading>들여쓰기</MenuHeading>
+              <MenuItem
+                icon={IndentIncrease}
+                label="늘리기"
+                disabled={!canIndent}
+                onClick={pick(() => changeIndent(editor, 1))}
+              />
+              <MenuItem
+                icon={IndentDecrease}
+                label="줄이기"
+                disabled={!canIndent}
+                onClick={pick(() => changeIndent(editor, -1))}
+              />
+            </div>
+          </>
+        )
+      }}
+    </ToolMenu>
+  )
+}
+
 /* ── 표 ─────────────────────────────────────────────────────── */
 
 /** 커서가 든 행·열을 기준으로 더하고 지운다. 묶음 사이에 구분선이 들어간다. */
@@ -466,7 +610,33 @@ export function TableMenu({
           )
         }
         const last = lastOfTable(editor)
-        return TABLE_ACTIONS.map((group, index) => (
+        // 칸 배경색. 여러 칸을 골랐으면 그 칸 모두에, 아니면 커서가 든 칸에 칠한다.
+        const fill = (color: string | null) => {
+          setCellBackground(editor, color)
+          close()
+        }
+        const background = (
+          <div
+            key="background"
+            role="group"
+            aria-label="칸 배경"
+            className="border-line mt-1 border-t pt-1 pb-0.5"
+          >
+            <MenuHeading>칸 배경</MenuHeading>
+            <div className="grid grid-cols-6 gap-1 px-1">
+              <Swatch label="없음" color="transparent" ring onClick={() => fill(null)} />
+              {HIGHLIGHT_COLORS.map((c) => (
+                <Swatch
+                  key={c.value}
+                  label={c.label}
+                  color={c.value}
+                  onClick={() => fill(c.value)}
+                />
+              ))}
+            </div>
+          </div>
+        )
+        const groups = TABLE_ACTIONS.map((group, index) => (
           <div
             key={index}
             role="group"
@@ -486,6 +656,8 @@ export function TableMenu({
             ))}
           </div>
         ))
+        // 표 지우기(마지막 묶음) 앞에 둔다.
+        return [...groups.slice(0, -1), background, ...groups.slice(-1)]
       }}
     </ToolMenu>
   )

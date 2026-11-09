@@ -1,6 +1,8 @@
-import { Editor } from '@tiptap/core'
+import { Editor, type JSONContent } from '@tiptap/core'
 import { afterEach, expect, it } from 'vitest'
 import { docContentExtensions } from './editorExtensions'
+import { CellSelection } from '@tiptap/pm/tables'
+import { changeIndent, setBlockFormat, setCellBackground } from './editorFormats'
 
 // 서식 3차 계약(이슈 #574): 서버 가져오기가 Y.Doc 에 싣는 속성을 편집기가 버리지 않고 그린다.
 const editors: Editor[] = []
@@ -188,4 +190,109 @@ it('서식 값에 스타일을 끼워 넣을 수 없다(남의 편집·붙여넣
     content: [{ type: 'paragraph', content: [text('글', { fontSize: '0pt' })] }],
   })
   expect(hidden.getHTML()).not.toContain('font-size')
+})
+
+it('툴바 명령: 들여쓰기는 고른 문단마다 지금 값에서 한 단계씩, 줄 간격·칸 배경은 그 자리에 쓴다', () => {
+  const editor = make({
+    type: 'doc',
+    content: [
+      { type: 'paragraph', content: [{ type: 'text', text: '가' }] },
+      { type: 'paragraph', attrs: { indent: 48 }, content: [{ type: 'text', text: '나' }] },
+      {
+        type: 'table',
+        content: [{ type: 'tableRow', content: [cell('tableCell', {})] }],
+      },
+    ],
+  })
+  const blocks = () => editor.getJSON().content ?? []
+  // 두 문단을 같이 고른다(가 의 안쪽부터 나 의 안쪽까지).
+  editor.commands.setTextSelection({ from: 1, to: 5 })
+  changeIndent(editor, 1)
+  expect(
+    blocks()
+      .slice(0, 2)
+      .map((b) => b.attrs?.indent),
+  ).toEqual([24, 72])
+  changeIndent(editor, -1)
+  changeIndent(editor, -1)
+  // 0 이 되면 값을 지운다(문서에 0 을 남기지 않는다). 음수로 내려가지 않는다.
+  expect(
+    blocks()
+      .slice(0, 2)
+      .map((b) => b.attrs?.indent),
+  ).toEqual([null, 24])
+
+  setBlockFormat(editor, 'lineHeight', '1.5')
+  expect(
+    blocks()
+      .slice(0, 2)
+      .map((b) => b.attrs?.lineHeight),
+  ).toEqual(['1.5', '1.5'])
+  setBlockFormat(editor, 'lineHeight', null)
+  expect(blocks()[0].attrs?.lineHeight).toBeNull()
+
+  // 칸 안에 커서를 두고 칸 배경을 칠한다.
+  let inCell = 0
+  editor.state.doc.descendants((node, pos) => {
+    if (node.type.name === 'tableCell') inCell = pos + 2
+  })
+  editor.commands.setTextSelection(inCell)
+  setCellBackground(editor, '#fef08a')
+  expect(editor.getHTML()).toContain('background-color: rgb(254, 240, 138)')
+})
+
+it('툴바 명령: 여러 칸을 고르면 칸마다, 목록에 걸친 선택은 목록 안을 건너뛴다', () => {
+  const editor = make({
+    type: 'doc',
+    content: [
+      {
+        type: 'table',
+        content: [
+          {
+            type: 'tableRow',
+            content: [cell('tableCell', {}), cell('tableCell', { backgroundColor: '#fef08a' })],
+          },
+        ],
+      },
+      { type: 'paragraph', content: [{ type: 'text', text: '앞' }] },
+      {
+        type: 'bulletList',
+        content: [
+          {
+            type: 'listItem',
+            content: [{ type: 'paragraph', content: [{ type: 'text', text: '항목' }] }],
+          },
+        ],
+      },
+    ],
+  })
+  const json = () => editor.getJSON() as JSONContent
+  const cells: number[] = []
+  editor.state.doc.descendants((node, pos) => {
+    if (node.type.name === 'tableCell') cells.push(pos)
+  })
+  const cellAttrs = () => (json().content?.[0].content?.[0].content ?? []).map((c) => c.attrs ?? {})
+
+  // 두 칸을 고른다. 뒤쪽 칸(기준)이 이미 노랑이어도 앞 칸까지 칠한다.
+  editor.view.dispatch(
+    editor.state.tr.setSelection(CellSelection.create(editor.state.doc, cells[0], cells[1])),
+  )
+  setCellBackground(editor, '#fef08a')
+  expect(cellAttrs().map((a) => a.backgroundColor)).toEqual(['#fef08a', '#fef08a'])
+  // 들여쓰기도 첫 칸만이 아니라 고른 칸 모두에.
+  editor.view.dispatch(
+    editor.state.tr.setSelection(CellSelection.create(editor.state.doc, cells[0], cells[1])),
+  )
+  changeIndent(editor, 1)
+  const cellParagraphs = (json().content?.[0].content?.[0].content ?? []).map(
+    (c) => c.content?.[0].attrs?.indent,
+  )
+  expect(cellParagraphs).toEqual([24, 24])
+
+  // 문단부터 목록 끝까지 고르면 문단만 들여 쓴다.
+  editor.commands.setTextSelection({ from: cells[1] + 6, to: editor.state.doc.content.size - 1 })
+  changeIndent(editor, 1)
+  const [, para, list] = json().content ?? []
+  expect(para.attrs?.indent).toBe(24)
+  expect(list.content?.[0].content?.[0].attrs?.indent).toBeNull()
 })
