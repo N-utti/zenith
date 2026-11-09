@@ -393,10 +393,11 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * 파일 가져오기 — multipart `file`(docx·xlsx·hwpx, 10MB) + `folder_id` → 새 문서 + 편집기용 HTML. 04 에 없던 경로(README 60)
-         * @description 본문을 서버가 Y.Doc 으로 만들지 않는다 — HTML 을 돌려주고 프론트가 새 문서를 열며 심는다(app/convert.py 머리말).
-         *     원본은 `/files` 와 같은 규칙(10MB·하루 200개·감사 `files.uploaded`)으로 문서 첨부에 넣어 둔다. 변환에 실패한
-         *     요청(`docs.import_failed`)도 하루 상한에 센다 — 비싼 변환을 같은 파일로 무한히 다시 시킬 수 없게(리뷰).
+         * 파일 가져오기 — multipart `file`(docx·xlsx·hwpx, 10MB) + `folder_id` → 본문이 심긴 새 문서. 04 에 없던 경로(README 60·61)
+         * @description 파일 → HTML(app/convert.py) → Y.Doc(app/ydoc.py) 을 서버가 끝까지 만들어 문서에 넣는다(README 61). 그래서 여러
+         *     파일을 올려도 파일마다 문서 하나가 바로 생기고, 열지 않아도 본문이 있다. 원본은 `/files` 와 같은 규칙(10MB·하루
+         *     200개·감사 `files.uploaded`)으로 문서 첨부에 넣고 본문 끝에 fileChip 을 붙인다. 변환에 실패한 요청
+         *     (`docs.import_failed`)도 하루 상한에 센다 — 비싼 변환을 같은 파일로 무한히 다시 시킬 수 없게(리뷰).
          */
         post: operations["import_doc_api_docs_import_post"];
         delete?: never;
@@ -3193,8 +3194,6 @@ export interface components {
         /** DocImportOut */
         DocImportOut: {
             doc: components["schemas"]["DocOut"];
-            /** Html */
-            html: string;
             /** Truncated */
             truncated: boolean;
             file: components["schemas"]["FileOut"];

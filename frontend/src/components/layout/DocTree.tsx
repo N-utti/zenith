@@ -36,7 +36,7 @@ import { FolderNameModal } from '@/features/docs/FolderNameModal'
 import { MoveNodeModal } from '@/features/docs/MoveNodeModal'
 import { TrashDocModal } from '@/features/docs/TrashDocModal'
 import { setSplitDoc } from '@/features/docs/splitDoc'
-import { DOC_DRAG_TYPE, IMPORT_ACCEPT, type DocSeedState } from '@/features/docs/types'
+import { DOC_DRAG_TYPE, IMPORT_ACCEPT, type DocImport } from '@/features/docs/types'
 import {
   IMPORT_MUTATION_KEY,
   UNTITLED_DOC,
@@ -116,6 +116,14 @@ function setDragCard(e: DragEvent, row: HTMLElement) {
   setTimeout(() => card.remove())
 }
 
+/** 가져오기 한 건의 변수. 여러 파일이면 몇 번째인지(`index`/`total`)를 진행 표시가 읽는다. */
+interface ImportVars {
+  file: File
+  folderId: string
+  index: number
+  total: number
+}
+
 interface RowActions {
   /** 끌고 있는 문서·폴더의 id. 제자리의 줄은 흐려진다. */
   dragId: string | null
@@ -123,8 +131,8 @@ interface RowActions {
   over: string | null
   /** 우클릭 메뉴가 열려 있는 문서·폴더의 id. 어느 줄의 메뉴인지 보이게 그 줄을 칠해 둔다. */
   menuId: string | null
-  /** 파일을 가져오는 중인 폴더의 id. 그 줄 끝에서 돈다. */
-  importingId: string | null
+  /** 파일을 가져오는 중인 폴더와 몇 번째인지. 그 줄 끝에서 돈다. */
+  importing: ImportVars | null
   onNavigate?: () => void
   onAddDoc: (folderId: string) => void
   onAddFolder: (parentId: string | null) => void
@@ -329,12 +337,16 @@ function FolderRow({
               <title>{access}</title>
             </Lock>
           )}
-          {actions.importingId === id && (
-            <Loader2
+          {actions.importing?.folderId === id && (
+            <span
               role="img"
               aria-label="파일 가져오는 중"
-              className="text-subtle size-3.5 shrink-0 animate-spin"
-            />
+              className="text-subtle flex shrink-0 items-center gap-1 text-xs tabular-nums"
+            >
+              <Loader2 className="size-3.5 animate-spin" />
+              {actions.importing.total > 1 &&
+                `${actions.importing.index}/${actions.importing.total}`}
+            </span>
           )}
         </Link>
 
@@ -442,36 +454,85 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
   const toRoot = !!drag && !!data && canDrop(drag, null, data)
 
   /*
-   * 파일 가져오기(백엔드 README 60). 서버가 빈 문서를 만들고 본문 HTML 을 돌려준다. 본문은 그 문서를
-   * 여는 탭이 심으므로(AI 문서로 저장과 같은 길) 다 되면 곧장 연다. 열지 않으면 빈 문서만 남는다.
-   * 그래서 한 번에 한 파일이다. 결과는 약속으로 받는다(`move` 와 같은 이유). 가져오는 중인 폴더는
-   * 뮤테이션 캐시에서 읽는다. 트리가 다시 마운트돼도 표시와 중복 막기가 남는다.
+   * 파일 가져오기(백엔드 README 60·61). 서버가 본문까지 심은 문서를 만든다. 여러 파일이면 하나씩
+   * 차례로 보낸다(서버 동시 변환 칸이 둘이라 한꺼번에 보내면 기다리다 429). 하나면 그 문서를 열고,
+   * 여럿이면 보던 화면에 두고 결과만 알린다(사용자 결정). 결과는 약속으로 받는다(`move` 와 같은
+   * 이유). 진행 중인 폴더와 몇 번째인지는 뮤테이션 캐시에서 읽어 트리가 다시 마운트돼도 남는다.
    */
   const importDoc = useImportDoc()
-  const importingId =
+  const importing =
     useMutationState({
       filters: { mutationKey: IMPORT_MUTATION_KEY, status: 'pending' },
-      select: (m) => (m.state.variables as { folderId: string }).folderId,
+      select: (m) => m.state.variables as ImportVars,
     })[0] ?? null
   const filePicker = useRef<HTMLInputElement>(null)
   const pickFor = useRef<string | null>(null)
-  const runImport = (file: File, folderId: string) => {
-    if (importingId) return toast.info('다른 파일을 가져오는 중입니다.')
+  const runImport = async (picked: File[], folderId: string) => {
+    if (!picked.length) return
+    if (importing) return toast.info('다른 파일을 가져오는 중입니다.')
+    // 변환은 길게는 1분이다. 그사이 다른 화면으로 갔으면 끌고 가지 않는다(본문은 서버가 심었다).
+    const from = window.location.pathname
     // 끌어 놓기는 accept 를 거치지 않는다. 서버 거절은 올린 뒤라 느리고 하루 상한도 하나 쓴다.
-    const name = file.name.toLowerCase()
-    if (!IMPORT_ACCEPT.split(',').some((ext) => name.endsWith(ext))) {
-      return toast.error('docx·xlsx·hwpx 파일만 가져올 수 있습니다(hwp 는 hwpx 로 저장해 주세요).')
-    }
-    void importDoc.mutateAsync({ file, folderId }).then(
-      ({ doc, html, truncated }) => {
-        if (truncated) toast.info('파일이 길어 앞부분만 가져왔습니다.')
-        onNavigate?.()
-        void navigate(`/docs/${doc.id}`, {
-          state: { seedHtml: html, title: doc.title } satisfies DocSeedState,
+    const ok = (f: File) =>
+      IMPORT_ACCEPT.split(',').some((ext) => f.name.toLowerCase().endsWith(ext))
+    const files = picked.filter(ok)
+    const failed = picked
+      .filter((f) => !ok(f))
+      .map((f) => ({ name: f.name, why: 'docx·xlsx·hwpx 가 아님' }))
+    const done: DocImport[] = []
+    for (const [i, file] of files.entries()) {
+      try {
+        done.push(
+          await importDoc.mutateAsync({ file, folderId, index: i + 1, total: files.length }),
+        )
+      } catch (err) {
+        failed.push({
+          name: file.name,
+          why: err instanceof ApiError ? err.message : '서버에 연결하지 못했습니다',
         })
-      },
-      (err: unknown) => fail(err, `${file.name} 을 가져오지 못했습니다.`),
-    )
+        // 422 는 그 파일만의 문제(크기·형식·변환). 하루 상한(429)·세션·폴더·연결 문제는 다음 파일도
+        // 똑같이 실패하니 남은 것은 보내지 않는다.
+        if (!(err instanceof ApiError && err.status === 422)) {
+          const rest = files.length - i - 1
+          if (rest) failed.push({ name: `나머지 ${rest}개`, why: '보내지 않음' })
+          break
+        }
+      }
+    }
+    const cut = done.filter((d) => d.truncated).map((d) => d.doc.title)
+
+    if (picked.length === 1 && done[0]) {
+      const open = () => {
+        onNavigate?.()
+        void navigate(`/docs/${done[0].doc.id}`)
+      }
+      if (window.location.pathname !== from) {
+        return toast.success(`${done[0].doc.title} 문서를 가져왔습니다.`, {
+          durationMs: 10_000,
+          action: { label: '열기', onClick: open },
+        })
+      }
+      if (cut.length) toast.info('파일이 길어 앞부분만 가져왔습니다.')
+      return open()
+    }
+    if (picked.length === 1 && failed[0]) {
+      // 서버 문구를 그대로(크기·하루 상한 등). 형식이 아니면 옛 한글 안내까지.
+      return toast.error(
+        ok(picked[0])
+          ? failed[0].why
+          : 'docx·xlsx·hwpx 파일만 가져올 수 있습니다(hwp 는 hwpx 로 저장해 주세요).',
+      )
+    }
+    // 여럿이면 결과를 한 토스트에. 따로 띄우면 앞의 것이 뒤의 것 밑에 접혀 안 보인다.
+    const notes = [
+      done.length && `${done.length}개를 가져왔습니다.`,
+      cut.length && `길어서 앞부분만 가져온 문서: ${cut.join(', ')}.`,
+      failed.length && `가져오지 못한 파일: ${failed.map((f) => `${f.name}(${f.why})`).join(', ')}`,
+    ]
+      .filter(Boolean)
+      .join(' ')
+    if (failed.length) toast.error(notes, { durationMs: 10_000 })
+    else toast.success(notes, cut.length ? { durationMs: 10_000 } : undefined)
   }
 
   /** 우클릭 메뉴가 열린 줄과 자리. `href` 는 그 줄 링크의 주소(새 탭으로 열 때 쓴다). */
@@ -581,9 +642,7 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
       if (fileZone) {
         // 채팅 입력창도 창 전체에서 파일을 받는다. 막아 두면 그쪽이 같이 붙이지 않는다.
         e.preventDefault()
-        const [file, ...rest] = e.dataTransfer.files
-        if (rest.length) toast.error('파일은 한 번에 하나씩 가져올 수 있습니다.')
-        else if (file) runImport(file, fileZone)
+        void runImport([...e.dataTransfer.files], fileZone)
         return endDrag()
       }
       const zone = zoneAt(e)
@@ -631,7 +690,7 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
     dragId: drag?.id ?? null,
     over,
     menuId: menu?.item.id ?? null,
-    importingId,
+    importing,
     onNavigate,
     onAddDoc: (folderId) =>
       createDoc.mutate(
@@ -736,12 +795,13 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
         ref={filePicker}
         type="file"
         accept={IMPORT_ACCEPT}
+        multiple
         hidden
         onChange={(e) => {
-          const file = e.target.files?.[0]
+          const files = [...(e.target.files ?? [])]
           // 같은 파일을 다시 골라도 change 가 오게 비운다.
           e.target.value = ''
-          if (file && pickFor.current) runImport(file, pickFor.current)
+          if (files.length && pickFor.current) void runImport(files, pickFor.current)
         }}
       />
       {isError && !data && (
@@ -827,7 +887,7 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
               <ContextMenuItem
                 icon={FileUp}
                 label="파일 가져오기"
-                disabledReason={importingId ? '다른 파일을 가져오는 중입니다' : undefined}
+                disabledReason={importing ? '다른 파일을 가져오는 중입니다' : undefined}
                 onSelect={() => {
                   pickFor.current = menu.item.id
                   filePicker.current?.click()
