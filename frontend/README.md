@@ -50,6 +50,15 @@ MSW 가 켜져 있고, 채팅·공동편집은 개발 릴레이를 같은 서버
 - MSW 는 서비스 워커라 **https 나 localhost** 에서만 켜진다. 다른 PC 에서 `http://IP:8080` 으로 열면 화면이 안 뜬다.
   그래서 기본은 이 PC 안(`127.0.0.1`)에서만 받는다. 바깥에 보이려면 https 프록시·터널을 앞에 둔다(`HOST=0.0.0.0` 으로 넓힐 수는 있다).
 
+클라우드 Node 호스팅(Render 웹 서비스 기준)에 올릴 때의 설정값. https 주소는 호스팅이 붙여 준다.
+
+| 칸 | 값 |
+| --- | --- |
+| Root Directory | `frontend` |
+| Build Command | `npm ci && npm run demo -- --build-only` |
+| Start Command | `npm run demo -- --no-build` |
+| 환경변수 | `HOST=0.0.0.0` (포트는 호스팅이 `PORT` 로 준다) |
+
 ### 실제 백엔드에 붙이기
 
 ```bash
