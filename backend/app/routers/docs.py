@@ -8,18 +8,21 @@
 import asyncio
 import base64
 import binascii
+import contextlib
+import html as html_lib
 import logging
+import re
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, Query, Request, Response
+from fastapi import APIRouter, Depends, Form, Query, Request, Response, UploadFile
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import defer
 
-from app import acl, audit
+from app import acl, audit, convert, storage
 from app.ai import embed
 from app.db import get_db, session_scope
 from app.deps import current_user
@@ -41,6 +44,7 @@ from app.models import (
 )
 from app.prefs import wants
 from app.realtime import chat, yjs
+from app.routers import files
 
 router = APIRouter(tags=["docs"], dependencies=[Depends(current_user)])
 log = logging.getLogger("zenith.docs")
@@ -506,6 +510,126 @@ async def create_doc(
     await db.commit()
     await db.refresh(doc)
     return _doc_out(doc, user)
+
+
+class DocImportOut(BaseModel):
+    doc: DocOut
+    # 편집기에 심을 본문. 프론트는 AI 「문서로 저장」의 seedHtml 과 같은 길로 넣는다(README 60). 끝에 원본 fileChip.
+    html: str
+    truncated: bool  # convert.MAX_SEED_COST 에서 끊었다 — 본문 끝에 안내 문단이 들어 있다
+    file: files.FileOut  # 원본 파일(문서 첨부로 기록) — html 끝의 fileChip 이 가리킨다
+
+
+# 동시 변환 상한 — 변환은 기본 스레드 풀(MinIO 읽기·쓰기, AI 첨부 추출과 공유)에서 돌고 수백 MB 를 쓸 수 있다(리뷰).
+# ponytail: 프로세스 메모리(worker 1개 전제). 밀리면 58 의 잡 구조로 옮긴다.
+_IMPORT_SEM = asyncio.Semaphore(2)
+IMPORT_QUEUE_WAIT_S = 10.0  # 슬롯을 이만큼 기다리면 429 — 대기열이 끝없이 쌓이지 않게
+
+
+async def _convert_guarded(name: str, data: bytes) -> tuple[str, bool]:
+    """슬롯을 잡고 변환한다. 시간 초과로 요청이 422 로 끝나도 **스레드는 끝날 때까지 슬롯을 쥔다**(shield) — 안 그러면
+    60초짜리 파일을 연달아 올려 끊긴 스레드가 CPU·메모리에 계속 쌓인다(Codex 리뷰). 스레드 자체는 끊을 수 없다."""
+    try:
+        await asyncio.wait_for(_IMPORT_SEM.acquire(), IMPORT_QUEUE_WAIT_S)
+    except TimeoutError:
+        raise ApiError(
+            429, "UPLOAD_THROTTLED", "지금 변환 중인 파일이 많습니다. 잠시 뒤 다시 올려 주세요."
+        ) from None
+    fut = asyncio.ensure_future(asyncio.to_thread(convert.to_html, name, data))
+    fut.add_done_callback(lambda _f: _IMPORT_SEM.release())
+    return await asyncio.wait_for(asyncio.shield(fut), convert.TIMEOUT_S)
+
+
+@router.post(
+    "/docs/import",
+    status_code=201,
+    response_model=DocImportOut,
+    summary="파일 가져오기 — multipart `file`(docx·xlsx·hwpx, 10MB) + `folder_id` → 새 문서 + 편집기용 HTML. 04 에 없던 경로(README 60)",
+)
+async def import_doc(
+    file: UploadFile,
+    request: Request,
+    folder_id: Annotated[uuid.UUID, Form()],
+    user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_db),
+) -> DocImportOut:
+    """본문을 서버가 Y.Doc 으로 만들지 않는다 — HTML 을 돌려주고 프론트가 새 문서를 열며 심는다(app/convert.py 머리말).
+    원본은 `/files` 와 같은 규칙(10MB·하루 200개·감사 `files.uploaded`)으로 문서 첨부에 넣어 둔다. 변환에 실패한
+    요청(`docs.import_failed`)도 하루 상한에 센다 — 비싼 변환을 같은 파일로 무한히 다시 시킬 수 없게(리뷰)."""
+    await _require_folder(db, folder_id, user)
+    since = _now() - timedelta(days=1)
+    used = await audit.count_since(db, "files.uploaded", since, actor=str(user.id))
+    used += await audit.count_since(db, "docs.import_failed", since, actor=str(user.id))
+    if used >= files.DAILY_UPLOADS:
+        raise ApiError(429, "UPLOAD_THROTTLED", "오늘 올릴 수 있는 파일 수를 넘었습니다.")
+    data = await file.read(files.MAX_FILE_BYTES + 1)
+    if len(data) > files.MAX_FILE_BYTES:
+        raise ApiError(422, "VALIDATION", "10MB 이하 파일만 올릴 수 있습니다.")
+    if not data:
+        raise ApiError(422, "VALIDATION", "빈 파일입니다.")
+    name = storage.safe_name(file.filename)
+    await db.commit()  # 변환하는 동안 커넥션·트랜잭션을 쥐고 있지 않게(풀 5+10, 리뷰)
+    try:
+        body_html, truncated = await _convert_guarded(name, data)
+    except (convert.Unsupported, convert.Empty, convert.TooLarge, TimeoutError) as e:
+        audit.record(
+            db,
+            "docs.import_failed",
+            request=request,
+            actor_id=user.id,
+            detail={"actor": str(user.id), "name": name, "why": type(e).__name__},
+        )
+        await db.commit()
+        if isinstance(e, convert.Unsupported):
+            detail = "docx·xlsx·hwpx 파일만 가져올 수 있습니다(hwp 는 hwpx 로 저장해 주세요)."
+        elif isinstance(e, convert.Empty):
+            detail = "읽을 내용이 없는 파일입니다."
+        elif isinstance(e, convert.TooLarge):
+            detail = "문서 본문이 너무 큽니다(압축 전 2MB). 나눠서 올려 주세요."
+        else:
+            detail = "파일을 읽는 데 너무 오래 걸립니다."
+        raise ApiError(422, "VALIDATION", detail) from None
+    await _require_folder(
+        db, folder_id, user
+    )  # 변환하는 동안(최대 60초) 폴더가 닫혔거나 지워졌을 수 있다(리뷰)
+    title = re.sub(r"\.[^.]+$", "", name).strip()[:200] or "가져온 문서"
+    doc = Document(folder_id=folder_id, title=title, updated_by=user.id)
+    db.add(doc)
+    await db.flush()
+    row = StoredFile(
+        name=name, size=len(data), content_type=files.OCTET, uploader_id=user.id, doc_id=doc.id
+    )
+    db.add(row)
+    await db.flush()
+    await storage.put(files._key(row.id), data, files.OCTET)
+    audit.record(
+        db,
+        "files.uploaded",
+        request=request,
+        actor_id=user.id,
+        target_id=row.id,
+        detail={"actor": str(user.id), "size": len(data), "type": files.OCTET, "doc": str(doc.id)},
+    )
+    try:
+        await db.commit()
+    except (
+        BaseException
+    ):  # CancelledError 포함 — 저장은 됐는데 행이 안 남으면 오브젝트를 되돌린다(리뷰)
+        with contextlib.suppress(Exception):
+            await storage.remove_prefix(files._key(row.id))
+        raise
+    await db.refresh(doc)
+    url = f"/api/files/{row.id}"
+    chip = (
+        f'<p><span data-type="fileChip" src="{url}" name="{html_lib.escape(name, quote=True)}" '
+        f'size="{row.size}">{html_lib.escape(name)}</span></p>'
+    )
+    return DocImportOut(
+        doc=_doc_out(doc, user),
+        html=body_html + chip,
+        truncated=truncated,
+        file=files.FileOut(id=row.id, url=url, name=name, size=row.size, content_type=files.OCTET),
+    )
 
 
 @router.get(

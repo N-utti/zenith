@@ -21,6 +21,7 @@ MAX_ZIP_MEMBER = (
 )  # zip 한 항목 압축 해제 상한 — zip 폭탄(29MB XML 하나가 560MB·5초였다, 보안 리뷰)
 # zip 전체 압축 해제 상한(docx·hwpx·xlsx 공통 — openpyxl 은 sharedStrings 를 통째로 올린다)
 MAX_ZIP_TOTAL = 30 * 1024 * 1024
+MAX_ZIP_ENTRIES = 2000  # 항목 수 — 빈 항목 10만 개로 ZipInfo·이름 색인을 부풀리는 걸 막는다(리뷰). 실제 문서는 수십 개
 MAX_PDF_STREAM = (
     20 * 1024 * 1024
 )  # PDF 내용 스트림 누적 상한 — 102KB 파일이 풀면 40MB·300초였다(보안 리뷰)
@@ -92,7 +93,8 @@ def _zip(data: bytes) -> zipfile.ZipFile:
     z = zipfile.ZipFile(io.BytesIO(data))  # BadZipFile 은 extract() 가 Unsupported 로 바꾼다
     infos = z.infolist()
     if (
-        any(i.file_size > MAX_ZIP_MEMBER for i in infos)
+        len(infos) > MAX_ZIP_ENTRIES
+        or any(i.file_size > MAX_ZIP_MEMBER for i in infos)
         or sum(i.file_size for i in infos) > MAX_ZIP_TOTAL
     ):
         raise Unsupported(
@@ -141,9 +143,8 @@ def _wtext(p) -> str:
     return "".join(out)
 
 
-def _hwpx(z: zipfile.ZipFile) -> str:
-    """Contents/section0.xml, section1.xml … 순서대로 문단. 문단은 자기 직속 run 의 글자만 모은다(표 셀 문단은 따로
-    잡히므로 두 번 들어가지 않게), `hp:t` 안의 tab·lineBreak 뒤 글자(.tail)도 살린다(리뷰)."""
+def hwpx_sections(z: zipfile.ZipFile) -> list[str]:
+    """Contents/section0.xml, section1.xml … 본문 순서대로. 없으면 hwpx 가 아니다. app/convert.py 도 쓴다."""
     sections = sorted(
         (n for n in z.namelist() if n.startswith("Contents/section") and n.endswith(".xml")),
         key=lambda n: (
@@ -152,8 +153,14 @@ def _hwpx(z: zipfile.ZipFile) -> str:
     )
     if not sections:
         raise Unsupported("hwpx")
+    return sections
+
+
+def _hwpx(z: zipfile.ZipFile) -> str:
+    """섹션 순서대로 문단. 문단은 자기 직속 run 의 글자만 모은다(표 셀 문단은 따로
+    잡히므로 두 번 들어가지 않게), `hp:t` 안의 tab·lineBreak 뒤 글자(.tail)도 살린다(리뷰)."""
     lines: list[str] = []
-    for sec in sections:
+    for sec in hwpx_sections(z):
         root = ET.fromstring(z.read(sec))
         for p in root.iter(f"{_HP}p"):
             parts: list[str] = []
