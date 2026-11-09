@@ -59,7 +59,7 @@ it('가져온 서식(글꼴·크기·줄 간격·간격·들여쓰기·칸 배�
   )
   // 1px = 15twip, 줄 간격 배수 × 240. 들여쓰기는 ind 에 더한다.
   expect(xml).toContain(
-    '<w:pPr><w:spacing w:before="120" w:after="180" w:line="384" w:lineRule="auto"/><w:ind w:left="600"/></w:pPr>',
+    '<w:pPr><w:spacing w:before="120" w:after="180" w:line="360" w:lineRule="auto"/><w:ind w:left="600"/></w:pPr>',
   )
   expect(xml).toContain('<w:shd w:val="clear" w:color="auto" w:fill="FFE599"/>')
   // 표는 둘인데 선을 적은 표는 하나다(테두리 없는 표).

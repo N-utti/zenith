@@ -4,8 +4,11 @@ import { cleanName } from '@/lib/format'
 import { uploadedFilePath } from '@/lib/links'
 import { escapeXml } from '@/lib/xlsx'
 import {
+  blockFormat,
   bodyBlocks,
   columnWidths,
+  fontName,
+  fontPoints,
   hexColor,
   layoutTable,
   safeHref,
@@ -72,6 +75,8 @@ interface Char {
   strike: boolean
   /** 고정폭 글꼴(코드). */
   mono: boolean
+  /** 글꼴 번호(header 의 fontface 안 차례). 0 은 맑은 고딕, 1 은 굴림체(코드), 2 부터는 문서에 쓰인 글꼴. */
+  face: number
 }
 const CHAR: Char = {
   height: 1000,
@@ -82,6 +87,7 @@ const CHAR: Char = {
   underline: false,
   strike: false,
   mono: false,
+  face: 0,
 }
 
 /** 문단 모양. 글자 모양과 마찬가지로 header 에 적고 번호로 가리킨다. */
@@ -94,6 +100,8 @@ interface Para {
   prev: number
   next: number
   border: number
+  /** 줄 간격(%). */
+  line: number
 }
 const PARA: Para = {
   align: 'LEFT',
@@ -102,6 +110,7 @@ const PARA: Para = {
   prev: 0,
   next: 600,
   border: 2,
+  line: 160,
 }
 
 /** 글이 놓이는 자리. 목록·인용·표 칸으로 들어갈 때마다 바뀐다. */
@@ -144,7 +153,7 @@ function borderFill(
 function charPr(id: number, char: Char): string {
   return (
     `<hh:charPr id="${id}" height="${char.height}" textColor="#${char.color}" shadeColor="${char.shade ? `#${char.shade}` : 'none'}" useFontSpace="0" useKerning="0" symMark="NONE" borderFillIDRef="2">` +
-    `<hh:fontRef ${eachLang(char.mono ? 1 : 0)}/><hh:ratio ${eachLang(100)}/><hh:spacing ${eachLang(0)}/><hh:relSz ${eachLang(100)}/><hh:offset ${eachLang(0)}/>` +
+    `<hh:fontRef ${eachLang(char.mono ? 1 : char.face)}/><hh:ratio ${eachLang(100)}/><hh:spacing ${eachLang(0)}/><hh:relSz ${eachLang(100)}/><hh:offset ${eachLang(0)}/>` +
     (char.italic ? '<hh:italic/>' : '') +
     (char.bold ? '<hh:bold/>' : '') +
     `<hh:underline type="${char.underline ? 'BOTTOM' : 'NONE'}" shape="SOLID" color="#${char.color}"/>` +
@@ -160,7 +169,7 @@ function paraPr(id: number, para: Para): string {
   const margin = (scale: number) =>
     `<hh:margin><hc:intent value="0" unit="HWPUNIT"/><hc:left value="${para.left * scale}" unit="HWPUNIT"/><hc:right value="0" unit="HWPUNIT"/>` +
     `<hc:prev value="${para.prev * scale}" unit="HWPUNIT"/><hc:next value="${para.next * scale}" unit="HWPUNIT"/></hh:margin>` +
-    `<hh:lineSpacing type="PERCENT" value="160" unit="HWPUNIT"/>`
+    `<hh:lineSpacing type="PERCENT" value="${para.line}" unit="HWPUNIT"/>`
   // 테두리가 있는 문단(인용의 왼쪽 선, 코드의 바탕)은 글과 테두리 사이를 2mm 띄운다.
   const offset = para.border === 2 ? 0 : 567
   return (
@@ -238,6 +247,25 @@ export function buildHwpx({ title, doc, images, origin }: ExportSource): Uint8Ar
   const manifest: string[] = []
   /** 문단·표·사진·링크에 주는 번호. 겹치지만 않으면 된다. 0번은 첫 문단이 쓴다. */
   let serial = 0
+  /** header 에 등록할 글꼴. 앞의 둘은 기본(본문·코드)이고, 문서에 쓰인 글꼴(서식 3차)이 뒤에 붙는다. */
+  const faces = ['맑은 고딕', '굴림체']
+  const faceId = (name: string) => {
+    const found = faces.indexOf(name)
+    return found >= 0 ? found : faces.push(name) - 1
+  }
+  /**
+   * 고정 목록(BORDER) 밖의 칸 테두리·배경. 칸 배경색과 테두리 없는 표(서식 3차)가 쓴 조합만 만든다.
+   * 번호는 고정 목록 다음(8)부터다.
+   */
+  const cellFills = new Map<string, number>()
+  const cellFill = (lines: boolean, face: string | null) => {
+    if (lines && face === null) return BORDER.cell
+    if (lines && face === FILL) return BORDER.headerCell
+    const key = JSON.stringify([lines, face])
+    const id = cellFills.get(key) ?? Math.max(...Object.values(BORDER)) + 1 + cellFills.size
+    cellFills.set(key, id)
+    return id
+  }
 
   const lookup = <T>(table: Map<string, number>, value: T) => {
     const key = JSON.stringify(value)
@@ -268,9 +296,14 @@ export function buildHwpx({ title, doc, images, origin }: ExportSource): Uint8Ar
     const find = (type: string) => marks?.find((mark) => mark.type === type)
     const code = !!find('code')
     const highlight = find('highlight')
+    const style = find('textStyle')?.attrs
+    const font = code ? null : fontName(style?.fontFamily)
+    const points = fontPoints(style?.fontSize)
     return charId({
-      height: ctx.size ?? CHAR.height,
-      color: hexColor(find('textStyle')?.attrs?.color) ?? (link ? LINK : (ctx.color ?? CHAR.color)),
+      // 글자에 적힌 크기(서식 3차)가 제목·사진 설명의 크기보다 이긴다. 단위는 1/100pt.
+      height: points ? Math.max(100, Math.round(points * 100)) : (ctx.size ?? CHAR.height),
+      face: font ? faceId(font) : 0,
+      color: hexColor(style?.color) ?? (link ? LINK : (ctx.color ?? CHAR.color)),
       shade: highlight ? (hexColor(highlight.attrs?.color) ?? 'FEF08A') : code ? FILL : null,
       bold: ctx.bold || !!find('bold'),
       italic: !!find('italic'),
@@ -343,6 +376,19 @@ export function buildHwpx({ title, doc, images, origin }: ExportSource): Uint8Ar
   }
   const align = (node: JSONContent | undefined) =>
     ALIGN.get(String(node?.attrs?.textAlign)) ?? 'LEFT'
+  /**
+   * 문단에 적힌 줄 간격·들여쓰기·앞뒤 간격(서식 3차). 적힌 것만 돌려줘 기본 모양을 덮는다.
+   * 1px 은 75 HWPUNIT, 줄 간격 배수 1.6 은 160%.
+   */
+  const formatOf = (node: JSONContent | undefined, ctx: Ctx): Partial<Para> => {
+    const f = blockFormat(node?.attrs)
+    return {
+      ...(f.indent !== null && { left: Math.min(ctx.indent + f.indent * PX, MAX_INDENT) }),
+      ...(f.before !== null && { prev: f.before * PX }),
+      ...(f.after !== null && { next: f.after * PX }),
+      ...(f.line !== null && { line: Math.round(f.line * 100) }),
+    }
+  }
 
   /**
    * 목록. 기호는 본문에 쓰지 않고 문단 모양이 가리키는 글머리표·번호 정의가 그린다.
@@ -360,6 +406,7 @@ export function buildHwpx({ title, doc, images, origin }: ExportSource): Uint8Ar
             align: align(lead),
             next: 200,
             ...(heading && { heading }),
+            ...formatOf(lead, ctx),
           }) + blocks(lead ? children.slice(1) : children, { ...deeper(ctx), depth: ctx.depth + 1 })
         )
       })
@@ -375,13 +422,17 @@ export function buildHwpx({ title, doc, images, origin }: ExportSource): Uint8Ar
     const grid = columnWidths(columns, PAGE_WIDTH / PX).map((px) => Math.floor(px * PX))
     const inner: Ctx = { indent: 0, depth: 0, quote: false, cell: true, bold: false }
     const margin = 'left="510" right="510" top="141" bottom="141"'
+    // 테두리 없는 표(서식 3차)는 칸·표 모두 선 없는 테두리를 가리킨다.
+    const lines = node.attrs?.borders !== 'none'
     /** 행 높이는 칸 위아래 여백만 적는다. 한글이 글에 맞춰 늘린다. */
     const ROW = 282
 
     const tc = (cell: JSONContent | null, col: number, row: number, colSpan = 1, rowSpan = 1) => {
       const header = cell?.type === 'tableHeader'
+      // 칸 배경색(서식 3차)이 머리 칸의 회색보다 이긴다.
+      const face = hexColor(cell?.attrs?.backgroundColor) ?? (header ? FILL : null)
       return (
-        `<hp:tc name="" header="0" hasMargin="0" protect="0" editable="0" dirty="0" borderFillIDRef="${header ? BORDER.headerCell : BORDER.cell}">` +
+        `<hp:tc name="" header="0" hasMargin="0" protect="0" editable="0" dirty="0" borderFillIDRef="${cellFill(lines, face)}">` +
         `<hp:subList id="" textDirection="HORIZONTAL" lineWrap="BREAK" vertAlign="TOP" linkListIDRef="0" linkListNextIDRef="0" textWidth="0" textHeight="0" hasTextRef="0" hasNumRef="0">` +
         // 빈 칸에도 문단 하나는 있어야 한다.
         (blocks(cell?.content, { ...inner, bold: header }) || para('', inner)) +
@@ -435,7 +486,7 @@ export function buildHwpx({ title, doc, images, origin }: ExportSource): Uint8Ar
 
     // 글자처럼 취급하지 않는 표여야 쪽을 넘길 때 나뉜다. 글자처럼 취급하면 한글이 아래를 잘라 그린다.
     const tbl =
-      `<hp:tbl id="${++serial}" zOrder="0" numberingType="TABLE" textWrap="TOP_AND_BOTTOM" textFlow="BOTH_SIDES" lock="0" dropcapstyle="None" pageBreak="CELL" repeatHeader="0" rowCnt="${rowCount}" colCnt="${columns.length}" cellSpacing="0" borderFillIDRef="${BORDER.cell}" noAdjust="0">` +
+      `<hp:tbl id="${++serial}" zOrder="0" numberingType="TABLE" textWrap="TOP_AND_BOTTOM" textFlow="BOTH_SIDES" lock="0" dropcapstyle="None" pageBreak="CELL" repeatHeader="0" rowCnt="${rowCount}" colCnt="${columns.length}" cellSpacing="0" borderFillIDRef="${cellFill(lines, null)}" noAdjust="0">` +
       `<hp:sz width="${sum(grid)}" widthRelTo="ABSOLUTE" height="${ROW * rowCount}" heightRelTo="ABSOLUTE" protect="0"/>` +
       `<hp:pos treatAsChar="0" affectLSpacing="0" flowWithText="1" allowOverlap="0" holdAnchorAndSO="0" vertRelTo="PARA" horzRelTo="COLUMN" vertAlign="TOP" horzAlign="LEFT" vertOffset="0" horzOffset="0"/>` +
       `<hp:outMargin left="0" right="0" top="0" bottom="0"/><hp:inMargin ${margin}/>` +
@@ -502,7 +553,7 @@ export function buildHwpx({ title, doc, images, origin }: ExportSource): Uint8Ar
   const block = (node: JSONContent, ctx: Ctx): string => {
     switch (node.type) {
       case 'paragraph':
-        return para(inlines(node, ctx), ctx, { align: align(node) })
+        return para(inlines(node, ctx), ctx, { align: align(node), ...formatOf(node, ctx) })
       case 'heading': {
         const level = wholeNumber(node.attrs?.level, 1, 6)
         // 제목은 큰 굵은 글자다. 크기는 글자 모양에 실리므로 제목 안의 글자 서식도 같은 크기를 받는다.
@@ -510,6 +561,7 @@ export function buildHwpx({ title, doc, images, origin }: ExportSource): Uint8Ar
         return para(inlines(node, { ...ctx, bold: true, size }), ctx, {
           align: align(node),
           prev: level < 3 ? 1200 : 800,
+          ...formatOf(node, ctx),
         })
       }
       case 'bulletList':
@@ -557,13 +609,14 @@ export function buildHwpx({ title, doc, images, origin }: ExportSource): Uint8Ar
     blocks(bodyBlocks(doc), root) +
     `</hs:sec>`
 
+  // 본문을 다 만든 뒤라 문서에 쓰인 글꼴이 faces 에 다 모여 있다. 글꼴 파일은 싣지 않는다(이름만).
   const fonts = LANGS.map(
     (lang) =>
-      `<hh:fontface lang="${lang.toUpperCase()}" fontCnt="2">` +
-      ['맑은 고딕', '굴림체']
+      `<hh:fontface lang="${lang.toUpperCase()}" fontCnt="${faces.length}">` +
+      faces
         .map(
           (face, id) =>
-            `<hh:font id="${id}" face="${face}" type="TTF" isEmbedded="0"><hh:typeInfo familyType="FCAT_GOTHIC" weight="6" proportion="4" contrast="0" strokeVariation="1" armStyle="1" letterform="1" midline="1" xHeight="1"/></hh:font>`,
+            `<hh:font id="${id}" face="${escapeXml(face)}" type="TTF" isEmbedded="0"><hh:typeInfo familyType="FCAT_GOTHIC" weight="6" proportion="4" contrast="0" strokeVariation="1" armStyle="1" letterform="1" midline="1" xHeight="1"/></hh:font>`,
         )
         .join('') +
       `</hh:fontface>`,
@@ -577,6 +630,17 @@ export function buildHwpx({ title, doc, images, origin }: ExportSource): Uint8Ar
     borderFill(BORDER.quote, ['left'], '0.7 mm', LINE),
     borderFill(BORDER.rule, ['bottom'], '0.12 mm', LINE),
     borderFill(BORDER.code, [], '0.1 mm', '000000', solid),
+    ...[...cellFills].map(([key, id]) => {
+      const [lines, face] = JSON.parse(key) as [boolean, string | null]
+      const sides = lines ? ['left', 'right', 'top', 'bottom'] : []
+      return borderFill(
+        id,
+        sides,
+        '0.12 mm',
+        LINE,
+        face ? { face: `#${face}`, hatch: '#FF000000' } : undefined,
+      )
+    }),
   ]
   const listOf = <T>(tag: string, items: T[], render: (item: T, id: number) => string) =>
     `<hh:${tag} itemCnt="${items.length}">${items.map(render).join('')}</hh:${tag}>`
