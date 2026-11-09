@@ -41,6 +41,11 @@ it('본문이 가리키는 글자·문단 모양이 header 에 전부 있고 개
   for (const [, ref] of section.matchAll(/paraPrIDRef="(\d+)"/g)) {
     expect(Number(ref)).toBeLessThan(paras)
   }
+  // 테두리는 번호가 띄엄띄엄일 수 있어 실제 id 와 대조한다. 없는 번호를 가리키면 한글이 문서를 열지 않는다.
+  const fills = new Set([...header.matchAll(/<hh:borderFill id="(\d+)"/g)].map(([, id]) => id))
+  for (const [, ref] of (header + section).matchAll(/borderFillIDRef="(\d+)"/g)) {
+    expect(fills.has(ref), `borderFill ${ref}`).toBe(true)
+  }
 })
 
 it('쪽 설정이 첫 문단 첫 run 에 들고 제목이 그 뒤에 온다', () => {
@@ -72,6 +77,35 @@ it('목록은 문단 모양의 기호 정의로 그리고, 번호 목록은 시�
   expect(header).toContain('<hh:numbering id="2" start="3"><hh:paraHead start="3" level="1"')
   expect(header).toContain('<hh:numberings itemCnt="2">')
   expect(section).toContain('<hp:t>☑ </hp:t>')
+})
+
+it('가져온 서식(글꼴·크기·줄 간격·간격·들여쓰기·칸 배경·테두리 없음)을 옮긴다', () => {
+  // 쓰인 글꼴은 기본 둘 다음(2번)에 언어마다 등록하고, 글자 모양이 그 번호를 가리킨다. 크기는 1/100pt.
+  expect(count(header, /fontCnt="3"/g)).toBe(7)
+  expect(header).toContain('<hh:font id="2" face="바탕"')
+  expect(header).toMatch(/<hh:charPr id="\d+" height="1400"[^>]*><hh:fontRef hangul="2"/)
+  // 1px = 75, 줄 간격 배수 1.5 = 150%. 여백은 옛 판 쪽(hp:default)에 두 배로, 줄 간격(%)은 같은 값으로.
+  expect(header).toContain(
+    '<hc:left value="6000" unit="HWPUNIT"/><hc:right value="0" unit="HWPUNIT"/><hc:prev value="1200" unit="HWPUNIT"/><hc:next value="1800" unit="HWPUNIT"/></hh:margin><hh:lineSpacing type="PERCENT" value="150"',
+  )
+  expect(header).toContain(
+    '<hc:left value="3000" unit="HWPUNIT"/><hc:right value="0" unit="HWPUNIT"/><hc:prev value="600" unit="HWPUNIT"/><hc:next value="900" unit="HWPUNIT"/></hh:margin><hh:lineSpacing type="PERCENT" value="150"',
+  )
+  // 노란 칸은 선 없이 배경만, 그 표는 선도 배경도 없는 테두리를 가리킨다.
+  const fill = (id: string | undefined) =>
+    header.match(new RegExp(`<hh:borderFill id="${id}" .*?</hh:borderFill>`))?.[0] ?? ''
+  const lastTable = section.slice(section.lastIndexOf('<hp:tbl '))
+  const [, tableFill, cellFill] =
+    /^<hp:tbl [^>]*borderFillIDRef="(\d+)".*?<hp:tc [^>]*borderFillIDRef="(\d+)"/.exec(lastTable) ??
+    []
+  expect(fill(cellFill)).toContain('faceColor="#FFE599"')
+  expect(fill(cellFill)).not.toMatch(/(left|right|top|bottom)Border type="SOLID"/)
+  expect(fill(tableFill)).not.toMatch(/(left|right|top|bottom)Border type="SOLID"/)
+  expect(fill(tableFill)).not.toContain('fillBrush')
+  // 선 있는 표의 머리 칸·보통 칸은 예전처럼 고정 번호(4·3)다.
+  const firstTable = section.slice(section.indexOf('<hp:tbl '))
+  expect(firstTable).toMatch(/^<hp:tbl [^>]*borderFillIDRef="3".*?<hp:tc [^>]*borderFillIDRef="4"/)
+  expect(firstTable.split('</hp:tbl>')[0]).toMatch(/<hp:tc [^>]*borderFillIDRef="3"/)
 })
 
 it('합친 칸: 덮인 자리에는 칸을 만들지 않고 합친 칸이 넓이를 말한다', () => {
