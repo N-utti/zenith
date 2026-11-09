@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import { PluginKey } from '@tiptap/pm/state'
 import type { Editor } from '@tiptap/react'
 import { BubbleMenu } from '@tiptap/react/menus'
@@ -82,18 +82,12 @@ function useMouseHeld(editor: Editor) {
 export function EditorBubbleMenu({ editor }: { editor: Editor }) {
   const state = useFormatState(editor)
   const held = useMouseHeld(editor)
-  // 그릴 때마다 새 함수를 주면 BubbleMenu 가 그때마다 옵션 갱신 트랜잭션을 보낸다.
-  const shouldShow = useCallback(
-    ({ editor: e }: { editor: Editor }) => !held.current && hasText(e),
-    [held],
-  )
-
   return (
     <BubbleMenu
       editor={editor}
       pluginKey={BUBBLE_KEY}
       updateDelay={100}
-      shouldShow={shouldShow}
+      shouldShow={({ editor: e }) => !held.current && hasText(e)}
       // 좁은 폭에서는 한 줄에 다 못 들어간다. 떠 있는 막대라 두 줄이 돼도 본문을 먹지 않으므로
       // 접히게 두고, 화면 밖으로 밀려 가로 스크롤이 생기는 것만 막는다.
       className="border-line bg-surface flex max-w-[calc(100vw-1.5rem)] flex-wrap items-center gap-0.5 rounded-xl border p-1 shadow-lg"
