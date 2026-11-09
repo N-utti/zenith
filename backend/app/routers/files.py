@@ -33,26 +33,14 @@ MAX_FILE_BYTES = 10 * 1024 * 1024  # 프론트 useFileUpload.ts 의 MAX_FILE_BYT
 # 사용자별 하루 상한(그림·파일 합쳐서). miniodata 가 db 와 같은 디스크라 저장소 포화는 전면 장애다 — 감사 로그를 세어 판정.
 # ponytail: 총량(디스크) 감시와 미참조 오브젝트 정리는 없다 — 15명·200개/일이면 하루 최대 30GB 가 천장.
 DAILY_UPLOADS = 200
-# 매직 바이트 → content type. 헤더는 클라이언트가 정하는 값이라 믿지 않는다.
-MAGIC = (
-    (b"\x89PNG\r\n\x1a\n", "image/png"),
-    (b"\xff\xd8\xff", "image/jpeg"),
-    (b"GIF87a", "image/gif"),
-    (b"GIF89a", "image/gif"),
-)
-# 브라우저가 inline 으로 그려도 스크립트가 돌지 않는 형식만 — channels.INLINE_TYPES 와 같은 집합
-INLINE_TYPES = frozenset(ct for _, ct in MAGIC) | {"image/webp"}
+# 브라우저가 inline 으로 그려도 스크립트가 돌지 않는 형식만 — channels.INLINE_TYPES 와 같은 집합(storage.sniff_image)
+INLINE_TYPES = frozenset({"image/png", "image/jpeg", "image/gif", "image/webp"})
 OCTET = "application/octet-stream"
 
 
 def _sniff(data: bytes) -> str:
-    """그림 넷이면 그 형식, 아니면 octet-stream — 우긴 Content-Type 은 보지 않는다."""
-    for magic, content_type in MAGIC:
-        if data.startswith(magic):
-            return content_type
-    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
-        return "image/webp"
-    return OCTET
+    """그림 넷이면 그 형식, 아니면 octet-stream — 우긴 Content-Type 은 보지 않는다(매직 바이트는 storage.sniff_image)."""
+    return storage.sniff_image(data) or OCTET
 
 
 def _key(file_id: uuid.UUID) -> str:
