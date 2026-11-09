@@ -1,4 +1,5 @@
-import { useMemo, useState, type DragEvent, type MouseEvent } from 'react'
+import { useMemo, useRef, useState, type DragEvent, type MouseEvent } from 'react'
+import { useMutationState } from '@tanstack/react-query'
 import { Link, NavLink, useLocation, useNavigate, useParams, useSearchParams } from 'react-router'
 import {
   ChevronDown,
@@ -7,12 +8,14 @@ import {
   Columns2,
   ExternalLink,
   FilePlus2,
+  FileUp,
   FileText,
   Folder,
   FolderInput,
   FolderOpen,
   FolderPlus,
   Link2,
+  Loader2,
   Lock,
   Pencil,
   Plus,
@@ -33,12 +36,14 @@ import { FolderNameModal } from '@/features/docs/FolderNameModal'
 import { MoveNodeModal } from '@/features/docs/MoveNodeModal'
 import { TrashDocModal } from '@/features/docs/TrashDocModal'
 import { setSplitDoc } from '@/features/docs/splitDoc'
-import { DOC_DRAG_TYPE } from '@/features/docs/types'
+import { DOC_DRAG_TYPE, IMPORT_ACCEPT, type DocSeedState } from '@/features/docs/types'
 import {
+  IMPORT_MUTATION_KEY,
   UNTITLED_DOC,
   useCreateDoc,
   useCreateFolder,
   useDeleteFolder,
+  useImportDoc,
   useMoveNode,
   useRenameDoc,
   useRenameFolder,
@@ -118,6 +123,8 @@ interface RowActions {
   over: string | null
   /** 우클릭 메뉴가 열려 있는 문서·폴더의 id. 어느 줄의 메뉴인지 보이게 그 줄을 칠해 둔다. */
   menuId: string | null
+  /** 파일을 가져오는 중인 폴더의 id. 그 줄 끝에서 돈다. */
+  importingId: string | null
   onNavigate?: () => void
   onAddDoc: (folderId: string) => void
   onAddFolder: (parentId: string | null) => void
@@ -322,6 +329,13 @@ function FolderRow({
               <title>{access}</title>
             </Lock>
           )}
+          {actions.importingId === id && (
+            <Loader2
+              role="img"
+              aria-label="파일 가져오는 중"
+              className="text-subtle size-3.5 shrink-0 animate-spin"
+            />
+          )}
         </Link>
 
         {/*
@@ -427,6 +441,39 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
   const [over, setOver] = useState<string | null>(null)
   const toRoot = !!drag && !!data && canDrop(drag, null, data)
 
+  /*
+   * 파일 가져오기(백엔드 README 60). 서버가 빈 문서를 만들고 본문 HTML 을 돌려준다. 본문은 그 문서를
+   * 여는 탭이 심으므로(AI 문서로 저장과 같은 길) 다 되면 곧장 연다. 열지 않으면 빈 문서만 남는다.
+   * 그래서 한 번에 한 파일이다. 결과는 약속으로 받는다(`move` 와 같은 이유). 가져오는 중인 폴더는
+   * 뮤테이션 캐시에서 읽는다. 트리가 다시 마운트돼도 표시와 중복 막기가 남는다.
+   */
+  const importDoc = useImportDoc()
+  const importingId =
+    useMutationState({
+      filters: { mutationKey: IMPORT_MUTATION_KEY, status: 'pending' },
+      select: (m) => (m.state.variables as { folderId: string }).folderId,
+    })[0] ?? null
+  const filePicker = useRef<HTMLInputElement>(null)
+  const pickFor = useRef<string | null>(null)
+  const runImport = (file: File, folderId: string) => {
+    if (importingId) return toast.info('다른 파일을 가져오는 중입니다.')
+    // 끌어 놓기는 accept 를 거치지 않는다. 서버 거절은 올린 뒤라 느리고 하루 상한도 하나 쓴다.
+    const name = file.name.toLowerCase()
+    if (!IMPORT_ACCEPT.split(',').some((ext) => name.endsWith(ext))) {
+      return toast.error('docx·xlsx·hwpx 파일만 가져올 수 있습니다(hwp 는 hwpx 로 저장해 주세요).')
+    }
+    void importDoc.mutateAsync({ file, folderId }).then(
+      ({ doc, html, truncated }) => {
+        if (truncated) toast.info('파일이 길어 앞부분만 가져왔습니다.')
+        onNavigate?.()
+        void navigate(`/docs/${doc.id}`, {
+          state: { seedHtml: html, title: doc.title } satisfies DocSeedState,
+        })
+      },
+      (err: unknown) => fail(err, `${file.name} 을 가져오지 못했습니다.`),
+    )
+  }
+
   /** 우클릭 메뉴가 열린 줄과 자리. `href` 는 그 줄 링크의 주소(새 탭으로 열 때 쓴다). */
   const [menu, setMenu] = useState<{ item: TreeItem; x: number; y: number; href: string } | null>(
     null,
@@ -475,6 +522,18 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
     )
   }
 
+  /**
+   * 바깥에서 끌어 온 파일이 올라간 폴더. 드라이브처럼 폴더에 놓으면 그 폴더로 가져온다. 문서는 폴더
+   * 안에만 살아서 최상위 자리는 받지 않는다. 트리 안의 끌기(`drag`)와는 따로 센다.
+   */
+  const fileZoneAt = (e: DragEvent): string | null => {
+    // 트리 안 끌기는 상태(`drag`)가 아니라 실린 표식으로 가린다. 상태는 끝 신호를 놓치면 남는다.
+    const { types } = e.dataTransfer
+    if (types.includes(DRAG_TYPE) || !types.includes('Files') || !(e.target instanceof Element))
+      return null
+    return e.target.closest<HTMLElement>('[data-drop]')?.dataset.drop || null
+  }
+
   /** 포인터 아래의 놓을 자리. 놓을 수 없는 곳이면 null. */
   const zoneAt = (e: DragEvent): string | null => {
     if (!drag || !data || !(e.target instanceof Element)) return null
@@ -507,16 +566,26 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
       setDragCard(e, row)
     },
     onDragOver: (e: DragEvent) => {
-      const zone = zoneAt(e)
+      const fileZone = fileZoneAt(e)
+      const zone = fileZone ?? zoneAt(e)
       setOver(zone)
       if (zone === null) return
       e.preventDefault()
-      e.dataTransfer.dropEffect = 'move'
+      e.dataTransfer.dropEffect = fileZone ? 'copy' : 'move'
     },
     onDragLeave: (e: DragEvent) => {
       if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOver(null)
     },
     onDrop: (e: DragEvent) => {
+      const fileZone = fileZoneAt(e)
+      if (fileZone) {
+        // 채팅 입력창도 창 전체에서 파일을 받는다. 막아 두면 그쪽이 같이 붙이지 않는다.
+        e.preventDefault()
+        const [file, ...rest] = e.dataTransfer.files
+        if (rest.length) toast.error('파일은 한 번에 하나씩 가져올 수 있습니다.')
+        else if (file) runImport(file, fileZone)
+        return endDrag()
+      }
       const zone = zoneAt(e)
       if (drag && zone !== null) {
         e.preventDefault()
@@ -562,6 +631,7 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
     dragId: drag?.id ?? null,
     over,
     menuId: menu?.item.id ?? null,
+    importingId,
     onNavigate,
     onAddDoc: (folderId) =>
       createDoc.mutate(
@@ -662,6 +732,18 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
 
   return (
     <div {...dragHandlers} {...longPress} onContextMenu={openMenu}>
+      <input
+        ref={filePicker}
+        type="file"
+        accept={IMPORT_ACCEPT}
+        hidden
+        onChange={(e) => {
+          const file = e.target.files?.[0]
+          // 같은 파일을 다시 골라도 change 가 오게 비운다.
+          e.target.value = ''
+          if (file && pickFor.current) runImport(file, pickFor.current)
+        }}
+      />
       {isError && !data && (
         <div className="space-y-1 px-3 py-2">
           <p className="text-danger text-[13px]">문서 트리를 불러오지 못했습니다.</p>
@@ -741,6 +823,15 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
                 icon={FolderPlus}
                 label="새 폴더"
                 onSelect={() => actions.onAddFolder(menu.item.id)}
+              />
+              <ContextMenuItem
+                icon={FileUp}
+                label="파일 가져오기"
+                disabledReason={importingId ? '다른 파일을 가져오는 중입니다' : undefined}
+                onSelect={() => {
+                  pickFor.current = menu.item.id
+                  filePicker.current?.click()
+                }}
               />
               <ContextMenuItem
                 icon={Pencil}

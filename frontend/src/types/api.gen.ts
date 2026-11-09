@@ -383,6 +383,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/docs/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 파일 가져오기 — multipart `file`(docx·xlsx·hwpx, 10MB) + `folder_id` → 새 문서 + 편집기용 HTML. 04 에 없던 경로(README 60)
+         * @description 본문을 서버가 Y.Doc 으로 만들지 않는다 — HTML 을 돌려주고 프론트가 새 문서를 열며 심는다(app/convert.py 머리말).
+         *     원본은 `/files` 와 같은 규칙(10MB·하루 200개·감사 `files.uploaded`)으로 문서 첨부에 넣어 둔다. 변환에 실패한
+         *     요청(`docs.import_failed`)도 하루 상한에 센다 — 비싼 변환을 같은 파일로 무한히 다시 시킬 수 없게(리뷰).
+         */
+        post: operations["import_doc_api_docs_import_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/docs/{id}": {
         parameters: {
             query?: never;
@@ -2501,6 +2523,16 @@ export interface components {
             /** Allowed */
             allowed: boolean;
         };
+        /** Body_import_doc_api_docs_import_post */
+        Body_import_doc_api_docs_import_post: {
+            /** File */
+            file: string;
+            /**
+             * Folder Id
+             * Format: uuid
+             */
+            folder_id: string;
+        };
         /** Body_import_orgs_api_crm_orgs_import_post */
         Body_import_orgs_api_crm_orgs_import_post: {
             /** File */
@@ -3157,6 +3189,15 @@ export interface components {
             ai_source: boolean;
             /** Ydoc */
             ydoc: string | null;
+        };
+        /** DocImportOut */
+        DocImportOut: {
+            doc: components["schemas"]["DocOut"];
+            /** Html */
+            html: string;
+            /** Truncated */
+            truncated: boolean;
+            file: components["schemas"]["FileOut"];
         };
         /** DocOut */
         DocOut: {
@@ -5798,6 +5839,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DocOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    import_doc_api_docs_import_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_import_doc_api_docs_import_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocImportOut"];
                 };
             };
             /** @description Validation Error */

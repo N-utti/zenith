@@ -7,6 +7,7 @@ import type { TreeItem } from './tree'
 import type {
   DocComment,
   DocDetail,
+  DocImport,
   DocSummary,
   DocTreeData,
   DocVersion,
@@ -338,6 +339,31 @@ export function uploadFile(file: File, docId: string) {
   form.append('file', file)
   form.append('doc_id', docId)
   return api<UploadedFile>('/files', { method: 'POST', body: form })
+}
+
+/**
+ * docx·xlsx·hwpx 를 새 문서로 가져온다. 변환에 몇 초 걸린다. 문서는 서버에 이미 생겼으니 목록을
+ * 다시 받는다. 본문은 응답의 `html` 을 들고 그 문서를 연 탭이 심는다.
+ */
+/** 가져오기 뮤테이션 키. 트리가 두 벌(AppLayout)이라 가져오는 중인지를 캐시에서 같이 본다. */
+export const IMPORT_MUTATION_KEY = ['docs', 'import'] as const
+
+export function useImportDoc() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationKey: IMPORT_MUTATION_KEY,
+    mutationFn: ({ file, folderId }: { file: File; folderId: string }) => {
+      const form = new FormData()
+      form.append('file', file)
+      form.append('folder_id', folderId)
+      return api<DocImport>('/docs/import', { method: 'POST', body: form })
+    },
+    // 실패해도 다시 받는다. 응답만 잃었으면(긴 변환 중 끊김) 서버에는 문서가 이미 생겼다.
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: ['documents'] })
+      void qc.invalidateQueries({ queryKey: docKeys.tree })
+    },
+  })
 }
 
 export function useComments(docId: string) {

@@ -110,6 +110,8 @@ export function Composer({
   const fromPage = useRef(false)
   const onFileDrag = useEffectEvent((e: DragEvent) => {
     if (fromPage.current || !e.dataTransfer?.types.includes('Files')) return
+    // 사이드바 문서 트리의 폴더가 먼저 받았다(파일 가져오기). 대화에 같이 붙이지 않는다.
+    if (e.defaultPrevented) return setDragging(false)
     // 화면을 나눠 오른쪽에 띄운 문서에 놓는 파일은 그 문서 것이다(편집기가 받는다). 대화에 같이 붙이지 않는다.
     if (e.target instanceof Element && e.target.closest('[data-split-doc]'))
       return setDragging(false)

@@ -25,6 +25,15 @@ export type DocTreeData = Schema<'TreeOut'>
 export type UploadedFile = Schema<'FileOut'>
 
 /**
+ * 파일 가져오기 결과(`POST /docs/import`, 백엔드 README 60). 서버는 문서를 빈 채로 만들고 본문은
+ * `html` 로만 준다. 받은 쪽이 그 문서를 열면서 `DocSeedState` 로 심는다(AI 문서로 저장과 같은 길).
+ */
+export type DocImport = Schema<'DocImportOut'>
+
+/** 가져올 수 있는 형식. 서버가 같은 목록으로 다시 거른다. 옛 한글(.hwp)은 아직 안 된다. */
+export const IMPORT_ACCEPT = '.docx,.xlsx,.hwpx'
+
+/**
  * 블록 댓글. 백엔드 `CommentOut` 과 같은 모양이다.
  *
  * 아바타 색은 서버가 주지 않는다. `lib/avatar.ts` 가 사람 id 로 만든다(다른 화면과 같은 규약).
