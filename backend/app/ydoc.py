@@ -36,6 +36,7 @@ NODES: dict[str, str | None] = {
     "blockquote": "blockquote",
     "hr": "horizontalRule",
     "br": "hardBreak",
+    "img": "imageBlock",  # 파일 안 그림 — 라우터가 올린 /api/files/{id} 를 data-ref 로 찾는다
     "thead": None,
     "tbody": None,
 }
@@ -47,6 +48,8 @@ MARKS = {
     "s": "strike",
     "code": "code",
     "a": "link",
+    "span": "textStyle",  # style="color:#rrggbb" 만 — 필터가 그 밖의 span 은 벗긴다
+    "mark": "highlight",  # data-color="#rrggbb"
 }
 # 글자가 바로 들어갈 수 없어 문단으로 감싸는 노드(ProseMirror content 규칙)
 _WRAP_TEXT = {"listItem", "tableCell", "tableHeader", "blockquote", None}
@@ -64,15 +67,25 @@ _TEXT_PARENTS = {"paragraph", "heading", "codeBlock"}  # 글자(와 hardBreak)�
 _CELLS = {"tableCell", "tableHeader"}
 
 
-def build(html: str, title: str, file: tuple[str, str, int] | None = None) -> bytes:
+def build(
+    html: str,
+    title: str,
+    file: tuple[str, str, int] | None = None,
+    image_urls: list[str] | None = None,
+    used_refs: set[int] | None = None,
+) -> bytes:
     """Y.Doc 전체 상태(업데이트 바이트). realtime/yjs.py 가 그대로 `apply_update` 해 방을 연다.
-    `file`=(url, 이름, 크기)면 본문 끝에 원본 파일 칩(fileChip, frontend FileChip.ts) 문단을 붙인다."""
+    `file`=(url, 이름, 크기)면 본문 끝에 원본 파일 칩(fileChip, frontend FileChip.ts) 문단을 붙인다.
+    `image_urls[i]` 는 HTML 의 `<img data-ref="i">` 가 가리키는 올린 그림 주소(imageBlock 의 src). `used_refs` 를 주면
+    실제로 imageBlock 이 된 번호를 채운다 — 셀 안·끊긴 뒤의 그림은 문서에 없으니 라우터가 올리지 않게(리뷰)."""
     doc = Doc(skip_gc=True)
     doc.get("meta", type=Map)["title"] = title
     root = doc.get("default", type=XmlFragment)
-    b = _Builder(root)
+    b = _Builder(root, image_urls or [])
     b.feed(html)
     b.close()
+    if used_refs is not None:
+        used_refs.update(b.used)
     if file is not None:
         url, name, size = file
         p = XmlElement("paragraph")
@@ -91,8 +104,13 @@ def plain_text(update: bytes) -> str:
 
 
 class _Builder(HTMLParser):
-    def __init__(self, root: XmlFragment) -> None:
+    def __init__(self, root: XmlFragment, image_urls: list[str] | None = None) -> None:
         super().__init__(convert_charrefs=True)
+        self.image_urls = image_urls or []
+        self.used: set[int] = set()  # imageBlock 이 된 data-ref 번호
+        self.reopen: tuple[str, dict] | None = (
+            None  # 그림 때문에 일찍 닫은 문단·제목 — 뒤 글자를 같은 속성으로
+        )
         self.stack: list[tuple[str | None, XmlFragment | XmlElement]] = [
             (None, root)
         ]  # (노드 이름, 요소)
@@ -134,7 +152,10 @@ class _Builder(HTMLParser):
 
     def _unwrap(self, name: str) -> None:
         """노드로 만들지 않는다 — 글자는 문단으로 남고, 짝 끝 태그는 삼킨다."""
-        if name != "horizontalRule":
+        if name not in (
+            "horizontalRule",
+            "imageBlock",
+        ):  # 끝 태그가 없는 잎 노드는 짝을 기다리지 않는다(리뷰)
             self.unwrapped.append(name)
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
@@ -147,6 +168,13 @@ class _Builder(HTMLParser):
                 if not a.get("href"):
                     return
                 mark_attrs = {"href": a["href"], **_LINK_ATTRS}
+            elif tag == "span":
+                m = re.search(r"color\s*:\s*(#[0-9a-fA-F]{6})", a.get("style", ""))
+                if not m:
+                    return  # 색 없는 span — 필터가 이미 벗겼지만 한 번 더
+                mark_attrs = {"color": m.group(1).lower()}
+            elif tag == "mark":
+                mark_attrs = {"color": a["data-color"]} if a.get("data-color") else {}
             self.marks.append((MARKS[tag], mark_attrs))
             return
         if tag not in NODES:
@@ -170,7 +198,21 @@ class _Builder(HTMLParser):
             and self.stack[-1][0] != "paragraph"
             or (self.stack[-1][0] == "paragraph" and name != "paragraph")
         ):
-            self._pop()  # 문단·제목·코드블록 안에 블록이 오면 브라우저처럼 부모를 먼저 닫는다(리뷰)
+            # 문단·제목·코드블록 안에 블록이 오면 브라우저처럼 부모를 먼저 닫는다(리뷰). 그림만 들어 있던 문단처럼
+            # 비어 있으면 지운다 — 빈 문단이 그림 앞에 남지 않게
+            closing, el = self.stack[-1]
+            empty = len(el.children) == 0
+            attrs = dict(el.attributes)
+            self._pop()
+            if empty:
+                parent = self.stack[-1][1]
+                del parent.children[len(parent.children) - 1]
+            # 그림 뒤에 이어지는 글자는 같은 문단·제목 속성(정렬·수준)으로 다시 연다(리뷰)
+            self.reopen = (
+                (closing, attrs)
+                if name == "imageBlock" and closing in ("paragraph", "heading")
+                else None
+            )
         parent = self.stack[-1][0]
         if name == "paragraph" and parent == "paragraph":
             return  # 문단 안 문단 — 벗긴다(끝 태그는 스택에 없어 무시된다)
@@ -191,6 +233,22 @@ class _Builder(HTMLParser):
             # 목록 바로 아래 글/블록 — 항목으로 감싼다
             self._open("listItem")
         node_attrs: dict = {}
+        if name == "imageBlock":
+            ref = a.get("data-ref", "")
+            if not ref.isdigit() or int(ref) >= len(self.image_urls):
+                return  # 올리지 못한 그림 — 자리를 비운다
+            node_attrs["src"] = self.image_urls[int(ref)]
+            self.used.add(int(ref))
+            if a.get("width", "").isdigit():
+                node_attrs["width"] = int(a["width"])
+            if a.get("alt"):
+                node_attrs["alt"] = a["alt"]
+        if name in ("heading", "paragraph"):
+            m = re.search(r"text-align\s*:\s*(center|right|justify)", a.get("style", ""))
+            if m:
+                node_attrs["textAlign"] = m.group(
+                    1
+                )  # 프론트 TextAlign 확장의 속성. left 는 기본값이라 안 싣는다
         if name == "heading":
             node_attrs["level"] = int(tag[1])
         elif name in ("tableCell", "tableHeader"):
@@ -198,12 +256,12 @@ class _Builder(HTMLParser):
                 if a.get(k, "").isdigit() and int(a[k]) > 1:
                     node_attrs[k] = int(a[k])
         self._open(name, node_attrs)
-        if name == "horizontalRule":
-            self.stack.pop()  # 잎 노드
+        if name in ("horizontalRule", "imageBlock"):
+            self.stack.pop()  # 잎 노드(imageBlock 의 캡션은 비워 둔다)
 
     def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         self.handle_starttag(tag, attrs)
-        if tag not in ("br", "hr") and tag in NODES and NODES[tag] is not None:
+        if tag not in ("br", "hr", "img") and tag in NODES and NODES[tag] is not None:
             self.handle_endtag(tag)
 
     def handle_endtag(self, tag: str) -> None:
@@ -215,7 +273,7 @@ class _Builder(HTMLParser):
                     break
             return
         name = NODES.get(tag)
-        if name is None or name in ("hardBreak", "horizontalRule"):
+        if name is None or name in ("hardBreak", "horizontalRule", "imageBlock"):
             return
         if self.unwrapped and self.unwrapped[-1] == name:
             self.unwrapped.pop()
@@ -241,7 +299,11 @@ class _Builder(HTMLParser):
             self._open("listItem")
             parent = "listItem"
         if parent in _WRAP_TEXT:
-            self._open("paragraph")
+            if self.reopen:
+                self._open(*self.reopen)
+                self.reopen = None
+            else:
+                self._open("paragraph")
             self.implicit += 1
 
     def handle_data(self, data: str) -> None:

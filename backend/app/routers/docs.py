@@ -523,7 +523,7 @@ _IMPORT_SEM = asyncio.Semaphore(2)
 IMPORT_QUEUE_WAIT_S = 10.0  # 슬롯을 이만큼 기다리면 429 — 대기열이 끝없이 쌓이지 않게
 
 
-async def _convert_guarded(name: str, data: bytes) -> tuple[str, bool]:
+async def _convert_guarded(name: str, data: bytes) -> convert.Converted:
     """슬롯을 잡고 변환한다. 시간 초과로 요청이 422 로 끝나도 **스레드는 끝날 때까지 슬롯을 쥔다**(shield) — 안 그러면
     60초짜리 파일을 연달아 올려 끊긴 스레드가 CPU·메모리에 계속 쌓인다(Codex 리뷰). 스레드 자체는 끊을 수 없다."""
     try:
@@ -568,7 +568,7 @@ async def import_doc(
     name = storage.safe_name(file.filename)
     await db.commit()  # 변환하는 동안 커넥션·트랜잭션을 쥐고 있지 않게(풀 5+10, 리뷰)
     try:
-        body_html, truncated = await _convert_guarded(name, data)
+        converted = await _convert_guarded(name, data)
     except (convert.Unsupported, convert.Empty, convert.TooLarge, TimeoutError) as e:
         audit.record(
             db,
@@ -591,44 +591,99 @@ async def import_doc(
         db, folder_id, user
     )  # 변환하는 동안(최대 60초) 폴더가 닫혔거나 지워졌을 수 있다(리뷰)
     title = re.sub(r"\.[^.]+$", "", name).strip()[:200] or "가져온 문서"
+    # 행은 하루 상한 검사(아래)를 지난 뒤에 세션에 넣는다 — 거절되는 요청이 문서·파일 행을 남기지 않게. id 는 미리 정해
+    # 주소(/api/files/{id})를 Y.Doc 에 먼저 쓸 수 있게 한다
+    row = StoredFile(
+        id=uuid.uuid4(), name=name, size=len(data), content_type=files.OCTET, uploader_id=user.id
+    )
+    url = f"/api/files/{row.id}"
+    # 파일 안의 그림(README 62) — 원본과 같은 규칙으로 문서 첨부에 넣고 imageBlock 이 가리키게 한다. 장수·형식·크기
+    # 상한은 convert 가 걸었다(MAX_IMAGES·sniff_image·MAX_IMAGE_BYTES). 하루 상한에도 한 장씩 센다(아래 감사)
+    stem = re.sub(r"\.[^.]+$", "", name) or "image"
+    candidates: list[
+        StoredFile
+    ] = []  # id 를 미리 정해 주소를 만들고, 실제로 본문에 들어간 것만 저장한다
+    for i, (img, content_type) in enumerate(converted.images, start=1):
+        ext = content_type.rsplit("/", 1)[-1].replace("jpeg", "jpg")
+        candidates.append(
+            StoredFile(
+                id=uuid.uuid4(),
+                name=storage.safe_name(f"{stem}-{i}.{ext}"),
+                size=len(img),
+                content_type=content_type,
+                uploader_id=user.id,
+            )
+        )
+    placed: set[int] = set()
+    snapshot = ydoc.build(
+        converted.html,
+        title,
+        (url, name, row.size),
+        [f"/api/files/{r.id}" for r in candidates],
+        placed,
+    )
+    # 셀 안·끊긴 뒤의 그림은 문서에 없다 — 올리지 않는다(리뷰). 원본 + 그림이 하루 상한을 넘으면 통째로 거절
+    kept = sorted(placed)
+    if used + 1 + len(kept) > files.DAILY_UPLOADS:
+        raise ApiError(
+            429, "UPLOAD_THROTTLED", "오늘 올릴 수 있는 파일 수를 넘었습니다(그림 포함)."
+        )
+    image_rows = [candidates[i] for i in kept]
+    images = [converted.images[i] for i in kept]
     doc = Document(folder_id=folder_id, title=title, updated_by=user.id)
     db.add(doc)
     await db.flush()
-    row = StoredFile(
-        name=name, size=len(data), content_type=files.OCTET, uploader_id=user.id, doc_id=doc.id
-    )
-    db.add(row)
+    for r in [row, *image_rows]:
+        r.doc_id = doc.id
+    db.add_all([row, *image_rows])
     await db.flush()
-    url = f"/api/files/{row.id}"
-    snapshot = ydoc.build(body_html, title, (url, name, row.size))
     text = ydoc.plain_text(snapshot)
     doc.ydoc_snapshot = (
         snapshot  # realtime/yjs.save_room 과 같은 파생(평문·tsv) — 방이 열리기 전에도 검색된다
     )
     doc.text_cache = text
     doc.tsv = yjs.tsv_of(text)
-    await storage.put(files._key(row.id), data, files.OCTET)
-    audit.record(
-        db,
-        "files.uploaded",
-        request=request,
-        actor_id=user.id,
-        target_id=row.id,
-        detail={"actor": str(user.id), "size": len(data), "type": files.OCTET, "doc": str(doc.id)},
-    )
+    blobs = [(row, data, files.OCTET)] + [
+        (r, img, ct) for r, (img, ct) in zip(image_rows, images, strict=True)
+    ]
+    stored: list[uuid.UUID] = []
     try:
+        for r, blob, ctype in blobs:
+            # 키를 먼저 적고 PUT 은 shield — 요청이 취소돼도 PUT 스레드는 끝까지 가므로, 끝나길 기다렸다가 지운다(Codex)
+            stored.append(r.id)
+            put = asyncio.ensure_future(storage.put(files._key(r.id), blob, ctype))
+            try:
+                await asyncio.shield(put)
+            except asyncio.CancelledError:
+                with contextlib.suppress(Exception):
+                    await put
+                raise
+            audit.record(
+                db,
+                "files.uploaded",
+                request=request,
+                actor_id=user.id,
+                target_id=r.id,
+                detail={
+                    "actor": str(user.id),
+                    "size": len(blob),
+                    "type": ctype,
+                    "doc": str(doc.id),
+                },
+            )
         await db.commit()
     except (
         BaseException
     ):  # CancelledError 포함 — 저장은 됐는데 행이 안 남으면 오브젝트를 되돌린다(리뷰)
-        with contextlib.suppress(Exception):
-            await storage.remove_prefix(files._key(row.id))
+        for fid in stored:
+            with contextlib.suppress(Exception):
+                await storage.remove_prefix(files._key(fid))
         raise
     await db.refresh(doc)
     embed.schedule(doc.id)  # 벡터 색인(README 45) — 임베딩이 꺼져 있으면 아무것도 안 한다
     return DocImportOut(
         doc=_doc_out(doc, user),
-        truncated=truncated,
+        truncated=converted.truncated,
         file=files.FileOut(id=row.id, url=url, name=name, size=row.size, content_type=files.OCTET),
     )
 

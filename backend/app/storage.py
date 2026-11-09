@@ -95,6 +95,26 @@ async def remove_prefix(prefix: str) -> None:
     await _call(_remove_prefix_sync, prefix)
 
 
+# 매직 바이트 → content type. 헤더는 클라이언트가 정하는 값이라 믿지 않는다. 브라우저가 inline 으로 그려도
+# 스크립트가 돌지 않는 형식만 — routers/files.INLINE_TYPES·channels.INLINE_TYPES 와 같은 집합.
+_IMAGE_MAGIC = (
+    (b"\x89PNG\r\n\x1a\n", "image/png"),
+    (b"\xff\xd8\xff", "image/jpeg"),
+    (b"GIF87a", "image/gif"),
+    (b"GIF89a", "image/gif"),
+)
+
+
+def sniff_image(data: bytes) -> str | None:
+    """png·jpeg·gif·webp 면 그 content type, 아니면 None(그림이 아니다 — emf·wmf·svg 포함)."""
+    for magic, content_type in _IMAGE_MAGIC:
+        if data.startswith(magic):
+            return content_type
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+    return None
+
+
 def safe_name(filename: str | None) -> str:
     """경로 구분자·제어문자를 벗기고 basename 만. 오브젝트 키와 Content-Disposition 에 그대로 쓴다."""
     name = "".join(
