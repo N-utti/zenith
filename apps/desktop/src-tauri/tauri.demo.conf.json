@@ -1,0 +1,12 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Zenith Demo",
+  "identifier": "kr.zenith.demo",
+  "build": {
+    "beforeBuildCommand": "npm --prefix ../../frontend run demo -- --build-only",
+    "frontendDist": "../../../frontend/dist-demo"
+  },
+  "bundle": {
+    "createUpdaterArtifacts": false
+  }
+}

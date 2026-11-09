@@ -26,6 +26,9 @@
  * (11 §7.5). 채널 멤버가 아닌 사용자의 요청은 403이어야 한다.
  *
  * 메모리에만 보관한다. 서버를 끄면 대화가 사라진다.
+ *
+ * 시연판 데스크톱 앱에는 이 서버를 띄울 곳이 없어 같은 코드를 화면 안에서 돌린다(src/mocks/inlineRelay.ts).
+ * 그래서 node 에만 있는 것(`Buffer`, 요청 스트림)은 본문 읽기(`readBody`·`readMultipartFile`)에만 둔다.
  */
 
 import users from '../src/mocks/users.json' with { type: 'json' }
@@ -465,11 +468,14 @@ function nameRejected(res, error) {
   })
 }
 
+/** UTF-8 바이트 수. `Buffer` 는 node 에만 있어 시연판 데스크톱 앱(브라우저 안에서 도는 릴레이)에서 죽는다. */
+const byteLength = (text) => new TextEncoder().encode(text).length
+
 function json(res, status, body) {
   const payload = JSON.stringify(body)
   res.writeHead(status, {
     'Content-Type': 'application/json; charset=utf-8',
-    'Content-Length': Buffer.byteLength(payload),
+    'Content-Length': byteLength(payload),
   })
   res.end(payload)
 }
@@ -528,7 +534,7 @@ function safeName(raw) {
     .join('')
     .replace(/^[.\s]+|[.\s]+$/g, '')
   if (!cleaned) cleaned = 'file'
-  while (Buffer.byteLength(cleaned, 'utf8') > 200) cleaned = cleaned.slice(0, -1)
+  while (byteLength(cleaned) > 200) cleaned = cleaned.slice(0, -1)
   return cleaned || 'file'
 }
 
@@ -537,6 +543,8 @@ function safeName(raw) {
  * 첨부는 파트 하나뿐이라 경계 문자열로 나누면 충분하다.
  */
 function readMultipartFile(req) {
+  // 브라우저 안의 릴레이(src/mocks/inlineRelay.ts)는 FormData 로 이미 꺼내 `req.file` 에 담아 온다.
+  if (req.file !== undefined) return Promise.resolve(req.file)
   /** 파트의 헤더와 본문 사이. 빈 줄 하나다. */
   const CRLF2 = '\r\n\r\n'
   const type = req.headers['content-type'] ?? ''

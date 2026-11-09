@@ -10,9 +10,10 @@ if (!origin?.startsWith('https://')) {
   process.exit(1)
 }
 
-const { version } = JSON.parse(readFileSync('src-tauri/tauri.conf.json', 'utf8'))
+const { productName, version } = JSON.parse(readFileSync('src-tauri/tauri.conf.json', 'utf8'))
 const dir = 'src-tauri/target/release/bundle/msi'
-const msi = readdirSync(dir).find((f) => f.endsWith('.msi') && f.includes(`_${version}_`))
+// 사외 시연판(`Zenith Demo_…`, 서명 없음)도 같은 폴더에 떨어진다. 제품 이름으로 좁힌다.
+const msi = readdirSync(dir).find((f) => f.endsWith('.msi') && f.startsWith(`${productName}_${version}_`))
 if (!msi) {
   console.error(`${dir} 에 ${version} 버전 .msi 가 없습니다. npm run build 를 먼저.`)
   process.exit(1)

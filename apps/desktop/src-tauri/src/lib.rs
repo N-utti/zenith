@@ -30,7 +30,9 @@ fn show_main(app: &AppHandle) {
 fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
     let autolaunch = app.autolaunch();
     let marker = app.path().app_config_dir()?.join("autostart-initialized");
-    if !cfg!(debug_assertions) && !marker.exists() && autolaunch.enable().is_ok() {
+    // 사외 시연판(tauri.demo.conf.json)은 남의 PC 에 깔리므로 시작 프로그램에 스스로 넣지 않는다.
+    let demo = app.config().identifier.ends_with(".demo");
+    if !cfg!(debug_assertions) && !demo && !marker.exists() && autolaunch.enable().is_ok() {
         if let Some(dir) = marker.parent() {
             let _ = std::fs::create_dir_all(dir);
         }

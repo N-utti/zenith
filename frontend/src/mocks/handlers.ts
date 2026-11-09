@@ -1,4 +1,4 @@
-import { bypass, delay, http, HttpResponse, passthrough } from 'msw'
+import { delay, http, HttpResponse, passthrough } from 'msw'
 import { PASSWORD_MIN, type Schema, type User } from '@/types'
 import { BODY_MAX, POST_COMMENT_MAX, TITLE_MAX } from '@/features/board/types'
 import type { PostAttachment } from '@/features/board/types'
@@ -280,7 +280,9 @@ const notFound = (detail = '문서를 찾을 수 없습니다.') =>
 async function chatArchive(): Promise<ArchiveFile[]> {
   const get = async <T>(path: string): Promise<T[]> => {
     try {
-      const res = await fetch(bypass(path), { signal: AbortSignal.timeout(2000) })
+      // bypass 로 MSW 를 건너뛰지 않는다. 개발·브라우저 시연판은 아래 통과 핸들러가 릴레이로 넘기고,
+      // 데스크톱 시연판은 화면 안 릴레이(inlineRelay.ts)가 받는다. 건너뛰면 셸의 정적 파일 서버로 간다.
+      const res = await fetch(path, { signal: AbortSignal.timeout(2000) })
       return res.ok ? ((await res.json()) as { items: T[] }).items : []
     } catch {
       return []

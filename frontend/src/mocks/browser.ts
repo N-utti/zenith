@@ -20,4 +20,14 @@ export async function startMockWorker() {
     },
     quiet: true,
   })
+
+  // 시연판 데스크톱 앱에는 채팅·문서 릴레이 서버가 없다. 같은 코드를 화면 안에서 돌린다.
+  if (import.meta.env.VITE_DEMO === 'true' && window.__TAURI__) {
+    // 앱을 막 켰을 때 서비스 워커를 거친 첫 요청 하나가 실패한다(WebView2, 켤 때마다 재현).
+    // 그게 화면 코드나 글꼴이면 빈 화면·섞인 글꼴이 되므로 버려도 되는 요청으로 먼저 받아 낸다.
+    // 실패하지 않고 멈추는 PC 가 있어도 첫 화면을 막지 않게 시간 제한을 둔다.
+    await fetch('/theme.js', { cache: 'no-store', signal: AbortSignal.timeout(3000) }).catch(() => {})
+    const { inlineRelayHandlers } = await import('./inlineRelay')
+    worker.use(...inlineRelayHandlers())
+  }
 }
