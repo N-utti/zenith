@@ -342,8 +342,8 @@ export function uploadFile(file: File, docId: string) {
 }
 
 /**
- * docx·xlsx·hwpx 를 새 문서로 가져온다. 변환에 몇 초 걸린다. 문서는 서버에 이미 생겼으니 목록을
- * 다시 받는다. 본문은 응답의 `html` 을 들고 그 문서를 연 탭이 심는다.
+ * docx·xlsx·hwpx 를 새 문서로 가져온다. 변환에 몇 초 걸린다. 본문은 서버가 심어 두므로(README 61)
+ * 돌아온 문서를 열기만 하면 된다. 목록은 다시 받는다.
  */
 /** 가져오기 뮤테이션 키. 트리가 두 벌(AppLayout)이라 가져오는 중인지를 캐시에서 같이 본다. */
 export const IMPORT_MUTATION_KEY = ['docs', 'import'] as const
@@ -352,7 +352,16 @@ export function useImportDoc() {
   const qc = useQueryClient()
   return useMutation({
     mutationKey: IMPORT_MUTATION_KEY,
-    mutationFn: ({ file, folderId }: { file: File; folderId: string }) => {
+    // `index`·`total` 은 서버로 안 간다. 여러 파일일 때 진행 표시가 캐시에서 읽는다.
+    mutationFn: ({
+      file,
+      folderId,
+    }: {
+      file: File
+      folderId: string
+      index?: number
+      total?: number
+    }) => {
       const form = new FormData()
       form.append('file', file)
       form.append('folder_id', folderId)

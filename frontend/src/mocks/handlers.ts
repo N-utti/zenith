@@ -2345,7 +2345,8 @@ export const handlers = [
     })
   }),
 
-  // 파일 가져오기(백엔드 README 60). 진짜 변환은 흉내 내지 않고 고정 본문을 준다. 거절 순서와 문구는
+  // 파일 가져오기(백엔드 README 61). 진짜 변환은 흉내 내지 않고 고정 본문을 심는다. 서버가 Y.Doc 을
+  // 심는 자리를, 목은 문서를 열 때 내려주는 초안(DOC_SEEDS)으로 대신한다. 거절 순서와 문구는
   // 백엔드 `import_doc` 과 같다. 원본은 문서 첨부로 남고 본문 끝에 그 파일 칩이 붙는다.
   http.post('/api/docs/import', async ({ request }) => {
     const user = authenticate()
@@ -2383,14 +2384,13 @@ export const handlers = [
     })
     const url = `/api/files/${stored.id}`
     const name = escapeHtml(stored.name)
-    const html =
+    DOC_SEEDS[doc.id] =
       '<p>시연판에서는 파일 내용 대신 이 예시 본문이 들어갑니다. 원본은 아래에 붙어 있습니다.</p>' +
       '<table><tr><th>항목</th><th>내용</th></tr><tr><td>형식</td><td>표도 그대로 옵니다</td></tr></table>' +
       `<p><span data-type="fileChip" src="${url}" name="${name.replace(/"/g, '&quot;')}" size="${stored.size}">${name}</span></p>`
     return HttpResponse.json(
       {
         doc,
-        html,
         truncated: false,
         file: {
           id: stored.id,

@@ -24,10 +24,7 @@ export type DocTreeData = Schema<'TreeOut'>
 /** 업로드 결과. 문서에는 바이너리가 아니라 이 url만 들어간다. */
 export type UploadedFile = Schema<'FileOut'>
 
-/**
- * 파일 가져오기 결과(`POST /docs/import`, 백엔드 README 60). 서버는 문서를 빈 채로 만들고 본문은
- * `html` 로만 준다. 받은 쪽이 그 문서를 열면서 `DocSeedState` 로 심는다(AI 문서로 저장과 같은 길).
- */
+/** 파일 가져오기 결과(`POST /docs/import`, 백엔드 README 61). 본문은 서버가 문서에 이미 심었다. */
 export type DocImport = Schema<'DocImportOut'>
 
 /** 가져올 수 있는 형식. 서버가 같은 목록으로 다시 거른다. 옛 한글(.hwp)은 아직 안 된다. */
