@@ -90,5 +90,21 @@ export const SAMPLE: JSONContent = {
       { type: 'fileChip', attrs: { src: '/api/files/f2', name: '견적서.xlsx', size: 10 } },
       { type: 'fileChip', attrs: { src: 'javascript:alert(1)', name: '가짜', size: 1 } },
     ),
+    // 서식 3차(이슈 #574): 파일 가져오기가 싣는 문단·글자·표 서식.
+    {
+      type: 'paragraph',
+      attrs: { lineHeight: '1.6', indent: 40, spaceBefore: 8, spaceAfter: 12 },
+      content: [
+        t('바탕 14pt', {
+          type: 'textStyle',
+          attrs: { fontFamily: "'바탕', serif", fontSize: '14pt' },
+        }),
+      ],
+    },
+    {
+      type: 'table',
+      attrs: { borders: 'none' },
+      content: [{ type: 'tableRow', content: [cell('노란 칸', { backgroundColor: '#ffe599' })] }],
+    },
   ],
 }

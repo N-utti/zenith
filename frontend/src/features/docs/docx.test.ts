@@ -1,7 +1,14 @@
 import { strFromU8, unzipSync } from 'fflate'
 import { expect, it } from 'vitest'
 import { buildDocx } from './docx'
-import { columnWidths, exportFileStem, layoutTable, safeHref } from './exportContent'
+import {
+  columnWidths,
+  exportFileStem,
+  fontName,
+  fontPoints,
+  layoutTable,
+  safeHref,
+} from './exportContent'
 import { PIXEL, SAMPLE } from './exportFixture'
 
 function build() {
@@ -42,6 +49,63 @@ it('제목·서식·정렬을 옮긴다', () => {
   expect(xml).toContain('<w:jc w:val="center"/>')
   // 코드 블록의 줄바꿈과 탭은 요소로 나간다.
   expect(xml).toContain('const a = 1</w:t><w:br/><w:tab/><w:t xml:space="preserve">const b = 2')
+})
+
+it('가져온 서식(글꼴·크기·줄 간격·간격·들여쓰기·칸 배경·테두리 없음)을 옮긴다', () => {
+  const xml = build()['word/document.xml']
+  // 글꼴은 목록의 첫 이름만, 크기는 반 pt. rPr 안의 순서(rFonts → color → sz → u)를 지킨다.
+  expect(xml).toContain(
+    '<w:rPr><w:rFonts w:ascii="바탕" w:hAnsi="바탕" w:eastAsia="바탕" w:cs="바탕"/><w:sz w:val="28"/><w:szCs w:val="28"/></w:rPr><w:t xml:space="preserve">바탕 14pt',
+  )
+  // 1px = 15twip, 줄 간격 배수 × 240. 들여쓰기는 ind 에 더한다.
+  expect(xml).toContain(
+    '<w:pPr><w:spacing w:before="120" w:after="180" w:line="384" w:lineRule="auto"/><w:ind w:left="600"/></w:pPr>',
+  )
+  expect(xml).toContain('<w:shd w:val="clear" w:color="auto" w:fill="FFE599"/>')
+  // 표는 둘인데 선을 적은 표는 하나다(테두리 없는 표).
+  expect(xml.match(/<w:tblBorders>/g)).toHaveLength(1)
+})
+
+it('서식이 없는 표 칸은 예전처럼 붙여 쓰고, 칸 배경은 머리 칸 회색보다 이긴다', () => {
+  expect(build()['word/document.xml']).toContain(
+    '<w:spacing w:after="0" w:line="240" w:lineRule="auto"/>',
+  )
+  const header = (attrs: object) => ({
+    type: 'table',
+    content: [
+      {
+        type: 'tableRow',
+        content: [
+          {
+            type: 'tableHeader',
+            attrs,
+            content: [{ type: 'paragraph', content: [{ type: 'text', text: '칸' }] }],
+          },
+        ],
+      },
+    ],
+  })
+  const xml = strFromU8(
+    unzipSync(
+      buildDocx({
+        title: 't',
+        doc: { type: 'doc', content: [header({ backgroundColor: '#ffe599' })] },
+        images: new Map(),
+        origin: '',
+      }),
+    )['word/document.xml'],
+  )
+  expect(xml).toContain('w:fill="FFE599"')
+  expect(xml).not.toContain('w:fill="F1F2F4"')
+})
+
+it('글꼴은 목록에서 실제 글꼴인 첫 이름, 크기는 px 도 pt 로 바꾼다', () => {
+  expect(fontName("sans-serif, ' 바탕 '")).toBe('바탕')
+  expect(fontName('ui-sans-serif, system-ui')).toBeNull()
+  expect(fontName('"Malgun Gothic", sans-serif')).toBe('Malgun Gothic')
+  expect(fontPoints('16px')).toBe(12)
+  expect(fontPoints('11pt')).toBe(11)
+  expect(fontPoints('0pt')).toBeNull()
 })
 
 it('링크는 http·메일·전화만 건다', () => {
