@@ -107,6 +107,17 @@ npm run manifest -- https://zenith.example.co.kr
 매니페스트의 `.msi` 주소는 만들 때 준 서버 주소로 박힌다. 서버를 옮기면 매니페스트를 다시 만든다.
 개인키 없이 `npm run build` 하면 서명 단계에서 실패한다. 배포본은 전부 서명돼야 하므로 의도한 것이다.
 
+### 사외 시연판
+
+```sh
+npm run build:demo   # → src-tauri/target/release/bundle/msi/Zenith Demo_*.msi
+```
+
+회사 밖 사람 PC 에 깔아 보여 주는 판이다. 서버 없이 목 데이터로 돌고(`frontend` 의 `npm run demo` 빌드, 실명은 가명),
+채팅·문서 릴레이도 앱 안에서 돈다(`frontend/src/mocks/inlineRelay.ts`). 혼자 쓰는 앱이라 다른 사람의 답은 없고,
+트레이 메뉴의 「종료」로 끄면 대화·편집은 처음 상태로 돌아간다(창의 X 는 트레이로 숨기기, 문서 첨부는 남는다). 설정 차이는 `tauri.demo.conf.json` 하나다. 앱 id(`identifier`)가 달라 직원용 앱과
+따로 깔리고, 업데이트 서명이 없어 개인키가 필요 없으며, 시작 프로그램에 스스로 넣지 않는다.
+
 ---
 
 ## 구성
@@ -118,6 +129,7 @@ apps/desktop/
 ├─ app-icon.png          아이콘 원본 1024² (바꾸면 npm run icons)
 └─ src-tauri/
    ├─ tauri.conf.json    창 크기 · CSP · 번들(.msi) 설정
+   ├─ tauri.demo.conf.json  사외 시연판(npm run build:demo)이 위 설정에서 바꾸는 것
    ├─ Cargo.toml
    ├─ capabilities/      셸이 웹앱에 허용하는 권한. 파일시스템·셸 실행은 닫혀 있다.
    ├─ icons/             생성물 (Windows/macOS/Android/iOS 전 사이즈)
