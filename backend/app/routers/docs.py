@@ -9,7 +9,6 @@ import asyncio
 import base64
 import binascii
 import contextlib
-import html as html_lib
 import logging
 import re
 import uuid
@@ -22,7 +21,7 @@ from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import defer
 
-from app import acl, audit, convert, storage
+from app import acl, audit, convert, storage, ydoc
 from app.ai import embed
 from app.db import get_db, session_scope
 from app.deps import current_user
@@ -513,11 +512,9 @@ async def create_doc(
 
 
 class DocImportOut(BaseModel):
-    doc: DocOut
-    # 편집기에 심을 본문. 프론트는 AI 「문서로 저장」의 seedHtml 과 같은 길로 넣는다(README 60). 끝에 원본 fileChip.
-    html: str
+    doc: DocOut  # 본문까지 심긴 문서(README 61) — 열기만 하면 된다. 여러 파일은 요청을 파일마다 보낸다
     truncated: bool  # convert.MAX_SEED_COST 에서 끊었다 — 본문 끝에 안내 문단이 들어 있다
-    file: files.FileOut  # 원본 파일(문서 첨부로 기록) — html 끝의 fileChip 이 가리킨다
+    file: files.FileOut  # 원본 파일(문서 첨부로 기록) — 본문 끝의 fileChip 이 가리킨다
 
 
 # 동시 변환 상한 — 변환은 기본 스레드 풀(MinIO 읽기·쓰기, AI 첨부 추출과 공유)에서 돌고 수백 MB 를 쓸 수 있다(리뷰).
@@ -544,7 +541,7 @@ async def _convert_guarded(name: str, data: bytes) -> tuple[str, bool]:
     "/docs/import",
     status_code=201,
     response_model=DocImportOut,
-    summary="파일 가져오기 — multipart `file`(docx·xlsx·hwpx, 10MB) + `folder_id` → 새 문서 + 편집기용 HTML. 04 에 없던 경로(README 60)",
+    summary="파일 가져오기 — multipart `file`(docx·xlsx·hwpx, 10MB) + `folder_id` → 본문이 심긴 새 문서. 04 에 없던 경로(README 60·61)",
 )
 async def import_doc(
     file: UploadFile,
@@ -553,9 +550,10 @@ async def import_doc(
     user: User = Depends(current_user),
     db: AsyncSession = Depends(get_db),
 ) -> DocImportOut:
-    """본문을 서버가 Y.Doc 으로 만들지 않는다 — HTML 을 돌려주고 프론트가 새 문서를 열며 심는다(app/convert.py 머리말).
-    원본은 `/files` 와 같은 규칙(10MB·하루 200개·감사 `files.uploaded`)으로 문서 첨부에 넣어 둔다. 변환에 실패한
-    요청(`docs.import_failed`)도 하루 상한에 센다 — 비싼 변환을 같은 파일로 무한히 다시 시킬 수 없게(리뷰)."""
+    """파일 → HTML(app/convert.py) → Y.Doc(app/ydoc.py) 을 서버가 끝까지 만들어 문서에 넣는다(README 61). 그래서 여러
+    파일을 올려도 파일마다 문서 하나가 바로 생기고, 열지 않아도 본문이 있다. 원본은 `/files` 와 같은 규칙(10MB·하루
+    200개·감사 `files.uploaded`)으로 문서 첨부에 넣고 본문 끝에 fileChip 을 붙인다. 변환에 실패한 요청
+    (`docs.import_failed`)도 하루 상한에 센다 — 비싼 변환을 같은 파일로 무한히 다시 시킬 수 없게(리뷰)."""
     await _require_folder(db, folder_id, user)
     since = _now() - timedelta(days=1)
     used = await audit.count_since(db, "files.uploaded", since, actor=str(user.id))
@@ -601,6 +599,14 @@ async def import_doc(
     )
     db.add(row)
     await db.flush()
+    url = f"/api/files/{row.id}"
+    snapshot = ydoc.build(body_html, title, (url, name, row.size))
+    text = ydoc.plain_text(snapshot)
+    doc.ydoc_snapshot = (
+        snapshot  # realtime/yjs.save_room 과 같은 파생(평문·tsv) — 방이 열리기 전에도 검색된다
+    )
+    doc.text_cache = text
+    doc.tsv = yjs.tsv_of(text)
     await storage.put(files._key(row.id), data, files.OCTET)
     audit.record(
         db,
@@ -619,14 +625,9 @@ async def import_doc(
             await storage.remove_prefix(files._key(row.id))
         raise
     await db.refresh(doc)
-    url = f"/api/files/{row.id}"
-    chip = (
-        f'<p><span data-type="fileChip" src="{url}" name="{html_lib.escape(name, quote=True)}" '
-        f'size="{row.size}">{html_lib.escape(name)}</span></p>'
-    )
+    embed.schedule(doc.id)  # 벡터 색인(README 45) — 임베딩이 꺼져 있으면 아무것도 안 한다
     return DocImportOut(
         doc=_doc_out(doc, user),
-        html=body_html + chip,
         truncated=truncated,
         file=files.FileOut(id=row.id, url=url, name=name, size=row.size, content_type=files.OCTET),
     )

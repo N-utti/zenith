@@ -225,12 +225,30 @@ def _xlsx(data: bytes) -> tuple[str, bool]:
     wb = openpyxl.load_workbook(io.BytesIO(data), read_only=True, data_only=True)
     parts: list[str] = []
     cells = visited = size = 0
+
+    def flush(title: str, rows: list[tuple]) -> None:
+        # 행마다 뒤쪽 빈 칸을 잘랐으니 길이가 다르다 — 가장 긴 행까지 빈 셀로 채운다. 들쭉날쭉하면 편집기가 열 때
+        # 제 나름대로 칸을 채우는데 첫 행이 짧으면 머리글이 오른쪽으로 밀린다(리뷰)
+        width = max((len(r) for r in rows), default=0)
+        parts.append(f"<h2>{html.escape(title)}</h2><table>")
+        for i, row in enumerate(rows):
+            tag = "th" if i == 0 else "td"
+            padded = tuple(row) + (None,) * (width - len(row))
+            parts.append(
+                "<tr>"
+                + "".join(
+                    f"<{tag}><p>{html.escape('' if v is None else str(v))}</p></{tag}>"
+                    for v in padded
+                )
+                + "</tr>"
+            )
+        parts.append("</table>")
+
     try:
         if any((ws.max_row or 0) * (ws.max_column or 0) > MAX_XLSX_AREA for ws in wb.worksheets):
             raise TooLarge("xlsx")  # 선언된 범위(dimension) 기준 — 돌기 전에 거절
         for ws in wb.worksheets:
-            parts.append(f"<h2>{html.escape(ws.title)}</h2><table>")
-            header = True
+            rows: list[tuple] = []
             for row in ws.iter_rows(values_only=True):
                 visited += len(row)
                 n = len(row)
@@ -238,22 +256,17 @@ def _xlsx(data: bytes) -> tuple[str, bool]:
                     n -= 1
                 row = row[:n]
                 if visited > MAX_XLSX_VISITED:
-                    parts.append("</table>")
+                    flush(ws.title, rows)
                     return "".join(parts), True
                 if not row:
                     continue
                 cells += len(row)
                 if cells > MAX_XLSX_CELLS or size > 2 * MAX_SEED_COST:
-                    parts.append("</table>")
+                    flush(ws.title, rows)
                     return "".join(parts), True
-                tag = "th" if header else "td"
-                header = False
-                line = "".join(
-                    f"<{tag}><p>{html.escape('' if v is None else str(v))}</p></{tag}>" for v in row
-                )
-                parts.append(f"<tr>{line}</tr>")
-                size += len(line) + len(row) * 2 * TAG_COST
-            parts.append("</table>")
+                rows.append(row)
+                size += sum(len(str(v)) for v in row if v is not None) + len(row) * 2 * TAG_COST
+            flush(ws.title, rows)
     finally:
         wb.close()
     return "".join(parts), False
