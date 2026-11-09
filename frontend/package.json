@@ -7,6 +7,7 @@
     "gen:api": "openapi-typescript ../backend/openapi.json -o src/types/api.gen.ts",
     "dev": "node scripts/dev.js",
     "server": "node scripts/dev-server.js",
+    "demo": "node scripts/demo.js",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "lint": "eslint .",

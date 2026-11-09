@@ -1,7 +1,8 @@
-import { defineConfig, loadEnv } from 'vite'
+import { defineConfig, loadEnv, normalizePath } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import path from 'node:path'
+import { swapNames } from './scripts/demo-names.js'
 
 export default defineConfig(({ mode }) => {
   // MSW를 끄면(VITE_DISABLE_MSW=true) /api 가 여기로 간다. 8000 이 다른 프로세스에 잡혀 있으면 바꾼다.
@@ -9,8 +10,16 @@ export default defineConfig(({ mode }) => {
   const apiTarget = env.VITE_API_TARGET || 'http://localhost:8000'
   const mswEnabled = env.VITE_DISABLE_MSW !== 'true'
 
+  // 사외 시연판은 목 데이터의 실제 직원 이름·메일을 가상 인물로 바꿔 싣는다(scripts/demo-names.js).
+  const srcDir = normalizePath(path.resolve(import.meta.dirname, 'src')) + '/'
+  const demoNames = {
+    name: 'demo-names',
+    enforce: 'pre' as const,
+    transform: (code: string, id: string) => (id.startsWith(srcDir) ? swapNames(code) : null),
+  }
+
   return {
-    plugins: [react(), tailwindcss()],
+    plugins: [react(), tailwindcss(), env.VITE_DEMO === 'true' && demoNames],
     resolve: {
       alias: {
         '@': path.resolve(import.meta.dirname, 'src'),
