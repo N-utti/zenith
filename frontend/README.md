@@ -16,6 +16,7 @@ npm run dev        # http://localhost:5173. 실시간 서버(:1234)도 같이 �
 | `npm run dev` | 개발 서버 (MSW 켜짐) + 실시간 서버. 둘을 각각 자식 프로세스로 띄운다(`scripts/dev.js`) |
 | `npm run server` | 실시간 서버만 따로. 문서 공동편집 + 채팅. `npm run dev` 가 이미 띄우므로 재시작할 때만 쓴다 |
 | `npm run build` | 타입체크 + 프로덕션 빌드 (`dist/`) |
+| `npm run demo` | 사외 시연판. 목 데이터로 도는 빌드 + 실시간 서버를 포트 하나로(아래 절) |
 | `npm run typecheck` | 타입만 검사 |
 | `npm run lint` | ESLint |
 | `npm run preview` | 빌드 결과 미리보기 |
@@ -32,6 +33,22 @@ npm run dev        # http://localhost:5173. 실시간 서버(:1234)도 같이 �
 조직도에 팀장 직급이 없어 lead 계정은 없다. 전체 13명(팀 5개 + 임원 5명)은 `src/mocks/users.json` 에 있다. 개발 채팅 서버도 같은 파일을 읽는다.
 
 역할 체계는 [근태 모듈 설계서 §3](https://app.notion.com/p/3aea471660468172aea1c46d2b11addf)을 따른다.
+
+### 사외 시연판
+
+```bash
+npm run demo                 # 시연 빌드(dist-demo) 후 http://localhost:8080
+npm run demo -- --no-build   # 이미 만든 dist-demo 로 바로
+```
+
+백엔드 없이 목 데이터로 도는 제니스를 포트 하나로 띄운다(`scripts/demo.js`). 화면은 `VITE_DEMO=true` 운영 빌드라
+MSW 가 켜져 있고, 채팅·공동편집은 개발 릴레이를 같은 서버가 맡는다. 대화·편집은 메모리에만 있어 끄면 처음으로 돌아간다.
+
+- 실제 직원 이름·메일은 가상 인물로 바꿔 싣는다. 대응표는 `scripts/demo-names.js`. 목에 사람을 넣으면 거기에도 넣는다.
+  시연 계정은 `minjun@zenith.co.kr`(사원)·`dongwook@zenith.co.kr`(임원), 비밀번호는 같다.
+  빌드 뒤 실명이 하나라도 남으면 띄우지 않고 끝낸다.
+- MSW 는 서비스 워커라 **https 나 localhost** 에서만 켜진다. 다른 PC 에서 `http://IP:8080` 으로 열면 화면이 안 뜬다.
+  그래서 기본은 이 PC 안(`127.0.0.1`)에서만 받는다. 바깥에 보이려면 https 프록시·터널을 앞에 둔다(`HOST=0.0.0.0` 으로 넓힐 수는 있다).
 
 ### 실제 백엔드에 붙이기
 

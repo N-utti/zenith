@@ -499,7 +499,13 @@ export function sessionUserId(req) {
     .split(';')
     .map((part) => part.trim())
     .find((part) => part.startsWith('zenith.mock.session='))
-  return cookie ? decodeURIComponent(cookie.slice('zenith.mock.session='.length)) : null
+  if (!cookie) return null
+  // 깨진 값(%E0 등)은 던지지 않고 익명으로 친다. WebSocket 업그레이드는 동기라 던지면 서버가 죽는다.
+  try {
+    return decodeURIComponent(cookie.slice('zenith.mock.session='.length))
+  } catch {
+    return null
+  }
 }
 
 /**

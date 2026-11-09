@@ -2,7 +2,9 @@
  * 백엔드가 붙기 전까지 MSW가 API를 흉내 낸다.
  * 실제 FastAPI에 붙이려면 `VITE_DISABLE_MSW=true npm run dev`.
  */
-export const MSW_ENABLED = import.meta.env.DEV && import.meta.env.VITE_DISABLE_MSW !== 'true'
+export const MSW_ENABLED =
+  (import.meta.env.DEV || import.meta.env.VITE_DEMO === 'true') &&
+  import.meta.env.VITE_DISABLE_MSW !== 'true'
 
 export const DEMO_PASSWORD = 'zenith1234'
 
