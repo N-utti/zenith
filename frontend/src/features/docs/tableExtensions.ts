@@ -1,9 +1,10 @@
-import type { Extensions } from '@tiptap/core'
+import { getStyleProperty, type Extensions } from '@tiptap/core'
 import { isChangeOrigin } from '@tiptap/extension-collaboration'
 import { Table, TableCell, TableHeader, TableRow, TableView } from '@tiptap/extension-table'
 import type { Node as PmNode } from '@tiptap/pm/model'
 import type { Plugin } from '@tiptap/pm/state'
 import { columnResizingPluginKey, tableEditingKey, updateColumnsOnResize } from '@tiptap/pm/tables'
+import { safeAlign, safeColor, safePx } from './docFormat'
 import { keepHandleAcrossRemoteEdits, rowResizing, settleColumnResize } from './tableResize'
 
 /**
@@ -13,12 +14,24 @@ import { keepHandleAcrossRemoteEdits, rowResizing, settleColumnResize } from './
  * 함수는 width 를 제대로 지우므로, 문서가 바뀔 때도 그 함수로 열 너비를 다시 쓴다.
  */
 class ColumnWidthTableView extends TableView {
+  constructor(...args: ConstructorParameters<typeof TableView>) {
+    super(...args)
+    markBorders(this.table, this.node)
+  }
+
   update(node: PmNode) {
     if (node.type !== this.node.type) return false
     this.node = node
     updateColumnsOnResize(node, this.colgroup, this.table, this.cellMinWidth)
+    markBorders(this.table, node)
     return true
   }
+}
+
+/** 이 뷰는 표 노드의 renderHTML 을 거치지 않고 `<table>` 을 직접 만든다. 테두리 없음 표시를 손으로 붙인다. */
+function markBorders(table: HTMLTableElement, node: PmNode) {
+  if (node.attrs.borders === 'none') table.dataset.borders = 'none'
+  else delete table.dataset.borders
 }
 
 /**
@@ -46,6 +59,20 @@ function keepFixupsOutOfHistory(plugin: Plugin) {
 }
 
 const DocTable = Table.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      // 테두리: none 이면 선 없음, 그 밖(비어 있음·all)은 전부 그린다. 워드의 테두리 없는 배치용 표,
+      // 한글의 「선 없음」 표를 가져오면 none 이 온다. 기본값을 비워 두어야 기존 표를 처음 고칠 때
+      // 'all' 이 문서에 새로 써지지 않는다.
+      borders: {
+        default: null,
+        parseHTML: (el) => (el.getAttribute('data-borders') === 'none' ? 'none' : null),
+        renderHTML: (attrs) => (attrs.borders === 'none' ? { 'data-borders': 'none' } : {}),
+      },
+    }
+  },
+
   addProseMirrorPlugins() {
     const plugins = this.parent?.() ?? []
     let resizable = false
@@ -77,11 +104,47 @@ const DocTableRow = TableRow.extend({
           const px = /^(\d+(?:\.\d+)?)px$/.exec(element.style.height)
           return px ? Math.round(Number(px[1])) : null
         },
-        renderHTML: (attrs) => (attrs.height ? { style: `height: ${attrs.height}px` } : {}),
+        // 남의 편집(Y.Doc)으로 온 값은 거르지 않고 들어온다. 그릴 때 숫자만 쓴다.
+        renderHTML: (attrs) => {
+          const height = safePx(attrs.height)
+          return height ? { style: `height: ${height}px` } : {}
+        },
       },
     }
   },
 })
+
+/**
+ * 칸 배경색. 머리 칸의 기본 바탕(index.css)보다 인라인 값이 이긴다.
+ * 칸 정렬은 원래 확장 것이 Y.Doc 값을 거르지 않고 style 에 쓴다. 그릴 때 거르는 판으로 덮는다.
+ */
+function cellAttributes(this: { parent?: () => Record<string, object> }) {
+  const parent = this.parent?.() ?? {}
+  return {
+    ...parent,
+    align: {
+      ...parent.align,
+      renderHTML: (attrs: Record<string, unknown>) => {
+        const v = safeAlign(attrs.align)
+        return v ? { style: `text-align: ${v}` } : {}
+      },
+    },
+    backgroundColor: {
+      default: null,
+      parseHTML: (el: HTMLElement) => {
+        const color = safeColor(
+          getStyleProperty(el, 'background-color') ?? el.style.backgroundColor,
+        )
+        return color === 'transparent' ? null : color
+      },
+      renderHTML: (attrs: Record<string, unknown>) => {
+        // transparent 는 머리 칸의 기본 바탕을 지울 뿐이라 없는 것으로 본다.
+        const color = safeColor(attrs.backgroundColor)
+        return color && color !== 'transparent' ? { style: `background-color: ${color}` } : {}
+      },
+    },
+  }
+}
 
 /**
  * 표. 행·열 편집은 표 메뉴(editorControls 의 TableMenu)가, 크기는 끌기(tableResize)가 맡는다.
@@ -102,7 +165,7 @@ export function tableExtensions(): Extensions {
       View: ColumnWidthTableView,
     }),
     DocTableRow,
-    TableCell.extend({ content: 'paragraph+' }),
-    TableHeader.extend({ content: 'paragraph+' }),
+    TableCell.extend({ content: 'paragraph+', addAttributes: cellAttributes }),
+    TableHeader.extend({ content: 'paragraph+', addAttributes: cellAttributes }),
   ]
 }
