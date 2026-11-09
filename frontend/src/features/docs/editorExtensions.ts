@@ -4,25 +4,24 @@ import Placeholder from '@tiptap/extension-placeholder'
 import Collaboration from '@tiptap/extension-collaboration'
 import CollaborationCaret from '@tiptap/extension-collaboration-caret'
 import Highlight from '@tiptap/extension-highlight'
-import TextAlign from '@tiptap/extension-text-align'
 import { TextStyleKit } from '@tiptap/extension-text-style'
 import { TaskItem, TaskList } from '@tiptap/extension-list'
 import { BlockId } from './blockId'
+import {
+  BlockFormat,
+  SafeColor,
+  SafeFontFamily,
+  SafeFontSize,
+  SafeTextAlign,
+  safeColor,
+} from './docFormat'
 import { FileChip } from './FileChip'
 import { ImageBlock } from './ImageBlock'
 import { SlashCommand } from './slashCommand'
 import { tableExtensions } from './tableExtensions'
 import type { CollabSession } from './useCollabSession'
 
-/**
- * 형광펜 색으로 받을 값. 16진수, `rgb()`·`rgba()`, 색 이름만. 원래 확장은 붙여넣은 HTML 의
- * `data-color` 를 그대로 `style="background-color: …"` 에 써서, `red;background-image:url(https://바깥/…)`
- * 같은 값을 끼우면 문서를 여는 사람마다 바깥으로 요청이 나간다(데스크톱 앱은 막지 않는다).
- */
-const SAFE_COLOR = /^(#[0-9a-f]{3,8}|rgba?\([\d.,%\s]+\)|[a-z]+)$/i
-const safeColor = (value: unknown) =>
-  typeof value === 'string' && SAFE_COLOR.test(value.trim()) ? value.trim() : null
-
+// 형광펜 색. 값을 거르는 까닭은 docFormat.ts 와 같다.
 const SafeHighlight = Highlight.extend({
   addAttributes() {
     return {
@@ -80,15 +79,20 @@ export function docContentExtensions(): Extensions {
       },
     }),
 
-    // 서식 확장. 툴바·버블 메뉴가 쓰는 것들.
+    // 서식 확장. 툴바·버블 메뉴가 쓰는 것들. 색·글꼴·크기는 값을 거르는 판(docFormat)으로 갈아 끼운다.
     TextStyleKit.configure({
       backgroundColor: false,
+      color: false,
       fontFamily: false,
       fontSize: false,
       lineHeight: false,
     }),
+    SafeColor,
+    SafeFontFamily,
+    SafeFontSize,
+    BlockFormat,
     SafeHighlight.configure({ multicolor: true }),
-    TextAlign.configure({ types: ['heading', 'paragraph'] }),
+    SafeTextAlign.configure({ types: ['heading', 'paragraph'] }),
     TaskList,
     TaskItem.configure({
       nested: true,
