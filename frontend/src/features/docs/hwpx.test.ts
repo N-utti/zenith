@@ -76,7 +76,7 @@ it('목록은 문단 모양의 기호 정의로 그리고, 번호 목록은 시�
 
 it('합친 칸: 덮인 자리에는 칸을 만들지 않고 합친 칸이 넓이를 말한다', () => {
   expect(section).toContain('rowCnt="3" colCnt="3"')
-  expect(count(section, /<hp:tc /g)).toBe(7)
+  expect(count(section.split('</hp:tbl>')[0], /<hp:tc /g)).toBe(7)
   expect(section).toContain(
     '<hp:cellAddr colAddr="1" rowAddr="0"/><hp:cellSpan colSpan="2" rowSpan="1"/>',
   )

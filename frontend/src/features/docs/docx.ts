@@ -4,8 +4,11 @@ import { cleanName } from '@/lib/format'
 import { uploadedFilePath } from '@/lib/links'
 import { escapeXml } from '@/lib/xlsx'
 import {
+  blockFormat,
   bodyBlocks,
   columnWidths,
+  fontName,
+  fontPoints,
   hexColor,
   layoutTable,
   safeHref,
@@ -64,6 +67,8 @@ interface ParaOptions {
   /** 첫 줄의 기호(글머리·번호·체크 상자)만 왼쪽으로 내어 쓴다. */
   hanging?: boolean
   align?: unknown
+  /** 문단 노드의 속성. 줄 간격·들여쓰기·앞뒤 간격(서식 3차)을 읽는다. */
+  attrs?: JSONContent['attrs']
   shade?: boolean
   /** 아래 테두리. 구분선이다. */
   rule?: boolean
@@ -114,16 +119,26 @@ export function buildDocx({ title, doc, images, origin }: ExportSource): Uint8Ar
   const runProps = (marks: JSONContent['marks'], ctx: Ctx, link: boolean) => {
     const find = (type: string) => marks?.find((mark) => mark.type === type)
     const code = !!find('code')
-    const color = hexColor(find('textStyle')?.attrs?.color)
+    const style = find('textStyle')?.attrs
+    const color = hexColor(style?.color)
+    const font = code ? null : fontName(style?.fontFamily)
+    const face = font && escapeXml(font)
+    const points = fontPoints(style?.fontSize)
+    // 워드의 크기는 반 pt 단위다. 상한은 거르는 판(safeFontSize, 400pt)이 이미 막는다.
+    const half = points && Math.max(2, Math.round(points * 2))
     const highlight = find('highlight')
     const fill = highlight ? (hexColor(highlight.attrs?.color) ?? 'FEF08A') : null
     return [
       link && '<w:rStyle w:val="Hyperlink"/>',
-      code && MONO,
+      code
+        ? MONO
+        : face &&
+          `<w:rFonts w:ascii="${face}" w:hAnsi="${face}" w:eastAsia="${face}" w:cs="${face}"/>`,
       (ctx.bold || find('bold')) && '<w:b/>',
       find('italic') && '<w:i/>',
       find('strike') && '<w:strike/>',
       color && `<w:color w:val="${color}"/>`,
+      half && `<w:sz w:val="${half}"/><w:szCs w:val="${half}"/>`,
       find('underline') && '<w:u w:val="single"/>',
       fill ? `<w:shd w:val="clear" w:color="auto" w:fill="${fill}"/>` : code && SHADE,
     ]
@@ -154,7 +169,20 @@ export function buildDocx({ title, doc, images, origin }: ExportSource): Uint8Ar
       .join('')
 
   const para = (runs: string, ctx: Ctx, options: ParaOptions = {}) => {
-    const indent = ctx.indent + (options.hanging ? STEP : 0)
+    const format = blockFormat(options.attrs)
+    const indent =
+      Math.min(ctx.indent + (format.indent ?? 0) * PX, MAX_INDENT) + (options.hanging ? STEP : 0)
+    // 표 칸 안은 문단 사이를 붙이고 줄 간격도 한 줄로 좁힌다. 본문 간격 그대로면 표가 두 배로 길어진다.
+    // 문단에 적힌 간격(서식 3차)이 있으면 그 값이 이긴다. 없는 값은 스타일(본문·제목)의 것을 쓴다.
+    const after = format.after !== null ? format.after * PX : ctx.cell ? 0 : null
+    const line = format.line !== null ? Math.round(format.line * 240) : ctx.cell ? 240 : null
+    const spacing = [
+      format.before !== null && `w:before="${format.before * PX}"`,
+      after !== null && `w:after="${after}"`,
+      line !== null && `w:line="${line}" w:lineRule="auto"`,
+    ]
+      .filter(Boolean)
+      .join(' ')
     const jc = JC.get(String(options.align))
     const border =
       (ctx.quote ? '<w:left w:val="single" w:sz="12" w:space="8" w:color="C4C8CF"/>' : '') +
@@ -165,8 +193,7 @@ export function buildDocx({ title, doc, images, origin }: ExportSource): Uint8Ar
         `<w:numPr><w:ilvl w:val="${options.num.level}"/><w:numId w:val="${options.num.id}"/></w:numPr>`,
       border && `<w:pBdr>${border}</w:pBdr>`,
       options.shade && SHADE,
-      // 표 칸 안은 문단 사이를 붙이고 줄 간격도 한 줄로 좁힌다. 본문 간격 그대로면 표가 두 배로 길어진다.
-      ctx.cell && '<w:spacing w:after="0" w:line="240" w:lineRule="auto"/>',
+      spacing && `<w:spacing ${spacing}/>`,
       indent > 0 && `<w:ind w:left="${indent}"${options.hanging ? ` w:hanging="${STEP}"` : ''}/>`,
       jc && `<w:jc w:val="${jc}"/>`,
     ]
@@ -194,6 +221,7 @@ export function buildDocx({ title, doc, images, origin }: ExportSource): Uint8Ar
             num,
             hanging: true,
             align: lead?.attrs?.textAlign,
+            attrs: lead?.attrs,
           }) + blocks(lead ? children.slice(1) : children, { ...deeper(ctx), depth: ctx.depth + 1 })
         )
       })
@@ -212,11 +240,12 @@ export function buildDocx({ title, doc, images, origin }: ExportSource): Uint8Ar
       const merge = !cellNode ? '<w:vMerge/>' : rowspan > 1 ? '<w:vMerge w:val="restart"/>' : ''
       // 칸은 문단으로 끝나야 한다. 빈 칸에도 문단 하나를 넣는다.
       const body = (cellNode && blocks(cellNode.content, { ...inner, bold: header })) || '<w:p/>'
+      const fill = hexColor(cellNode?.attrs?.backgroundColor)
       return (
         `<w:tc><w:tcPr><w:tcW w:w="${sum(grid.slice(col, col + colspan))}" w:type="dxa"/>` +
         (colspan > 1 ? `<w:gridSpan w:val="${colspan}"/>` : '') +
         merge +
-        (header ? SHADE : '') +
+        (fill ? `<w:shd w:val="clear" w:color="auto" w:fill="${fill}"/>` : header ? SHADE : '') +
         `</w:tcPr>${body}</w:tc>`
       )
     }
@@ -226,7 +255,10 @@ export function buildDocx({ title, doc, images, origin }: ExportSource): Uint8Ar
     return (
       `<w:tbl><w:tblPr><w:tblW w:w="${sum(grid)}" w:type="dxa"/>` +
       (ctx.indent ? `<w:tblInd w:w="${ctx.indent}" w:type="dxa"/>` : '') +
-      `<w:tblBorders>${['top', 'left', 'bottom', 'right', 'insideH', 'insideV'].map(edge).join('')}</w:tblBorders>` +
+      // 테두리 없는 표(서식 3차)는 선을 적지 않는다. 표 스타일이 없는 워드 표의 기본은 선 없음이다.
+      (node.attrs?.borders === 'none'
+        ? ''
+        : `<w:tblBorders>${['top', 'left', 'bottom', 'right', 'insideH', 'insideV'].map(edge).join('')}</w:tblBorders>`) +
       `<w:tblLayout w:type="fixed"/>` +
       `<w:tblCellMar><w:top w:w="60" w:type="dxa"/><w:left w:w="120" w:type="dxa"/><w:bottom w:w="60" w:type="dxa"/><w:right w:w="120" w:type="dxa"/></w:tblCellMar>` +
       `</w:tblPr><w:tblGrid>${grid.map((width) => `<w:gridCol w:w="${width}"/>`).join('')}</w:tblGrid>` +
@@ -286,11 +318,12 @@ export function buildDocx({ title, doc, images, origin }: ExportSource): Uint8Ar
     const align = node.attrs?.textAlign
     switch (node.type) {
       case 'paragraph':
-        return para(inlines(node, ctx), ctx, { align })
+        return para(inlines(node, ctx), ctx, { align, attrs: node.attrs })
       case 'heading': {
         return para(inlines(node, ctx), ctx, {
           style: `Heading${wholeNumber(node.attrs?.level, 1, 6)}`,
           align,
+          attrs: node.attrs,
         })
       }
       case 'bulletList':

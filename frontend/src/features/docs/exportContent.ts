@@ -1,6 +1,7 @@
 import type { JSONContent } from '@tiptap/core'
 import { cleanName } from '@/lib/format'
 import { displayWidth } from '@/lib/xlsx'
+import { safeFontFamily, safeFontSize, safeLineHeight, safePx } from './docFormat'
 
 /** 파일 안에 넣을 사진 한 장. 워드·한글이 읽는 형식(png·jpeg·gif)으로 맞춰 둔 것이다. */
 export interface ExportImage {
@@ -63,6 +64,43 @@ export function hexColor(value: unknown): string | null {
     .map((n) => Math.min(255, Number(n)).toString(16).padStart(2, '0'))
     .join('')
     .toUpperCase()
+}
+
+/**
+ * 글꼴 목록(`'맑은 고딕', sans-serif`)에서 실제 글꼴인 첫 이름. 따옴표를 뗀다. 워드·한글은 이름 하나만
+ * 받고, 대체 목록의 일반 이름(sans-serif·ui-serif 등)은 글꼴이 아니라서 건너뛴다.
+ */
+export function fontName(value: unknown): string | null {
+  const names = safeFontFamily(value)?.split(',') ?? []
+  const generic =
+    /^(serif|sans-serif|monospace|cursive|fantasy|system-ui|math|emoji|fangsong|ui-[a-z-]+|inherit|initial|unset|revert)$/i
+  for (const raw of names) {
+    const name = raw
+      .trim()
+      .replace(/^['"]|['"]$/g, '')
+      .trim()
+    if (name && !generic.test(name)) return name
+  }
+  return null
+}
+
+/** 글자 크기를 pt 로. 계약은 pt 지만 제니스 안에서 붙여넣은 글은 px 로도 온다(1px = 0.75pt). */
+export function fontPoints(value: unknown): number | null {
+  const size = safeFontSize(value)
+  if (!size) return null
+  const n = parseFloat(size)
+  return size.endsWith('px') ? n * 0.75 : n
+}
+
+/** 문단 서식(서식 3차). 값은 편집기와 같은 판으로 거른다. 없는 값은 `null`. */
+export function blockFormat(attrs: JSONContent['attrs']) {
+  const line = safeLineHeight(attrs?.lineHeight)
+  return {
+    line: line === null ? null : Number(line),
+    indent: safePx(attrs?.indent),
+    before: safePx(attrs?.spaceBefore),
+    after: safePx(attrs?.spaceAfter),
+  }
 }
 
 /** 표에 놓인 칸 하나. 합친 칸이 위에서 내려와 차지한 자리는 `node` 가 `null` 이다. */
