@@ -906,6 +906,48 @@
         }
       }
     },
+    "/api/docs/import": {
+      "post": {
+        "tags": [
+          "docs"
+        ],
+        "summary": "파일 가져오기 — multipart `file`(docx·xlsx·hwpx, 10MB) + `folder_id` → 새 문서 + 편집기용 HTML. 04 에 없던 경로(README 60)",
+        "description": "본문을 서버가 Y.Doc 으로 만들지 않는다 — HTML 을 돌려주고 프론트가 새 문서를 열며 심는다(app/convert.py 머리말).\n원본은 `/files` 와 같은 규칙(10MB·하루 200개·감사 `files.uploaded`)으로 문서 첨부에 넣어 둔다. 변환에 실패한\n요청(`docs.import_failed`)도 하루 상한에 센다 — 비싼 변환을 같은 파일로 무한히 다시 시킬 수 없게(리뷰).",
+        "operationId": "import_doc_api_docs_import_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_import_doc_api_docs_import_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocImportOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/docs/{id}": {
       "get": {
         "tags": [
@@ -8191,6 +8233,26 @@
         ],
         "title": "BoardOut"
       },
+      "Body_import_doc_api_docs_import_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          },
+          "folder_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Folder Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file",
+          "folder_id"
+        ],
+        "title": "Body_import_doc_api_docs_import_post"
+      },
       "Body_import_orgs_api_crm_orgs_import_post": {
         "properties": {
           "file": {
@@ -10039,6 +10101,32 @@
           "ydoc"
         ],
         "title": "DocDetail"
+      },
+      "DocImportOut": {
+        "properties": {
+          "doc": {
+            "$ref": "#/components/schemas/DocOut"
+          },
+          "html": {
+            "type": "string",
+            "title": "Html"
+          },
+          "truncated": {
+            "type": "boolean",
+            "title": "Truncated"
+          },
+          "file": {
+            "$ref": "#/components/schemas/FileOut"
+          }
+        },
+        "type": "object",
+        "required": [
+          "doc",
+          "html",
+          "truncated",
+          "file"
+        ],
+        "title": "DocImportOut"
       },
       "DocOut": {
         "properties": {
