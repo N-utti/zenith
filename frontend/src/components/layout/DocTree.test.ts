@@ -185,13 +185,14 @@ test('여러 파일은 앞 파일이 끝나야 다음을 보내고, 폴더 줄�
   expect(imports()).toHaveLength(1)
   expect(progress()).toBe('1/2')
 
-  // 진행 표시는 캐시 알림이 다음 박자(setTimeout 0)에 다시 그린다.
-  await act(async () => {
-    pending[0]!()
-    await new Promise((r) => setTimeout(r, 0))
+  // 진행 표시는 캐시 알림이 다음 박자(setTimeout 0)에 다시 그린다. 전체 테스트를 같이 돌리면 한 박자로는
+  // 모자랄 때가 있어 그려질 때까지 박자를 넘긴다.
+  await act(async () => pending[0]!())
+  await vi.waitFor(async () => {
+    await act(() => new Promise((r) => setTimeout(r, 0)))
+    expect(progress()).toBe('2/2')
   })
   expect(imports()).toHaveLength(2)
-  expect(progress()).toBe('2/2')
 })
 
 test('하루 상한(429)처럼 파일과 상관없는 거절이면 남은 파일은 보내지 않는다', async () => {
