@@ -299,6 +299,12 @@
     @apply mt-4;
   }
 
+  /* 글을 고를 때의 바탕. 브라우저 기본 파랑 대신 강조색을 옅게 쓴다(글자색은 그대로). 다크 모드는 강조색이
+     밝아져서 같은 비율로도 충분히 보인다. */
+  .zenith-editor ::selection {
+    background-color: color-mix(in srgb, var(--color-accent) 22%, transparent);
+  }
+
   .zenith-editor h1 {
     @apply mt-8 text-2xl font-bold tracking-tight;
   }
