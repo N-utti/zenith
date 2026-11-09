@@ -59,6 +59,7 @@ import {
 import { addTask, findTask, listTasks, removeTask } from './dashboardDb'
 import { TODO_TEXT_MAX } from '@/features/home/types'
 import { BLOCK_ID_MAX, COMMENT_BODY_MAX } from '@/features/docs/types'
+import { escapeHtml } from '@/features/docs/markdownTable'
 import {
   listMentionNotifications,
   listNotifications,
@@ -2342,6 +2343,65 @@ export const handlers = [
     return HttpResponse.json(createDoc(user, body.folder_id, title, body.ai_source), {
       status: 201,
     })
+  }),
+
+  // 파일 가져오기(백엔드 README 60). 진짜 변환은 흉내 내지 않고 고정 본문을 준다. 거절 순서와 문구는
+  // 백엔드 `import_doc` 과 같다. 원본은 문서 첨부로 남고 본문 끝에 그 파일 칩이 붙는다.
+  http.post('/api/docs/import', async ({ request }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+
+    const form = await request.formData()
+    const file = form.get('file')
+    const folderId = form.get('folder_id')
+    if (!(file instanceof File) || typeof folderId !== 'string') {
+      return validationError('file 과 folder_id 가 필요합니다.')
+    }
+    // 못 보는 폴더도 없는 폴더다(존재 여부를 새게 하지 않는다).
+    if (!findFolder(folderId) || !canViewFolder(user, folderId)) {
+      return validationError('없는 폴더입니다.')
+    }
+    if (file.size > MAX_UPLOAD_BYTES) return validationError('10MB 이하 파일만 올릴 수 있습니다.')
+    if (file.size === 0) return validationError('빈 파일입니다.')
+    if (!/\.(docx|xlsx|hwpx)$/i.test(file.name)) {
+      return validationError(
+        'docx·xlsx·hwpx 파일만 가져올 수 있습니다(hwp 는 hwpx 로 저장해 주세요).',
+      )
+    }
+    await delay(800)
+
+    const title =
+      file.name
+        .replace(/\.[^.]+$/, '')
+        .trim()
+        .slice(0, 200) || '가져온 문서'
+    const doc = createDoc(user, folderId, title)
+    const stored = await saveFile(file, 'f', {
+      doc_id: doc.id,
+      uploaded_by: { id: user.id, name: user.name },
+      created_at: new Date().toISOString(),
+    })
+    const url = `/api/files/${stored.id}`
+    const name = escapeHtml(stored.name)
+    const html =
+      '<p>시연판에서는 파일 내용 대신 이 예시 본문이 들어갑니다. 원본은 아래에 붙어 있습니다.</p>' +
+      '<table><tr><th>항목</th><th>내용</th></tr><tr><td>형식</td><td>표도 그대로 옵니다</td></tr></table>' +
+      `<p><span data-type="fileChip" src="${url}" name="${name.replace(/"/g, '&quot;')}" size="${stored.size}">${name}</span></p>`
+    return HttpResponse.json(
+      {
+        doc,
+        html,
+        truncated: false,
+        file: {
+          id: stored.id,
+          url,
+          name: stored.name,
+          size: stored.size,
+          content_type: 'application/octet-stream',
+        },
+      } satisfies Schema<'DocImportOut'>,
+      { status: 201 },
+    )
   }),
 
   http.get('/api/docs/:docId', ({ params }) => {
