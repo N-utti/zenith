@@ -1,3 +1,4 @@
+import { claimTabs } from '@/components/layout/desktopTabs'
 import { useCallback, useEffect, useMemo, type ReactNode } from 'react'
 import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { resetThread } from '@/features/ai/store'
@@ -17,6 +18,8 @@ async function fetchMe(): Promise<User | null> {
     const me = await api<User>('/me')
     // 쿠키로 곧장 들어온 사람도 문서 사본 주인과 비교한다. 로그인 화면을 안 거친 경로다.
     await claimDocCaches(me.id)
+    // 데스크톱 탭도 같다. 앞사람이 보던 주소로 돌아가지 않게 탭 줄이 뜨기 전에 가른다.
+    claimTabs(me.id)
     return me
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) return null
@@ -97,6 +100,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // 문서 사본은 주인이 바뀌었을 때만 지운다. 프로필을 넣으면 곧바로 화면이 뜨고 문서를 열 수 있으니
         // 그 전에 끝낸다.
         await claimDocCaches(me.id)
+        // 데스크톱 탭도 같다. 앞사람이 보던 주소로 돌아가지 않게 탭 줄이 뜨기 전에 가른다.
+        claimTabs(me.id)
         qc.setQueryData(meQueryKey, me)
       } catch (error) {
         // `/me` 가 실패해 누구인지 모르면 주인과 비교할 수 없다. 앞사람 사본일 수 있으니 지운다.
