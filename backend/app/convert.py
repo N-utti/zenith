@@ -67,41 +67,23 @@ _COLOR_RE = re.compile(r"^#([0-9a-f]{6}|[0-9a-f]{3})$", re.IGNORECASE)
 _SPAN_COLOR_RE = re.compile(r"(?<![-\w])color\s*:\s*(#[0-9a-f]{3,6})\b", re.IGNORECASE)
 MAX_ALT = 200
 # 서식 3차(README 63) — 편집기 속성 계약(#574)과 같은 범위·단위. 값은 늘 여기서 다시 써서 꼬리가 남지 않는다
-_LINE_HEIGHT_RE = re.compile(r"line-height\s*:\s*(\d+(?:\.\d+)?)\s*(?:;|$)", re.IGNORECASE)
+_LINE_HEIGHT_RE = re.compile(r"line-height\s*:\s*(\d+(?:\.\d+)?)\s*(?:;|$)", re.IGNORECASE | re.ASCII)
 _MARGIN_RE = {
-    k: re.compile(rf"{k}\s*:\s*(\d+)px\b", re.IGNORECASE)
+    k: re.compile(rf"{k}\s*:\s*(\d+)px\b", re.IGNORECASE | re.ASCII)
     for k in ("margin-left", "margin-top", "margin-bottom")
 }
 _FONT_FAMILY_RE = re.compile(r"font-family\s*:\s*([^;]+)", re.IGNORECASE)
-_FONT_SIZE_RE = re.compile(r"font-size\s*:\s*(\d+(?:\.\d+)?)pt\b", re.IGNORECASE)
+_FONT_SIZE_RE = re.compile(r"font-size\s*:\s*(\d+(?:\.\d+)?)pt\b", re.IGNORECASE | re.ASCII)
 _BG_RE = re.compile(r"background-color\s*:\s*(#[0-9a-f]{3,6})\b", re.IGNORECASE)
-_WIDTH_RE = re.compile(r"(?<![-\w])width\s*:\s*(\d+)px\b", re.IGNORECASE)
+_WIDTH_RE = re.compile(r"(?<![-\w])width\s*:\s*(\d+)px\b", re.IGNORECASE | re.ASCII)
 # 서식 4차(README 64) — 행 높이(tr)·칸 변 테두리(td·th). 값은 계약(#574) 모양 그대로: `1px solid #000000` 또는 `none`
-_HEIGHT_RE = re.compile(r"(?<![-\w])height\s*:\s*(\d{1,4})px\b", re.IGNORECASE)
+_HEIGHT_RE = re.compile(r"(?<![-\w])height\s*:\s*(\d{1,4})px\b", re.IGNORECASE | re.ASCII)
 _BORDER_RE = re.compile(
     r"border-(top|right|bottom|left)\s*:\s*(?:(none)|([1-8])px\s+(solid|dashed|dotted|double)\s+(#[0-9a-f]{3,6}))\b",
-    re.IGNORECASE,
+    re.IGNORECASE | re.ASCII,
 )
 MAX_ROW_HEIGHT = 2000
 _PLAIN_BORDER = "1px solid #000000"  # 편집기 기본 선과 같은 값 — 싣지 않는다
-_BORDER_STYLES = {  # 워드 w:val · 한글 type → CSS. 없는 것은 solid
-    "dashed": "dashed",
-    "dashsmallgap": "dashed",
-    "dotdash": "dashed",
-    "dotdotdash": "dashed",
-    "dash": "dashed",
-    "dash_dot": "dashed",
-    "dash_dot_dot": "dashed",
-    "long_dash": "dashed",
-    "dotted": "dotted",
-    "dot": "dotted",
-    "double": "double",
-    "triple": "double",
-    "double_slim": "double",
-    "slim_thick": "double",
-    "thick_slim": "double",
-    "slim_thick_slim": "double",
-}
 _SIDE_NAMES = {  # docx 는 left/right 를 start/end 로 적기도 한다
     "top": ("top",),
     "right": ("right", "end"),
@@ -293,7 +275,18 @@ def _border_css(style: str | None, px: float | None, color: str | None) -> str |
     if kind in ("none", "nil"):
         return "none"
     width = min(8, max(1, round(px or 1)))
-    return f"{width}px {_BORDER_STYLES.get(kind, 'solid')} {_hex(color) or '#000000'}"
+    return f"{width}px {_border_kind(kind)} {_hex(color) or '#000000'}"
+
+
+def _border_kind(kind: str) -> str:
+    """워드 w:val(dashed·dotDash·thinThickSmallGap…)·한글 type(DASH_DOT·DOT·SLIM_THICK…) → CSS 선 종류 넷."""
+    if "dash" in kind:
+        return "dashed"
+    if "dot" in kind:
+        return "dotted"
+    if "double" in kind or "thick" in kind or "triple" in kind:
+        return "double"
+    return "solid"
 
 
 def _cell_border_style(sides: dict[str, str | None], borderless: bool) -> list[str]:
@@ -810,14 +803,22 @@ class _Docx:
         starts: dict[int, dict] = {}  # 열 위치 → 세로 병합 시작 칸
         tblpr = tbl.find(f"{_W}tblPr")
         tbl_borders = tblpr.find(f"{_W}tblBorders") if tblpr is not None else None
+        # tblBorders 만 있고 표 스타일이 없으면 적히지 않은 변은 워드가 그리지 않는다(위·아래 선만 있는 표) → none(리뷰)
+        unlisted = (
+            "none"
+            if tbl_borders is not None and tblpr.find(f"{_W}tblStyle") is None
+            else None
+        )
         borderless = self._borderless(tbl)
+        grid_cols = tbl.findall(f"{_W}tblGrid/{_W}gridCol")
         for tr in tbl.findall(f"{_W}tr"):
             trpr = tr.find(f"{_W}trPr")
             header = trpr is not None and trpr.find(f"{_W}tblHeader") is not None
             trh = trpr.find(f"{_W}trHeight") if trpr is not None else None
             height = _px_from_twips(trh.get(f"{_W}val")) if trh is not None else None
             cells: list[dict] = []
-            col = 0
+            gb = trpr.find(f"{_W}gridBefore") if trpr is not None else None
+            col = int(gb.get(f"{_W}val")) if gb is not None and _digits(gb.get(f"{_W}val")) else 0
             for tc in tr.findall(f"{_W}tc"):
                 tcpr = tc.find(f"{_W}tcPr")
                 span_el = tcpr.find(f"{_W}gridSpan") if tcpr is not None else None
@@ -863,7 +864,9 @@ class _Docx:
                 col += colspan
             if cells:
                 grid.append((cells, height))
-        ncols = max((sum(c["colspan"] for c in cells) for cells, _ in grid), default=0)
+        ncols = len(grid_cols) or max(
+            (c["col"] + c["colspan"] for cells, _ in grid for c in cells), default=0
+        )
         rows: list[str] = []
         for r, (cells, height) in enumerate(grid):
             html_cells = []
@@ -875,7 +878,7 @@ class _Docx:
                     "right": c["col"] + c["colspan"] >= ncols,
                 }
                 sides = {
-                    side: self._border(c["tcb"], tbl_borders, side, is_outer)
+                    side: self._border(c["tcb"], tbl_borders, side, is_outer) or unlisted
                     for side, is_outer in outer.items()
                 }
                 style = ";".join(c["style"] + _cell_border_style(sides, borderless))
@@ -1416,7 +1419,7 @@ class _Hwpx:
         self._depth += 1
         # 표 자체와 모든 셀의 borderFill 이 다 선 없음일 때만 — 한글은 셀 쪽이 선을 그리는 경우가 있다(리뷰, 실제 파일 미확인)
         refs = [tbl.get("borderFillIDRef", "")] + [
-            tc.get("borderFillIDRef", "") for tc in tbl.iter(f"{_HP}tc")
+            tc.get("borderFillIDRef", "") for tc in tbl.findall(f"{_HP}tr/{_HP}tc")
         ]
         borderless = all(self.fills.get(r, {}).get("borderless") for r in refs)
         rows: list[str] = []
