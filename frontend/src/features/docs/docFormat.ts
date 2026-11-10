@@ -50,6 +50,21 @@ export const safePx = (value: unknown) => {
   const n = typeof value === 'number' ? value : /^\d+$/.test(str(value)) ? Number(str(value)) : NaN
   return Number.isInteger(n) && n >= 0 && n <= 2000 ? n : null
 }
+// 칸 한 변(계약 #574 확장, 서버 convert.py `_border_css`·`_BORDER_RE`): `1px solid #000000` 꼴이거나 `none`.
+const SAFE_BORDER = /^(none|[1-8]px (solid|dashed|dotted|double) #[0-9a-f]{6})$/
+/** 칸 한 변의 테두리. 굵기 1~8px, 선 종류 넷, 여섯 자리 색만 받는다. */
+export const safeBorder = (value: unknown) => {
+  const v = str(value).toLowerCase()
+  return SAFE_BORDER.test(v) ? v : null
+}
+/** 칸 테두리 속성 이름과 CSS 이름. */
+export const CELL_BORDERS = [
+  ['borderTop', 'border-top'],
+  ['borderRight', 'border-right'],
+  ['borderBottom', 'border-bottom'],
+  ['borderLeft', 'border-left'],
+] as const
+
 /** style 의 `12px` 값을 px 정수로. 다른 단위(pt·em·%)는 크기가 달라지므로 버린다. */
 const pxOf = (css: string | undefined) => {
   const m = /^(\d+(?:\.\d+)?)px$/.exec(css?.trim() ?? '')
@@ -117,6 +132,7 @@ const OUTSIDE_ATTRS = [
   'spaceAfter',
   'backgroundColor',
   'borders',
+  ...CELL_BORDERS.map(([name]) => name),
   'fontFamily',
   'fontSize',
 ]

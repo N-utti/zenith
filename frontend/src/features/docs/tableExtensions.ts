@@ -4,7 +4,7 @@ import { Table, TableCell, TableHeader, TableRow, TableView } from '@tiptap/exte
 import type { Node as PmNode } from '@tiptap/pm/model'
 import type { Plugin } from '@tiptap/pm/state'
 import { columnResizingPluginKey, tableEditingKey, updateColumnsOnResize } from '@tiptap/pm/tables'
-import { safeAlign, safeColor, safePx } from './docFormat'
+import { CELL_BORDERS, safeAlign, safeBorder, safeColor, safePx } from './docFormat'
 import { keepHandleAcrossRemoteEdits, rowResizing, settleColumnResize } from './tableResize'
 
 /**
@@ -115,7 +115,8 @@ const DocTableRow = TableRow.extend({
 })
 
 /**
- * 칸 배경색. 머리 칸의 기본 바탕(index.css)보다 인라인 값이 이긴다.
+ * 칸 배경색과 변마다의 테두리(가져온 파일, 계약 #574 확장). 머리 칸의 기본 바탕·기본 선(index.css)보다 인라인 값이 이긴다.
+ * 테두리를 정하지 않은 변은 편집기 기본 선으로 그린다(서버도 검정 1px 실선은 싣지 않는다).
  * 칸 정렬은 원래 확장 것이 Y.Doc 값을 거르지 않고 style 에 쓴다. 그릴 때 거르는 판으로 덮는다.
  */
 function cellAttributes(this: { parent?: () => Record<string, object> }) {
@@ -143,6 +144,23 @@ function cellAttributes(this: { parent?: () => Record<string, object> }) {
         return color && color !== 'transparent' ? { style: `background-color: ${color}` } : {}
       },
     },
+    ...Object.fromEntries(
+      CELL_BORDERS.map(([name, css]) => [
+        name,
+        {
+          default: null,
+          // 원래 표기를 먼저 읽는다. `el.style` 은 색을 rgb() 로 바꿔 거름에 걸린다.
+          parseHTML: (el: HTMLElement) =>
+            safeBorder(getStyleProperty(el, css) ?? el.style.getPropertyValue(css)),
+          // 지운 변(none)은 옆 칸에 선이 있으면 그 선이 그려진다(워드도 한쪽만 없으면 다른 쪽을 그린다).
+          // 이중선은 3px 보다 가늘면 한 줄로 그려져 3px 로 올린다.
+          renderHTML: (attrs: Record<string, unknown>) => {
+            const v = safeBorder(attrs[name])?.replace(/^[12]px double/, '3px double')
+            return v ? { style: `${css}: ${v}` } : {}
+          },
+        },
+      ]),
+    ),
   }
 }
 

@@ -349,8 +349,10 @@
   .zenith-editor .tableWrapper {
     @apply overflow-x-auto;
   }
+  /* 표 자체에는 선을 두지 않는다. 칸 경계를 합쳐 그리므로 바깥 줄 칸의 선이 곧 표 테두리다. 표에 선을 두면
+     합칠 때 가져온 칸의 점선·지운 변(none)을 이겨 버린다. */
   .zenith-editor table {
-    @apply border-line w-full border-collapse border text-sm;
+    @apply w-full border-collapse text-sm;
   }
   /* 본문에 바로 놓인 표는 본문보다 넓어지면 오른쪽 여백으로 뻗는다(노션처럼). 문서 영역 끝에 닿을
      때까지는 스크롤이 없고, 그보다 넓어지면 그때부터 표만 구른다. 감싼 상자가 표 폭을 따라 늘어나되
