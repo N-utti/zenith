@@ -833,7 +833,9 @@ class _Docx:
                 break
             gb = trpr.find(f"{_W}gridBefore") if trpr is not None else None
             v = gb.get(f"{_W}val") if gb is not None else None
-            before = int(v) if _digits(v) and int(v) <= MAX_SPAN else 0
+            before = (
+                min(int(v), MAX_SPAN) if _digits(v) else 0
+            )  # 63 을 넘으면 잘라 쓴다 — 0 으로 버리면 뒤 칸이 0열로 밀린다(리뷰)
             if grid_cols:
                 before = min(
                     before, max(0, len(grid_cols) - 1)
