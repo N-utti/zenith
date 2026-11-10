@@ -1098,14 +1098,15 @@ def test_fmt4_docx_nested_table_row_height_cell_borders() -> None:
         '<tr><td style="border-top:2px solid #ffffff;border-right:3px dashed #ff0000"><p>c</p></td>'
         '<td style="border-top:2px solid #ffffff;border-left:3px dashed #ff0000"><p>d</p></td></tr></table>'
     )
-    # 세로 병합: 아래 변은 마지막(이어지는) 칸의 tcBorders 로 — 시작 칸은 solid, 끝 칸은 dashed 면 dashed(리뷰)
+    # 세로 병합: 아래 변은 마지막(이어지는) 칸의 tcBorders 로 — 시작 칸은 solid, 끝 칸은 dashed 면 dashed(리뷰).
+    # 이어지는 칸뿐인 행은 출력에서 사라지므로 rowspan 도 1 로 돌아온다(Codex)
     merged = (
         '<w:tbl><w:tr><w:tc><w:tcPr><w:vMerge w:val="restart"/><w:tcBorders><w:bottom w:val="single" w:sz="12"/></w:tcBorders></w:tcPr><w:p><w:r><w:t>a</w:t></w:r></w:p></w:tc></w:tr>'
         '<w:tr><w:tc><w:tcPr><w:vMerge/><w:tcBorders><w:bottom w:val="dashed" w:sz="12"/></w:tcBorders></w:tcPr><w:p/></w:tc></w:tr></w:tbl>'
     )
     assert (
         th("a.docx", make_docx(merged))[0]
-        == '<table data-borders="none"><tr><td rowspan="2" style="border-bottom:2px dashed #000000"><p>a</p></td></tr></table>'
+        == '<table data-borders="none"><tr><td style="border-bottom:2px dashed #000000"><p>a</p></td></tr></table>'
     )
     # 위·아래 선만 적힌 표(tblStyle 없음): 적히지 않은 변은 워드가 안 그린다 → none. gridBefore 1 인 둘째 행의 칸은 안쪽(insideV)·오른쪽 바깥.
     # tblGrid 가 열 수. 선 종류 thinThickSmallGap → double
@@ -1115,10 +1116,14 @@ def test_fmt4_docx_nested_table_row_height_cell_borders() -> None:
         "<w:tblGrid><w:gridCol/><w:gridCol/></w:tblGrid>"
         f'<w:tr>{cell("a")}{cell("b")}</w:tr><w:tr><w:trPr><w:gridBefore w:val="1"/></w:trPr>{cell("c")}</w:tr></w:tbl>'
     )
-    assert th("a.docx", make_docx(lines))[0] == (
-        '<table><tr><td style="border-top:2px double #000000;border-right:1px dashed #00ff00;border-bottom:none;border-left:none"><p>a</p></td>'
-        '<td style="border-top:2px double #000000;border-right:none;border-bottom:none;border-left:1px dashed #00ff00"><p>b</p></td></tr>'
-        '<tr><td style="border-top:none;border-right:none;border-bottom:2px solid #000000;border-left:1px dashed #00ff00"><p>c</p></td></tr></table>'
+    assert (
+        th("a.docx", make_docx(lines))[0]
+        == (
+            '<table><tr><td style="border-top:2px double #000000;border-right:1px dashed #00ff00;border-bottom:none;border-left:none"><p>a</p></td>'
+            '<td style="border-top:2px double #000000;border-right:none;border-bottom:none;border-left:1px dashed #00ff00"><p>b</p></td></tr>'
+            '<tr><td style="border-top:none;border-right:none;border-bottom:none;border-left:none"><p></p></td>'  # 빈자리엔 선이 없다
+            '<td style="border-top:none;border-right:none;border-bottom:2px solid #000000;border-left:1px dashed #00ff00"><p>c</p></td></tr></table>'
+        )
     )
 
 
@@ -1202,6 +1207,61 @@ def test_fmt4_filter_and_ydoc_row_height_cell_borders() -> None:
     )
     assert frag == (
         '<table><tableRow height="40"><tableCell borderLeft="1px dotted #9ccfe0" borderTop="none"><paragraph>x</paragraph></tableCell></tableRow></table>'
+    )
+
+
+def test_docx_grid_codex_regressions() -> None:
+    """#585 Codex 리뷰(머지 뒤 도착) — 워드 격자: (1) gridBefore 자리는 빈 칸으로 내야 다음 칸이 제 열에 선다,
+    (2) continue 만 있는 행은 출력에서 사라지므로 그 행을 세던 rowspan 도 줄여야 아래 행을 덮지 않는다,
+    (3) 칸이 빠진 행을 지나면 병합은 끝나고, 열린 병합이 없는 continue 는 보통 칸이다."""
+
+    def cell(text: str, pr: str = "") -> str:
+        body = f"<w:p><w:r><w:t>{text}</w:t></w:r></w:p>" if text else "<w:p/>"
+        return f"<w:tc>{f'<w:tcPr>{pr}</w:tcPr>' if pr else ''}{body}</w:tc>"
+
+    restart = '<w:vMerge w:val="restart"/>'
+    # (2) restart A / continue 뿐인 행 / B — A 는 제 행만, B 는 따로. insideH(파랑)가 A 의 아래 변
+    rows = (
+        '<w:tbl><w:tblPr><w:tblBorders><w:bottom w:val="single" w:sz="12" w:color="FF0000"/><w:insideH w:val="single" w:sz="12" w:color="0000FF"/></w:tblBorders></w:tblPr>'
+        f"<w:tr>{cell('A', restart)}</w:tr><w:tr>{cell('', '<w:vMerge/>')}</w:tr><w:tr>{cell('B')}</w:tr></w:tbl>"
+    )
+    assert th("a.docx", make_docx(rows))[0] == (
+        '<table><tr><td style="border-top:none;border-right:none;border-bottom:2px solid #0000ff;border-left:none"><p>A</p></td></tr>'
+        '<tr><td style="border-top:2px solid #0000ff;border-right:none;border-bottom:2px solid #ff0000;border-left:none"><p>B</p></td></tr></table>'
+    )
+    # (1)+(3) 1행 A(restart)·X, 2행 gridBefore=1 Y, 3행 continue(열린 병합 없음 → 보통 칸) Z·W
+    rows = (
+        f"<w:tbl><w:tr>{cell('A', restart)}{cell('X')}</w:tr>"
+        f'<w:tr><w:trPr><w:gridBefore w:val="1"/></w:trPr>{cell("Y")}</w:tr>'
+        f"<w:tr>{cell('Z', '<w:vMerge/>')}{cell('W')}</w:tr></w:tbl>"
+    )
+    assert th("a.docx", make_docx(rows))[0] == (
+        '<table data-borders="none"><tr><td><p>A</p></td><td><p>X</p></td></tr>'
+        "<tr><td><p></p></td><td><p>Y</p></td></tr>"
+        "<tr><td><p>Z</p></td><td><p>W</p></td></tr></table>"
+    )
+    # continue 가 새 병합의 시작이 되지 않는다: 행2 의 Z(continue, 열린 병합 없음) 뒤 행3 의 continue 도 보통 칸
+    rows = f"<w:tbl><w:tr>{cell('A', '<w:vMerge/>')}</w:tr><w:tr>{cell('B', '<w:vMerge/>')}</w:tr></w:tbl>"
+    assert th("a.docx", make_docx(rows))[0] == (
+        '<table data-borders="none"><tr><td><p>A</p></td></tr><tr><td><p>B</p></td></tr></table>'
+    )
+    # 칸 상한: gridBefore 63 만 있는 빈 행 수천 개(82바이트씩)가 칸 수천 개로 불어나던 것 — MAX_CELLS 에서 끊고 truncated(리뷰)
+    row = '<w:tr><w:trPr><w:gridBefore w:val="63"/><w:gridAfter w:val="63"/></w:trPr></w:tr>'
+    t0 = time.monotonic()
+    c = convert.to_html(
+        "a.docx", make_docx("<w:p><w:r><w:t>x</w:t></w:r></w:p><w:tbl>" + row * 3000 + "</w:tbl>")
+    )
+    assert c.truncated and c.html.count("<td>") <= convert.MAX_CELLS and time.monotonic() - t0 < 5
+    # Y.Doc 에서도 열이 맞는다(빈 칸이 첫 열)
+    frag = ydoc_fragment(
+        ydoc.build(
+            "<table><tr><td><p>A</p></td><td><p>X</p></td></tr><tr><td><p></p></td><td><p>Y</p></td></tr></table>",
+            "t",
+        )
+    )
+    assert (
+        "<tableRow><tableCell><paragraph></paragraph></tableCell><tableCell><paragraph>Y</paragraph></tableCell></tableRow>"
+        in frag
     )
 
 
