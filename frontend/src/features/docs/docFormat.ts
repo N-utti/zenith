@@ -14,8 +14,9 @@ import { Color, FontFamily, FontSize } from '@tiptap/extension-text-style'
  */
 
 const SAFE_COLOR = /^(#[0-9a-f]{3,8}|rgba?\([\d.,%\s]+\)|[a-z]+)$/i
-// 글꼴 이름: 글자·숫자·빈칸·따옴표·쉼표·밑줄·하이픈만. 괄호·쌍점·세미콜론·빗금이 없으면 url() 도 선언 끊기도 못 한다.
-const SAFE_FONT_FAMILY = /^[\p{L}\p{N} ,'"_-]{1,100}$/u
+// 글꼴 이름: 글자·숫자·빈칸(탭·전각 포함)·따옴표·쉼표·마침표·밑줄·하이픈만. 괄호·쌍점·세미콜론·빗금이 없으면 url() 도 선언 끊기도 못 한다.
+// 서버 가져오기(convert.py _font)가 남기는 글자를 받되, 탭 말고 줄바꿈 계열은 받지 않는다. 이름 100자에 감싸는 홑따옴표 둘이 붙어 102자.
+const SAFE_FONT_FAMILY = /^[\p{L}\p{N}\p{Zs}\t,'"_.-]{1,102}$/u
 const SAFE_FONT_SIZE = /^\d{1,3}(\.\d{1,2})?(pt|px)$/
 
 const str = (value: unknown) => (typeof value === 'string' ? value.trim() : '')
