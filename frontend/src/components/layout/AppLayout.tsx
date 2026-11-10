@@ -8,9 +8,11 @@ import { SplitActions } from '@/features/docs/SplitActions'
 import { setSplitDoc, useSplitDoc } from '@/features/docs/splitDoc'
 import { DOC_DRAG_TYPE } from '@/features/docs/types'
 import { cn } from '@/lib/cn'
+import { isDesktopShell } from '@/lib/desktop'
 import { useContentWide } from '@/lib/contentWidth'
 import { usePanelWidth } from '@/lib/usePanelWidth'
 import { ConnectionBanner } from './ConnectionBanner'
+import { DesktopTabBar } from './DesktopTabBar'
 import { Header } from './Header'
 import { MobileTabBar } from './MobileTabBar'
 import { Sidebar } from './Sidebar'
@@ -97,6 +99,7 @@ export function AppLayout({ bleed = false }: { bleed?: boolean }) {
 
   return (
     <div className="bg-canvas flex h-full flex-col">
+      {isDesktopShell() && <DesktopTabBar />}
       <Header
         onOpenSidebar={() => setSidebarOpen(true)}
         collapsed={collapsed}

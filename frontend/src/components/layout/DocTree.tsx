@@ -28,6 +28,7 @@ import { useToast } from '@/components/ui/ToastContext'
 import { ApiError } from '@/lib/api'
 import { copyText } from '@/lib/clipboard'
 import { isDesktopShell } from '@/lib/desktop'
+import { openTab } from './desktopTabs'
 import { serverOrigin } from '@/lib/serverOrigin'
 import { useLongPress } from '@/lib/useLongPress'
 import { useCurrentUser } from '@/features/auth/AuthContext'
@@ -925,14 +926,16 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
             </>
           ) : (
             <>
-              {/* 브라우저 메뉴를 가렸으니 거기 있던 둘을 돌려준다. 데스크탑 셸에는 탭이 없다. */}
-              {!isDesktopShell() && (
-                <ContextMenuItem
-                  icon={ExternalLink}
-                  label="새 탭에서 열기"
-                  onSelect={() => window.open(menu.href, '_blank', 'noopener')}
-                />
-              )}
+              {/* 브라우저 메뉴를 가렸으니 거기 있던 둘을 돌려준다. 데스크탑 셸은 앱 안 탭으로 연다. */}
+              <ContextMenuItem
+                icon={ExternalLink}
+                label="새 탭에서 열기"
+                onSelect={() => {
+                  if (!isDesktopShell()) return void window.open(menu.href, '_blank', 'noopener')
+                  const url = new URL(menu.href)
+                  openTab(url.pathname + url.search)
+                }}
+              />
               {/* 끌어 놓기와 같은 일. 키보드(Shift+F10)로도 화면을 나눌 수 있게. 오른쪽 칸이 뜨는 폭(1280px)에서만. */}
               {window.matchMedia('(min-width: 80rem)').matches && (
                 <ContextMenuItem
