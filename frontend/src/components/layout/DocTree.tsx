@@ -479,9 +479,16 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
     const files = picked.filter(ok)
     const failed = picked
       .filter((f) => !ok(f))
-      .map((f) => ({ name: f.name, why: 'docx·xlsx·hwpx 가 아님' }))
+      .map((f) => ({ name: f.name, why: 'docx·xlsx·hwpx·hwp 가 아님' }))
+    // hwp 변환기가 멎으면(503 HWP_UNAVAILABLE) 남은 hwp 만 보내지 않는다. 다른 형식은 된다.
+    let hwpDown = false
+    const isHwp = (f: File) => f.name.toLowerCase().endsWith('.hwp')
     const done: DocImport[] = []
     for (const [i, file] of files.entries()) {
+      if (hwpDown && isHwp(file)) {
+        failed.push({ name: file.name, why: 'hwp 변환기에 연결할 수 없음' })
+        continue
+      }
       try {
         done.push(
           await importDoc.mutateAsync({ file, folderId, index: i + 1, total: files.length }),
@@ -491,6 +498,10 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
           name: file.name,
           why: err instanceof ApiError ? err.message : '서버에 연결하지 못했습니다',
         })
+        if (err instanceof ApiError && err.code === 'HWP_UNAVAILABLE') {
+          hwpDown = true
+          continue
+        }
         // 422 는 그 파일만의 문제(크기·형식·변환). 하루 상한(429)·세션·폴더·연결 문제는 다음 파일도
         // 똑같이 실패하니 남은 것은 보내지 않는다.
         if (!(err instanceof ApiError && err.status === 422)) {
@@ -517,11 +528,9 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
       return open()
     }
     if (picked.length === 1 && failed[0]) {
-      // 서버 문구를 그대로(크기·하루 상한 등). 형식이 아니면 옛 한글 안내까지.
+      // 서버 문구를 그대로(크기·하루 상한 등). 형식이 아니면 받는 형식을 알린다.
       return toast.error(
-        ok(picked[0])
-          ? failed[0].why
-          : 'docx·xlsx·hwpx 파일만 가져올 수 있습니다(hwp 는 hwpx 로 저장해 주세요).',
+        ok(picked[0]) ? failed[0].why : 'docx·xlsx·hwpx·hwp 파일만 가져올 수 있습니다.',
       )
     }
     // 여럿이면 결과를 한 토스트에. 따로 띄우면 앞의 것이 뒤의 것 밑에 접혀 안 보인다.

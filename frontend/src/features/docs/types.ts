@@ -27,8 +27,8 @@ export type UploadedFile = Schema<'FileOut'>
 /** 파일 가져오기 결과(`POST /docs/import`, 백엔드 README 61). 본문은 서버가 문서에 이미 심었다. */
 export type DocImport = Schema<'DocImportOut'>
 
-/** 가져올 수 있는 형식. 서버가 같은 목록으로 다시 거른다. 옛 한글(.hwp)은 아직 안 된다. */
-export const IMPORT_ACCEPT = '.docx,.xlsx,.hwpx'
+/** 가져올 수 있는 형식. 서버가 같은 목록으로 다시 거른다. 옛 한글(.hwp)은 서버의 변환기가 따로 맡는다(README 65). */
+export const IMPORT_ACCEPT = '.docx,.xlsx,.hwpx,.hwp'
 
 /**
  * 블록 댓글. 백엔드 `CommentOut` 과 같은 모양이다.
