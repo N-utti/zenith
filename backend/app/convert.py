@@ -817,23 +817,37 @@ class _Docx:
             trh = trpr.find(f"{_W}trHeight") if trpr is not None else None
             height = _px_from_twips(trh.get(f"{_W}val")) if trh is not None else None
             cells: list[dict] = []
-            gb = trpr.find(f"{_W}gridBefore") if trpr is not None else None
-            col = int(gb.get(f"{_W}val")) if gb is not None and _digits(gb.get(f"{_W}val")) else 0
+            next_starts: dict[
+                int, dict
+            ] = {}  # 이 행에서 이어진 병합만 다음 행으로(끊긴 병합은 다시 붙지 않게, Codex)
+            bumped: list[dict] = []  # 이 행에서 한 줄 늘린 병합 칸 — 행이 통째로 빠지면 도로 줄인다
+            gaps = {}
+            for key in ("gridBefore", "gridAfter"):
+                el = trpr.find(f"{_W}{key}") if trpr is not None else None
+                v = el.get(f"{_W}val") if el is not None else None
+                gaps[key] = int(v) if _digits(v) and int(v) <= MAX_SPAN else 0
+            # gridBefore 만큼은 칸이 없는 자리 — 빈 칸을 내야 다음 칸이 제 열에 선다(Codex). 위에서 내려오던 병합은 여기서 끝난다
+            cells += [self._gap_cell(k, header) for k in range(gaps["gridBefore"])]
+            col = gaps["gridBefore"]
             for tc in tr.findall(f"{_W}tc"):
                 tcpr = tc.find(f"{_W}tcPr")
                 span_el = tcpr.find(f"{_W}gridSpan") if tcpr is not None else None
                 span_val = span_el.get(f"{_W}val", "1") if span_el is not None else "1"
                 colspan = int(span_val) if span_val.isdigit() and int(span_val) > 1 else 1
                 vmerge = tcpr.find(f"{_W}vMerge") if tcpr is not None else None
-                if vmerge is not None and vmerge.get(f"{_W}val", "continue") != "restart":
-                    if col in starts:
-                        starts[col]["rowspan"] += 1
-                        # 병합 영역의 아래 변은 워드가 마지막 칸의 tcBorders 로 그린다(리뷰)
-                        starts[col]["tcb_end"] = (
-                            tcpr.find(f"{_W}tcBorders") if tcpr is not None else None
-                        )
-                        col += colspan
-                        continue  # 위 칸에 합쳐진 칸 — 내지 않는다
+                if (
+                    vmerge is not None
+                    and vmerge.get(f"{_W}val", "continue") != "restart"
+                    and col in starts
+                ):
+                    start = starts[col]
+                    start["rowspan"] += 1
+                    # 병합 영역의 아래 변은 워드가 마지막 칸의 tcBorders 로 그린다(리뷰)
+                    start["tcb_end"] = tcpr.find(f"{_W}tcBorders") if tcpr is not None else None
+                    next_starts[col] = start
+                    bumped.append(start)
+                    col += colspan
+                    continue  # 위 칸에 합쳐진 칸 — 내지 않는다. 열린 병합이 없는 continue 는 보통 칸으로(Codex)
                 inner: list[str] = []
                 self._blocks(tc, inner, in_cell=True)
                 style = []
@@ -861,13 +875,17 @@ class _Docx:
                     "tcb": tcpr.find(f"{_W}tcBorders") if tcpr is not None else None,
                 }
                 if vmerge is not None:
-                    starts[col] = cell
-                else:
-                    starts.pop(col, None)
+                    next_starts[col] = cell
                 cells.append(cell)
                 col += colspan
+            cells += [self._gap_cell(col + k, header) for k in range(gaps["gridAfter"])]
+            starts = next_starts
             if cells:
                 grid.append((cells, height))
+            else:
+                # 이어지는 칸뿐인 행은 출력에서 사라진다 — 그 행을 세던 병합도 한 줄 줄여야 아래 행을 덮지 않는다(Codex)
+                for start in bumped:
+                    start["rowspan"] -= 1
         ncols = len(grid_cols) or max(
             (c["col"] + c["colspan"] for cells, _ in grid for c in cells), default=0
         )
@@ -904,6 +922,19 @@ class _Docx:
         out.append(f"<table{borders}>{''.join(rows)}</table>")
         out.extend(self._lifted)
         self._lifted = lifted
+
+    @staticmethod
+    def _gap_cell(col: int, header: bool) -> dict:
+        """gridBefore/gridAfter 로 비어 있는 자리의 빈 칸."""
+        return {
+            "html": "<p></p>",
+            "tag": "th" if header else "td",
+            "colspan": 1,
+            "rowspan": 1,
+            "style": [],
+            "col": col,
+            "tcb": None,
+        }
 
     @staticmethod
     def _border(tcb, tbl_borders, side: str, is_outer: bool) -> str | None:
