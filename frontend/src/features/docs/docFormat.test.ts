@@ -48,7 +48,12 @@ const imported = {
           type: 'tableRow',
           content: [
             cell('tableHeader', { backgroundColor: '#eeeeee' }),
-            cell('tableCell', { colwidth: [120] }),
+            cell('tableCell', {
+              colwidth: [120],
+              borderTop: '1px dotted #9ccfe0',
+              borderLeft: 'none',
+              borderBottom: '3px double #1f4e79',
+            }),
           ],
         },
       ],
@@ -68,6 +73,12 @@ it('가져온 서식을 버리지 않는다(문서 JSON 이 그대로 남는다)
   const table = json.content?.[1]
   expect(table?.attrs?.borders).toBe('none')
   expect(JSON.stringify(table)).toContain('"backgroundColor":"#eeeeee"')
+  expect((table as JSONContent | undefined)?.content?.[0]?.content?.[1]?.attrs).toMatchObject({
+    borderTop: '1px dotted #9ccfe0',
+    borderLeft: 'none',
+    borderBottom: '3px double #1f4e79',
+    borderRight: null,
+  })
 })
 
 it('서버가 남기는 글꼴 이름(마침표·전각 빈칸·감싼 100자)을 버리지 않는다', () => {
@@ -92,6 +103,26 @@ it('가져온 서식을 스타일로 그린다(인쇄·복사가 쓰는 HTML)', 
   expect(html).toContain('font-size: 11pt')
   expect(html).toContain('data-borders="none"')
   expect(html).toContain('background-color: rgb(238, 238, 238)')
+  // 칸 변 테두리(서식 4차). 정하지 않은 변(오른쪽)은 편집기 기본 선이라 쓰지 않는다.
+  expect(html).toContain('border-top: 1px dotted rgb(156, 207, 224)')
+  // 지운 변. jsdom 은 none 을 medium 으로 다시 쓴다(브라우저는 그대로 둔다).
+  expect(html).toMatch(/border-left: (none|medium)/)
+  expect(html).toContain('border-bottom: 3px double rgb(31, 78, 121)')
+  expect(html).not.toContain('border-right')
+  // 가는 이중선은 한 줄로 보여 3px 로 그린다(값은 그대로).
+  const thin = make(imported)
+  thin.commands.command(({ tr }) => {
+    tr.doc.descendants((node, pos) => {
+      if (node.type.name === 'tableCell')
+        tr.setNodeAttribute(pos, 'borderTop', '1px double #000000')
+    })
+    return true
+  })
+  expect(thin.getHTML()).toContain('border-top: 3px double')
+  expect(JSON.stringify(thin.getJSON())).toContain('"borderTop":"1px double #000000"')
+  // 편집 화면의 칸에도 붙는다.
+  const td = make(imported).view.dom.querySelector('td')?.getAttribute('style') ?? ''
+  expect(td).toContain('border-top: 1px dotted')
 })
 
 it('편집 화면의 표에도 테두리 없음이 붙는다(표 뷰는 renderHTML 을 거치지 않는다)', () => {
@@ -113,12 +144,24 @@ it('HTML 로 받은 서식도 같은 이름으로 읽는다(제니스 안 복사
   expect(p?.content?.[0].marks?.[0].attrs).toMatchObject({ fontFamily: 'Arial', fontSize: '12px' })
 })
 
+it('HTML 로 받은 칸 테두리도 같은 값으로 읽는다(제니스 안 복사). 다른 단위·이름 색은 버린다', () => {
+  const editor = make(
+    '<table><tr><td style="border-top: 2px dashed #FF0000; border-left: none; border-right: 1pt solid red">칸</td></tr></table>',
+  )
+  const json: JSONContent = editor.getJSON()
+  expect(json.content?.[0]?.content?.[0]?.content?.[0]?.attrs).toMatchObject({
+    borderTop: '2px dashed #ff0000',
+    borderLeft: 'none',
+    borderRight: null,
+  })
+})
+
 it('바깥에서 붙여넣은 간격·글꼴·크기·줄 간격·칸 배경은 벗긴다. 제니스에서 복사한 것은 남긴다', () => {
   const outside =
     '<p style="margin-top: 0px; margin-bottom: 16px; line-height: 1.38"><span style="font-family: Arial; font-size: 14px; color: #e0483d">글</span></p>' +
     // 구글 문서는 전체를 굵기 normal 인 <b> 로 감싸고, 굵은 글은 span 의 굵기로 싣는다.
     '<b style="font-weight: normal"><p><span style="font-weight: 700; font-size: 11pt">굵게</span> 보통</p></b>' +
-    '<table data-borders="none"><tr><td style="background-color: #ffffff">칸</td></tr></table>'
+    '<table data-borders="none"><tr><td style="background-color: #ffffff; border-top: 1px solid #000000">칸</td></tr></table>'
   const editor = make('<p></p>')
   editor.view.pasteHTML(outside, paste())
   const html = editor.getHTML()
@@ -129,6 +172,7 @@ it('바깥에서 붙여넣은 간격·글꼴·크기·줄 간격·칸 배경은 
     'font-size',
     'background-color',
     'data-borders',
+    'border-top',
   ])
     expect(html).not.toContain(gone)
   // 글자색과 굵게는 예전처럼 받는다. 굵기 normal 겉싸개는 굵게가 되지 않는다.
@@ -173,7 +217,14 @@ it('서식 값에 스타일을 끼워 넣을 수 없다(남의 편집·붙여넣
           {
             type: 'tableRow',
             attrs: { height: '1px;background-image:url(https://evil.example/r);x:' },
-            content: [cell('tableCell', { backgroundColor: evil, align: evil })],
+            content: [
+              cell('tableCell', {
+                backgroundColor: evil,
+                align: evil,
+                borderTop: `1px solid #000000;${evil}`,
+                borderLeft: evil,
+              }),
+            ],
           },
         ],
       },
