@@ -65,8 +65,13 @@ function Tab({
       onAuxClick={(e) => e.button === 1 && onClose()}
       onMouseDown={(e) => e.button === 1 && e.preventDefault()}
       className={cn(
-        'group flex h-7 w-52 min-w-24 shrink items-center rounded-md text-sm',
-        active ? 'bg-surface text-fg shadow-sm' : 'text-muted hover:bg-surface-hover',
+        'group flex w-52 min-w-24 shrink items-center text-sm',
+        // 지금 탭은 줄 바닥까지 내려와 아래 상단바(같은 흰 면)와 이어진다. 나머지는 떠 있는 알약.
+        // 테두리는 줄 아랫선과 같은 색이고 아래만 열려 있다. 알약에도 투명한 테두리를 둬서 글자 자리를 맞추고,
+        // 늘어난 아래 5px 는 안쪽 여백으로 비운다. 글자 자리가 같아야 탭을 바꿀 때 글이 움찔하지 않는다.
+        active
+          ? 'bg-surface text-fg h-8 rounded-t-lg border border-b-0 border-(--tab-line) pb-[5px]'
+          : 'text-muted hover:bg-surface-hover mb-1 h-7 rounded-md border border-transparent',
       )}
     >
       <button
@@ -76,7 +81,7 @@ function Tab({
         tabIndex={active ? 0 : -1}
         title={label}
         onClick={onSelect}
-        className="flex h-full min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-md pl-2.5 text-left"
+        className="flex h-full min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-[inherit] pl-2.5 text-left"
       >
         <Icon className="size-3.5 shrink-0" />
         <span className="min-w-0 truncate">{label}</span>
@@ -197,7 +202,9 @@ export function DesktopTabBar() {
   }
 
   return (
-    <div className="border-line bg-sunken flex h-9 shrink-0 items-center gap-1 border-b px-2">
+    // 아랫선은 테두리가 아니라 안쪽 그림자로 긋는다. 그래야 지금 탭이 그 위를 덮어 아래 화면과 이어진다.
+    // 회색 줄 위에서 기본 선(line)은 진해 보여 회색 쪽으로 30% 섞어 연하게 쓴다.
+    <div className="bg-sunken flex h-9 shrink-0 items-end gap-1 px-2 shadow-[inset_0_-1px_0_var(--tab-line)] [--tab-line:color-mix(in_oklch,var(--color-line)_70%,var(--color-sunken))]">
       <div
         role="navigation"
         aria-label="탭"
@@ -206,7 +213,7 @@ export function DesktopTabBar() {
         onWheel={(e) => {
           if (!e.deltaX) e.currentTarget.scrollLeft += e.deltaY
         }}
-        className="flex min-w-0 items-center gap-1 overflow-x-auto [scrollbar-width:none]"
+        className="flex min-w-0 items-end gap-1 self-stretch overflow-x-auto [scrollbar-width:none]"
       >
         {tabs.map((tab) => (
           <Tab
@@ -223,7 +230,7 @@ export function DesktopTabBar() {
         aria-label="새 탭 (Ctrl+T)"
         title="새 탭 (Ctrl+T)"
         onClick={() => show(openTab('/', true))}
-        className="text-muted hover:bg-surface-hover grid size-7 shrink-0 cursor-pointer place-items-center rounded-md"
+        className="text-muted hover:bg-surface-hover mb-1 grid size-7 shrink-0 cursor-pointer place-items-center rounded-md"
       >
         <Plus className="size-4" />
       </button>
