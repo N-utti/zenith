@@ -21,7 +21,6 @@
     "noUncheckedSideEffectImports": true,
     "erasableSyntaxOnly": true,
 
-    "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"]
     }
