@@ -1,7 +1,14 @@
 import type { JSONContent } from '@tiptap/core'
 import { cleanName } from '@/lib/format'
 import { displayWidth } from '@/lib/xlsx'
-import { safeFontFamily, safeFontSize, safeLineHeight, safePx } from './docFormat'
+import {
+  CELL_BORDERS,
+  safeBorder,
+  safeFontFamily,
+  safeFontSize,
+  safeLineHeight,
+  safePx,
+} from './docFormat'
 
 /** 파일 안에 넣을 사진 한 장. 워드·한글이 읽는 형식(png·jpeg·gif)으로 맞춰 둔 것이다. */
 export interface ExportImage {
@@ -103,12 +110,33 @@ export function blockFormat(attrs: JSONContent['attrs']) {
   }
 }
 
-/** 표에 놓인 칸 하나. 합친 칸이 위에서 내려와 차지한 자리는 `node` 가 `null` 이다. */
+/** 표에 놓인 칸 하나. 합친 칸이 위에서 내려와 차지한 자리는 `node` 가 `null` 이고 `from` 이 그 칸이다. */
 export interface PlacedCell {
   node: JSONContent | null
   col: number
   colspan: number
   rowspan: number
+  from?: JSONContent
+}
+
+export type Side = 'top' | 'right' | 'bottom' | 'left'
+/** 칸 한 변(서식 4차). `none` 은 선 없음, 색은 `RRGGBB`. */
+export type CellEdge =
+  'none' | { px: number; style: 'solid' | 'dashed' | 'dotted' | 'double'; color: string }
+
+/** 칸 네 변의 테두리. 편집기와 같은 판으로 거른다. 안 적힌 변은 빠진다(표의 기본 선을 따른다). */
+export function cellEdges(attrs: JSONContent['attrs']): Partial<Record<Side, CellEdge>> {
+  const edges: Partial<Record<Side, CellEdge>> = {}
+  for (const [name, css] of CELL_BORDERS) {
+    const value = safeBorder(attrs?.[name])
+    if (!value) continue
+    const [width, style, color] = value.split(' ')
+    edges[css.slice('border-'.length) as Side] =
+      value === 'none'
+        ? 'none'
+        : { px: parseInt(width), style: style as 'solid', color: color.slice(1).toUpperCase() }
+  }
+  return edges
 }
 
 export const sum = (values: number[]) => values.reduce((total, value) => total + value, 0)
@@ -152,10 +180,15 @@ export interface TableColumn {
  * 표의 칸마다 실제 열 자리를 매긴다. 세로로 합친 칸은 아래 행에 칸이 아예 없어서, 그 행의 칸이
  * 몇 번째 열인지는 위에서부터 세어야만 안다. 워드는 그 빈자리에도 "위와 이어짐" 칸을 요구한다.
  */
-export function layoutTable(table: JSONContent): { rows: PlacedCell[][]; columns: TableColumn[] } {
+export function layoutTable(table: JSONContent): {
+  rows: PlacedCell[][]
+  columns: TableColumn[]
+  /** 행마다 최소 높이(px). 정한 적 없는 행은 `null`(글에 맞춰 늘어난다). */
+  heights: (number | null)[]
+} {
   const tableRows = table.content ?? []
   // 열마다, 위에서 내려온 합친 칸이 앞으로 몇 행을 더 차지하는지.
-  const held: { rows: number; colspan: number }[] = []
+  const held: { rows: number; colspan: number; node: JSONContent }[] = []
   const widths: number[] = []
   const texts: number[] = []
   let cols = 0
@@ -166,7 +199,13 @@ export function layoutTable(table: JSONContent): { rows: PlacedCell[][]; columns
     const takeHeld = () => {
       while ((held[col]?.rows ?? 0) > 0) {
         held[col].rows -= 1
-        placed.push({ node: null, col, colspan: held[col].colspan, rowspan: 1 })
+        placed.push({
+          node: null,
+          col,
+          colspan: held[col].colspan,
+          rowspan: 1,
+          from: held[col].node,
+        })
         col += held[col].colspan
       }
     }
@@ -176,7 +215,7 @@ export function layoutTable(table: JSONContent): { rows: PlacedCell[][]; columns
       // 표 끝을 넘는 세로 합치기는 남은 행까지만.
       const rowspan = Math.min(span(cell.attrs?.rowspan), tableRows.length - r)
       placed.push({ node: cell, col, colspan, rowspan })
-      held[col] = { rows: rowspan - 1, colspan }
+      held[col] = { rows: rowspan - 1, colspan, node: cell }
       // 합친 칸은 덮은 열마다 너비를 하나씩 갖는다(`colwidth` 는 배열이다).
       const colwidth: unknown = cell.attrs?.colwidth
       for (let i = 0; i < colspan; i += 1) {
@@ -197,7 +236,8 @@ export function layoutTable(table: JSONContent): { rows: PlacedCell[][]; columns
     width: widths[col] ?? null,
     text: texts[col] ?? 0,
   }))
-  return { rows, columns }
+  const heights = tableRows.map((row) => safePx(row.attrs?.height) || null)
+  return { rows, columns, heights }
 }
 
 /**

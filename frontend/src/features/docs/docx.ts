@@ -6,6 +6,7 @@ import { escapeXml } from '@/lib/xlsx'
 import {
   blockFormat,
   bodyBlocks,
+  cellEdges,
   columnWidths,
   fontName,
   fontPoints,
@@ -28,6 +29,8 @@ const STEP = 360
 const MAX_INDENT = STEP * 12
 /** 1px 은 15twip, 그림 단위(EMU)로는 9525 다(96dpi). */
 const PX = 15
+/** 편집기 선 종류 → 워드 선 이름. */
+const WORD_LINE = { solid: 'single', dashed: 'dashed', dotted: 'dotted', double: 'double' }
 const EMU = 9525
 
 const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
@@ -228,14 +231,32 @@ export function buildDocx({ title, doc, images, origin }: ExportSource): Uint8Ar
       .join('')
 
   const table = (node: JSONContent, ctx: Ctx) => {
-    const { rows, columns } = layoutTable(node)
+    const { rows, columns, heights } = layoutTable(node)
     if (!columns.length) return ''
     const grid = columnWidths(columns, (PAGE_WIDTH - ctx.indent) / PX).map((px) =>
       Math.floor(px * PX),
     )
     const inner: Ctx = { indent: 0, depth: 0, quote: false, cell: true, bold: false }
 
-    const cell = ({ node: cellNode, col, colspan, rowspan }: PlacedCell) => {
+    /**
+     * 칸 변 테두리(서식 4차). 세로로 합친 칸은 칸마다 선을 읽으므로, 이어지는 칸에도 첫 칸의 좌우·아래
+     * 선을 적는다. 위 선은 합친 칸 안쪽이라 뺀다.
+     */
+    const borders = (source: JSONContent | undefined, continued: boolean) => {
+      const edges = cellEdges(source?.attrs)
+      const xml = (['top', 'left', 'bottom', 'right'] as const)
+        .map((side) => {
+          const edge = edges[side]
+          if (!edge || (continued && side === 'top')) return ''
+          if (edge === 'none') return `<w:${side} w:val="nil"/>`
+          // 굵기는 1/8pt. 1px = 0.75pt = 6.
+          return `<w:${side} w:val="${WORD_LINE[edge.style]}" w:sz="${edge.px * 6}" w:space="0" w:color="${edge.color}"/>`
+        })
+        .join('')
+      return xml && `<w:tcBorders>${xml}</w:tcBorders>`
+    }
+
+    const cell = ({ node: cellNode, col, colspan, rowspan, from }: PlacedCell) => {
       const header = cellNode?.type === 'tableHeader'
       const merge = !cellNode ? '<w:vMerge/>' : rowspan > 1 ? '<w:vMerge w:val="restart"/>' : ''
       // 칸은 문단으로 끝나야 한다. 빈 칸에도 문단 하나를 넣는다.
@@ -245,6 +266,7 @@ export function buildDocx({ title, doc, images, origin }: ExportSource): Uint8Ar
         `<w:tc><w:tcPr><w:tcW w:w="${sum(grid.slice(col, col + colspan))}" w:type="dxa"/>` +
         (colspan > 1 ? `<w:gridSpan w:val="${colspan}"/>` : '') +
         merge +
+        borders(cellNode ?? from, !cellNode) +
         (fill ? `<w:shd w:val="clear" w:color="auto" w:fill="${fill}"/>` : header ? SHADE : '') +
         `</w:tcPr>${body}</w:tc>`
       )
@@ -263,8 +285,15 @@ export function buildDocx({ title, doc, images, origin }: ExportSource): Uint8Ar
       `<w:tblCellMar><w:top w:w="60" w:type="dxa"/><w:left w:w="120" w:type="dxa"/><w:bottom w:w="60" w:type="dxa"/><w:right w:w="120" w:type="dxa"/></w:tblCellMar>` +
       `</w:tblPr><w:tblGrid>${grid.map((width) => `<w:gridCol w:w="${width}"/>`).join('')}</w:tblGrid>` +
       rows
-        .filter((row) => row.length > 0)
-        .map((row) => `<w:tr>${row.map(cell).join('')}</w:tr>`)
+        .map((row, r) => {
+          if (!row.length) return ''
+          // 편집기의 행 높이는 최소 높이다(글이 넘치면 늘어난다).
+          const height = heights[r]
+          const props = height
+            ? `<w:trPr><w:trHeight w:val="${height * PX}" w:hRule="atLeast"/></w:trPr>`
+            : ''
+          return `<w:tr>${props}${row.map(cell).join('')}</w:tr>`
+        })
         .join('') +
       `</w:tbl>`
     )

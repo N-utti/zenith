@@ -6,6 +6,7 @@ import { escapeXml } from '@/lib/xlsx'
 import {
   blockFormat,
   bodyBlocks,
+  cellEdges,
   columnWidths,
   fontName,
   fontPoints,
@@ -14,7 +15,9 @@ import {
   safeHref,
   sum,
   wholeNumber,
+  type CellEdge,
   type ExportSource,
+  type Side,
 } from './exportContent'
 
 /** 길이 단위(HWPUNIT)는 1/7200 인치다. 1px 은 75, 1pt 는 100. */
@@ -129,19 +132,40 @@ interface Ctx {
 }
 const deeper = (ctx: Ctx): Ctx => ({ ...ctx, indent: Math.min(ctx.indent + STEP, MAX_INDENT) })
 
+/** 편집기 선 종류 → 한글 선 종류. */
+const HWP_LINE = { solid: 'SOLID', dashed: 'DASH', dotted: 'DOT', double: 'DOUBLE_SLIM' }
+/** 한글이 받는 선 굵기(mm). 이 목록 밖의 값은 한글이 읽지 못한다. */
+const HWP_WIDTHS = '0.12 0.15 0.2 0.25 0.3 0.4 0.5 0.6 0.7 1.0 1.5 2.0'.split(' ')
+/**
+ * px 굵기 → 가장 가까운 한글 굵기(1px = 0.2646mm). 1px 은 편집기의 가는 선이라 칸 기본 선(0.12 mm)과
+ * 맞춘다. 가져오기(서버)는 0.12 mm 를 1px 로 읽으니 다시 가져와도 같은 값이다.
+ */
+const hwpWidth = (px: number) => {
+  const gap = (mm: string) => Math.abs(Number(mm) - px * 0.2646)
+  const mm = px <= 1 ? '0.12' : HWP_WIDTHS.reduce((best, w) => (gap(w) < gap(best) ? w : best))
+  return `${mm} mm`
+}
+
 function borderFill(
   id: number,
   sides: string[],
   width: string,
   color: string,
   fill?: { face: string; hatch: string },
+  edges: Partial<Record<Side, CellEdge>> = {},
 ): string {
-  const side = (name: string) =>
-    `<hh:${name}Border type="${sides.includes(name) ? 'SOLID' : 'NONE'}" width="${width}" color="#${color}"/>`
+  const side = (name: Side) => {
+    // 칸 변 테두리(서식 4차)가 적힌 변은 그 값이 이긴다.
+    const edge = edges[name]
+    if (edge === 'none') return `<hh:${name}Border type="NONE" width="${width}" color="#${color}"/>`
+    if (edge)
+      return `<hh:${name}Border type="${HWP_LINE[edge.style]}" width="${hwpWidth(edge.px)}" color="#${edge.color}"/>`
+    return `<hh:${name}Border type="${sides.includes(name) ? 'SOLID' : 'NONE'}" width="${width}" color="#${color}"/>`
+  }
   return (
     `<hh:borderFill id="${id}" threeD="0" shadow="0" centerLine="NONE" breakCellSeparateLine="0">` +
     `<hh:slash type="NONE" Crooked="0" isCounter="0"/><hh:backSlash type="NONE" Crooked="0" isCounter="0"/>` +
-    ['left', 'right', 'top', 'bottom'].map(side).join('') +
+    (['left', 'right', 'top', 'bottom'] as const).map(side).join('') +
     `<hh:diagonal type="SOLID" width="0.1 mm" color="#000000"/>` +
     (fill
       ? `<hc:fillBrush><hc:winBrush faceColor="${fill.face}" hatchColor="${fill.hatch}" alpha="0"/></hc:fillBrush>`
@@ -258,10 +282,15 @@ export function buildHwpx({ title, doc, images, origin }: ExportSource): Uint8Ar
    * 번호는 고정 목록 다음(8)부터다.
    */
   const cellFills = new Map<string, number>()
-  const cellFill = (lines: boolean, face: string | null) => {
-    if (lines && face === null) return BORDER.cell
-    if (lines && face === FILL) return BORDER.headerCell
-    const key = JSON.stringify([lines, face])
+  const cellFill = (
+    lines: boolean,
+    face: string | null,
+    edges: Partial<Record<Side, CellEdge>> = {},
+  ) => {
+    const plain = Object.keys(edges).length === 0
+    if (plain && lines && face === null) return BORDER.cell
+    if (plain && lines && face === FILL) return BORDER.headerCell
+    const key = JSON.stringify([lines, face, edges])
     const id = cellFills.get(key) ?? Math.max(...Object.values(BORDER)) + 1 + cellFills.size
     cellFills.set(key, id)
     return id
@@ -413,7 +442,7 @@ export function buildHwpx({ title, doc, images, origin }: ExportSource): Uint8Ar
       .join('')
 
   const table = (node: JSONContent) => {
-    const { rows, columns } = layoutTable(node)
+    const { rows, columns, heights } = layoutTable(node)
     // 위에서 내려온 합친 칸뿐인 행은 쓸 칸이 없다. 칸 없는 행은 한글이 거부하므로 행째 뺀다.
     const kept = rows.map((row) => row.some((cell) => cell.node))
     const rowCount = kept.filter(Boolean).length
@@ -424,21 +453,27 @@ export function buildHwpx({ title, doc, images, origin }: ExportSource): Uint8Ar
     const margin = 'left="510" right="510" top="141" bottom="141"'
     // 테두리 없는 표(서식 3차)는 칸·표 모두 선 없는 테두리를 가리킨다.
     const lines = node.attrs?.borders !== 'none'
-    /** 행 높이는 칸 위아래 여백만 적는다. 한글이 글에 맞춰 늘린다. */
+    /**
+     * 행 높이. 정한 적 없는 행은 칸 위아래 여백만 적고 한글이 글에 맞춰 늘린다. 편집기에서 정한 높이
+     * (가져온 행 높이 포함)는 최소 높이로 적는다. 칸 없어 뺀 행은 세지 않는다.
+     * 한계: 뺀 행에 정한 높이는 버려진다(그 행을 덮은 합친 칸이 그만큼 낮아진다). 드물어서 두었다.
+     */
     const ROW = 282
+    const rowHeights = heights.filter((_, r) => kept[r]).map((px) => Math.max(ROW, (px ?? 0) * PX))
 
     const tc = (cell: JSONContent | null, col: number, row: number, colSpan = 1, rowSpan = 1) => {
       const header = cell?.type === 'tableHeader'
       // 칸 배경색(서식 3차)이 머리 칸의 회색보다 이긴다.
       const face = hexColor(cell?.attrs?.backgroundColor) ?? (header ? FILL : null)
+      const fillId = cellFill(lines, face, cellEdges(cell?.attrs))
       return (
-        `<hp:tc name="" header="0" hasMargin="0" protect="0" editable="0" dirty="0" borderFillIDRef="${cellFill(lines, face)}">` +
+        `<hp:tc name="" header="0" hasMargin="0" protect="0" editable="0" dirty="0" borderFillIDRef="${fillId}">` +
         `<hp:subList id="" textDirection="HORIZONTAL" lineWrap="BREAK" vertAlign="TOP" linkListIDRef="0" linkListNextIDRef="0" textWidth="0" textHeight="0" hasTextRef="0" hasNumRef="0">` +
         // 빈 칸에도 문단 하나는 있어야 한다.
         (blocks(cell?.content, { ...inner, bold: header }) || para('', inner)) +
         `</hp:subList>` +
         `<hp:cellAddr colAddr="${col}" rowAddr="${row}"/><hp:cellSpan colSpan="${colSpan}" rowSpan="${rowSpan}"/>` +
-        `<hp:cellSz width="${sum(grid.slice(col, col + colSpan))}" height="${ROW * rowSpan}"/>` +
+        `<hp:cellSz width="${sum(grid.slice(col, col + colSpan))}" height="${sum(rowHeights.slice(row, row + rowSpan))}"/>` +
         `<hp:cellMargin ${margin}/></hp:tc>`
       )
     }
@@ -487,7 +522,7 @@ export function buildHwpx({ title, doc, images, origin }: ExportSource): Uint8Ar
     // 글자처럼 취급하지 않는 표여야 쪽을 넘길 때 나뉜다. 글자처럼 취급하면 한글이 아래를 잘라 그린다.
     const tbl =
       `<hp:tbl id="${++serial}" zOrder="0" numberingType="TABLE" textWrap="TOP_AND_BOTTOM" textFlow="BOTH_SIDES" lock="0" dropcapstyle="None" pageBreak="CELL" repeatHeader="0" rowCnt="${rowCount}" colCnt="${columns.length}" cellSpacing="0" borderFillIDRef="${cellFill(lines, null)}" noAdjust="0">` +
-      `<hp:sz width="${sum(grid)}" widthRelTo="ABSOLUTE" height="${ROW * rowCount}" heightRelTo="ABSOLUTE" protect="0"/>` +
+      `<hp:sz width="${sum(grid)}" widthRelTo="ABSOLUTE" height="${sum(rowHeights)}" heightRelTo="ABSOLUTE" protect="0"/>` +
       `<hp:pos treatAsChar="0" affectLSpacing="0" flowWithText="1" allowOverlap="0" holdAnchorAndSO="0" vertRelTo="PARA" horzRelTo="COLUMN" vertAlign="TOP" horzAlign="LEFT" vertOffset="0" horzOffset="0"/>` +
       `<hp:outMargin left="0" right="0" top="0" bottom="0"/><hp:inMargin ${margin}/>` +
       body +
@@ -631,7 +666,11 @@ export function buildHwpx({ title, doc, images, origin }: ExportSource): Uint8Ar
     borderFill(BORDER.rule, ['bottom'], '0.12 mm', LINE),
     borderFill(BORDER.code, [], '0.1 mm', '000000', solid),
     ...[...cellFills].map(([key, id]) => {
-      const [lines, face] = JSON.parse(key) as [boolean, string | null]
+      const [lines, face, edges] = JSON.parse(key) as [
+        boolean,
+        string | null,
+        Partial<Record<Side, CellEdge>>,
+      ]
       const sides = lines ? ['left', 'right', 'top', 'bottom'] : []
       return borderFill(
         id,
@@ -639,6 +678,7 @@ export function buildHwpx({ title, doc, images, origin }: ExportSource): Uint8Ar
         '0.12 mm',
         LINE,
         face ? { face: `#${face}`, hatch: '#FF000000' } : undefined,
+        edges,
       )
     }),
   ]
