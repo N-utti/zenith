@@ -16,6 +16,8 @@ data-ref·width·alt(img — 파일 안의 그림, data-ref 는 `Converted.image
 스레드로 돌린다(`asyncio.to_thread`).
 """
 
+import base64
+import binascii
 import hashlib
 import html
 import io
@@ -26,12 +28,14 @@ import zipfile
 from dataclasses import dataclass, field
 from html.parser import HTMLParser
 
+import httpx
 import openpyxl
 
 from app import storage
 from app.ai.extract import _HP, MAX_XLSX_CELLS, Empty, Unsupported, _zip, hwpx_sections
+from app.config import settings
 
-SUPPORTED = ("docx", "xlsx", "hwpx")
+SUPPORTED = ("docx", "xlsx", "hwpx", "hwp")
 TIMEOUT_S = 60.0  # 변환 한 건 상한 — 스레드는 못 끊지만 요청은 422 로 돌려준다(ai.py ATTACH_EXTRACT_TIMEOUT_S 와 같다)
 MAX_XML_BYTES = (
     2 * 1024 * 1024
@@ -103,6 +107,16 @@ class TooLarge(ValueError):
     """본문 XML 이 MAX_XML_BYTES 를 넘는다 — 형식은 맞지만 받지 않는다."""
 
 
+class HwpUnavailable(RuntimeError):
+    """구형 hwp 변환기(infra/hwp 컨테이너)에 닿지 못했다 — 파일 탓이 아니라 503."""
+
+
+MAX_HWP5_XML_BYTES = (
+    32 * 1024 * 1024
+)  # hwp5proc xml 은 장황하고(LineSeg…) 그림이 base64 로 들어 있다. ET 트리는 XML 의 5~6배(리뷰)
+_OLE_MAGIC = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
+
+
 def _parse_xml(z: zipfile.ZipFile, path: str):
     """zip 안 XML 하나. 없으면 None. 크기는 MAX_XML_BYTES(본문뿐 아니라 styles·numbering·rels·header 도 — 9MB 빈 스타일
     반복이 9초·115MB 였다, 리뷰), DOCTYPE·내부 엔티티는 거부(474바이트가 6.9MB 로 부풀었다, Codex) — 워드·한글은 안 쓴다."""
@@ -136,9 +150,11 @@ def to_html(name: str, data: bytes) -> Converted:
             raw, cut = _Docx(_zip(data), images).run()
         elif ext == "xlsx":
             raw, cut = _xlsx(data)
+        elif ext == "hwp":
+            raw, cut = _Hwp5(_hwp5_xml(data), images).run()
         else:
             raw, cut = _Hwpx(_zip(data), images).run()
-    except (Unsupported, Empty, TooLarge):
+    except (Unsupported, Empty, TooLarge, HwpUnavailable, TimeoutError):
         raise
     except Exception as e:  # noqa: BLE001 — ET.ParseError·KeyError(zip 항목 없음)·zlib.error… 전부 형식 오류
         raise Unsupported(ext) from e
@@ -498,12 +514,26 @@ def _image_tag(
     """zip 안의 그림을 꺼내 `images` 에 넣고 `<img data-ref>` 를 돌려준다. 같은 파일을 여러 번 넣은 문서는 한 번만
     올린다(`seen`: 경로 → 번호). 형식이 아니거나(emf·wmf·svg) 너무 크거나 장수가 찼으면 빈 문자열 — 그 자리는 조용히
     비운다(사진 한 장 때문에 가져오기를 막지 않는다)."""
-    width = f' width="{width_px}"' if width_px and 0 < width_px <= 4000 else ""
     if path in seen:
-        return f'<img data-ref="{seen[path]}"{width}>'
+        return _image_bytes(b"", path, images, width_px, seen)
     if path not in z.namelist() or z.getinfo(path).file_size > MAX_IMAGE_BYTES:
         return ""
-    data = z.read(path)
+    return _image_bytes(z.read(path), path, images, width_px, seen)
+
+
+def _image_bytes(
+    data: bytes,
+    key: str,
+    images: list[tuple[bytes, str]],
+    width_px: int | None,
+    seen: dict[str, int],
+) -> str:
+    """그림 바이트 하나 → `images` 에 넣고 `<img data-ref>`. `key`(zip 경로·BinData 번호)가 이미 있으면 그 번호를 다시 쓴다."""
+    width = f' width="{width_px}"' if width_px and 0 < width_px <= 4000 else ""
+    if key in seen:
+        return f'<img data-ref="{seen[key]}"{width}>'
+    if len(data) > MAX_IMAGE_BYTES:
+        return ""
     content_type = storage.sniff_image(data)
     if content_type is None:
         return ""
@@ -515,8 +545,8 @@ def _image_tag(
             return ""
         images.append((data, content_type))
         seen[digest] = len(images) - 1
-    seen[path] = seen[digest]
-    return f'<img data-ref="{seen[path]}"{width}>'
+    seen[key] = seen[digest]
+    return f'<img data-ref="{seen[key]}"{width}>'
 
 
 # ── docx ─────────────────────────────────────────────────────────────────────────
@@ -1487,3 +1517,279 @@ class _Hwpx:
             else None
         )
         return _image_tag(self.z, path, self.images, width, self.seen)
+
+
+# ── hwp (구형 HWP 5 바이너리) ───────────────────────────────────────────────────────
+
+
+def _hwp5_xml(data: bytes):
+    """구형 hwp 는 pyhwp(AGPL) 컨테이너(infra/hwp)가 `hwp5proc xml --embedbin` 으로 바꿔 준다 — api 프로세스에는 pyhwp 가
+    없다(라이선스 경계 = 네트워크). HWP_URL 이 비면 미지원(「hwpx 로 저장」 안내), 컨테이너에 못 닿으면 503."""
+    if not settings.hwp_url:
+        raise Unsupported("hwp")
+    if not data.startswith(_OLE_MAGIC):
+        raise Unsupported("hwp")  # OLE 복합 파일이 아니다 — 보내 보지도 않는다
+    parser = ET.XMLParser()  # 받으면서 바로 먹인다 — 32MB 를 두 번 들고 있지 않게(리뷰)
+    total = 0
+    try:
+        with httpx.stream(
+            "POST",
+            f"{settings.hwp_url.rstrip('/')}/convert",
+            content=data,
+            headers={"Content-Type": "application/octet-stream"},
+            # 서버 45초 < 여기 55초 < 라우터 60초 — 어느 쪽이 먼저 끊어도 결과가 버려지지 않게(리뷰)
+            timeout=httpx.Timeout(55, connect=5),
+        ) as r:
+            if r.status_code == 504:
+                raise TimeoutError("hwp")
+            if r.status_code != 200:
+                raise Unsupported("hwp")
+            for chunk in r.iter_bytes():
+                if total == 0 and (b"<!DOCTYPE" in chunk or b"<!ENTITY" in chunk):
+                    raise Unsupported(
+                        "xml-dtd"
+                    )  # DOCTYPE 는 루트 앞에만 올 수 있다 — 첫 조각만 보면 된다
+                total += len(chunk)
+                if total > MAX_HWP5_XML_BYTES:
+                    raise TooLarge("hwp")
+                parser.feed(chunk)
+    except httpx.HTTPError as e:
+        raise HwpUnavailable() from e
+    return parser.close()
+
+
+_HWP5_ALIGN = {"center": "center", "right": "right", "both": "justify", "distribute": "justify"}
+_HWP5_CHARS = {  # pyhwp ControlChar 이름 → 글자. 나머지(필드 시작/끝·책갈피·쪽 번호…)는 버린다
+    "LINE_BREAK": "<br>",
+    "TAB": " ",
+    "NONBREAK_SPACE": " ",
+    "FIXWIDTH_SPACE": " ",
+    "HYPHEN": "-",
+}
+_HWP5_SIDES = ("top", "right", "bottom", "left")
+
+
+class _Hwp5:
+    """`hwp5proc xml` 결과를 hwpx 와 같은 규칙으로. DocInfo 의 FaceName(언어별 묶음 — 앞 `ko-fonts` 개가 한글 글꼴)·CharShape·
+    ParaShape(0-based)·BorderFill·BinData(1-based, base64 내장)를 번호로 대조하고, 문단은 BodyText 아래 Paragraph(표 안 문단은
+    TableCell 이 다시 연다) → LineSeg → Text/ControlChar/TableControl/GShapeObjectControl 순서대로. 문단 기본값은 Style 0(바탕글)의
+    글자·문단 모양 — 같은 글꼴·크기·줄 간격·여백은 싣지 않는다(hwpx 의 id 0 과 같은 규칙).
+    ponytail: 취소선(CharShape 에 속성 없음)·하이퍼링크·글머리표는 제외, 그림은 내장(BinDataEmbedding)만."""
+
+    def __init__(self, root, images: list[tuple[bytes, str]]) -> None:
+        self.images = images
+        self.seen: dict[str, int] = {}
+        self._lifted: list[str] = []
+        self._depth = 0
+        info = root.find("DocInfo")
+        body = root.find("BodyText")
+        if info is None or body is None:
+            raise Unsupported("hwp")
+        self.body = body
+        idm = info.find("IdMappings")
+        n_ko = int(idm.get("ko-fonts")) if idm is not None and _digits(idm.get("ko-fonts")) else 0
+        faces = [f.get("name", "") for f in info.iter("FaceName")][:n_ko]
+        self.char: list[dict] = []
+        for cs in info.iter("CharShape"):
+            ff = cs.find("FontFace")
+            ko = ff.get("ko", "") if ff is not None else ""
+            self.char.append(
+                {
+                    "bold": cs.get("bold") == "1",
+                    "italic": cs.get("italic") == "1",
+                    "underline": cs.get("underline", "none") not in ("none", "0"),
+                    "color": None
+                    if cs.get("text-color", "#000000").lower() in ("#000000", "none")
+                    else _hex(cs.get("text-color")),
+                    "bg": None
+                    if cs.get("shade-color", "#ffffff").lower() in ("#ffffff", "none")
+                    else _hex(cs.get("shade-color")),
+                    "font": _font(faces[int(ko)]) if _digits(ko) and int(ko) < len(faces) else None,
+                    "size": _pt(int(cs.get("basesize")) / 100)
+                    if _digits(cs.get("basesize"))
+                    else None,  # 1/100pt
+                }
+            )
+        self.para: list[dict] = []
+        self.para_extra: list[dict] = []
+        for ps in info.iter("ParaShape"):
+            level = None
+            if ps.get("head-shape") == "outline" and _digits(ps.get("level")):
+                level = min(6, int(ps.get("level")) + 1)
+            self.para.append({"align": _HWP5_ALIGN.get(ps.get("align", "")), "level": level})
+            extra: dict = {}
+            if ps.get("linespacing-type") == "ratio" and _digits(ps.get("linespacing")):
+                extra["line_height"] = _line_height(int(ps.get("linespacing")) / 100)
+            for key, attr in (
+                ("indent", "doubled-margin-left"),
+                ("space_before", "doubled-margin-top"),
+                ("space_after", "doubled-margin-bottom"),
+            ):
+                v = ps.get(attr, "")
+                if _digits(v) and int(v) > 0:
+                    extra[key] = round(int(v) / 2 / _HWPUNIT_PER_PX) or None  # 두 배로 적힌 HWPUNIT
+            self.para_extra.append(extra)
+        self.fills: list[dict] = [{}]  # borderfill-id 는 1-based(0 = 없음)
+        for bf in info.iter("BorderFill"):
+            sides = {b.get("attribute-name", ""): b for b in bf.findall("Border")}
+            fc = bf.find("FillColorPattern")
+            filled = (
+                bf.get("colorpattern") == "1"
+            )  # 그러데이션·그림 채우기의 남은 색은 배경이 아니다(리뷰)
+            bg = _hex(fc.get("background-color")) if fc is not None and filled else None
+            self.fills.append(
+                {
+                    "bg": None if bg in ("#ffffff", None) else bg,
+                    "borderless": all(
+                        sd is None or sd.get("stroke-type", "none") == "none"
+                        for sd in (sides.get(k) for k in _HWP5_SIDES)
+                    ),
+                    "sides": {
+                        k: _border_css(
+                            sd.get("stroke-type"), _px_from_mm(sd.get("width")), sd.get("color")
+                        )
+                        if (sd := sides.get(k)) is not None
+                        else None
+                        for k in _HWP5_SIDES
+                    },
+                }
+            )
+        self.bins = [None] + [bd.find("BinDataEmbedding") for bd in info.iter("BinData")]  # 1-based
+        # 기본값 = Style 0(바탕글)의 글자·문단 모양
+        style = next(info.iter("Style"), None)  # IdMappings 아래
+        base = self._at(self.char, style.get("charshape-id") if style is not None else None)
+        base_font, base_size = base.get("font"), base.get("size")
+        for cs in self.char:
+            if cs["font"] == base_font:
+                cs["font"] = None
+            if cs["size"] == base_size:
+                cs["size"] = None
+        basex = dict(
+            self._at(self.para_extra, style.get("parashape-id") if style is not None else None)
+        )
+        for extra in self.para_extra:
+            for key, value in basex.items():
+                if value is not None and extra.get(key) == value:
+                    extra[key] = None
+
+    @staticmethod
+    def _at(items: list, idx: str | None) -> dict:
+        return items[int(idx)] if _digits(idx) and int(idx) < len(items) else {}
+
+    def run(self) -> tuple[str, bool]:
+        return "".join(self._block(p) for p in self._paragraphs(self.body)), False
+
+    def _paragraphs(self, node):
+        """최상위 문단 — Paragraph 를 만나면 그 안(표 안 문단)으로는 내려가지 않는다. 구역·단 설정은 그냥 지난다."""
+        for ch in node:
+            if ch.tag == "Paragraph":
+                yield ch
+            else:
+                yield from self._paragraphs(ch)
+
+    def _block(self, p) -> str:
+        pid = p.get("parashape-id")
+        pr = self._at(self.para, pid)
+        extra = self._at(self.para_extra, pid)
+        tag = f"h{pr['level']}" if pr.get("level") else "p"
+        out: list[str] = []
+        text: list[str] = []
+
+        def flush() -> None:
+            if line := "".join(text).strip():
+                out.append(_block(tag, line, pr.get("align"), extra))
+            text.clear()
+
+        def inline(node) -> None:
+            for el in node:
+                if el.tag == "Text":
+                    marks = self._at(self.char, el.get("charshape-id"))
+                    text.append(_wrap(html.escape(el.text or "", quote=False), **marks))
+                elif el.tag == "ControlChar":
+                    text.append(_HWP5_CHARS.get(el.get("name", ""), ""))
+                elif el.tag == "TableControl":
+                    flush()
+                    (self._lifted if self._depth else out).append(
+                        self._table(el)
+                    )  # 칸 안의 표는 바깥 표 뒤로
+                elif el.tag == "GShapeObjectControl":
+                    flush()
+                    out.append(self._pic(el))
+                elif el.tag.startswith("Field"):
+                    inline(
+                        el
+                    )  # 계산식(FieldFormula)·하이퍼링크(FieldHyperLink) 안의 글자 — 합계 금액이 비지 않게(리뷰)
+
+        for seg in p.findall("LineSeg"):
+            inline(seg)
+        flush()
+        if not out:
+            out.append("<p></p>")  # 일부러 띄운 빈 줄
+        return "".join(out)
+
+    def _fill(self, fid: str | None) -> dict:
+        return self.fills[int(fid)] if _digits(fid) and 0 < int(fid) < len(self.fills) else {}
+
+    def _table(self, ctl) -> str:
+        body = ctl.find("TableBody")
+        if body is None:
+            return ""
+        lifted, self._lifted = self._lifted, []
+        self._depth += 1
+        refs = [body.get("borderfill-id")] + [
+            tc.get("borderfill-id") for tc in body.findall("TableRow/TableCell")
+        ]
+        borderless = all(self._fill(r).get("borderless") for r in refs)
+        rows: list[str] = []
+        for tr in body.findall("TableRow"):
+            cells: list[str] = []
+            height = 0
+            for tc in tr.findall("TableCell"):
+                inner = "".join(self._block(p) for p in tc.findall("Paragraph")) or "<p></p>"
+                attrs = ""
+                for key in ("colspan", "rowspan"):
+                    if (v := tc.get(key, "1")) != "1" and _digits(v):
+                        attrs += f' {key}="{v}"'  # 상한은 필터가 본다
+                style = []
+                fill = self._fill(tc.get("borderfill-id"))
+                if fill.get("bg"):
+                    style.append(f"background-color:{fill['bg']}")
+                if w := _px_from_hwpunit(tc.get("width")):
+                    style.append(f"width:{w}px")
+                if tc.get("rowspan", "1") == "1" and (h := _px_from_hwpunit(tc.get("height"))):
+                    height = max(height, h)
+                style += _cell_border_style(fill.get("sides", {}), borderless)
+                if style:
+                    attrs += f' style="{";".join(style)}"'
+                cells.append(f"<td{attrs}>{inner}</td>")
+            tr_style = f' style="height:{height}px"' if height else ""
+            rows.append(f"<tr{tr_style}>{''.join(cells)}</tr>")
+        self._depth -= 1
+        borders = ' data-borders="none"' if borderless else ""
+        table = f"<table{borders}>{''.join(rows)}</table>" + "".join(self._lifted)
+        self._lifted = lifted
+        return table
+
+    def _pic(self, gso) -> str:
+        info = gso.find(".//PictureInfo")
+        bid = info.get("bindata-id") if info is not None else None
+        key = f"bin:{bid}"
+        width = _px_from_hwpunit(gso.get("width"))
+        if key in self.seen:  # 같은 그림을 또 넣은 자리 — 다시 풀지 않는다(9MB 300번 = 8.8초, 리뷰)
+            return (
+                _image_bytes(b"", key, self.images, width, self.seen) if self.seen[key] >= 0 else ""
+            )
+        emb = self.bins[int(bid)] if _digits(bid) and 0 < int(bid) < len(self.bins) else None
+        b64 = (emb.text or "").strip() if emb is not None else ""
+        data = b""
+        if (
+            b64 and len(b64) <= MAX_IMAGE_BYTES * 4 // 3 + 4
+        ):  # 연결 그림(storage=link)·너무 큰 그림은 비운다
+            try:
+                data = base64.b64decode(b64)
+            except (ValueError, binascii.Error):
+                data = b""
+        tag = _image_bytes(data, key, self.images, width, self.seen) if data else ""
+        if not tag:
+            self.seen[key] = -1  # 못 쓰는 그림도 기억 — 참조마다 다시 풀지 않게
+        return tag

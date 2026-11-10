@@ -35,6 +35,8 @@ class Settings(BaseSettings):
     # 벡터 검색(README 45) — Ollama 의 `/api/embed`(bge-m3). 비우면 색인·벡터 검색이 꺼지고 핵심어(FTS)만 쓴다
     # (CI·개발 PC 는 꺼진 채로 돈다). compose 는 `http://ollama:11434`.
     embed_url: str | None = None
+    # 구형 .hwp 변환기(README 65) — infra/hwp 컨테이너의 `POST /convert`. 비우면 .hwp 가져오기는 미지원(hwpx 로 저장 안내).
+    hwp_url: str | None = None
     embed_model: str = "bge-m3:567m"  # 태그 고정 — latest 가 바뀌어 차원이 달라지지 않게
     # 규정 폴더(README 46) — 있으면 그 폴더(하위 포함)의 「AI 근거로 쓰기」 문서 전문을 질문마다 시스템 프롬프트에
     # 넣는다(프롬프트 캐시). 비면 검색 도구만. 전문 합이 ai_rules_max_chars 를 넘으면 넣지 않고 경고만(검색으로 폴백).
