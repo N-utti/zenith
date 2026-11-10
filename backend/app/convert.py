@@ -67,15 +67,32 @@ _COLOR_RE = re.compile(r"^#([0-9a-f]{6}|[0-9a-f]{3})$", re.IGNORECASE)
 _SPAN_COLOR_RE = re.compile(r"(?<![-\w])color\s*:\s*(#[0-9a-f]{3,6})\b", re.IGNORECASE)
 MAX_ALT = 200
 # 서식 3차(README 63) — 편집기 속성 계약(#574)과 같은 범위·단위. 값은 늘 여기서 다시 써서 꼬리가 남지 않는다
-_LINE_HEIGHT_RE = re.compile(r"line-height\s*:\s*(\d+(?:\.\d+)?)\s*(?:;|$)", re.IGNORECASE)
+_LINE_HEIGHT_RE = re.compile(
+    r"line-height\s*:\s*(\d+(?:\.\d+)?)\s*(?:;|$)", re.IGNORECASE | re.ASCII
+)
 _MARGIN_RE = {
-    k: re.compile(rf"{k}\s*:\s*(\d+)px\b", re.IGNORECASE)
+    k: re.compile(rf"{k}\s*:\s*(\d+)px\b", re.IGNORECASE | re.ASCII)
     for k in ("margin-left", "margin-top", "margin-bottom")
 }
 _FONT_FAMILY_RE = re.compile(r"font-family\s*:\s*([^;]+)", re.IGNORECASE)
-_FONT_SIZE_RE = re.compile(r"font-size\s*:\s*(\d+(?:\.\d+)?)pt\b", re.IGNORECASE)
+_FONT_SIZE_RE = re.compile(r"font-size\s*:\s*(\d+(?:\.\d+)?)pt\b", re.IGNORECASE | re.ASCII)
 _BG_RE = re.compile(r"background-color\s*:\s*(#[0-9a-f]{3,6})\b", re.IGNORECASE)
-_WIDTH_RE = re.compile(r"(?<![-\w])width\s*:\s*(\d+)px\b", re.IGNORECASE)
+_WIDTH_RE = re.compile(r"(?<![-\w])width\s*:\s*(\d+)px\b", re.IGNORECASE | re.ASCII)
+# 서식 4차(README 64) — 행 높이(tr)·칸 변 테두리(td·th). 값은 계약(#574) 모양 그대로: `1px solid #000000` 또는 `none`
+_HEIGHT_RE = re.compile(r"(?<![-\w])height\s*:\s*(\d{1,4})px\b", re.IGNORECASE | re.ASCII)
+_BORDER_RE = re.compile(
+    r"border-(top|right|bottom|left)\s*:\s*(?:(none)|([1-8])px\s+(solid|dashed|dotted|double)\s+(#[0-9a-f]{3,6}))\b",
+    re.IGNORECASE | re.ASCII,
+)
+MAX_ROW_HEIGHT = 2000
+_PLAIN_BORDER = "1px solid #000000"  # 편집기 기본 선과 같은 값 — 싣지 않는다
+_SIDE_NAMES = {  # docx 는 left/right 를 start/end 로 적기도 한다
+    "top": ("top",),
+    "right": ("right", "end"),
+    "bottom": ("bottom",),
+    "left": ("left", "start"),
+}
+_MM_RE = re.compile(r"\s*(\d{1,3}(?:\.\d+)?)\s*mm")
 _FONT_OK = re.compile(
     r"[^\w\s가-힣.,\-]"
 )  # 글꼴 이름에 남길 글자 — 따옴표는 전부 지우고 필요하면 _font 가 다시 감싼다
@@ -246,6 +263,44 @@ def _px_from_hwpunit(value: str | None) -> int | None:
     return round(int(value) / _HWPUNIT_PER_PX)
 
 
+def _px_from_mm(value: str | None) -> float | None:
+    """한글 선 굵기 `"0.12 mm"` → px."""
+    m = _MM_RE.match(value or "")
+    return float(m.group(1)) * 96 / 25.4 if m else None
+
+
+def _border_css(style: str | None, px: float | None, color: str | None) -> str | None:
+    """칸 한 변 → 계약(#574) 값 `"1px solid #000000"` 또는 `"none"`. style 이 없으면 정해진 게 없다(None) — 편집기 기본 선."""
+    if not style:
+        return None
+    kind = style.strip().lower()
+    if kind in ("none", "nil"):
+        return "none"
+    width = min(8, max(1, round(px or 1)))
+    return f"{width}px {_border_kind(kind)} {_hex(color) or '#000000'}"
+
+
+def _border_kind(kind: str) -> str:
+    """워드 w:val(dashed·dotDash·thinThickSmallGap…)·한글 type(DASH_DOT·DOT·SLIM_THICK…) → CSS 선 종류 넷."""
+    if "dash" in kind:
+        return "dashed"
+    if "dot" in kind or kind == "circle":  # 한글 CIRCLE 은 동그란 점선
+        return "dotted"
+    if "double" in kind or "thick" in kind or "triple" in kind:
+        return "double"
+    return "solid"
+
+
+def _cell_border_style(sides: dict[str, str | None], borderless: bool) -> list[str]:
+    """칸 네 변 중 실을 것 — 표가 테두리 없음이면 `none` 은 이미 그렇고, 아니면 기본 선과 같은 값은 싣지 않는다."""
+    skip = "none" if borderless else _PLAIN_BORDER
+    return [
+        f"border-{side}:{css}"
+        for side in ("top", "right", "bottom", "left")
+        if (css := sides.get(side)) and css != skip
+    ]
+
+
 def _line_height(ratio: float | None) -> str | None:
     """줄 간격 배수 — 0.5~5, 1.0 은 기본이라 싣지 않는다."""
     if ratio is None or not (0.5 <= ratio <= 5) or abs(ratio - 1.0) < 0.01:
@@ -319,8 +374,18 @@ class _Filter(HTMLParser):
                     parts.append(f"background-color:{c}")
                 if (m := _WIDTH_RE.search(value)) and 0 < int(m.group(1)) <= 4000:
                     parts.append(f"width:{m.group(1)}px")
+                sides: dict[str, str] = {}  # 같은 변이 두 번 오면 마지막 것
+                for m in _BORDER_RE.finditer(value):
+                    if m.group(2):
+                        sides[m.group(1).lower()] = "none"
+                    elif c := _hex(m.group(5)):
+                        sides[m.group(1).lower()] = f"{m.group(3)}px {m.group(4).lower()} {c}"
+                parts += [f"border-{side}:{css}" for side, css in sides.items()]
                 if parts:
                     kept["style"] = ";".join(parts)
+            elif tag == "tr" and key == "style":
+                if (m := _HEIGHT_RE.search(value)) and 0 < int(m.group(1)) <= MAX_ROW_HEIGHT:
+                    kept["style"] = f"height:{m.group(1)}px"
             elif tag == "table" and key == "data-borders" and value == "none":
                 kept["data-borders"] = "none"
             elif tag == "mark" and key == "data-color":
@@ -515,6 +580,7 @@ class _Docx:
         self.nums = self._numbering()
         self.rels = self._rels()
         self.theme = self._theme()
+        self._lifted: list[str] = []  # 칸 안의 표 — 바깥 표 바로 뒤에 낸다(서식 4차)
         self.default_line: str | None = None
         self.default_font, self.default_size = self._defaults()
         self.out: list[str] = []
@@ -664,9 +730,11 @@ class _Docx:
             if el.tag == f"{_W}p":
                 self._para(el, out, in_cell)
             elif el.tag == f"{_W}tbl":
-                if not in_cell:
+                if in_cell:
+                    self._table(el, self._lifted)  # 편집기 셀은 문단만 받는다 — 바깥 표 뒤로 꺼낸다
+                else:
                     self._close_lists(0)
-                self._table(el, out)
+                    self._table(el, out)
             elif el.tag in _CONTAINERS:
                 self._blocks(el, out, in_cell)
 
@@ -727,14 +795,30 @@ class _Docx:
             self.out.append(("</li>" if open_li else "") + f"</{tag}>")
 
     def _table(self, tbl, out: list[str]) -> None:
-        """행·칸을 격자에 놓는다 — gridSpan 은 colspan, vMerge 는 시작 칸에 rowspan 을 주고 이어지는 칸은 뺀다(Codex 리뷰)."""
-        grid: list[list[dict]] = []  # 행마다 낼 칸들 {html, tag, colspan, rowspan}
+        """행·칸을 격자에 놓는다 — gridSpan 은 colspan, vMerge 는 시작 칸에 rowspan 을 주고 이어지는 칸은 뺀다(Codex 리뷰).
+        행 높이(`trHeight`, 편집기엔 최소 높이)·칸 변 테두리(`tcBorders`, 없으면 `tblBorders` 의 바깥 변/inside*)를 싣고,
+        칸 안의 표는 이 표 바로 뒤에 낸다(서식 4차 — 결재란 같은 안쪽 표가 글자만 남지 않게. 자리는 제목 옆이 아니라 아래)."""
+        lifted, self._lifted = self._lifted, []
+        grid: list[
+            tuple[list[dict], int | None]
+        ] = []  # 행마다 (낼 칸들 {html, tag, colspan, rowspan, col, tcb}, 높이)
         starts: dict[int, dict] = {}  # 열 위치 → 세로 병합 시작 칸
+        tblpr = tbl.find(f"{_W}tblPr")
+        tbl_borders = tblpr.find(f"{_W}tblBorders") if tblpr is not None else None
+        # tblBorders 만 있고 표 스타일이 없으면 적히지 않은 변은 워드가 그리지 않는다(위·아래 선만 있는 표) → none(리뷰)
+        unlisted = (
+            "none" if tbl_borders is not None and tblpr.find(f"{_W}tblStyle") is None else None
+        )
+        borderless = self._borderless(tbl)
+        grid_cols = tbl.findall(f"{_W}tblGrid/{_W}gridCol")
         for tr in tbl.findall(f"{_W}tr"):
             trpr = tr.find(f"{_W}trPr")
             header = trpr is not None and trpr.find(f"{_W}tblHeader") is not None
+            trh = trpr.find(f"{_W}trHeight") if trpr is not None else None
+            height = _px_from_twips(trh.get(f"{_W}val")) if trh is not None else None
             cells: list[dict] = []
-            col = 0
+            gb = trpr.find(f"{_W}gridBefore") if trpr is not None else None
+            col = int(gb.get(f"{_W}val")) if gb is not None and _digits(gb.get(f"{_W}val")) else 0
             for tc in tr.findall(f"{_W}tc"):
                 tcpr = tc.find(f"{_W}tcPr")
                 span_el = tcpr.find(f"{_W}gridSpan") if tcpr is not None else None
@@ -744,6 +828,10 @@ class _Docx:
                 if vmerge is not None and vmerge.get(f"{_W}val", "continue") != "restart":
                     if col in starts:
                         starts[col]["rowspan"] += 1
+                        # 병합 영역의 아래 변은 워드가 마지막 칸의 tcBorders 로 그린다(리뷰)
+                        starts[col]["tcb_end"] = (
+                            tcpr.find(f"{_W}tcBorders") if tcpr is not None else None
+                        )
                         col += colspan
                         continue  # 위 칸에 합쳐진 칸 — 내지 않는다
                 inner: list[str] = []
@@ -768,7 +856,9 @@ class _Docx:
                     "tag": "th" if header else "td",
                     "colspan": colspan,
                     "rowspan": 1,
-                    "style": ";".join(style),
+                    "style": style,
+                    "col": col,
+                    "tcb": tcpr.find(f"{_W}tcBorders") if tcpr is not None else None,
                 }
                 if vmerge is not None:
                     starts[col] = cell
@@ -777,20 +867,69 @@ class _Docx:
                 cells.append(cell)
                 col += colspan
             if cells:
-                grid.append(cells)
+                grid.append((cells, height))
+        ncols = len(grid_cols) or max(
+            (c["col"] + c["colspan"] for cells, _ in grid for c in cells), default=0
+        )
         rows: list[str] = []
-        for cells in grid:
+        for r, (cells, height) in enumerate(grid):
             html_cells = []
             for c in cells:
+                outer = {
+                    "top": r == 0,
+                    "bottom": r + c["rowspan"] >= len(grid),
+                    "left": c["col"] == 0,
+                    "right": c["col"] + c["colspan"] >= ncols,
+                }
+                sides = {
+                    side: self._border(
+                        c["tcb_end"] if side == "bottom" and "tcb_end" in c else c["tcb"],
+                        tbl_borders,
+                        side,
+                        is_outer,
+                    )
+                    or unlisted
+                    for side, is_outer in outer.items()
+                }
+                style = ";".join(c["style"] + _cell_border_style(sides, borderless))
                 attrs = (
                     (f' colspan="{c["colspan"]}"' if c["colspan"] > 1 else "")
                     + (f' rowspan="{c["rowspan"]}"' if c["rowspan"] > 1 else "")
-                    + (f' style="{c["style"]}"' if c["style"] else "")
+                    + (f' style="{style}"' if style else "")
                 )
                 html_cells.append(f"<{c['tag']}{attrs}>{c['html']}</{c['tag']}>")
-            rows.append(f"<tr>{''.join(html_cells)}</tr>")
-        borders = ' data-borders="none"' if self._borderless(tbl) else ""
+            tr_style = f' style="height:{height}px"' if height else ""
+            rows.append(f"<tr{tr_style}>{''.join(html_cells)}</tr>")
+        borders = ' data-borders="none"' if borderless else ""
         out.append(f"<table{borders}>{''.join(rows)}</table>")
+        out.extend(self._lifted)
+        self._lifted = lifted
+
+    @staticmethod
+    def _border(tcb, tbl_borders, side: str, is_outer: bool) -> str | None:
+        """칸 한 변 — 칸 자신(tcBorders)이 우선, 없으면 표(tblBorders)의 바깥 변 또는 안쪽 선(insideH·insideV)."""
+        el = None
+        for name in _SIDE_NAMES[side]:
+            if tcb is not None and (el := tcb.find(f"{_W}{name}")) is not None:
+                break
+        if el is None and tbl_borders is not None:
+            names = (
+                _SIDE_NAMES[side]
+                if is_outer
+                else (("insideH",) if side in ("top", "bottom") else ("insideV",))
+            )
+            for name in names:
+                if (el := tbl_borders.find(f"{_W}{name}")) is not None:
+                    break
+        if el is None:
+            return None
+        sz = el.get(f"{_W}sz", "")
+        color = el.get(f"{_W}color")
+        return _border_css(
+            el.get(f"{_W}val"),
+            int(sz) / 8 * 96 / 72 if _digits(sz) else None,  # sz 는 1/8pt
+            None if color in (None, "auto") else color,
+        )
 
     def _borderless(self, tbl) -> bool:
         """테두리 없는 표 — 네 변(top·bottom·left/start·right/end)이 모두 적혀 있고 전부 none/nil 이거나, tblBorders 도 tblStyle 도
@@ -1098,8 +1237,10 @@ class _Hwpx:
         self.char: dict[str, dict] = {}
         self.para: dict[str, dict] = {}
         self.para_extra: dict[str, dict] = {}  # 문단 모양 → 줄 간격·여백(계약 속성)
-        self.fills: dict[str, dict] = {}  # borderFill id → {bg, borderless}
+        self.fills: dict[str, dict] = {}  # borderFill id → {bg, borderless, sides}
         self.seen: dict[str, int] = {}
+        self._lifted: list[str] = []  # 칸 안의 표 — 바깥 표 뒤에 낸다(서식 4차)
+        self._depth = 0  # 열린 표 깊이
         self._header()
         self._drop_default_para()
         self.manifest = self._manifest()
@@ -1121,12 +1262,20 @@ class _Hwpx:
             if brush is None:
                 brush = bf.find(f".//{_HH}winBrush")
             bg = _hex(brush.get("faceColor")) if brush is not None else None
-            sides = [bf.find(f"{_HH}{side}Border") for side in ("left", "right", "top", "bottom")]
+            sides = {
+                side: bf.find(f"{_HH}{side}Border") for side in ("top", "right", "bottom", "left")
+            }
             self.fills[bf.get("id", "")] = {
                 "bg": None if bg in ("#ffffff", None) else bg,
                 "borderless": all(
-                    sd is None or sd.get("type", "NONE").upper() == "NONE" for sd in sides
+                    sd is None or sd.get("type", "NONE").upper() == "NONE" for sd in sides.values()
                 ),
+                "sides": {
+                    side: _border_css(sd.get("type"), _px_from_mm(sd.get("width")), sd.get("color"))
+                    if sd is not None
+                    else None
+                    for side, sd in sides.items()
+                },
             }
         for cp in root.iter(f"{_HH}charPr"):
             u = cp.find(f"{_HH}underline")
@@ -1252,7 +1401,9 @@ class _Hwpx:
                     text.append(_wrap(self._text(el), **marks))
                 elif name == "tbl":
                     flush()
-                    out.append(self._table(el))
+                    (self._lifted if self._depth else out).append(
+                        self._table(el)
+                    )  # 칸 안의 표는 바깥 표 뒤로
                 elif name == "pic":
                     flush()
                     out.append(self._pic(el))
@@ -1272,9 +1423,19 @@ class _Hwpx:
         return "".join(parts)
 
     def _table(self, tbl) -> str:
+        """행 높이는 그 행 칸들의 `cellSz height` 중 가장 큰 것(세로 병합 칸 제외), 칸 변 테두리는 칸의 borderFill 에서.
+        칸 안의 표는 이 표 바로 뒤에 낸다(docx 와 같은 이유)."""
+        lifted, self._lifted = self._lifted, []
+        self._depth += 1
+        # 표 자체와 모든 셀의 borderFill 이 다 선 없음일 때만 — 한글은 셀 쪽이 선을 그리는 경우가 있다(리뷰, 실제 파일 미확인)
+        refs = [tbl.get("borderFillIDRef", "")] + [
+            tc.get("borderFillIDRef", "") for tc in tbl.findall(f"{_HP}tr/{_HP}tc")
+        ]
+        borderless = all(self.fills.get(r, {}).get("borderless") for r in refs)
         rows: list[str] = []
         for tr in tbl.findall(f"{_HP}tr"):
             cells: list[str] = []
+            height = 0
             for tc in tr.findall(f"{_HP}tc"):
                 inner = (
                     "".join(self._block(p) for p in tc.findall(f"{_HP}subList/{_HP}p")) or "<p></p>"
@@ -1292,17 +1453,23 @@ class _Hwpx:
                 sz = tc.find(f"{_HP}cellSz")
                 if sz is not None and (w := _px_from_hwpunit(sz.get("width"))):
                     style.append(f"width:{w}px")
+                if (
+                    sz is not None
+                    and (span is None or span.get("rowSpan", "1") == "1")
+                    and (h := _px_from_hwpunit(sz.get("height")))
+                ):
+                    height = max(height, h)
+                style += _cell_border_style(fill.get("sides", {}), borderless)
                 if style:
                     attrs += f' style="{";".join(style)}"'
                 cells.append(f"<td{attrs}>{inner}</td>")
-            rows.append(f"<tr>{''.join(cells)}</tr>")
-        # 표 자체와 모든 셀의 borderFill 이 다 선 없음일 때만 — 한글은 셀 쪽이 선을 그리는 경우가 있다(리뷰, 실제 파일 미확인)
-        refs = [tbl.get("borderFillIDRef", "")] + [
-            tc.get("borderFillIDRef", "") for tc in tbl.iter(f"{_HP}tc")
-        ]
-        borderless = all(self.fills.get(r, {}).get("borderless") for r in refs)
+            tr_style = f' style="height:{height}px"' if height else ""
+            rows.append(f"<tr{tr_style}>{''.join(cells)}</tr>")
+        self._depth -= 1
         borders = ' data-borders="none"' if borderless else ""
-        return f"<table{borders}>{''.join(rows)}</table>"
+        table = f"<table{borders}>{''.join(rows)}</table>" + "".join(self._lifted)
+        self._lifted = lifted
+        return table
 
     def _pic(self, pic) -> str:
         img = pic.find(f".//{_HC}img")
