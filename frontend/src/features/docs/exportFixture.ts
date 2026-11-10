@@ -108,3 +108,37 @@ export const SAMPLE: JSONContent = {
     },
   ],
 }
+
+/**
+ * 칸 변 테두리·행 높이(서식 4차). 왼쪽 칸은 두 행을 합쳤고 위 초록 점선·왼쪽 초록·아래 파란 이중선,
+ * 오른쪽 위 칸은 노란 바탕에 위 선 빨간 점선·아래 선 없음, 아래 행은 높이 40px. 거를 값(`red;…`)은
+ * 버려야 한다.
+ */
+export const EDGE_DOC: JSONContent = {
+  type: 'doc',
+  content: [
+    {
+      type: 'table',
+      content: [
+        {
+          type: 'tableRow',
+          content: [
+            cell('합친 칸', {
+              rowspan: 2,
+              borderTop: '1px dotted #00ff00',
+              borderLeft: '1px solid #00ff00',
+              borderBottom: '3px double #0000ff',
+            }),
+            cell('위', {
+              backgroundColor: '#ffe599',
+              borderTop: '2px dashed #ff0000',
+              borderBottom: 'none',
+              borderRight: 'red;background:url(x)',
+            }),
+          ],
+        },
+        { type: 'tableRow', attrs: { height: 40 }, content: [cell('아래')] },
+      ],
+    },
+  ],
+}

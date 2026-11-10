@@ -9,7 +9,7 @@ import {
   layoutTable,
   safeHref,
 } from './exportContent'
-import { PIXEL, SAMPLE } from './exportFixture'
+import { EDGE_DOC, PIXEL, SAMPLE } from './exportFixture'
 
 function build() {
   const zip = unzipSync(
@@ -222,4 +222,27 @@ it('메일·전화 링크는 공백이나 따옴표가 들면 걸지 않는다',
   expect(safeHref('tel:010-1234-5678')).toBe('tel:010-1234-5678')
   expect(safeHref('tel:010 1234 5678')).toBeNull()
   expect(safeHref('mailto:a"b@c.kr')).toBeNull()
+})
+
+it('칸 변 테두리와 행 높이(서식 4차)를 옮긴다', () => {
+  const xml = strFromU8(
+    unzipSync(buildDocx({ title: 't', doc: EDGE_DOC, images: new Map(), origin: '' }))[
+      'word/document.xml'
+    ],
+  )
+  // 굵기는 px×6(1/8pt), 선 없음은 nil. 걸러진 오른쪽 선은 적지 않는다. 배경(shd)은 테두리 뒤.
+  expect(xml).toContain(
+    '<w:tcBorders><w:top w:val="dashed" w:sz="12" w:space="0" w:color="FF0000"/><w:bottom w:val="nil"/></w:tcBorders><w:shd w:val="clear" w:color="auto" w:fill="FFE599"/>',
+  )
+  expect(xml).not.toContain('url(')
+  const left = '<w:left w:val="single" w:sz="6" w:space="0" w:color="00FF00"/>'
+  const bottom = '<w:bottom w:val="double" w:sz="18" w:space="0" w:color="0000FF"/>'
+  expect(xml).toContain(
+    `<w:vMerge w:val="restart"/><w:tcBorders><w:top w:val="dotted" w:sz="6" w:space="0" w:color="00FF00"/>${left}${bottom}</w:tcBorders>`,
+  )
+  // 합친 칸의 이어지는 자리에도 첫 칸의 좌우·아래 선을 적고, 칸 안쪽인 위 선은 뺀다.
+  expect(xml).toContain(`<w:vMerge/><w:tcBorders>${left}${bottom}</w:tcBorders>`)
+  // 행 높이는 최소 높이(px×15). 정한 적 없는 행에는 적지 않는다.
+  expect(xml.match(/<w:trPr>/g)).toHaveLength(1)
+  expect(xml).toContain('<w:tr><w:trPr><w:trHeight w:val="600" w:hRule="atLeast"/></w:trPr>')
 })

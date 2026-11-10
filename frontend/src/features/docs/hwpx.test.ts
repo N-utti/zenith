@@ -1,6 +1,6 @@
 import { strFromU8, unzipSync } from 'fflate'
 import { expect, it } from 'vitest'
-import { PIXEL, SAMPLE } from './exportFixture'
+import { EDGE_DOC, PIXEL, SAMPLE } from './exportFixture'
 import { buildHwpx } from './hwpx'
 
 const bytes = buildHwpx({
@@ -216,4 +216,65 @@ it('틀어진 표와 비정상 값으로도 빈자리·겹침 없는 격자를 �
   const head = strFromU8(odd['Contents/header.xml'])
   expect(head.includes('<hh:numberings itemCnt="3">')).toBe(true)
   expect(head.includes('<hh:numbering id="2" start="1">')).toBe(true)
+})
+
+it('칸 변 테두리와 행 높이(서식 4차)를 옮긴다', () => {
+  const zip = unzipSync(buildHwpx({ title: 't', doc: EDGE_DOC, images: new Map(), origin: '' }))
+  const head = strFromU8(zip['Contents/header.xml'])
+  const body = strFromU8(zip['Contents/section0.xml'])
+  const fill = (text: string) => {
+    const tc = body.split('<hp:tc ').find((part) => part.includes(`<hp:t>${text}</hp:t>`))
+    const id = /borderFillIDRef="(\d+)"/.exec(tc ?? '')?.[1]
+    return head.match(new RegExp(`<hh:borderFill id="${id}" .*?</hh:borderFill>`))?.[0] ?? ''
+  }
+  // 2px = 0.53mm 는 한글 굵기 0.5 mm 로, 1px 은 칸 기본 선 굵기로. 안 적힌 변은 기본 선 그대로.
+  expect(fill('위')).toContain('<hh:topBorder type="DASH" width="0.5 mm" color="#FF0000"/>')
+  expect(fill('위')).toContain('<hh:bottomBorder type="NONE"')
+  expect(fill('위')).toContain('<hh:rightBorder type="SOLID" width="0.12 mm" color="#C4C8CF"/>')
+  expect(fill('합친 칸')).toContain('<hh:leftBorder type="SOLID" width="0.12 mm" color="#00FF00"/>')
+  expect(fill('합친 칸')).toContain('<hh:topBorder type="DOT" width="0.12 mm" color="#00FF00"/>')
+  // 3px = 0.79mm 는 0.7 mm 로.
+  expect(fill('합친 칸')).toContain(
+    '<hh:bottomBorder type="DOUBLE_SLIM" width="0.7 mm" color="#0000FF"/>',
+  )
+  expect(head).not.toContain('url(')
+  // 40px = 3000. 합친 칸과 표는 두 행의 합(282 + 3000).
+  expect(body).toMatch(/<hp:t>아래<\/hp:t>.*?<hp:cellSz width="\d+" height="3000"\/>/)
+  expect(body).toMatch(/<hp:t>합친 칸<\/hp:t>.*?<hp:cellSz width="\d+" height="3282"\/>/)
+  expect(body).toContain('heightRelTo="ABSOLUTE" protect="0"/>')
+  expect(body).toMatch(/<hp:sz width="\d+" widthRelTo="ABSOLUTE" height="3282"/)
+})
+
+it('합친 칸뿐이라 뺀 행이 있어도 행 높이가 밀리지 않는다', () => {
+  const row = (texts: string[], attrs: object = {}, rowspan = 1) => ({
+    type: 'tableRow',
+    attrs,
+    content: texts.map((text, i) => ({
+      type: 'tableCell',
+      attrs: i === 0 ? { rowspan } : {},
+      content: [{ type: 'paragraph', content: [{ type: 'text', text }] }],
+    })),
+  })
+  const doc = {
+    type: 'doc',
+    content: [
+      {
+        type: 'table',
+        content: [
+          row(['A', 'B'], {}, 2),
+          { type: 'tableRow', content: [] },
+          row(['C', 'D'], { height: 40 }),
+        ],
+      },
+    ],
+  }
+  const body = strFromU8(
+    unzipSync(buildHwpx({ title: 't', doc, images: new Map(), origin: '' }))[
+      'Contents/section0.xml'
+    ],
+  )
+  expect(body).toContain('rowCnt="2"')
+  expect(body).toMatch(
+    /<hp:t>D<\/hp:t>.*?<hp:cellAddr colAddr="1" rowAddr="1"\/>.*?height="3000"\/>/,
+  )
 })
