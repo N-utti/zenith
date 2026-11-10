@@ -74,6 +74,10 @@ it('서버가 남기는 글꼴 이름(마침표·전각 빈칸·감싼 100자)�
   for (const name of ["'Font 1.0'", `'가\u3000나'`, `'${'가'.repeat(99)} '`]) {
     expect(safeFontFamily(name)).toBe(name)
   }
+  // 넓힌 뒤에도 선언 끊기·url()·주석·이스케이프·줄바꿈은 막힌다.
+  for (const bad of ['a;b', 'url(x)', 'a/b', 'a\\b', 'a\nb', "'a"]) {
+    expect(safeFontFamily(bad)).toBeNull()
+  }
 })
 
 it('가져온 서식을 스타일로 그린다(인쇄·복사가 쓰는 HTML)', () => {
