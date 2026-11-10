@@ -23,6 +23,7 @@ from sqlalchemy.orm import defer
 
 from app import acl, audit, convert, storage, ydoc
 from app.ai import embed
+from app.config import settings
 from app.db import get_db, session_scope
 from app.deps import current_user
 from app.errors import ApiError
@@ -569,17 +570,38 @@ async def import_doc(
     await db.commit()  # 변환하는 동안 커넥션·트랜잭션을 쥐고 있지 않게(풀 5+10, 리뷰)
     try:
         converted = await _convert_guarded(name, data)
-    except (convert.Unsupported, convert.Empty, convert.TooLarge, TimeoutError) as e:
+    except (
+        convert.Unsupported,
+        convert.Empty,
+        convert.TooLarge,
+        convert.HwpUnavailable,
+        TimeoutError,
+    ) as e:
         audit.record(
             db,
-            "docs.import_failed",
+            # 변환기(infra/hwp) 장애는 사용자 잘못이 아니라 하루 상한(`docs.import_failed`)에 세지 않는다(리뷰)
+            "docs.import_unavailable"
+            if isinstance(e, convert.HwpUnavailable)
+            else "docs.import_failed",
             request=request,
             actor_id=user.id,
             detail={"actor": str(user.id), "name": name, "why": type(e).__name__},
         )
         await db.commit()
+        if isinstance(e, convert.HwpUnavailable):
+            # 파일 탓이 아니라 변환기(infra/hwp) 탓 — 503 으로 구분한다(README 65)
+            raise ApiError(
+                503,
+                "HWP_UNAVAILABLE",
+                "hwp 변환기에 연결할 수 없습니다. 잠시 후 다시 시도하거나 hwpx 로 저장해 올려 주세요.",
+            ) from None
         if isinstance(e, convert.Unsupported):
-            detail = "docx·xlsx·hwpx 파일만 가져올 수 있습니다(hwp 는 hwpx 로 저장해 주세요)."
+            if not settings.hwp_url:
+                detail = "docx·xlsx·hwpx 파일만 가져올 수 있습니다(hwp 는 hwpx 로 저장해 주세요)."
+            elif name.lower().endswith(".hwp"):
+                detail = "한글 97 이전 형식이거나 손상된 hwp 입니다. hwpx 로 저장해 올려 주세요."
+            else:
+                detail = "docx·xlsx·hwpx·hwp 파일만 가져올 수 있습니다."
         elif isinstance(e, convert.Empty):
             detail = "읽을 내용이 없는 파일입니다."
         elif isinstance(e, convert.TooLarge):

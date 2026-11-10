@@ -1,0 +1,9 @@
+# `docker run --rm zenith-hwp pip freeze` (2026-11-10). pyhwp 0.1b15 는 six 를 선언하지 않고 쓴다
+pyhwp==0.1b15
+six==1.17.0
+lxml==5.3.0
+olefile==0.47
+cryptography==50.0.2
+cffi==2.1.1
+pycparser==3.12
+packaging==26.3

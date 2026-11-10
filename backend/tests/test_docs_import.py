@@ -4,10 +4,12 @@
 경로 테스트는 원본을 MinIO 에 넣으므로 MinIO 가 없으면 skip(conftest.minio_bucket).
 """
 
+import base64
 import io
 import re
 import time
 import uuid
+import xml.etree.ElementTree as ET
 import zipfile
 from html.parser import HTMLParser
 
@@ -1263,6 +1265,151 @@ def test_docx_grid_codex_regressions() -> None:
     )
 
 
+# ── 구형 hwp(README 65) — pyhwp 컨테이너가 돌려준 `hwp5proc xml` 모양을 그대로 흉내 낸다(실제 파일 4개로 구조 확인)
+
+
+def make_hwp5_xml(body: str, bindata: str = "", styles: str = "") -> str:
+    styles = styles or '<Style name="Normal" parashape-id="0" charshape-id="0"/>'
+    return (
+        '<HwpDoc version="5.1.0.1"><DocInfo><IdMappings ko-fonts="2" en-fonts="1" charshapes="3" parashapes="2" borderfills="2" bindata="1">'
+        '<FaceName name="함초롬바탕"/><FaceName name="나눔스퀘어"/><FaceName name="Arial"/>'  # ko 2 + en 1
+        '<CharShape basesize="1000" bold="0" italic="0" underline="none" text-color="#000000" shade-color="#ffffff"><FontFace ko="0" en="0"/></CharShape>'
+        '<CharShape basesize="1600" bold="1" italic="0" underline="underline" text-color="#FF0000" shade-color="#FEF08A"><FontFace ko="1" en="0"/></CharShape>'
+        '<CharShape basesize="1000" bold="0" italic="1" underline="none" text-color="#000000" shade-color="#ffffff"><FontFace ko="0" en="0"/></CharShape>'
+        '<ParaShape align="both" linespacing-type="ratio" linespacing="160" doubled-margin-left="0" doubled-margin-top="0" doubled-margin-bottom="0" head-shape="none" level="0"/>'
+        '<ParaShape align="center" linespacing-type="ratio" linespacing="200" doubled-margin-left="3000" doubled-margin-top="1500" doubled-margin-bottom="0" head-shape="outline" level="0"/>'
+        '<BorderFill colorpattern="0" fillflags="00000000"><Border stroke-type="none" width="0.1mm" color="#000000" attribute-name="left"/><Border stroke-type="none" width="0.1mm" color="#000000" attribute-name="right"/>'
+        '<Border stroke-type="none" width="0.1mm" color="#000000" attribute-name="top"/><Border stroke-type="none" width="0.1mm" color="#000000" attribute-name="bottom"/><FillColorPattern background-color="#ffffff"/></BorderFill>'
+        '<BorderFill colorpattern="1" fillflags="00000001"><Border stroke-type="dotted" width="0.12mm" color="#9CCFE0" attribute-name="left"/><Border stroke-type="none" width="0.1mm" color="#000000" attribute-name="right"/>'
+        '<Border stroke-type="none" width="0.1mm" color="#000000" attribute-name="top"/><Border stroke-type="solid" width="0.4mm" color="#5FB3D0" attribute-name="bottom"/><FillColorPattern background-color="#DDF2F8"/></BorderFill>'
+        f"{bindata}{styles}"
+        f"</IdMappings></DocInfo><BodyText><SectionDef><ColumnSet>{body}</ColumnSet></SectionDef></BodyText></HwpDoc>"
+    )
+
+
+def hwp5_p(inner: str, ps: str = "0") -> str:
+    return f'<Paragraph parashape-id="{ps}"><LineSeg>{inner}<ControlChar name="PARAGRAPH_BREAK"/></LineSeg></Paragraph>'
+
+
+def test_hwp5_text_fonts_spacing(monkeypatch) -> None:
+    """바탕글(Style 0)의 글꼴·크기·줄 간격(160%)은 싣지 않고, 다른 것만. 개요 문단은 h1, 여백은 두 배 HWPUNIT÷2÷75."""
+    body = (
+        hwp5_p(
+            '<Text charshape-id="0">기본 </Text><Text charshape-id="1">큰 스퀘어</Text><ControlChar name="TAB"/><Text charshape-id="2">기울임</Text>'
+            '<ControlChar name="FIELD_START"/><FieldFormula><Text charshape-id="0"> 합계 </Text><ControlChar name="NONBREAK_SPACE"/><Text charshape-id="0">264,800</Text></FieldFormula><ControlChar name="FIELD_END"/>'
+        )
+        + hwp5_p(
+            '<Text charshape-id="0">제목</Text><ControlChar name="LINE_BREAK"/><Text charshape-id="0">둘째 줄</Text>',
+            ps="1",
+        )
+        + '<Paragraph parashape-id="0"><LineSeg><ControlChar name="PARAGRAPH_BREAK"/></LineSeg></Paragraph>'
+    )
+    root = ET.fromstring(make_hwp5_xml(body))
+    monkeypatch.setattr(convert, "_hwp5_xml", lambda data: root)
+    assert (
+        convert.to_html("a.hwp", b"\xd0\xcf\x11\xe0" + b"x").html
+        == (
+            '<p style="text-align:justify">기본 <span style="color:#ff0000;font-family:나눔스퀘어;font-size:16pt"><mark data-color="#fef08a"><u><strong>큰 스퀘어</strong></u></mark></span> <em>기울임</em> 합계  264,800</p>'  # 계산식(FieldFormula) 안의 글자(합계)도 글자로, 필드 시작/끝 제어문자는 버린다(리뷰)
+            '<h1 style="text-align:center;line-height:2;margin-left:20px;margin-top:10px">제목<br>둘째 줄</h1>'
+            "<p></p>"
+        )
+    )
+
+
+def test_hwp5_table_picture_nested(monkeypatch) -> None:
+    """표: 행 높이는 칸 height 최대(세로 병합 제외), 칸 테두리·배경은 borderfill-id(1-based), 칸 안의 표는 뒤로. 그림은 BinData base64."""
+    png = base64.b64encode(png_1x1()).decode()
+    bindata = f'<BinData storage="embedding"><BinDataEmbedding storage-id="BIN0001" ext="png">{png}</BinDataEmbedding></BinData>'
+    inner_tbl = (
+        '<TableControl><TableBody rows="1" cols="1" borderfill-id="1"><TableRow><TableCell col="0" row="0" colspan="1" rowspan="1" width="7500" height="750" borderfill-id="1">'
+        + hwp5_p('<Text charshape-id="0">내부</Text>')
+        + "</TableCell></TableRow></TableBody></TableControl>"
+    )
+    table = (
+        '<TableControl><TableBody rows="2" cols="2" borderfill-id="1"><TableRow>'
+        '<TableCell col="0" row="0" colspan="1" rowspan="1" width="7500" height="1500" borderfill-id="2">'
+        + hwp5_p(f'<Text charshape-id="0">칸</Text>{inner_tbl}')
+        + '</TableCell><TableCell col="1" row="0" colspan="1" rowspan="2" width="7500" height="3000" borderfill-id="2">'
+        + hwp5_p('<Text charshape-id="0">둘</Text>')
+        + "</TableCell></TableRow><TableRow></TableRow></TableBody></TableControl>"
+    )
+    pic = '<GShapeObjectControl width="7500" height="3000"><ShapeComponent><ShapePicture><PictureInfo bindata-id="1"/></ShapePicture></ShapeComponent></GShapeObjectControl>'
+    bad = '<GShapeObjectControl width="750"><ShapeComponent><ShapePicture><PictureInfo bindata-id="7"/></ShapePicture></ShapeComponent></GShapeObjectControl>'
+    body = hwp5_p(
+        f'<Text charshape-id="0">앞</Text>{table}<Text charshape-id="0">뒤</Text>{pic}{pic}{bad}{bad}'
+    )
+    root = ET.fromstring(make_hwp5_xml(body, bindata))
+    monkeypatch.setattr(convert, "_hwp5_xml", lambda data: root)
+    calls = []
+    real = base64.b64decode
+    monkeypatch.setattr(convert.base64, "b64decode", lambda b: calls.append(1) or real(b))
+    c = convert.to_html("a.hwp", b"\xd0\xcf\x11\xe0" + b"x")
+    side = "border-top:none;border-right:none;border-bottom:2px solid #5fb3d0;border-left:1px dotted #9ccfe0"
+    assert (
+        c.html
+        == (
+            '<p style="text-align:justify">앞</p>'
+            f'<table><tr style="height:20px"><td style="background-color:#ddf2f8;width:100px;{side}"><p style="text-align:justify">칸</p></td>'
+            f'<td rowspan="2" style="background-color:#ddf2f8;width:100px;{side}"><p style="text-align:justify">둘</p></td></tr><tr></tr></table>'
+            '<table data-borders="none"><tr style="height:10px"><td style="width:100px"><p style="text-align:justify">내부</p></td></tr></table>'
+            '<p style="text-align:justify">뒤</p><img data-ref="0" width="100"><img data-ref="0" width="100">'  # 두 번째는 다시 풀지 않고 번호만
+        )
+    )
+    assert len(c.images) == 1 and c.images[0][1] == "image/png"
+    assert len(calls) == 1  # 같은 그림 두 번·없는 그림 두 번 → 디코딩은 한 번(리뷰)
+
+
+def test_hwp5_guards(monkeypatch) -> None:
+    """HWP_URL 이 없으면 미지원(hwpx 로 저장 안내), OLE 서명이 아니면 보내지 않는다, 변환기에 못 닿으면 HwpUnavailable."""
+    import httpx
+
+    monkeypatch.setattr(convert.settings, "hwp_url", None)
+    with pytest.raises(Unsupported):
+        convert.to_html("a.hwp", b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1" + b"x" * 100)
+    monkeypatch.setattr(convert.settings, "hwp_url", "http://hwp:8080")
+    with pytest.raises(Unsupported):
+        convert.to_html("a.hwp", b"PK\x03\x04" + b"x" * 100)  # zip 이지 OLE 가 아니다
+
+    def boom(*a, **k):
+        raise httpx.ConnectError("down")
+
+    monkeypatch.setattr(convert.httpx, "stream", boom)
+    with pytest.raises(convert.HwpUnavailable):
+        convert.to_html("a.hwp", b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1" + b"x" * 100)
+    # 변환기 응답별: 504 → 시간 초과(422 「너무 오래」), 200 아님 → 형식 오류, 상한 초과 → TooLarge, DOCTYPE → 거부, 정상 → 루트
+    import xml.etree.ElementTree as ET2
+
+    def serve(resp: httpx.Response):
+        client = httpx.Client(transport=httpx.MockTransport(lambda req: resp))
+        monkeypatch.setattr(
+            convert.httpx, "stream", lambda method, url, **kw: client.stream(method, url, **kw)
+        )
+
+    ole = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1" + b"x" * 100
+    serve(httpx.Response(504))
+    with pytest.raises(TimeoutError):
+        convert._hwp5_xml(ole)
+    serve(httpx.Response(422, content=b"not hwp5"))
+    with pytest.raises(Unsupported):
+        convert._hwp5_xml(ole)
+    monkeypatch.setattr(convert, "MAX_HWP5_XML_BYTES", 64)
+    serve(httpx.Response(200, content=b"<HwpDoc>" + b"<a/>" * 100 + b"</HwpDoc>"))
+    with pytest.raises(convert.TooLarge):
+        convert._hwp5_xml(ole)
+    monkeypatch.setattr(convert, "MAX_HWP5_XML_BYTES", 1 << 20)
+    serve(httpx.Response(200, content=b'<!DOCTYPE x [<!ENTITY a "b">]><HwpDoc>&a;</HwpDoc>'))
+    with pytest.raises(Unsupported):
+        convert._hwp5_xml(ole)
+    serve(httpx.Response(200, content=b"<HwpDoc><DocInfo/><BodyText/></HwpDoc>"))
+    assert (
+        isinstance(convert._hwp5_xml(ole), ET2.Element) and convert._hwp5_xml(ole).tag == "HwpDoc"
+    )
+    # 빈 행·DocInfo 없는 XML 은 형식 오류
+    monkeypatch.setattr(convert, "_hwp5_xml", lambda data: ET.fromstring("<HwpDoc/>"))
+    with pytest.raises(Unsupported):
+        convert.to_html("a.hwp", b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1" + b"x" * 100)
+
+
 async def _import(client: AsyncClient, name: str, data: bytes, **form):
     return await client.post(
         "/api/docs/import",
@@ -1328,6 +1475,22 @@ async def test_import_route(
     r = await _import(client, "a.docx", DOCX, folder_id=str(uuid.uuid4()))
     assert (r.status_code, r.json()["detail"]) == (422, "없는 폴더입니다.")
     assert len((await app_db.execute(select(Document))).scalars().all()) == len(before)
+
+    # 503: 변환기(infra/hwp) 불통 — 파일 탓이 아니라 HWP_UNAVAILABLE, 감사는 docs.import_unavailable(하루 상한에 안 센다)
+    def down(name, data):
+        raise convert.HwpUnavailable()
+
+    monkeypatch.setattr(convert, "to_html", down)
+    r = await _import(client, "a.hwp", b"\xd0\xcf\x11\xe0" + b"x" * 64, folder_id=str(root.id))
+    assert (r.status_code, r.json()["code"]) == (503, "HWP_UNAVAILABLE")
+    monkeypatch.setattr(convert, "to_html", _real_to_html)
+    kinds = [
+        e.kind
+        for e in (
+            await app_db.execute(select(AuditEvent).where(AuditEvent.kind.like("docs.import_%")))
+        ).scalars()
+    ]
+    assert kinds.count("docs.import_unavailable") == 1
 
     # 그림이 든 파일 — 그림도 그 문서의 첨부로 올라가고(감사 1건씩) imageBlock 이 그 주소를 가리킨다
     r = await _import(client, "그림.docx", make_rich_docx(), folder_id=str(root.id))
