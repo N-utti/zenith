@@ -114,10 +114,13 @@ DOCX = make_docx(
 def test_docx_to_html() -> None:
     body, truncated = th("a.docx", make_docx(DOCX_BODY, DOCX_RELS))
     assert not truncated
-    assert body == (
-        "<h1>제목 하나</h1><p>보통 <strong>굵게</strong><u>밑줄</u></p>"
-        "<table><tr><td><p>A1</p></td><td><p>B1 &lt;x&gt;</p></td></tr></table>"
-        "<p>링크</p>"  # javascript: 링크는 벗기고 글자만
+    assert (
+        body
+        == (
+            "<h1>제목 하나</h1><p>보통 <strong>굵게</strong><u>밑줄</u></p>"
+            '<table data-borders="none"><tr><td><p>A1</p></td><td><p>B1 &lt;x&gt;</p></td></tr></table>'
+            "<p>링크</p>"  # javascript: 링크는 벗기고 글자만. tblPr 없는 표는 워드가 선을 안 그린다 → 테두리 없음
+        )
     )
 
 
@@ -486,7 +489,7 @@ RICH_DOCX_HTML = (
     '<mark data-color="#bbf7d0"><u> 밑줄</u></mark><a href="https://z.example">링크</a></p>'
     "<ul><li>항목1<ul><li>하위</li></ul></li></ul><ol><li>번호1</li></ol>"
     '<p><img data-ref="0" width="200"></p>'
-    '<table><tr><th colspan="2"><p>머리</p></th></tr><tr><td><p style="text-align:right"><em>A</em></p></td><td><p>B</p></td></tr></table>'
+    '<table data-borders="none"><tr><th colspan="2"><p>머리</p></th></tr><tr><td><p style="text-align:right"><em>A</em></p></td><td><p>B</p></td></tr></table>'
     "<p>끝</p>"
 )
 
@@ -511,7 +514,9 @@ def test_rich_docx_to_ydoc_marks_attrs_image() -> None:
     )
     # 그림만 있던 문단은 지우고 imageBlock 을 블록으로. 폭은 숫자
     assert "<paragraph></paragraph><imageBlock" not in frag
-    assert '<imageBlock src="/api/files/img1" width="200"></imageBlock><table>' in frag
+    assert (
+        '<imageBlock src="/api/files/img1" width="200"></imageBlock><table borders="none">' in frag
+    )
     assert '<tableHeader colspan="2"><paragraph>머리</paragraph></tableHeader>' in frag
     assert '<paragraph textAlign="right"><italic>A</italic></paragraph>' in frag
     # 올리지 못한 그림(번호 범위 밖)은 자리를 비운다
@@ -555,10 +560,13 @@ def test_xlsx_cell_formatting() -> None:
     buf = io.BytesIO()
     wb.save(buf)
     body, _ = th("a.xlsx", buf.getvalue())
-    assert body == (
-        "<h2>S</h2><table><tr><th><p><strong>머리</strong></p></th><th><p>x</p></th></tr>"
-        '<tr><td><p style="text-align:center"><span style="color:#ff0000"><mark data-color="#ffff00"><em>빨강</em></mark></span></p></td>'
-        "<td><p>3</p></td></tr></table>"
+    assert (
+        body
+        == (
+            "<h2>S</h2><table><tr><th><p><strong>머리</strong></p></th><th><p>x</p></th></tr>"
+            '<tr><td style="background-color:#ffff00"><p style="text-align:center"><span style="color:#ff0000"><em>빨강</em></span></p></td>'
+            "<td><p>3</p></td></tr></table>"  # 채우기는 셀 배경으로(계약 backgroundColor), 기본 글꼴 Calibri 11 은 싣지 않는다
+        )
     )
 
 
@@ -739,7 +747,7 @@ def test_fmt_codex_regressions(monkeypatch) -> None:
         "<w:tr><w:tc><w:tcPr><w:vMerge/></w:tcPr><w:p/></w:tc><w:tc><w:p><w:r><w:t>C</w:t></w:r></w:p></w:tc></w:tr></w:tbl>"
     )
     assert th("a.docx", make_docx(body))[0] == (
-        '<table><tr><td rowspan="2"><p>A</p></td><td><p>B</p></td></tr><tr><td><p>C</p></td></tr></table>'
+        '<table data-borders="none"><tr><td rowspan="2"><p>A</p></td><td><p>B</p></td></tr><tr><td><p>C</p></td></tr></table>'
     )
     # (5) hwpx 의 일부러 띄운 빈 문단은 남는다
     sec = "<hp:p><hp:run><hp:t>A</hp:t></hp:run></hp:p><hp:p><hp:run><hp:t></hp:t></hp:run></hp:p><hp:p><hp:run><hp:t>B</hp:t></hp:run></hp:p>"
@@ -764,6 +772,283 @@ def test_fmt_codex_regressions(monkeypatch) -> None:
         dst.writestr("word/media/image2.png", png_1x1())
     c = convert.to_html("a.docx", buf.getvalue())
     assert len(c.images) == 1 and c.html.count('<img data-ref="0">') == 2
+
+
+# ── 서식 3차(README 63, 계약 #574) ────────────────────────────────────────────────
+
+
+def test_fmt3_docx_fonts_spacing_table() -> None:
+    styles = (
+        f'<w:styles {_WNS}><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:eastAsia="맑은 고딕"/><w:sz w:val="20"/></w:rPr></w:rPrDefault></w:docDefaults>'
+        '<w:style w:type="paragraph" w:styleId="1"><w:name w:val="heading 1"/></w:style></w:styles>'
+    )
+    body = (
+        # 기본 글꼴(맑은 고딕 10pt)과 같은 run 은 마크 없음, 다른 글꼴·크기만 span
+        '<w:p><w:pPr><w:spacing w:before="240" w:after="120" w:line="360" w:lineRule="auto"/><w:ind w:left="720"/></w:pPr>'
+        '<w:r><w:rPr><w:rFonts w:eastAsia="맑은 고딕"/><w:sz w:val="20"/></w:rPr><w:t>기본 </w:t></w:r>'
+        '<w:r><w:rPr><w:rFonts w:ascii="Arial" w:eastAsia="나눔명조"/><w:sz w:val="28"/></w:rPr><w:t>큰 명조</w:t></w:r></w:p>'
+        # 표: 테두리 명시 → 기본(all), 셀 폭·배경
+        '<w:tbl><w:tblPr><w:tblBorders><w:top w:val="single"/></w:tblBorders></w:tblPr><w:tr><w:tc><w:tcPr><w:tcW w:w="1800" w:type="dxa"/><w:shd w:val="clear" w:fill="FEF08A"/></w:tcPr><w:p><w:r><w:t>칸</w:t></w:r></w:p></w:tc></w:tr></w:tbl>'
+        # 테두리 전부 none → 테두리 없음
+        '<w:tbl><w:tblPr><w:tblStyle w:val="TableGrid"/><w:tblBorders><w:top w:val="none"/><w:left w:val="nil"/><w:bottom w:val="none"/><w:right w:val="none"/><w:insideH w:val="none"/><w:insideV w:val="none"/></w:tblBorders></w:tblPr>'
+        "<w:tr><w:tc><w:p><w:r><w:t>x</w:t></w:r></w:p></w:tc></w:tr></w:tbl>"
+    )
+    buf = io.BytesIO()
+    with zipfile.ZipFile(io.BytesIO(make_docx(body))) as src, zipfile.ZipFile(buf, "w") as dst:
+        for info in src.infolist():
+            if info.filename != "word/styles.xml":
+                dst.writestr(info, src.read(info.filename))
+        dst.writestr("word/styles.xml", styles)
+    assert th("a.docx", buf.getvalue())[0] == (
+        '<p style="line-height:1.5;margin-left:48px;margin-top:16px;margin-bottom:8px">기본 '
+        '<span style="font-family:나눔명조;font-size:14pt">큰 명조</span></p>'
+        '<table><tr><td style="background-color:#fef08a;width:120px"><p>칸</p></td></tr></table>'
+        '<table data-borders="none"><tr><td><p>x</p></td></tr></table>'
+    )  # 240twip=16px, 720twip=48px, 1800twip=120px, line 360/240=1.5, sz 28 = 14pt, eastAsia 우선
+
+
+def test_fmt3_hwpx_fonts_spacing_cells() -> None:
+    hh = "http://www.hancom.co.kr/hwpml/2011/head"
+    header = (
+        f'<hh:head xmlns:hh="{hh}"><hh:refList>'
+        '<hh:fontfaces><hh:fontface lang="HANGUL"><hh:font id="0" face="함초롬바탕"/><hh:font id="1" face="나눔스퀘어"/></hh:fontface></hh:fontfaces>'
+        '<hh:borderFills><hh:borderFill id="1"><hh:leftBorder type="NONE"/><hh:rightBorder type="NONE"/><hh:topBorder type="NONE"/><hh:bottomBorder type="NONE"/></hh:borderFill>'
+        '<hh:borderFill id="2"><hh:leftBorder type="SOLID"/><hh:fillBrush><hh:winBrush faceColor="#BFDBFE"/></hh:fillBrush></hh:borderFill></hh:borderFills>'
+        '<hh:charProperties><hh:charPr id="0" height="1000" textColor="#000000" shadeColor="none"><hh:fontRef hangul="0"/></hh:charPr>'
+        '<hh:charPr id="1" height="1600" textColor="#000000" shadeColor="none"><hh:fontRef hangul="1"/><hh:bold/></hh:charPr></hh:charProperties>'
+        '<hh:paraProperties><hh:paraPr id="0"/><hh:paraPr id="1"><hh:align horizontal="LEFT"/><hh:heading type="NONE" level="0"/>'
+        '<hh:margin><hh:left value="1500" unit="HWPUNIT"/><hh:prev value="750" unit="HWPUNIT"/><hh:next value="0" unit="HWPUNIT"/></hh:margin>'
+        '<hh:lineSpacing type="PERCENT" value="180"/></hh:paraPr></hh:paraProperties></hh:refList></hh:head>'
+    )
+    section = (
+        '<hp:p paraPrIDRef="1"><hp:run charPrIDRef="0"><hp:t>기본 </hp:t></hp:run><hp:run charPrIDRef="1"><hp:t>큰 스퀘어</hp:t></hp:run></hp:p>'
+        '<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:tbl borderFillIDRef="1"><hp:tr><hp:tc borderFillIDRef="2"><hp:cellSz width="7500" height="1000"/>'
+        '<hp:subList><hp:p><hp:run charPrIDRef="0"><hp:t>칸</hp:t></hp:run></hp:p></hp:subList></hp:tc></hp:tr></hp:tbl></hp:run></hp:p>'
+    )
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("mimetype", "application/hwp+zip")
+        z.writestr("Contents/header.xml", header)
+        z.writestr(
+            "Contents/section0.xml",
+            f'<?xml version="1.0"?><hs:sec xmlns:hs="{_HS}" xmlns:hp="{_HP}">{section}</hs:sec>',
+        )
+    assert (
+        th("a.hwpx", buf.getvalue())[0]
+        == (
+            '<p style="line-height:1.8;margin-left:20px;margin-top:10px">기본 <span style="font-family:나눔스퀘어;font-size:16pt"><strong>큰 스퀘어</strong></span></p>'
+            '<table><tr><td style="background-color:#bfdbfe;width:100px"><p>칸</p></td></tr></table>'
+        )
+    )  # height 1600 = 16pt, 1500 HWPUNIT = 20px, 7500 = 100px, 기본 글자 모양(id 0)의 글꼴·크기는 싣지 않는다
+
+
+def test_fmt3_xlsx_fonts_and_column_widths() -> None:
+    from openpyxl.styles import Font
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "S"
+    ws["A1"] = "굵은 큰 글"
+    ws["A1"].font = Font(name="나눔고딕", size=14, bold=True)
+    ws["B1"] = "기본"
+    ws.column_dimensions["A"].width = 30  # 30자 ≈ 215px
+    buf = io.BytesIO()
+    wb.save(buf)
+    assert th("a.xlsx", buf.getvalue())[0] == (
+        '<h2>S</h2><table><tr><th style="width:210px"><p><span style="font-family:나눔고딕;font-size:14pt"><strong>굵은 큰 글</strong></span></p></th>'
+        "<th><p>기본</p></th></tr></table>"
+    )
+
+
+def test_fmt3_filter_sanitizes_style_values() -> None:
+    f = convert._Filter()
+    f.feed(
+        '<p style="line-height: 1.6; margin-left: 40px; margin-top: 9999px; color: red">a</p>'
+        "<span style=\"font-family: '맑은 고딕'; background:url(https://x); font-size: 11pt\">b</span>"
+        '<span style="font-family: Arial, sans-serif</span><script>">c</span>'
+        '<span style="font-size:200pt">d</span><span style="color:#000000;font-family:&quot;Evil&quot;;">e</span>'
+        '<table data-borders="none"><tr><td style="width:120px;background-color:#abc;border:9px">x</td><td style="width:99999px">y</td></tr></table>'
+    )
+    f.close()
+    assert (
+        f.result()
+        == (
+            '<p style="line-height:1.6;margin-left:40px">a</p>'  # 상한 밖(margin-top 9999) 은 버림, color 는 문단 속성이 아니다
+            "<p><span style=\"font-family:'맑은 고딕';font-size:11pt\">b</span>"  # background:url 은 벗겨진다
+            '<span style="font-family:Arial, sans-serif">c</span>'  # 글꼴 이름엔 허용 글자만 — < > / 는 지워진다
+            "d"  # 200pt 는 범위 밖 → 속성 없는 span 은 벗김
+            '<span style="color:#000000;font-family:Evil">e</span></p>'  # 큰따옴표는 홑따옴표로 바뀐 뒤 벗겨진다
+            '<table data-borders="none"><tr><td style="background-color:#aabbcc;width:120px">x</td><td>y</td></tr></table>',
+            False,
+        )
+    )
+
+
+def test_fmt3_ydoc_attrs() -> None:
+    frag = ydoc_fragment(
+        ydoc.build(
+            '<p style="text-align:center;line-height:1.6;margin-left:40px;margin-top:8px;margin-bottom:4px">'
+            "<span style=\"color:#ff0000;font-family:'맑은 고딕';font-size:11pt\">a</span></p>"
+            '<table data-borders="none"><tr><td style="background-color:#aabbcc;width:120px"><p>x</p></td></tr></table>',
+            "t",
+        )
+    )
+    assert frag == (
+        '<paragraph indent="40" lineHeight="1.6" spaceAfter="4" spaceBefore="8" textAlign="center">'
+        '<textStyle color="#ff0000" fontFamily="\'맑은 고딕\'" fontSize="11pt">a</textStyle></paragraph>'
+        '<table borders="none"><tableRow><tableCell backgroundColor="#aabbcc" colwidth="[120]"><paragraph>x</paragraph></tableCell></tableRow></table>'
+    )
+
+
+def test_fmt3_review_regressions(monkeypatch) -> None:
+    # (1) 시트 XML 이 2MB 를 넘어도 열 너비 때문에 거절하지 않는다 — 앞부분만 읽는다
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "S"
+    ws["A1"] = "x"
+    ws.column_dimensions["A"].width = 20
+    buf = io.BytesIO()
+    wb.save(buf)
+    out = io.BytesIO()
+    with zipfile.ZipFile(io.BytesIO(buf.getvalue())) as src, zipfile.ZipFile(out, "w") as dst:
+        for info in src.infolist():
+            data = src.read(info.filename)
+            if info.filename == "xl/worksheets/sheet1.xml":
+                data = data.replace(
+                    b"</sheetData>", b"<!-- " + b"x" * (3 * 1024 * 1024) + b" --></sheetData>"
+                )
+            dst.writestr(info, data)
+    body, _ = th(
+        "a.xlsx", out.getvalue()
+    )  # 시트 3MB — 거절 없음, 너비는 앞부분에서 읽힌다(20자 → 140px)
+    assert body.startswith('<h2>S</h2><table><tr><th style="width:140px">')
+    # (2) <col min=1 max=1048576> 을 수천 번 반복해도 열 상한에서 멈춘다(47초 → 즉시). 숨긴 열은 건너뛴다
+    out = io.BytesIO()
+    with zipfile.ZipFile(io.BytesIO(buf.getvalue())) as src, zipfile.ZipFile(out, "w") as dst:
+        for info in src.infolist():
+            data = src.read(info.filename)
+            if info.filename == "xl/worksheets/sheet1.xml":
+                cols = (
+                    b'<col min="1" max="1" width="9" hidden="1"/>'
+                    + b'<col min="1" max="1048576" width="9"/>' * 5000
+                )
+                data = re.sub(rb"<cols>.*?</cols>", b"<cols>" + cols + b"</cols>", data, flags=re.S)
+            dst.writestr(info, data)
+    body, _ = th("a.xlsx", out.getvalue())
+    assert body.startswith('<h2>S</h2><table><tr><th style="width:63px">')
+    # (3) 차트시트가 앞에 있어도 건너뛴다 — wb.worksheets 와 같은 순서가 된다
+    out = io.BytesIO()
+    with zipfile.ZipFile(out, "w") as z:
+        z.writestr(
+            "xl/workbook.xml",
+            '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+            '<sheets><sheet name="Chart" sheetId="1" r:id="rId1"/><sheet name="S" sheetId="2" r:id="rId2"/></sheets></workbook>',
+        )
+        z.writestr(
+            "xl/_rels/workbook.xml.rels",
+            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            '<Relationship Id="rId1" Type="x/chartsheet" Target="chartsheets/sheet1.xml"/>'
+            '<Relationship Id="rId2" Type="x/worksheet" Target="worksheets/sheet1.xml"/></Relationships>',
+        )
+        z.writestr("xl/chartsheets/sheet1.xml", "<chartsheet/>")
+        z.writestr(
+            "xl/worksheets/sheet1.xml",
+            '<worksheet><cols><col min="2" max="3" width="10"/></cols><sheetData/></worksheet>',
+        )
+    with zipfile.ZipFile(io.BytesIO(out.getvalue())) as z:
+        assert convert._xlsx_col_widths(z) == [{2: 70, 3: 70}]
+    # (4) hwpx: 기본 글자 모양과 같은 글꼴·크기는 두 번째 charPr 에서도 생략(base dict 를 먼저 지우던 버그), 실제 한글 파일의
+    #     hp:switch/hp:default + hc: 여백, 기본 문단 모양의 줄 간격(160%)은 생략, hc:winBrush 배경
+    hh = "http://www.hancom.co.kr/hwpml/2011/head"
+    hc = "http://www.hancom.co.kr/hwpml/2011/core"
+    header = (
+        f'<hh:head xmlns:hh="{hh}" xmlns:hc="{hc}" xmlns:hp="{_HP}"><hh:refList>'
+        '<hh:fontfaces><hh:fontface lang="HANGUL"><hh:font id="0" face="함초롬바탕"/></hh:fontface></hh:fontfaces>'
+        '<hh:borderFills><hh:borderFill id="3"><hh:leftBorder type="SOLID"/><hc:fillBrush><hc:winBrush faceColor="#BFDBFE"/></hc:fillBrush></hh:borderFill></hh:borderFills>'
+        '<hh:charProperties><hh:charPr id="0" height="1000" textColor="#000000" shadeColor="none"><hh:fontRef hangul="0"/></hh:charPr>'
+        '<hh:charPr id="1" height="1000" textColor="#000000" shadeColor="none"><hh:fontRef hangul="0"/><hh:bold/></hh:charPr></hh:charProperties>'
+        '<hh:paraProperties><hh:paraPr id="0"><hh:align horizontal="JUSTIFY"/><hp:switch><hp:case><hh:lineSpacing type="PERCENT" value="160"/></hp:case>'
+        '<hp:default><hh:margin><hc:left value="0"/><hc:prev value="0"/></hh:margin><hh:lineSpacing type="PERCENT" value="160"/></hp:default></hp:switch></hh:paraPr>'
+        '<hh:paraPr id="1"><hp:switch><hp:default><hh:margin><hc:left value="1500"/><hc:prev value="750"/></hh:margin><hh:lineSpacing type="PERCENT" value="200"/></hp:default></hp:switch></hh:paraPr>'
+        "</hh:paraProperties></hh:refList></hh:head>"
+    )
+    section = (
+        '<hp:p paraPrIDRef="0"><hp:run charPrIDRef="1"><hp:t>굵게만</hp:t></hp:run></hp:p>'
+        '<hp:p paraPrIDRef="1"><hp:run charPrIDRef="0"><hp:t>들여쓴 넓은 줄</hp:t></hp:run></hp:p>'
+        '<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:tbl borderFillIDRef="3"><hp:tr><hp:tc borderFillIDRef="3"><hp:subList><hp:p><hp:run charPrIDRef="0"><hp:t>칸</hp:t></hp:run></hp:p></hp:subList></hp:tc></hp:tr></hp:tbl></hp:run></hp:p>'
+    )
+    out = io.BytesIO()
+    with zipfile.ZipFile(out, "w") as z:
+        z.writestr("mimetype", "application/hwp+zip")
+        z.writestr("Contents/header.xml", header)
+        z.writestr(
+            "Contents/section0.xml",
+            f'<?xml version="1.0"?><hs:sec xmlns:hs="{_HS}" xmlns:hp="{_HP}">{section}</hs:sec>',
+        )
+    assert th("a.hwpx", out.getvalue())[0] == (
+        '<p style="text-align:justify"><strong>굵게만</strong></p>'
+        '<p style="line-height:2;margin-left:20px;margin-top:10px">들여쓴 넓은 줄</p>'
+        '<table><tr><td style="background-color:#bfdbfe"><p>칸</p></td></tr></table>'
+    )
+    # (5) 글꼴 이름의 홑따옴표는 지운다(닫히지 않는 CSS 문자열 방지), 유니코드 숫자·긴 숫자는 거절 대신 무시
+    assert convert._font("a'b c") == "'ab c'"
+    body = (
+        '<w:p><w:pPr><w:ind w:left="²"/></w:pPr><w:r><w:rPr><w:sz w:val="'
+        + "9" * 5000
+        + '"/></w:rPr><w:t>글</w:t></w:r></w:p>'
+    )
+    assert th("a.docx", make_docx(body))[0] == "<p>글</p>"
+    # (6) 문단마다 직접 붙은 기본 줄 간격(docDefaults 와 같은 259)은 생략, 일부 변만 none 인 TableGrid 표는 테두리 있음
+    styles = f'<w:styles {_WNS}><w:docDefaults><w:pPrDefault><w:pPr><w:spacing w:line="259" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults></w:styles>'
+    body = (
+        '<w:p><w:pPr><w:spacing w:line="259" w:lineRule="auto"/></w:pPr><w:r><w:t>a</w:t></w:r></w:p>'
+        '<w:tbl><w:tblPr><w:tblStyle w:val="TableGrid"/><w:tblBorders><w:top w:val="none"/></w:tblBorders></w:tblPr><w:tr><w:tc><w:p><w:r><w:t>x</w:t></w:r></w:p></w:tc></w:tr></w:tbl>'
+    )
+    out = io.BytesIO()
+    with zipfile.ZipFile(io.BytesIO(make_docx(body))) as src, zipfile.ZipFile(out, "w") as dst:
+        for info in src.infolist():
+            if info.filename != "word/styles.xml":
+                dst.writestr(info, src.read(info.filename))
+        dst.writestr("word/styles.xml", styles)
+    assert th("a.docx", out.getvalue())[0] == "<p>a</p><table><tr><td><p>x</p></td></tr></table>"
+    # (7) 병합 칸(colspan>1)엔 colwidth 를 싣지 않는다
+    frag = ydoc_fragment(
+        ydoc.build('<table><tr><td colspan="2" style="width:120px"><p>a</p></td></tr></table>', "t")
+    )
+    assert "colwidth" not in frag and 'colspan="2"' in frag
+
+
+def test_fmt3_theme_fonts_are_document_default() -> None:
+    """실제 워드 파일(시말서.docx 대조): docDefaults 는 글꼴 이름 대신 테마(`minorEastAsia`)를 가리키고 theme1.xml 이 맑은 고딕을
+    준다. 본문 run 의 명시적 맑은 고딕은 기본값과 같으니 싣지 않고, 다른 글꼴만 마크가 된다."""
+    styles = (
+        f"<w:styles {_WNS}><w:docDefaults><w:rPrDefault><w:rPr>"
+        '<w:rFonts w:asciiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia" w:hAnsiTheme="minorHAnsi"/><w:sz w:val="22"/>'
+        "</w:rPr></w:rPrDefault></w:docDefaults></w:styles>"
+    )
+    theme = (
+        '<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:themeElements><a:fontScheme name="Office">'
+        '<a:majorFont><a:latin typeface="Calibri Light"/><a:ea typeface=""/><a:font script="Hang" typeface="맑은 고딕"/></a:majorFont>'
+        '<a:minorFont><a:latin typeface="Calibri"/><a:ea typeface=""/><a:font script="Hang" typeface="맑은 고딕"/></a:minorFont>'
+        "</a:fontScheme></a:themeElements></a:theme>"
+    )
+    body = (
+        '<w:p><w:r><w:rPr><w:rFonts w:ascii="맑은 고딕" w:eastAsia="맑은 고딕" w:hAnsi="맑은 고딕"/><w:sz w:val="22"/></w:rPr><w:t>기본 </w:t></w:r>'
+        '<w:r><w:rPr><w:rFonts w:eastAsiaTheme="majorEastAsia"/></w:rPr><w:t>테마 제목 글꼴 </w:t></w:r>'
+        '<w:r><w:rPr><w:rFonts w:eastAsia="돋움"/></w:rPr><w:t>돋움</w:t></w:r></w:p>'
+    )
+    buf = io.BytesIO()
+    with zipfile.ZipFile(io.BytesIO(make_docx(body))) as src, zipfile.ZipFile(buf, "w") as dst:
+        for info in src.infolist():
+            if info.filename != "word/styles.xml":
+                dst.writestr(info, src.read(info.filename))
+        dst.writestr("word/styles.xml", styles)
+        dst.writestr("word/theme/theme1.xml", theme)
+    # majorEastAsia 도 Hang 이 맑은 고딕이라 기본과 같다 → 생략. 돋움만 남는다
+    assert (
+        th("a.docx", buf.getvalue())[0]
+        == '<p>기본 테마 제목 글꼴 <span style="font-family:돋움">돋움</span></p>'
+    )
 
 
 async def _import(client: AsyncClient, name: str, data: bytes, **form):

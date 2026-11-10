@@ -64,8 +64,22 @@ MAX_XLSX_VISITED = (
 _ALIGNS = ("center", "right", "justify")  # left 는 기본값이라 싣지 않는다
 _ALIGN_RE = re.compile(r"text-align\s*:\s*(center|right|justify)\b", re.IGNORECASE)
 _COLOR_RE = re.compile(r"^#([0-9a-f]{6}|[0-9a-f]{3})$", re.IGNORECASE)
-_SPAN_COLOR_RE = re.compile(r"color\s*:\s*(#[0-9a-f]{3,6})\b", re.IGNORECASE)
+_SPAN_COLOR_RE = re.compile(r"(?<![-\w])color\s*:\s*(#[0-9a-f]{3,6})\b", re.IGNORECASE)
 MAX_ALT = 200
+# 서식 3차(README 63) — 편집기 속성 계약(#574)과 같은 범위·단위. 값은 늘 여기서 다시 써서 꼬리가 남지 않는다
+_LINE_HEIGHT_RE = re.compile(r"line-height\s*:\s*(\d+(?:\.\d+)?)\s*(?:;|$)", re.IGNORECASE)
+_MARGIN_RE = {
+    k: re.compile(rf"{k}\s*:\s*(\d+)px\b", re.IGNORECASE)
+    for k in ("margin-left", "margin-top", "margin-bottom")
+}
+_FONT_FAMILY_RE = re.compile(r"font-family\s*:\s*([^;]+)", re.IGNORECASE)
+_FONT_SIZE_RE = re.compile(r"font-size\s*:\s*(\d+(?:\.\d+)?)pt\b", re.IGNORECASE)
+_BG_RE = re.compile(r"background-color\s*:\s*(#[0-9a-f]{3,6})\b", re.IGNORECASE)
+_WIDTH_RE = re.compile(r"(?<![-\w])width\s*:\s*(\d+)px\b", re.IGNORECASE)
+_FONT_OK = re.compile(
+    r"[^\w\s가-힣.,\-]"
+)  # 글꼴 이름에 남길 글자 — 따옴표는 전부 지우고 필요하면 _font 가 다시 감싼다
+MAX_FONT = 100
 
 
 class TooLarge(ValueError):
@@ -122,6 +136,11 @@ def to_html(name: str, data: bytes) -> Converted:
     return Converted(body, truncated or cut, images)
 
 
+def _digits(value: str | None) -> bool:
+    """ASCII 숫자만, 9자리까지. `isdigit()` 는 `²` 도 참이고 int() 는 4300자리에서 ValueError 다(리뷰)."""
+    return bool(value) and value.isascii() and value.isdigit() and len(value) <= 9
+
+
 def _hex(value: str | None) -> str | None:
     """`#abc`·`#aabbcc`·`aabbcc`·`FFaabbcc`(ARGB) → `#aabbcc` 소문자. 아니면 None."""
     if not value:
@@ -134,6 +153,26 @@ def _hex(value: str | None) -> str | None:
     return f"#{v.lower()}" if re.fullmatch(r"[0-9a-fA-F]{6}", v) else None
 
 
+def _font(raw: str | None) -> str | None:
+    """글꼴 이름 — 계약에 맞는 글자만 남기고(홑따옴표·쉼표 허용) 100자. 공백이 있으면 홑따옴표로 감싼다."""
+    if not raw:
+        return None
+    # 따옴표가 닫히지 않은 속성값엔 뒤따르는 태그가 통째로 들어온다 — 첫 `<` 에서 자른다
+    name = (
+        _FONT_OK.sub("", raw.split("<")[0].replace('"', "'")).strip().strip("'").strip()[:MAX_FONT]
+    )
+    if not name:
+        return None
+    return f"'{name}'" if " " in name and "," not in name else name
+
+
+def _pt(value: float | None) -> str | None:
+    """글자 크기 pt — 4~96 사이만, 정수면 정수로."""
+    if value is None or not (4 <= value <= 96):
+        return None
+    return f"{int(value)}" if float(value).is_integer() else f"{round(value, 1)}"
+
+
 def _wrap(
     text: str,
     *,
@@ -144,8 +183,10 @@ def _wrap(
     color=None,
     bg=None,
     href=None,
+    font=None,
+    size=None,
 ) -> str:
-    """글자 조각을 마크 태그로 감싼다. 빈 글자는 그대로(빈 마크 태그를 만들지 않게)."""
+    """글자 조각을 마크 태그로 감싼다. 빈 글자는 그대로(빈 마크 태그를 만들지 않게). 글자색·글꼴·크기는 span 하나의 style 로."""
     if not text:
         return text
     if bold:
@@ -158,16 +199,58 @@ def _wrap(
         text = f"<s>{text}</s>"
     if bg:
         text = f'<mark data-color="{bg}">{text}</mark>'
+    styles = []
     if color:
-        text = f'<span style="color:{color}">{text}</span>'
+        styles.append(f"color:{color}")
+    if font:
+        styles.append(f"font-family:{font}")
+    if size:
+        styles.append(f"font-size:{size}pt")
+    if styles:
+        text = f'<span style="{";".join(styles)}">{text}</span>'
     if href:
         text = f'<a href="{html.escape(href, quote=True)}">{text}</a>'
     return text
 
 
-def _block(tag: str, inner: str, align: str | None) -> str:
-    style = f' style="text-align:{align}"' if align in _ALIGNS else ""
+def _block(tag: str, inner: str, align: str | None, extra: dict | None = None) -> str:
+    """문단·제목. `extra` 는 계약의 문단 속성 — line_height(배수), indent·space_before·space_after(px)."""
+    parts = []
+    if align in _ALIGNS:
+        parts.append(f"text-align:{align}")
+    extra = extra or {}
+    if lh := extra.get("line_height"):
+        parts.append(f"line-height:{lh}")
+    for key, prop in (
+        ("indent", "margin-left"),
+        ("space_before", "margin-top"),
+        ("space_after", "margin-bottom"),
+    ):
+        if extra.get(key):
+            parts.append(f"{prop}:{extra[key]}px")
+    style = f' style="{";".join(parts)}"' if parts else ""
     return f"<{tag}{style}>{inner}</{tag}>"
+
+
+def _px_from_twips(value: str | None) -> int | None:
+    """워드 twip(1/20pt) → px. 0 은 None(싣지 않는다)."""
+    if not _digits(value) or int(value) <= 0:
+        return None
+    return round(int(value) / 15)
+
+
+def _px_from_hwpunit(value: str | None) -> int | None:
+    """한글 HWPUNIT(1/7200 inch) → px."""
+    if not _digits(value) or int(value) <= 0:
+        return None
+    return round(int(value) / _HWPUNIT_PER_PX)
+
+
+def _line_height(ratio: float | None) -> str | None:
+    """줄 간격 배수 — 0.5~5, 1.0 은 기본이라 싣지 않는다."""
+    if ratio is None or not (0.5 <= ratio <= 5) or abs(ratio - 1.0) < 0.01:
+        return None
+    return f"{round(ratio, 2):g}"
 
 
 # ── 필터 ─────────────────────────────────────────────────────────────────────────
@@ -203,21 +286,50 @@ class _Filter(HTMLParser):
             if tag == "a" and key == "href" and len(value) <= MAX_HREF and _HREF_OK.match(value):
                 kept["href"] = value
             elif tag in ("td", "th") and key in ("colspan", "rowspan"):
-                if value.isdigit() and 1 <= int(value) <= MAX_SPAN:
+                if _digits(value) and 1 <= int(value) <= MAX_SPAN:
                     kept[key] = value
             elif tag in ("p", "h1", "h2", "h3", "h4", "h5", "h6") and key == "style":
+                parts = []
                 if m := _ALIGN_RE.search(value):
-                    kept["style"] = f"text-align:{m.group(1).lower()}"
+                    parts.append(f"text-align:{m.group(1).lower()}")
+                if (m := _LINE_HEIGHT_RE.search(value)) and (lh := _line_height(float(m.group(1)))):
+                    parts.append(f"line-height:{lh}")
+                for prop, limit in (
+                    ("margin-left", 2000),
+                    ("margin-top", 500),
+                    ("margin-bottom", 500),
+                ):
+                    if (m := _MARGIN_RE[prop].search(value)) and 0 < int(m.group(1)) <= limit:
+                        parts.append(f"{prop}:{m.group(1)}px")
+                if parts:
+                    kept["style"] = ";".join(parts)
             elif tag == "span" and key == "style":
+                parts = []
                 if (m := _SPAN_COLOR_RE.search(value)) and (c := _hex(m.group(1))):
-                    kept["style"] = f"color:{c}"
+                    parts.append(f"color:{c}")
+                if (m := _FONT_FAMILY_RE.search(value)) and (f := _font(m.group(1))):
+                    parts.append(f"font-family:{f}")
+                if (m := _FONT_SIZE_RE.search(value)) and (sz := _pt(float(m.group(1)))):
+                    parts.append(f"font-size:{sz}pt")
+                if parts:
+                    kept["style"] = ";".join(parts)
+            elif tag in ("td", "th") and key == "style":
+                parts = []
+                if (m := _BG_RE.search(value)) and (c := _hex(m.group(1))):
+                    parts.append(f"background-color:{c}")
+                if (m := _WIDTH_RE.search(value)) and 0 < int(m.group(1)) <= 4000:
+                    parts.append(f"width:{m.group(1)}px")
+                if parts:
+                    kept["style"] = ";".join(parts)
+            elif tag == "table" and key == "data-borders" and value == "none":
+                kept["data-borders"] = "none"
             elif tag == "mark" and key == "data-color":
                 if c := _hex(value):
                     kept["data-color"] = c
             elif tag == "img":
-                if key == "data-ref" and value.isdigit() and int(value) < self.n_images:
+                if key == "data-ref" and _digits(value) and int(value) < self.n_images:
                     kept["data-ref"] = value
-                elif key == "width" and value.isdigit() and 0 < int(value) <= 4000:
+                elif key == "width" and _digits(value) and 0 < int(value) <= 4000:
                     kept["width"] = value
                 elif key == "alt" and value:
                     kept["alt"] = value[:MAX_ALT]
@@ -242,7 +354,11 @@ class _Filter(HTMLParser):
             self.handle_endtag("p")
         if not self.stack and tag in _INLINE and tag not in _VOID:
             self._open_implicit_p()  # 블록 밖 링크·굵게 — 글자와 같은 규칙으로 문단에 넣는다
-        attr_html = "".join(f' {k}="{html.escape(v, quote=True)}"' for k, v in kept.items())
+        # 속성값은 큰따옴표 안이라 `"`·`&`·`<`·`>` 만 escape — 글꼴 이름의 홑따옴표(`'맑은 고딕'`)는 그대로
+        attr_html = "".join(
+            f' {k}="{html.escape(v, quote=False).replace(chr(34), "&quot;")}"'
+            for k, v in kept.items()
+        )
         self._emit(f"<{tag}{attr_html}>", TAG_COST + len(attr_html.encode()))
         if tag == "img":
             self.images += 1
@@ -398,6 +514,9 @@ class _Docx:
         self.styles = self._styles()
         self.nums = self._numbering()
         self.rels = self._rels()
+        self.theme = self._theme()
+        self.default_line: str | None = None
+        self.default_font, self.default_size = self._defaults()
         self.out: list[str] = []
         self.lists: list[
             tuple[str, bool, str]
@@ -422,6 +541,73 @@ class _Docx:
                     based.get(f"{_W}val") if based is not None else None,
                 )
         return out
+
+    def _theme(self) -> dict[str, str]:
+        """theme1.xml 의 글꼴 구성 — 워드 기본 서식은 글꼴 이름 대신 `w:eastAsiaTheme="minorEastAsia"` 처럼 테마를 가리킨다(실제
+        파일 확인). {"minor:ea": "맑은 고딕", "minor:latin": …, "major:…"}. 한글 문서는 `a:font script="Hang"` 이 ea 보다 우선."""
+        out: dict[str, str] = {}
+        path = next(
+            (n for n in self.z.namelist() if n.startswith("word/theme/") and n.endswith(".xml")),
+            None,
+        )
+        root = self._xml(path) if path else None
+        if root is None:
+            return out
+        for kind in ("major", "minor"):
+            node = root.find(f".//{_A}fontScheme/{_A}{kind}Font")
+            if node is None:
+                continue
+            latin, ea = node.find(f"{_A}latin"), node.find(f"{_A}ea")
+            hang = next((f for f in node.findall(f"{_A}font") if f.get("script") == "Hang"), None)
+            if latin is not None and latin.get("typeface"):
+                out[f"{kind}:latin"] = latin.get("typeface")
+            ea_face = (hang.get("typeface") if hang is not None else None) or (
+                ea.get("typeface") if ea is not None else None
+            )
+            out[f"{kind}:ea"] = ea_face or out.get(f"{kind}:latin", "")
+        return out
+
+    def _rfont(self, fonts) -> str | None:
+        """`w:rFonts` 에서 글꼴 이름 하나 — 동아시아(eastAsia) 우선, 이름이 없으면 테마 참조(…Theme 속성)를 theme1.xml 로 푼다."""
+        if fonts is None:
+            return None
+        for attr in ("eastAsia", "ascii", "hAnsi"):
+            if name := fonts.get(f"{_W}{attr}"):
+                return _font(name)
+            theme = fonts.get(f"{_W}{attr}Theme", "")
+            if theme:
+                kind = "major" if theme.startswith("major") else "minor"
+                slot = "ea" if "EastAsia" in theme else "latin"
+                if face := self.theme.get(f"{kind}:{slot}"):
+                    return _font(face)
+        return None
+
+    def _defaults(self) -> tuple[str | None, str | None]:
+        """styles.xml 의 docDefaults(rFonts·sz) — 이 값과 같은 글꼴·크기는 싣지 않는다(README 63). 문서 기본값은 편집기 기본값이
+        대신하고, 본문 전체에 같은 글꼴 마크가 깔리는 걸 막는다."""
+        root = self._xml("word/styles.xml")
+        if root is None:
+            return None, None
+        # 기본 문단 줄 간격(pPrDefault spacing line) — 같은 값은 싣지 않는다(복사해 붙인 문서는 문단마다 직접 259 가 붙는다, 리뷰)
+        ppr = root.find(f"{_W}docDefaults/{_W}pPrDefault/{_W}pPr/{_W}spacing")
+        self.default_line = (
+            _line_height(int(ppr.get(f"{_W}line")) / 240)
+            if ppr is not None
+            and ppr.get(f"{_W}lineRule", "auto") == "auto"
+            and _digits(ppr.get(f"{_W}line"))
+            else None
+        )
+        rpr = root.find(f"{_W}docDefaults/{_W}rPrDefault/{_W}rPr")
+        if rpr is None:
+            return None, None
+        fonts, sz = rpr.find(f"{_W}rFonts"), rpr.find(f"{_W}sz")
+        font = self._rfont(fonts)
+        size = (
+            _pt(int(sz.get(f"{_W}val")) / 2)
+            if sz is not None and _digits(sz.get(f"{_W}val"))
+            else None
+        )
+        return font, size
 
     def _heading(self, style_id: str | None) -> int | None:
         for _ in range(5):  # basedOn 사슬 — 「제목 1 기반 내 스타일」도 제목으로
@@ -492,6 +678,19 @@ class _Docx:
         align = _JC.get(jc.get(f"{_W}val", "")) if jc is not None else None
         numpr = ppr.find(f"{_W}numPr") if ppr is not None else None
         inner = self._inline(p)
+        extra: dict = {}
+        if ppr is not None:
+            sp = ppr.find(f"{_W}spacing")
+            if sp is not None:
+                line, rule = sp.get(f"{_W}line", ""), sp.get(f"{_W}lineRule", "auto")
+                if rule == "auto" and _digits(line):
+                    lh = _line_height(int(line) / 240)  # 240 = 1줄
+                    extra["line_height"] = None if lh == self.default_line else lh
+                extra["space_before"] = _px_from_twips(sp.get(f"{_W}before"))
+                extra["space_after"] = _px_from_twips(sp.get(f"{_W}after"))
+            ind = ppr.find(f"{_W}ind")
+            if ind is not None:
+                extra["indent"] = _px_from_twips(ind.get(f"{_W}left") or ind.get(f"{_W}start"))
         if numpr is not None and not in_cell and level is None:
             ilvl_el, num_el = numpr.find(f"{_W}ilvl"), numpr.find(f"{_W}numId")
             raw = ilvl_el.get(f"{_W}val", "0") if ilvl_el is not None else "0"
@@ -505,7 +704,7 @@ class _Docx:
                 return
         if not in_cell:
             self._close_lists(0)
-        out.append(_block(f"h{level}" if level else "p", inner, align))
+        out.append(_block(f"h{level}" if level else "p", inner, align, extra))
 
     def _list_item(self, ilvl: int, tag: str, num_id: str, inner: str) -> None:
         """목록 항목 — ilvl 만큼 중첩. 깊어지면 열린 항목 안에 새 목록을, 얕아지면 그만큼 닫는다. 깊이는 한 번에 한 단계만
@@ -549,11 +748,27 @@ class _Docx:
                         continue  # 위 칸에 합쳐진 칸 — 내지 않는다
                 inner: list[str] = []
                 self._blocks(tc, inner, in_cell=True)
+                style = []
+                shd = tcpr.find(f"{_W}shd") if tcpr is not None else None
+                if (
+                    shd is not None
+                    and shd.get(f"{_W}fill", "auto") != "auto"
+                    and (bg := _hex(shd.get(f"{_W}fill")))
+                ):
+                    style.append(f"background-color:{bg}")
+                tcw = tcpr.find(f"{_W}tcW") if tcpr is not None else None
+                if (
+                    tcw is not None
+                    and tcw.get(f"{_W}type", "dxa") == "dxa"
+                    and (w := _px_from_twips(tcw.get(f"{_W}w")))
+                ):
+                    style.append(f"width:{w}px")
                 cell = {
                     "html": "".join(inner),
                     "tag": "th" if header else "td",
                     "colspan": colspan,
                     "rowspan": 1,
+                    "style": ";".join(style),
                 }
                 if vmerge is not None:
                     starts[col] = cell
@@ -567,12 +782,34 @@ class _Docx:
         for cells in grid:
             html_cells = []
             for c in cells:
-                attrs = (f' colspan="{c["colspan"]}"' if c["colspan"] > 1 else "") + (
-                    f' rowspan="{c["rowspan"]}"' if c["rowspan"] > 1 else ""
+                attrs = (
+                    (f' colspan="{c["colspan"]}"' if c["colspan"] > 1 else "")
+                    + (f' rowspan="{c["rowspan"]}"' if c["rowspan"] > 1 else "")
+                    + (f' style="{c["style"]}"' if c["style"] else "")
                 )
                 html_cells.append(f"<{c['tag']}{attrs}>{c['html']}</{c['tag']}>")
             rows.append(f"<tr>{''.join(html_cells)}</tr>")
-        out.append(f"<table>{''.join(rows)}</table>")
+        borders = ' data-borders="none"' if self._borderless(tbl) else ""
+        out.append(f"<table{borders}>{''.join(rows)}</table>")
+
+    def _borderless(self, tbl) -> bool:
+        """테두리 없는 표 — 네 변(top·bottom·left/start·right/end)이 모두 적혀 있고 전부 none/nil 이거나, tblBorders 도 tblStyle 도
+        없을 때(워드는 그러면 선을 안 그린다). 일부 변만 none 이고 tblStyle 이 있으면 스타일이 나머지를 그리므로 테두리 있음(리뷰)."""
+        tblpr = tbl.find(f"{_W}tblPr")
+        borders = tblpr.find(f"{_W}tblBorders") if tblpr is not None else None
+        if borders is None:
+            return tblpr is None or tblpr.find(f"{_W}tblStyle") is None
+        vals: dict[str, str] = {}
+        for b in borders:
+            side = b.tag.removeprefix(_W)
+            side = {"start": "left", "end": "right"}.get(side, side)
+            vals[side] = b.get(f"{_W}val", "none")
+        sides = ("top", "bottom", "left", "right")
+        if not all(side in vals for side in sides):
+            return tblpr.find(f"{_W}tblStyle") is None and all(
+                v in ("none", "nil") for v in vals.values()
+            )
+        return all(vals[side] in ("none", "nil") for side in sides)
 
     # ── 인라인 ──
     def _inline(self, node, href: str | None = None) -> str:
@@ -605,8 +842,16 @@ class _Docx:
                 img = el.find(f".//{_V}imagedata")
                 if img is not None:
                     text.append(self._image(img.get(f"{_R}id"), None))
-        color = bg = None
+        color = bg = font = size = None
         if rpr is not None:
+            font = self._rfont(rpr.find(f"{_W}rFonts"))
+            sz = rpr.find(f"{_W}sz")
+            if sz is not None and _digits(sz.get(f"{_W}val")):
+                size = _pt(int(sz.get(f"{_W}val")) / 2)  # 반포인트
+            if font == self.default_font:
+                font = None
+            if size == self.default_size:
+                size = None
             c = rpr.find(f"{_W}color")
             color = (
                 _hex(c.get(f"{_W}val")) if c is not None and c.get(f"{_W}val") != "auto" else None
@@ -626,6 +871,8 @@ class _Docx:
             color=color,
             bg=bg,
             href=href,
+            font=font,
+            size=size,
         )
 
     def _drawing(self, drawing) -> str:
@@ -652,24 +899,25 @@ class _Docx:
 # ── xlsx ─────────────────────────────────────────────────────────────────────────
 
 
-def _cell_html(cell) -> str:
-    """셀 값 + 셀 서식(굵게·기울임·밑줄·취소선·글자색·채우기색 → 형광펜). read_only 의 EmptyCell 은 서식이 없다."""
+def _cell_html(cell, default_font=None) -> tuple[str, str | None]:
+    """(셀 값 HTML, 셀 배경색). 글자 서식은 굵게·기울임·밑줄·취소선·글자색·글꼴·크기, 채우기는 셀 배경(계약 backgroundColor).
+    read_only 의 EmptyCell 은 서식이 없다."""
     value = cell.value
     text = html.escape("" if value is None else str(value))
     font = getattr(cell, "font", None)
-    if not text or font is None:
-        return text
-    color = (
-        _hex(font.color.rgb) if font.color is not None and isinstance(font.color.rgb, str) else None
-    )
-    if color == "#000000":
-        color = None
     fill = getattr(cell, "fill", None)
     bg = None
     if fill is not None and fill.fill_type == "solid" and isinstance(fill.fgColor.rgb, str):
         bg = _hex(fill.fgColor.rgb)
         if bg in ("#ffffff", "#000000"):
             bg = None
+    if not text or font is None:
+        return text, bg
+    color = (
+        _hex(font.color.rgb) if font.color is not None and isinstance(font.color.rgb, str) else None
+    )
+    if color == "#000000":
+        color = None
     return _wrap(
         text,
         bold=bool(font.b),
@@ -677,8 +925,67 @@ def _cell_html(cell) -> str:
         underline=bool(font.u),
         strike=bool(font.strike),
         color=color,
-        bg=bg,
-    )
+        font=None
+        if default_font is not None and font.name == default_font.name
+        else _font(font.name),
+        size=None
+        if font.sz is None or (default_font is not None and font.sz == default_font.sz)
+        else _pt(float(font.sz)),
+    ), bg
+
+
+_COL_RE = re.compile(rb"<col\b([^>]*?)/?>")
+_COL_ATTR_RE = re.compile(rb'(min|max|width|hidden)="([^"]*)"')
+_COLS_HEAD_BYTES = 256 * 1024  # <cols> 는 <sheetData> 앞에 있다 — 시트 XML 의 앞부분만 읽는다
+MAX_XLSX_COLS = 16384  # 엑셀 열 상한(XFD)
+
+
+def _xlsx_col_widths(z: zipfile.ZipFile) -> list[dict[int, int]]:
+    """워크시트 순서대로(차트시트는 건너뛴다 — wb.worksheets 와 같은 순서, 리뷰) {열 번호(1부터): px}. workbook.xml 의 시트 순서 →
+    rels → sheetN.xml 앞부분의 <cols>. 엑셀 열 너비(글자 수)는 여백 포함 값이라 ×7 이 화면 px 에 가깝다(9.14 → 64px, 리뷰).
+    시트 XML 은 수십 MB 일 수 있어 `_parse_xml`(2MB 상한)로 읽지 않는다 — 앞 256KB 만 읽어 `<sheetData` 앞에서 자르고 `<col>` 을
+    정규식으로 꺼낸다(리뷰: 10MB 시트가 통째로 거절됐고, `<col min=1 max=1024>` 4.8만 개가 47초 걸렸다). 못 읽으면 {} —
+    너비는 있으면 좋은 것이지 거절 사유가 아니다. read_only 워크시트는 column_dimensions 를 안 준다."""
+    _XL = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
+    try:
+        wb_root = _parse_xml(z, "xl/workbook.xml")
+        rels_root = _parse_xml(z, "xl/_rels/workbook.xml.rels")
+    except (TooLarge, Unsupported):
+        return []
+    if wb_root is None or rels_root is None:
+        return []
+    rels = {r.get("Id", ""): r.get("Target", "") for r in rels_root.iter(f"{_REL}Relationship")}
+    out: list[dict[int, int]] = []
+    for sh in wb_root.iter(f"{_XL}sheet"):
+        target = rels.get(sh.get(f"{_R}id", ""), "")
+        if "worksheets/" not in target:
+            continue  # 차트시트 등 — openpyxl 의 wb.worksheets 에도 없다
+        path = posixpath.normpath(
+            target.lstrip("/") if target.startswith("/") else posixpath.join("xl", target)
+        )
+        widths: dict[int, int] = {}
+        if path in z.namelist():
+            with z.open(path) as f:
+                head = f.read(_COLS_HEAD_BYTES)
+            head = head.split(b"<sheetData", 1)[0]
+            for m in _COL_RE.finditer(head):
+                attrs = dict(_COL_ATTR_RE.findall(m.group(1)))
+                if attrs.get(b"hidden") in (b"1", b"true"):
+                    continue
+                try:
+                    lo = int(attrs.get(b"min", b"0"))
+                    hi = min(int(attrs.get(b"max", b"0")), MAX_XLSX_COLS)
+                    w = float(attrs.get(b"width", b"0"))
+                except ValueError:
+                    continue
+                if not (w > 0 and 0 < lo <= hi):
+                    continue
+                for c in range(lo, hi + 1):
+                    if len(widths) >= MAX_XLSX_COLS:
+                        break
+                    widths.setdefault(c, min(4000, round(w * 7)))
+        out.append(widths)
+    return out
 
 
 def _cell_align(cell) -> str | None:
@@ -704,16 +1011,33 @@ def _xlsx(data: bytes) -> tuple[str, bool]:
         for member in ("xl/styles.xml", "xl/sharedStrings.xml", "xl/workbook.xml"):
             if member in z.namelist() and z.getinfo(member).file_size > MAX_XML_BYTES:
                 raise TooLarge(member)
+    with _zip(data) as z:
+        col_widths = _xlsx_col_widths(z)
     wb = openpyxl.load_workbook(io.BytesIO(data), read_only=True, data_only=True)
+    fonts = getattr(wb, "_fonts", None)
+    default_font = (
+        fonts[0] if fonts else None
+    )  # 통합 문서 기본 글꼴(Normal) — 같은 값은 싣지 않는다(README 63)
     parts: list[str] = []
     cells = visited = size = 0
 
-    def flush(title: str, rows: list[tuple]) -> None:
+    def flush(title: str, rows: list[tuple], widths: dict[int, int]) -> None:
         width = max((len(r) for r in rows), default=0)
         parts.append(f"<h2>{html.escape(title)}</h2><table>")
         for i, row in enumerate(rows):
             tag = "th" if i == 0 else "td"
-            tds = [f"<{tag}>{_block('p', _cell_html(c), _cell_align(c))}</{tag}>" for c in row]
+            tds = []
+            for j, c in enumerate(row, start=1):
+                inner, bg = _cell_html(c, default_font)
+                style = []
+                if bg:
+                    style.append(f"background-color:{bg}")
+                if i == 0 and widths.get(
+                    j
+                ):  # 열 너비는 첫 행에만 — 편집기(colwidth)는 첫 행 값을 쓴다
+                    style.append(f"width:{widths[j]}px")
+                attr = f' style="{";".join(style)}"' if style else ""
+                tds.append(f"<{tag}{attr}>{_block('p', inner, _cell_align(c))}</{tag}>")
             tds += [f"<{tag}><p></p></{tag}>"] * (width - len(row))
             parts.append(f"<tr>{''.join(tds)}</tr>")
         parts.append("</table>")
@@ -721,7 +1045,8 @@ def _xlsx(data: bytes) -> tuple[str, bool]:
     try:
         if any((ws.max_row or 0) * (ws.max_column or 0) > MAX_XLSX_AREA for ws in wb.worksheets):
             raise TooLarge("xlsx")  # 선언된 범위(dimension) 기준 — 돌기 전에 거절
-        for ws in wb.worksheets:
+        for sheet_no, ws in enumerate(wb.worksheets):
+            widths = col_widths[sheet_no] if sheet_no < len(col_widths) else {}
             rows: list[tuple] = []
             for row in ws.iter_rows():
                 visited += len(row)
@@ -730,20 +1055,20 @@ def _xlsx(data: bytes) -> tuple[str, bool]:
                     n -= 1
                 row = row[:n]
                 if visited > MAX_XLSX_VISITED:
-                    flush(ws.title, rows)
+                    flush(ws.title, rows, widths)
                     return "".join(parts), True
                 if not row:
                     continue
                 cells += len(row)
                 if cells > MAX_XLSX_CELLS or size > 2 * MAX_SEED_COST:
-                    flush(ws.title, rows)
+                    flush(ws.title, rows, widths)
                     return "".join(parts), True
                 rows.append(row)
                 size += (
                     sum(len(str(c.value)) for c in row if c.value is not None)
                     + len(row) * 2 * TAG_COST
                 )
-            flush(ws.title, rows)
+            flush(ws.title, rows, widths)
     finally:
         wb.close()
     return "".join(parts), False
@@ -772,8 +1097,11 @@ class _Hwpx:
             raise TooLarge("hwpx")
         self.char: dict[str, dict] = {}
         self.para: dict[str, dict] = {}
+        self.para_extra: dict[str, dict] = {}  # 문단 모양 → 줄 간격·여백(계약 속성)
+        self.fills: dict[str, dict] = {}  # borderFill id → {bg, borderless}
         self.seen: dict[str, int] = {}
         self._header()
+        self._drop_default_para()
         self.manifest = self._manifest()
 
     def _xml(self, path: str):
@@ -783,6 +1111,23 @@ class _Hwpx:
         root = self._xml("Contents/header.xml")
         if root is None:
             return
+        faces: dict[str, str] = {}  # 한글 글꼴 id → 이름(fontface lang=HANGUL)
+        for ff in root.iter(f"{_HH}fontface"):
+            if ff.get("lang", "HANGUL").upper() == "HANGUL":
+                for f in ff.findall(f"{_HH}font"):
+                    faces[f.get("id", "")] = f.get("face", "")
+        for bf in root.iter(f"{_HH}borderFill"):
+            brush = bf.find(f".//{_HC}winBrush")
+            if brush is None:
+                brush = bf.find(f".//{_HH}winBrush")
+            bg = _hex(brush.get("faceColor")) if brush is not None else None
+            sides = [bf.find(f"{_HH}{side}Border") for side in ("left", "right", "top", "bottom")]
+            self.fills[bf.get("id", "")] = {
+                "bg": None if bg in ("#ffffff", None) else bg,
+                "borderless": all(
+                    sd is None or sd.get("type", "NONE").upper() == "NONE" for sd in sides
+                ),
+            }
         for cp in root.iter(f"{_HH}charPr"):
             u = cp.find(f"{_HH}underline")
             so = cp.find(f"{_HH}strikeout")
@@ -796,7 +1141,29 @@ class _Hwpx:
                 if cp.get("textColor", "#000000") in ("#000000", "none")
                 else _hex(cp.get("textColor")),
                 "bg": None if shade == "none" else _hex(shade),
+                "font": _font(
+                    faces.get(
+                        cp.find(f"{_HH}fontRef").get("hangul", "")
+                        if cp.find(f"{_HH}fontRef") is not None
+                        else ""
+                    )
+                ),
+                "size": _pt(int(cp.get("height")) / 100)
+                if _digits(cp.get("height"))
+                else None,  # 1/100 pt
             }
+        base = self.char.get(
+            "0", {}
+        )  # 한글의 기본 글자 모양(id 0) — 같은 글꼴·크기는 싣지 않는다(README 63)
+        base_font, base_size = (
+            base.get("font"),
+            base.get("size"),
+        )  # 같은 dict 라 루프 전에 값을 떼어 둔다(리뷰)
+        for cp in self.char.values():
+            if cp.get("font") == base_font:
+                cp["font"] = None
+            if cp.get("size") == base_size:
+                cp["size"] = None
         for pp in root.iter(f"{_HH}paraPr"):
             al = pp.find(f"{_HH}align")
             hd = pp.find(f"{_HH}heading")
@@ -807,6 +1174,31 @@ class _Hwpx:
                 and hd.get("level", "").isdigit()
             ):
                 level = min(int(hd.get("level")) + 1, 6)
+            # 한글이 저장한 파일은 여백·줄 간격을 hp:switch/hp:default 아래에 두고 margin 자식은 hc: 네임스페이스다(리뷰)
+            scope = pp.find(f"{_HP}switch/{_HP}default")
+            if scope is None:
+                scope = pp
+            ls = scope.find(f"{_HH}lineSpacing")
+            margin = scope.find(f"{_HH}margin")
+            extra: dict = {}
+            if (
+                ls is not None
+                and ls.get("type", "").upper() == "PERCENT"
+                and _digits(ls.get("value"))
+            ):
+                extra["line_height"] = _line_height(int(ls.get("value")) / 100)
+            if margin is not None:
+                for child, key in (
+                    ("left", "indent"),
+                    ("prev", "space_before"),
+                    ("next", "space_after"),
+                ):
+                    m = margin.find(f"{_HC}{child}")
+                    if m is None:
+                        m = margin.find(f"{_HH}{child}")
+                    if m is not None:
+                        extra[key] = _px_from_hwpunit(m.get("value"))
+            self.para_extra[pp.get("id", "")] = extra
             self.para[pp.get("id", "")] = {
                 "align": {
                     "CENTER": "center",
@@ -816,6 +1208,13 @@ class _Hwpx:
                 }.get((al.get("horizontal", "") if al is not None else "").upper()),
                 "level": level,
             }
+
+    def _drop_default_para(self) -> None:
+        base = dict(self.para_extra.get("0", {}))  # 값을 떼어 둔다(같은 dict 함정)
+        for extra in self.para_extra.values():
+            for key, value in base.items():
+                if value is not None and extra.get(key) == value:
+                    extra[key] = None
 
     def _manifest(self) -> dict[str, str]:
         root = self._xml("Contents/content.hpf")
@@ -838,9 +1237,11 @@ class _Hwpx:
         out: list[str] = []
         text: list[str] = []
 
+        extra = self.para_extra.get(p.get("paraPrIDRef", ""), {})
+
         def flush() -> None:
             if line := "".join(text).strip():
-                out.append(_block(tag, line, pr.get("align")))
+                out.append(_block(tag, line, pr.get("align"), extra))
             text.clear()
 
         for run in p.findall(f"{_HP}run"):
@@ -884,9 +1285,24 @@ class _Hwpx:
                     for src, dst in (("colSpan", "colspan"), ("rowSpan", "rowspan")):
                         if (v := span.get(src, "1")) != "1":
                             attrs += f' {dst}="{html.escape(v, quote=True)}"'  # 상한은 필터가 본다
+                style = []
+                fill = self.fills.get(tc.get("borderFillIDRef", ""), {})
+                if fill.get("bg"):
+                    style.append(f"background-color:{fill['bg']}")
+                sz = tc.find(f"{_HP}cellSz")
+                if sz is not None and (w := _px_from_hwpunit(sz.get("width"))):
+                    style.append(f"width:{w}px")
+                if style:
+                    attrs += f' style="{";".join(style)}"'
                 cells.append(f"<td{attrs}>{inner}</td>")
             rows.append(f"<tr>{''.join(cells)}</tr>")
-        return f"<table>{''.join(rows)}</table>"
+        # 표 자체와 모든 셀의 borderFill 이 다 선 없음일 때만 — 한글은 셀 쪽이 선을 그리는 경우가 있다(리뷰, 실제 파일 미확인)
+        refs = [tbl.get("borderFillIDRef", "")] + [
+            tc.get("borderFillIDRef", "") for tc in tbl.iter(f"{_HP}tc")
+        ]
+        borderless = all(self.fills.get(r, {}).get("borderless") for r in refs)
+        borders = ' data-borders="none"' if borderless else ""
+        return f"<table{borders}>{''.join(rows)}</table>"
 
     def _pic(self, pic) -> str:
         img = pic.find(f".//{_HC}img")

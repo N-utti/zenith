@@ -103,6 +103,16 @@ def plain_text(update: bytes) -> str:
     return _plain_text(doc.get("default", type=XmlFragment))
 
 
+def _style_props(style: str) -> dict[str, str]:
+    """`a:b;c:d` → {a: b}. 필터가 이미 정해진 모양으로 다시 쓴 값만 온다."""
+    out: dict[str, str] = {}
+    for part in style.split(";"):
+        if ":" in part:
+            k, v = part.split(":", 1)
+            out[k.strip().lower()] = v.strip()
+    return out
+
+
 class _Builder(HTMLParser):
     def __init__(self, root: XmlFragment, image_urls: list[str] | None = None) -> None:
         super().__init__(convert_charrefs=True)
@@ -169,10 +179,15 @@ class _Builder(HTMLParser):
                     return
                 mark_attrs = {"href": a["href"], **_LINK_ATTRS}
             elif tag == "span":
-                m = re.search(r"color\s*:\s*(#[0-9a-fA-F]{6})", a.get("style", ""))
-                if not m:
-                    return  # 색 없는 span — 필터가 이미 벗겼지만 한 번 더
-                mark_attrs = {"color": m.group(1).lower()}
+                props = _style_props(a.get("style", ""))
+                if c := props.get("color"):
+                    mark_attrs["color"] = c.lower()
+                if f := props.get("font-family"):
+                    mark_attrs["fontFamily"] = f  # 계약(#574): CSS font-family 값 그대로
+                if sz := props.get("font-size"):
+                    mark_attrs["fontSize"] = sz  # "11pt"
+                if not mark_attrs:
+                    return  # 아무 속성도 없는 span — 필터가 이미 벗겼지만 한 번 더
             elif tag == "mark":
                 mark_attrs = {"color": a["data-color"]} if a.get("data-color") else {}
             self.marks.append((MARKS[tag], mark_attrs))
@@ -244,11 +259,28 @@ class _Builder(HTMLParser):
             if a.get("alt"):
                 node_attrs["alt"] = a["alt"]
         if name in ("heading", "paragraph"):
-            m = re.search(r"text-align\s*:\s*(center|right|justify)", a.get("style", ""))
-            if m:
-                node_attrs["textAlign"] = m.group(
-                    1
-                )  # 프론트 TextAlign 확장의 속성. left 는 기본값이라 안 싣는다
+            props = _style_props(a.get("style", ""))
+            if (al := props.get("text-align")) in ("center", "right", "justify"):
+                node_attrs["textAlign"] = (
+                    al  # 프론트 TextAlign 확장의 속성. left 는 기본값이라 안 싣는다
+                )
+            if lh := props.get("line-height"):
+                node_attrs["lineHeight"] = lh  # 계약(#574): 배수 문자열
+            for prop, key in (
+                ("margin-left", "indent"),
+                ("margin-top", "spaceBefore"),
+                ("margin-bottom", "spaceAfter"),
+            ):
+                if (v := props.get(prop, "")).endswith("px") and v[:-2].isdigit():
+                    node_attrs[key] = int(v[:-2])
+        elif name in ("tableCell", "tableHeader"):
+            props = _style_props(a.get("style", ""))
+            if bg := props.get("background-color"):
+                node_attrs["backgroundColor"] = bg.lower()
+            if (w := props.get("width", "")).endswith("px") and w[:-2].isdigit() and a.get("colspan", "1") == "1":
+                node_attrs["colwidth"] = [int(w[:-2])]  # Tiptap 표준 속성(px 배열, 길이 = colspan — 병합 칸은 싣지 않는다)
+        elif name == "table" and a.get("data-borders") == "none":
+            node_attrs["borders"] = "none"
         if name == "heading":
             node_attrs["level"] = int(tag[1])
         elif name in ("tableCell", "tableHeader"):
