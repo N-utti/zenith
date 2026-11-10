@@ -1,5 +1,10 @@
 import { afterEach, expect, test, vi } from 'vitest'
-import { clearNotifications, installExternalLinkHandler, restrictImageSources } from './desktop'
+import {
+  clearNotifications,
+  installExternalLinkHandler,
+  openExternal,
+  restrictImageSources,
+} from './desktop'
 
 const server = vi.hoisted(() => ({ origin: '' }))
 vi.mock('./serverOrigin', () => ({ serverOrigin: () => server.origin }))
@@ -72,4 +77,20 @@ test('데스크톱 앱이면 바깥 링크의 왼쪽 클릭과 휠 클릭을 기
     off()
     link.remove()
   }
+})
+
+test('바깥 주소 열기: 데스크톱 앱은 기본 브라우저로, 브라우저는 새 탭으로', () => {
+  const open = vi.spyOn(window, 'open').mockImplementation(() => null)
+  openExternal('https://example.com/')
+  expect(open).toHaveBeenCalledWith('https://example.com/', '_blank', 'noopener')
+
+  const invoke = vi.fn(() => Promise.resolve())
+  window.__TAURI__ = { core: { invoke } }
+  open.mockClear()
+  openExternal('https://example.com/')
+  expect(invoke).toHaveBeenCalledWith('plugin:opener|open_url', {
+    url: 'https://example.com/',
+    with: null,
+  })
+  expect(open).not.toHaveBeenCalled()
 })
