@@ -67,7 +67,9 @@ _COLOR_RE = re.compile(r"^#([0-9a-f]{6}|[0-9a-f]{3})$", re.IGNORECASE)
 _SPAN_COLOR_RE = re.compile(r"(?<![-\w])color\s*:\s*(#[0-9a-f]{3,6})\b", re.IGNORECASE)
 MAX_ALT = 200
 # 서식 3차(README 63) — 편집기 속성 계약(#574)과 같은 범위·단위. 값은 늘 여기서 다시 써서 꼬리가 남지 않는다
-_LINE_HEIGHT_RE = re.compile(r"line-height\s*:\s*(\d+(?:\.\d+)?)\s*(?:;|$)", re.IGNORECASE | re.ASCII)
+_LINE_HEIGHT_RE = re.compile(
+    r"line-height\s*:\s*(\d+(?:\.\d+)?)\s*(?:;|$)", re.IGNORECASE | re.ASCII
+)
 _MARGIN_RE = {
     k: re.compile(rf"{k}\s*:\s*(\d+)px\b", re.IGNORECASE | re.ASCII)
     for k in ("margin-left", "margin-top", "margin-bottom")
@@ -282,7 +284,7 @@ def _border_kind(kind: str) -> str:
     """워드 w:val(dashed·dotDash·thinThickSmallGap…)·한글 type(DASH_DOT·DOT·SLIM_THICK…) → CSS 선 종류 넷."""
     if "dash" in kind:
         return "dashed"
-    if "dot" in kind:
+    if "dot" in kind or kind == "circle":  # 한글 CIRCLE 은 동그란 점선
         return "dotted"
     if "double" in kind or "thick" in kind or "triple" in kind:
         return "double"
@@ -805,9 +807,7 @@ class _Docx:
         tbl_borders = tblpr.find(f"{_W}tblBorders") if tblpr is not None else None
         # tblBorders 만 있고 표 스타일이 없으면 적히지 않은 변은 워드가 그리지 않는다(위·아래 선만 있는 표) → none(리뷰)
         unlisted = (
-            "none"
-            if tbl_borders is not None and tblpr.find(f"{_W}tblStyle") is None
-            else None
+            "none" if tbl_borders is not None and tblpr.find(f"{_W}tblStyle") is None else None
         )
         borderless = self._borderless(tbl)
         grid_cols = tbl.findall(f"{_W}tblGrid/{_W}gridCol")
@@ -828,6 +828,10 @@ class _Docx:
                 if vmerge is not None and vmerge.get(f"{_W}val", "continue") != "restart":
                     if col in starts:
                         starts[col]["rowspan"] += 1
+                        # 병합 영역의 아래 변은 워드가 마지막 칸의 tcBorders 로 그린다(리뷰)
+                        starts[col]["tcb_end"] = (
+                            tcpr.find(f"{_W}tcBorders") if tcpr is not None else None
+                        )
                         col += colspan
                         continue  # 위 칸에 합쳐진 칸 — 내지 않는다
                 inner: list[str] = []
@@ -878,7 +882,13 @@ class _Docx:
                     "right": c["col"] + c["colspan"] >= ncols,
                 }
                 sides = {
-                    side: self._border(c["tcb"], tbl_borders, side, is_outer) or unlisted
+                    side: self._border(
+                        c["tcb_end"] if side == "bottom" and "tcb_end" in c else c["tcb"],
+                        tbl_borders,
+                        side,
+                        is_outer,
+                    )
+                    or unlisted
                     for side, is_outer in outer.items()
                 }
                 style = ";".join(c["style"] + _cell_border_style(sides, borderless))

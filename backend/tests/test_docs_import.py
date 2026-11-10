@@ -1096,6 +1096,15 @@ def test_fmt4_docx_nested_table_row_height_cell_borders() -> None:
         '<tr><td style="border-top:2px solid #ffffff;border-right:3px dashed #ff0000"><p>c</p></td>'
         '<td style="border-top:2px solid #ffffff;border-left:3px dashed #ff0000"><p>d</p></td></tr></table>'
     )
+    # 세로 병합: 아래 변은 마지막(이어지는) 칸의 tcBorders 로 — 시작 칸은 solid, 끝 칸은 dashed 면 dashed(리뷰)
+    merged = (
+        '<w:tbl><w:tr><w:tc><w:tcPr><w:vMerge w:val="restart"/><w:tcBorders><w:bottom w:val="single" w:sz="12"/></w:tcBorders></w:tcPr><w:p><w:r><w:t>a</w:t></w:r></w:p></w:tc></w:tr>'
+        '<w:tr><w:tc><w:tcPr><w:vMerge/><w:tcBorders><w:bottom w:val="dashed" w:sz="12"/></w:tcBorders></w:tcPr><w:p/></w:tc></w:tr></w:tbl>'
+    )
+    assert (
+        th("a.docx", make_docx(merged))[0]
+        == '<table data-borders="none"><tr><td rowspan="2" style="border-bottom:2px dashed #000000"><p>a</p></td></tr></table>'
+    )
     # 위·아래 선만 적힌 표(tblStyle 없음): 적히지 않은 변은 워드가 안 그린다 → none. gridBefore 1 인 둘째 행의 칸은 안쪽(insideV)·오른쪽 바깥.
     # tblGrid 가 열 수. 선 종류 thinThickSmallGap → double
     lines = (
