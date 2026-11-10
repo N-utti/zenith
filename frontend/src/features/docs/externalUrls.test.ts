@@ -1,7 +1,7 @@
 import { Editor } from '@tiptap/core'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { afterEach, expect, it } from 'vitest'
+import { afterEach, expect, it, vi } from 'vitest'
 import { docContentExtensions } from './editorExtensions'
 import { ImageBlockView } from './ImageBlockView'
 
@@ -12,7 +12,10 @@ const make = (content: string | object) => {
   editors.push(editor)
   return editor
 }
-afterEach(() => editors.splice(0).forEach((e) => e.destroy()))
+afterEach(() => {
+  editors.splice(0).forEach((e) => e.destroy())
+  vi.restoreAllMocks()
+})
 
 it('바깥 주소의 그림은 사진 블록이 되지 않는다. 올린 파일은 그대로 된다', () => {
   const outside = make('<p>앞</p><img src="https://evil.example/x.png?d=1">')
@@ -99,4 +102,48 @@ it('형광펜 색에 스타일을 끼워 넣을 수 없다. 툴바 색은 그대
 
   const toolbar = make('<p><mark data-color="#fef08a">글</mark></p>')
   expect(toolbar.getHTML()).toContain('data-color="#fef08a"')
+})
+
+it('링크를 누르면 새 탭으로 연다. 위험한 주소와 끌어 고른 끝은 열지 않는다', () => {
+  const open = vi.spyOn(window, 'open').mockImplementation(() => null)
+  const click = (editor: Editor) => {
+    const event = new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })
+    editor.view.dom.querySelector('a')?.dispatchEvent(event)
+    return event.defaultPrevented
+  }
+
+  expect(click(make('<p><a href="https://example.com/x">바깥</a></p>'))).toBe(true)
+  expect(open).toHaveBeenCalledWith('https://example.com/x', '_blank', 'noopener')
+
+  open.mockClear()
+  const dragged = make('<p><a href="https://example.com/y">고른 글</a></p>')
+  dragged.commands.setTextSelection({ from: 1, to: 3 })
+  expect(click(dragged)).toBe(false)
+  // javascript: 는 Link 확장이 href 부터 버리지만, 남의 편집으로 실려 와도 열지 않는다.
+  const evil = make({
+    type: 'doc',
+    content: [
+      {
+        type: 'paragraph',
+        content: [
+          {
+            type: 'text',
+            text: '악성',
+            marks: [{ type: 'link', attrs: { href: 'javascript:alert(1)' } }],
+          },
+        ],
+      },
+    ],
+  })
+  click(evil)
+  expect(open).not.toHaveBeenCalled()
+
+  // 파일 칩 같은 노드 뷰 안의 링크는 그쪽이 처리한다.
+  const chip = make('<p>칩</p>')
+  const wrapper = document.createElement('div')
+  wrapper.setAttribute('data-node-view-wrapper', '')
+  wrapper.innerHTML = '<a href="https://example.com/file">내려받기</a>'
+  chip.view.dom.append(wrapper)
+  expect(click(chip)).toBe(false)
+  expect(open).not.toHaveBeenCalled()
 })

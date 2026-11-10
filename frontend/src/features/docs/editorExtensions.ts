@@ -1,4 +1,5 @@
-import { getStyleProperty, type Extensions } from '@tiptap/core'
+import { Extension, getStyleProperty, type Extensions } from '@tiptap/core'
+import { Plugin } from '@tiptap/pm/state'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import Collaboration from '@tiptap/extension-collaboration'
@@ -15,7 +16,9 @@ import {
   SafeTextAlign,
   safeColor,
 } from './docFormat'
+import { safeHref } from './exportContent'
 import { FileChip } from './FileChip'
+import { openExternal } from '@/lib/desktop'
 import { ImageBlock } from './ImageBlock'
 import { SlashCommand } from './slashCommand'
 import { tableExtensions } from './tableExtensions'
@@ -46,6 +49,39 @@ const SafeHighlight = Highlight.extend({
   },
 })
 
+/**
+ * 링크를 누르면 연다(편집 중에도). tiptap 의 openOnClick 은 noopener 없이 `window.open` 하고,
+ * mouseup 에서 불려 click 기본 동작이 살아남아 데스크톱 셸의 전역 처리기가 한 번 더 연다.
+ * 그래서 click 을 직접 받아 막고 연다. 끌어서 고른 끝이 링크면 열지 않는다.
+ * href 는 원래 값을 읽는다. 걸러져 빈 href 를 `anchor.href` 로 풀면 지금 페이지 주소가 된다.
+ */
+const OpenLinkOnClick = Extension.create({
+  name: 'openLinkOnClick',
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        props: {
+          handleDOMEvents: {
+            click: (view, event) => {
+              if (event.button !== 0 || !view.state.selection.empty) return false
+              const anchor =
+                event.target instanceof Element ? event.target.closest('a[href]') : null
+              // 링크 서식만. 파일 칩의 내려받기 링크 같은 노드 뷰 안 링크는 그쪽이 처리한다.
+              if (!(anchor instanceof HTMLAnchorElement)) return false
+              if (anchor.closest('[data-node-view-wrapper]')) return false
+              const href = safeHref(anchor.getAttribute('href'))
+              if (!href) return false
+              event.preventDefault()
+              openExternal(href)
+              return true
+            },
+          },
+        },
+      }),
+    ]
+  },
+})
+
 type BuildOptions = Pick<CollabSession, 'doc' | 'provider'> & {
   user: { name: string; color: string }
 }
@@ -73,11 +109,12 @@ export function docContentExtensions(): Extensions {
     StarterKit.configure({
       undoRedo: false,
       link: {
-        openOnClick: false,
+        openOnClick: false, // 아래 OpenLinkOnClick 이 연다
         autolink: true,
         HTMLAttributes: { rel: 'noopener noreferrer nofollow', target: '_blank' },
       },
     }),
+    OpenLinkOnClick,
 
     // 서식 확장. 툴바·버블 메뉴가 쓰는 것들. 색·글꼴·크기는 값을 거르는 판(docFormat)으로 갈아 끼운다.
     TextStyleKit.configure({

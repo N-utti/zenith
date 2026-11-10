@@ -48,6 +48,24 @@ export function restrictImageSources(): void {
 }
 
 /**
+ * 주소를 앱 밖에서 연다. 셸은 기본 브라우저로, 브라우저는 새 탭으로.
+ * 셸에서 `window.open` 을 쓰면 주소창 없는 앱 창이 떠서 나눈다.
+ */
+export function openExternal(url: string): void {
+  const tauri = typeof window !== 'undefined' ? window.__TAURI__ : undefined
+  if (tauri) {
+    void tauri.core
+      .invoke('plugin:opener|open_url', { url, with: null })
+      .catch((e: unknown) => console.warn('바깥 주소 열기 실패', e))
+  } else if (/^https?:/i.test(url)) {
+    window.open(url, '_blank', 'noopener')
+  } else {
+    // 메일·전화 주소를 새 탭으로 열면 빈 탭이 남는다.
+    location.href = url
+  }
+}
+
+/**
  * 바깥 링크를 기본 브라우저로 넘긴다.
  *
  * 셸에는 주소창도 뒤로 가기도 없다. 그냥 두면 Notion 링크 하나를 눌렀을 때
@@ -73,7 +91,7 @@ export function installExternalLinkHandler(): () => void {
     if (anchor.origin === location.origin) return
 
     event.preventDefault()
-    void tauri.core.invoke('plugin:opener|open_url', { url: anchor.href, with: null })
+    openExternal(anchor.href)
   }
 
   document.addEventListener('click', onClick)
