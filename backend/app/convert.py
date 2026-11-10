@@ -38,6 +38,9 @@ MAX_XML_BYTES = (
 )  # 본문 XML(document.xml·section*.xml 합) 압축 해제 상한 — 한글 70만 자, 결과 상한의 몇 배
 MAX_SEED_COST = 500_000  # Yjs 업데이트 어림 바이트 — MAX_FRAME(1MB)의 절반
 TAG_COST = 64  # 요소 하나의 Yjs 몫 어림(실측: tableCell+paragraph+글자 1 = 130 바이트)
+MAX_CELLS = MAX_SEED_COST // (
+    2 * TAG_COST
+)  # 빈 칸 하나 = td+p 두 요소 — 이보다 많은 칸은 어차피 필터가 끊는다(리뷰)
 MAX_IMAGES = 50  # 문서 하나에서 꺼내는 그림 수 — 하루 업로드 상한(200)의 1/4
 MAX_IMAGE_BYTES = 10 * 1024 * 1024  # routers/files.MAX_FILE_BYTES 와 같다
 TRUNCATED_NOTE = "<p><em>(파일이 길어 여기서 끊었습니다. 나머지는 원본 파일을 여세요.)</em></p>"
@@ -581,6 +584,8 @@ class _Docx:
         self.rels = self._rels()
         self.theme = self._theme()
         self._lifted: list[str] = []  # 칸 안의 표 — 바깥 표 바로 뒤에 낸다(서식 4차)
+        self.cells = 0  # 지금까지 낸 칸 수 — MAX_CELLS 를 넘으면 표를 더 만들지 않는다(gridBefore 63 빈 행 2만 개 = 65초, 리뷰)
+        self.cut = False
         self.default_line: str | None = None
         self.default_font, self.default_size = self._defaults()
         self.out: list[str] = []
@@ -722,7 +727,7 @@ class _Docx:
             raise Empty("docx")
         self._blocks(body, self.out)
         self._close_lists(0)
-        return "".join(self.out), False
+        return "".join(self.out), self.cut
 
     # ── 블록 ──
     def _blocks(self, node, out: list[str], in_cell: bool = False) -> None:
@@ -821,14 +826,22 @@ class _Docx:
                 int, dict
             ] = {}  # 이 행에서 이어진 병합만 다음 행으로(끊긴 병합은 다시 붙지 않게, Codex)
             bumped: list[dict] = []  # 이 행에서 한 줄 늘린 병합 칸 — 행이 통째로 빠지면 도로 줄인다
-            gaps = {}
-            for key in ("gridBefore", "gridAfter"):
-                el = trpr.find(f"{_W}{key}") if trpr is not None else None
-                v = el.get(f"{_W}val") if el is not None else None
-                gaps[key] = int(v) if _digits(v) and int(v) <= MAX_SPAN else 0
-            # gridBefore 만큼은 칸이 없는 자리 — 빈 칸을 내야 다음 칸이 제 열에 선다(Codex). 위에서 내려오던 병합은 여기서 끝난다
-            cells += [self._gap_cell(k, header) for k in range(gaps["gridBefore"])]
-            col = gaps["gridBefore"]
+            if self.cells >= MAX_CELLS:
+                self.cut = (
+                    True  # 칸 상한 — 남은 행은 만들지 않는다(필터가 어차피 끊을 양, 비용만 든다)
+                )
+                break
+            gb = trpr.find(f"{_W}gridBefore") if trpr is not None else None
+            v = gb.get(f"{_W}val") if gb is not None else None
+            before = int(v) if _digits(v) and int(v) <= MAX_SPAN else 0
+            if grid_cols:
+                before = min(
+                    before, max(0, len(grid_cols) - 1)
+                )  # 격자 열 수를 넘는 gridBefore 는 깨진 파일
+            # gridBefore 만큼은 칸이 없는 자리 — 빈 칸을 내야 다음 칸이 제 열에 선다(Codex). 위에서 내려오던 병합은 여기서 끝난다.
+            # gridAfter(뒤쪽 빈자리)는 열을 밀지 않으므로 내지 않는다 — 편집기 fixTables 가 채운다(리뷰)
+            cells += [self._gap_cell(k, header) for k in range(before)]
+            col = before
             for tc in tr.findall(f"{_W}tc"):
                 tcpr = tc.find(f"{_W}tcPr")
                 span_el = tcpr.find(f"{_W}gridSpan") if tcpr is not None else None
@@ -874,12 +887,14 @@ class _Docx:
                     "col": col,
                     "tcb": tcpr.find(f"{_W}tcBorders") if tcpr is not None else None,
                 }
-                if vmerge is not None:
-                    next_starts[col] = cell
+                if vmerge is not None and vmerge.get(f"{_W}val", "continue") == "restart":
+                    next_starts[col] = (
+                        cell  # 열린 병합 없는 continue 는 보통 칸 — 새 병합의 시작도 아니다(리뷰)
+                    )
                 cells.append(cell)
                 col += colspan
-            cells += [self._gap_cell(col + k, header) for k in range(gaps["gridAfter"])]
             starts = next_starts
+            self.cells += len(cells)
             if cells:
                 grid.append((cells, height))
             else:
@@ -900,7 +915,9 @@ class _Docx:
                     "right": c["col"] + c["colspan"] >= ncols,
                 }
                 sides = {
-                    side: self._border(
+                    side: "none"  # gridBefore 빈자리엔 칸이 없어 워드가 선을 안 그린다(리뷰)
+                    if c.get("gap")
+                    else self._border(
                         c["tcb_end"] if side == "bottom" and "tcb_end" in c else c["tcb"],
                         tbl_borders,
                         side,
@@ -934,6 +951,7 @@ class _Docx:
             "style": [],
             "col": col,
             "tcb": None,
+            "gap": True,
         }
 
     @staticmethod

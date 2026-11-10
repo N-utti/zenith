@@ -1114,11 +1114,14 @@ def test_fmt4_docx_nested_table_row_height_cell_borders() -> None:
         "<w:tblGrid><w:gridCol/><w:gridCol/></w:tblGrid>"
         f'<w:tr>{cell("a")}{cell("b")}</w:tr><w:tr><w:trPr><w:gridBefore w:val="1"/></w:trPr>{cell("c")}</w:tr></w:tbl>'
     )
-    assert th("a.docx", make_docx(lines))[0] == (
-        '<table><tr><td style="border-top:2px double #000000;border-right:1px dashed #00ff00;border-bottom:none;border-left:none"><p>a</p></td>'
-        '<td style="border-top:2px double #000000;border-right:none;border-bottom:none;border-left:1px dashed #00ff00"><p>b</p></td></tr>'
-        '<tr><td style="border-top:none;border-right:1px dashed #00ff00;border-bottom:2px solid #000000;border-left:none"><p></p></td>'
-        '<td style="border-top:none;border-right:none;border-bottom:2px solid #000000;border-left:1px dashed #00ff00"><p>c</p></td></tr></table>'
+    assert (
+        th("a.docx", make_docx(lines))[0]
+        == (
+            '<table><tr><td style="border-top:2px double #000000;border-right:1px dashed #00ff00;border-bottom:none;border-left:none"><p>a</p></td>'
+            '<td style="border-top:2px double #000000;border-right:none;border-bottom:none;border-left:1px dashed #00ff00"><p>b</p></td></tr>'
+            '<tr><td style="border-top:none;border-right:none;border-bottom:none;border-left:none"><p></p></td>'  # 빈자리엔 선이 없다
+            '<td style="border-top:none;border-right:none;border-bottom:2px solid #000000;border-left:1px dashed #00ff00"><p>c</p></td></tr></table>'
+        )
     )
 
 
@@ -1235,6 +1238,18 @@ def test_docx_grid_codex_regressions() -> None:
         "<tr><td><p></p></td><td><p>Y</p></td></tr>"
         "<tr><td><p>Z</p></td><td><p>W</p></td></tr></table>"
     )
+    # continue 가 새 병합의 시작이 되지 않는다: 행2 의 Z(continue, 열린 병합 없음) 뒤 행3 의 continue 도 보통 칸
+    rows = f"<w:tbl><w:tr>{cell('A', '<w:vMerge/>')}</w:tr><w:tr>{cell('B', '<w:vMerge/>')}</w:tr></w:tbl>"
+    assert th("a.docx", make_docx(rows))[0] == (
+        '<table data-borders="none"><tr><td><p>A</p></td></tr><tr><td><p>B</p></td></tr></table>'
+    )
+    # 칸 상한: gridBefore 63 만 있는 빈 행 수천 개(82바이트씩)가 칸 수천 개로 불어나던 것 — MAX_CELLS 에서 끊고 truncated(리뷰)
+    row = '<w:tr><w:trPr><w:gridBefore w:val="63"/><w:gridAfter w:val="63"/></w:trPr></w:tr>'
+    t0 = time.monotonic()
+    c = convert.to_html(
+        "a.docx", make_docx("<w:p><w:r><w:t>x</w:t></w:r></w:p><w:tbl>" + row * 3000 + "</w:tbl>")
+    )
+    assert c.truncated and c.html.count("<td>") <= convert.MAX_CELLS and time.monotonic() - t0 < 5
     # Y.Doc 에서도 열이 맞는다(빈 칸이 첫 열)
     frag = ydoc_fragment(
         ydoc.build(
