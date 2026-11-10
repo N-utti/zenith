@@ -111,9 +111,7 @@ class HwpUnavailable(RuntimeError):
     """구형 hwp 변환기(infra/hwp 컨테이너)에 닿지 못했다 — 파일 탓이 아니라 503."""
 
 
-MAX_HWP5_XML_BYTES = (
-    40 * 1024 * 1024
-)  # hwp5proc xml 은 장황하고(LineSeg…) 그림이 base64 로 들어 있다
+MAX_HWP5_XML_BYTES = 32 * 1024 * 1024  # hwp5proc xml 은 장황하고(LineSeg…) 그림이 base64 로 들어 있다. ET 트리는 XML 의 5~6배(리뷰)
 _OLE_MAGIC = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
 
 
@@ -1529,32 +1527,41 @@ def _hwp5_xml(data: bytes):
         raise Unsupported("hwp")
     if not data.startswith(_OLE_MAGIC):
         raise Unsupported("hwp")  # OLE 복합 파일이 아니다 — 보내 보지도 않는다
-    buf = bytearray()
+    parser = ET.XMLParser()  # 받으면서 바로 먹인다 — 32MB 를 두 번 들고 있지 않게(리뷰)
+    total = 0
     try:
         with httpx.stream(
             "POST",
             f"{settings.hwp_url.rstrip('/')}/convert",
             content=data,
             headers={"Content-Type": "application/octet-stream"},
-            timeout=httpx.Timeout(60, connect=5),
+            # 서버 45초 < 여기 55초 < 라우터 60초 — 어느 쪽이 먼저 끊어도 결과가 버려지지 않게(리뷰)
+            timeout=httpx.Timeout(55, connect=5),
         ) as r:
             if r.status_code == 504:
                 raise TimeoutError("hwp")
             if r.status_code != 200:
                 raise Unsupported("hwp")
             for chunk in r.iter_bytes():
-                buf += chunk
-                if len(buf) > MAX_HWP5_XML_BYTES:
+                if total == 0 and (b"<!DOCTYPE" in chunk or b"<!ENTITY" in chunk):
+                    raise Unsupported("xml-dtd")  # DOCTYPE 는 루트 앞에만 올 수 있다 — 첫 조각만 보면 된다
+                total += len(chunk)
+                if total > MAX_HWP5_XML_BYTES:
                     raise TooLarge("hwp")
+                parser.feed(chunk)
     except httpx.HTTPError as e:
         raise HwpUnavailable() from e
-    raw = bytes(buf)
-    if b"<!DOCTYPE" in raw or b"<!ENTITY" in raw:
-        raise Unsupported("xml-dtd")
-    return ET.fromstring(raw)
+    return parser.close()
 
 
 _HWP5_ALIGN = {"center": "center", "right": "right", "both": "justify", "distribute": "justify"}
+_HWP5_CHARS = {  # pyhwp ControlChar 이름 → 글자. 나머지(필드 시작/끝·책갈피·쪽 번호…)는 버린다
+    "LINE_BREAK": "<br>",
+    "TAB": " ",
+    "NONBREAK_SPACE": " ",
+    "FIXWIDTH_SPACE": " ",
+    "HYPHEN": "-",
+}
 _HWP5_SIDES = ("top", "right", "bottom", "left")
 
 
@@ -1687,25 +1694,24 @@ class _Hwp5:
                 out.append(_block(tag, line, pr.get("align"), extra))
             text.clear()
 
-        for seg in p.findall("LineSeg"):
-            for el in seg:
+        def inline(node) -> None:
+            for el in node:
                 if el.tag == "Text":
                     marks = self._at(self.char, el.get("charshape-id"))
                     text.append(_wrap(html.escape(el.text or "", quote=False), **marks))
                 elif el.tag == "ControlChar":
-                    name = el.get("name", "")
-                    if name == "LINE_BREAK":
-                        text.append("<br>")
-                    elif name == "TAB":
-                        text.append(" ")
+                    text.append(_HWP5_CHARS.get(el.get("name", ""), ""))
                 elif el.tag == "TableControl":
                     flush()
-                    (self._lifted if self._depth else out).append(
-                        self._table(el)
-                    )  # 칸 안의 표는 바깥 표 뒤로
+                    (self._lifted if self._depth else out).append(self._table(el))  # 칸 안의 표는 바깥 표 뒤로
                 elif el.tag == "GShapeObjectControl":
                     flush()
                     out.append(self._pic(el))
+                elif el.tag.startswith("Field"):
+                    inline(el)  # 계산식(FieldFormula)·하이퍼링크(FieldHyperLink) 안의 글자 — 합계 금액이 비지 않게(리뷰)
+
+        for seg in p.findall("LineSeg"):
+            inline(seg)
         flush()
         if not out:
             out.append("<p></p>")  # 일부러 띄운 빈 줄
@@ -1757,14 +1763,19 @@ class _Hwp5:
     def _pic(self, gso) -> str:
         info = gso.find(".//PictureInfo")
         bid = info.get("bindata-id") if info is not None else None
+        key = f"bin:{bid}"
+        width = _px_from_hwpunit(gso.get("width"))
+        if key in self.seen:  # 같은 그림을 또 넣은 자리 — 다시 풀지 않는다(9MB 300번 = 8.8초, 리뷰)
+            return _image_bytes(b"", key, self.images, width, self.seen) if self.seen[key] >= 0 else ""
         emb = self.bins[int(bid)] if _digits(bid) and 0 < int(bid) < len(self.bins) else None
         b64 = (emb.text or "").strip() if emb is not None else ""
-        if not b64 or len(b64) > MAX_IMAGE_BYTES * 4 // 3 + 4:
-            return ""  # 연결 그림(storage=link)·너무 큰 그림은 비운다
-        try:
-            data = base64.b64decode(b64)
-        except (ValueError, binascii.Error):
-            return ""
-        return _image_bytes(
-            data, f"bin:{bid}", self.images, _px_from_hwpunit(gso.get("width")), self.seen
-        )
+        data = b""
+        if b64 and len(b64) <= MAX_IMAGE_BYTES * 4 // 3 + 4:  # 연결 그림(storage=link)·너무 큰 그림은 비운다
+            try:
+                data = base64.b64decode(b64)
+            except (ValueError, binascii.Error):
+                data = b""
+        tag = _image_bytes(data, key, self.images, width, self.seen) if data else ""
+        if not tag:
+            self.seen[key] = -1  # 못 쓰는 그림도 기억 — 참조마다 다시 풀지 않게
+        return tag

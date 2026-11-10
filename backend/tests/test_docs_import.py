@@ -1236,6 +1236,7 @@ def test_hwp5_text_fonts_spacing(monkeypatch) -> None:
     body = (
         hwp5_p(
             '<Text charshape-id="0">기본 </Text><Text charshape-id="1">큰 스퀘어</Text><ControlChar name="TAB"/><Text charshape-id="2">기울임</Text>'
+            '<ControlChar name="FIELD_START"/><FieldFormula><Text charshape-id="0"> 합계 </Text><ControlChar name="NONBREAK_SPACE"/><Text charshape-id="0">264,800</Text></FieldFormula><ControlChar name="FIELD_END"/>'
         )
         + hwp5_p(
             '<Text charshape-id="0">제목</Text><ControlChar name="LINE_BREAK"/><Text charshape-id="0">둘째 줄</Text>',
@@ -1245,10 +1246,13 @@ def test_hwp5_text_fonts_spacing(monkeypatch) -> None:
     )
     root = ET.fromstring(make_hwp5_xml(body))
     monkeypatch.setattr(convert, "_hwp5_xml", lambda data: root)
-    assert convert.to_html("a.hwp", b"\xd0\xcf\x11\xe0" + b"x").html == (
-        '<p style="text-align:justify">기본 <span style="color:#ff0000;font-family:나눔스퀘어;font-size:16pt"><mark data-color="#fef08a"><u><strong>큰 스퀘어</strong></u></mark></span> <em>기울임</em></p>'
-        '<h1 style="text-align:center;line-height:2;margin-left:20px;margin-top:10px">제목<br>둘째 줄</h1>'
-        "<p></p>"
+    assert (
+        convert.to_html("a.hwp", b"\xd0\xcf\x11\xe0" + b"x").html
+        == (
+            '<p style="text-align:justify">기본 <span style="color:#ff0000;font-family:나눔스퀘어;font-size:16pt"><mark data-color="#fef08a"><u><strong>큰 스퀘어</strong></u></mark></span> <em>기울임</em> 합계  264,800</p>'  # 계산식(FieldFormula) 안의 글자(합계)도 글자로, 필드 시작/끝 제어문자는 버린다(리뷰)
+            '<h1 style="text-align:center;line-height:2;margin-left:20px;margin-top:10px">제목<br>둘째 줄</h1>'
+            "<p></p>"
+        )
     )
 
 
@@ -1270,19 +1274,29 @@ def test_hwp5_table_picture_nested(monkeypatch) -> None:
         + "</TableCell></TableRow><TableRow></TableRow></TableBody></TableControl>"
     )
     pic = '<GShapeObjectControl width="7500" height="3000"><ShapeComponent><ShapePicture><PictureInfo bindata-id="1"/></ShapePicture></ShapeComponent></GShapeObjectControl>'
-    body = hwp5_p(f'<Text charshape-id="0">앞</Text>{table}<Text charshape-id="0">뒤</Text>{pic}')
+    bad = '<GShapeObjectControl width="750"><ShapeComponent><ShapePicture><PictureInfo bindata-id="7"/></ShapePicture></ShapeComponent></GShapeObjectControl>'
+    body = hwp5_p(
+        f'<Text charshape-id="0">앞</Text>{table}<Text charshape-id="0">뒤</Text>{pic}{pic}{bad}{bad}'
+    )
     root = ET.fromstring(make_hwp5_xml(body, bindata))
     monkeypatch.setattr(convert, "_hwp5_xml", lambda data: root)
+    calls = []
+    real = base64.b64decode
+    monkeypatch.setattr(convert.base64, "b64decode", lambda b: calls.append(1) or real(b))
     c = convert.to_html("a.hwp", b"\xd0\xcf\x11\xe0" + b"x")
     side = "border-top:none;border-right:none;border-bottom:2px solid #5fb3d0;border-left:1px dotted #9ccfe0"
-    assert c.html == (
-        '<p style="text-align:justify">앞</p>'
-        f'<table><tr style="height:20px"><td style="background-color:#ddf2f8;width:100px;{side}"><p style="text-align:justify">칸</p></td>'
-        f'<td rowspan="2" style="background-color:#ddf2f8;width:100px;{side}"><p style="text-align:justify">둘</p></td></tr><tr></tr></table>'
-        '<table data-borders="none"><tr style="height:10px"><td style="width:100px"><p style="text-align:justify">내부</p></td></tr></table>'
-        '<p style="text-align:justify">뒤</p><img data-ref="0" width="100">'
+    assert (
+        c.html
+        == (
+            '<p style="text-align:justify">앞</p>'
+            f'<table><tr style="height:20px"><td style="background-color:#ddf2f8;width:100px;{side}"><p style="text-align:justify">칸</p></td>'
+            f'<td rowspan="2" style="background-color:#ddf2f8;width:100px;{side}"><p style="text-align:justify">둘</p></td></tr><tr></tr></table>'
+            '<table data-borders="none"><tr style="height:10px"><td style="width:100px"><p style="text-align:justify">내부</p></td></tr></table>'
+            '<p style="text-align:justify">뒤</p><img data-ref="0" width="100"><img data-ref="0" width="100">'  # 두 번째는 다시 풀지 않고 번호만
+        )
     )
     assert len(c.images) == 1 and c.images[0][1] == "image/png"
+    assert len(calls) == 1  # 같은 그림 두 번·없는 그림 두 번 → 디코딩은 한 번(리뷰)
 
 
 def test_hwp5_guards(monkeypatch) -> None:

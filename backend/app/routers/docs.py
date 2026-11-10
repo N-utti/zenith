@@ -579,7 +579,8 @@ async def import_doc(
     ) as e:
         audit.record(
             db,
-            "docs.import_failed",
+            # 변환기(infra/hwp) 장애는 사용자 잘못이 아니라 하루 상한(`docs.import_failed`)에 세지 않는다(리뷰)
+            "docs.import_unavailable" if isinstance(e, convert.HwpUnavailable) else "docs.import_failed",
             request=request,
             actor_id=user.id,
             detail={"actor": str(user.id), "name": name, "why": type(e).__name__},

@@ -98,9 +98,14 @@ services:
     restart: unless-stopped
     cpus: "1"
     mem_limit: 512m
+    pids_limit: 64
     read_only: true
     tmpfs:
-      - /tmp
+      - /tmp:size=128m
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    # 신뢰 불가 파일을 파싱하는 프로세스 — db·redis·minio·인터넷에 닿지 못하게 internal 망에만 둔다(리뷰, 안전 가드레일)
+    networks: [hwp_net]
 
   api:
     build: ../backend
@@ -127,6 +132,7 @@ services:
       sh -c "uv run --no-dev alembic upgrade head
       && uv run --no-dev uvicorn app.main:app --host 0.0.0.0 --port 8000 --ws-max-size 1048576"
     # 호스트 포트를 열지 않는다 — 브라우저는 caddy(https)로만 들어온다. 평문 http 의 api 는 Secure 쿠키를 못 심는다.
+    networks: [default, hwp_net]
     depends_on:
       db:
         condition: service_healthy
@@ -162,6 +168,10 @@ services:
     depends_on:
       db:
         condition: service_healthy
+
+networks:
+  hwp_net:
+    internal: true  # hwp ↔ api 만. 바깥으로 나가는 길이 없다
 
 volumes:
   pgdata:
