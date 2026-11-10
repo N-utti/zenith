@@ -217,6 +217,12 @@ export function auditView(event: AuditEvent): AuditView {
     case 'docs.hard_deleted':
       return { summary: '문서 완전 삭제', detail: text(detail, 'title'), tone: 'warning' }
 
+    // 파일 가져오기(README 60·65). 변환기 장애는 사용자 탓이 아니라 하루 상한에 세지 않는다.
+    case 'docs.import_failed':
+      return { summary: '파일 가져오기 실패', detail: text(detail, 'name'), tone: 'neutral' }
+    case 'docs.import_unavailable':
+      return { summary: 'hwp 변환기 연결 실패', detail: text(detail, 'name'), tone: 'warning' }
+
     case 'docs.purged':
       return {
         summary: '휴지통 보관 기간이 지나 지웠습니다',

@@ -342,7 +342,7 @@ export function uploadFile(file: File, docId: string) {
 }
 
 /**
- * docx·xlsx·hwpx 를 새 문서로 가져온다. 변환에 몇 초 걸린다. 본문은 서버가 심어 두므로(README 61)
+ * docx·xlsx·hwpx·hwp 를 새 문서로 가져온다. 변환에 몇 초 걸린다. 본문은 서버가 심어 두므로(README 61)
  * 돌아온 문서를 열기만 하면 된다. 목록은 다시 받는다.
  */
 /** 가져오기 뮤테이션 키. 트리가 두 벌(AppLayout)이라 가져오는 중인지를 캐시에서 같이 본다. */

@@ -160,7 +160,7 @@ test('가져오는 도중 트리가 새로 마운트돼도 진행 표시와 중�
   expect(toast.info).toHaveBeenCalledOnce()
 })
 
-test('docx·xlsx·hwpx 가 아니면 올리지 않고 바로 알린다', async () => {
+test('docx·xlsx·hwpx·hwp 가 아니면 올리지 않고 바로 알린다', async () => {
   const container = render()
   await act(async () => dropFiles(folderRow(container), [new File(['a'], '사진.png')]))
   expect(api).not.toHaveBeenCalled()
@@ -211,4 +211,56 @@ test('하루 상한(429)처럼 파일과 상관없는 거절이면 남은 파일
   )
   expect(imports()).toHaveLength(1)
   expect(toast.error.mock.calls[0]![0]).toContain('나머지 2개(보내지 않음)')
+})
+
+test('hwp 변환기가 멎으면(503) 남은 hwp 만 건너뛰고 다른 형식은 보낸다', async () => {
+  api.mockImplementation((path: string, init?: { body: FormData }) => {
+    if (path !== '/docs/import') return Promise.resolve(tree)
+    const file = init!.body.get('file') as File
+    return file.name.endsWith('.hwp')
+      ? Promise.reject(
+          new ApiError(503, 'hwp 변환기에 연결할 수 없습니다.', { code: 'HWP_UNAVAILABLE' }),
+        )
+      : Promise.resolve({ doc: { id: 'd', title: 't' }, truncated: false, file: {} })
+  })
+  const container = render()
+  await act(async () =>
+    dropFiles(folderRow(container), [
+      new File(['a'], 'a.hwp'),
+      new File(['b'], 'b.hwp'),
+      new File(['c'], 'c.docx'),
+    ]),
+  )
+  expect(imports().map(([, init]) => (init.body.get('file') as File).name)).toEqual([
+    'a.hwp',
+    'c.docx',
+  ])
+  const note = toast.error.mock.calls[0]![0] as string
+  expect(note).toContain('a.hwp(hwp 변환기에 연결할 수 없습니다.)')
+  expect(note).toContain('b.hwp(hwp 변환기에 연결할 수 없음)')
+  expect(note).toContain('1개를 가져왔습니다')
+})
+
+test('hwp 하나만 올려 변환기가 멎으면 서버 문구를 그대로 띄운다', async () => {
+  const why = 'hwp 변환기에 연결할 수 없습니다. 잠시 후 다시 시도하거나 hwpx 로 저장해 올려 주세요.'
+  api.mockImplementation((path: string) =>
+    path === '/docs/import'
+      ? Promise.reject(new ApiError(503, why, { code: 'HWP_UNAVAILABLE' }))
+      : Promise.resolve(tree),
+  )
+  const container = render()
+  await act(async () => dropFiles(folderRow(container), [new File(['a'], 'a.hwp')]))
+  expect(toast.error).toHaveBeenCalledWith(why)
+})
+
+test('코드 없는 503(프록시 등)은 변환기 장애로 보지 않고 남은 파일을 보내지 않는다', async () => {
+  api.mockImplementation((path: string) =>
+    path === '/docs/import' ? Promise.reject(new ApiError(503, '')) : Promise.resolve(tree),
+  )
+  const container = render()
+  await act(async () =>
+    dropFiles(folderRow(container), [new File(['a'], 'a.hwp'), new File(['b'], 'b.docx')]),
+  )
+  expect(imports()).toHaveLength(1)
+  expect(toast.error.mock.calls[0]![0]).toContain('나머지 1개(보내지 않음)')
 })
