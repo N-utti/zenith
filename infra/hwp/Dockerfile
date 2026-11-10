@@ -2,8 +2,9 @@
 # 라이선스 경계를 네트워크로 긋는다(backend/README 65). api 만 compose 망 안에서 hwp:8080 으로 부른다.
 FROM python:3.11-slim
 
-# pyhwp 0.1b15 는 six 를 선언하지 않고 쓴다. lxml 은 hwp5proc 의 XML 직렬화에.
-RUN pip install --no-cache-dir pyhwp==0.1b15 six==1.17.0 lxml==5.3.0 \
+# 전이 의존성까지 requirements.txt 로 고정(리뷰). lxml 은 hwp5proc 의 XML 직렬화에.
+COPY requirements.txt /srv/requirements.txt
+RUN pip install --no-cache-dir -r /srv/requirements.txt \
     && useradd --system --no-create-home hwp
 
 COPY server.py /srv/server.py

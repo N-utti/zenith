@@ -1214,13 +1214,13 @@ def make_hwp5_xml(body: str, bindata: str = "", styles: str = "") -> str:
         '<HwpDoc version="5.1.0.1"><DocInfo><IdMappings ko-fonts="2" en-fonts="1" charshapes="3" parashapes="2" borderfills="2" bindata="1">'
         '<FaceName name="함초롬바탕"/><FaceName name="나눔스퀘어"/><FaceName name="Arial"/>'  # ko 2 + en 1
         '<CharShape basesize="1000" bold="0" italic="0" underline="none" text-color="#000000" shade-color="#ffffff"><FontFace ko="0" en="0"/></CharShape>'
-        '<CharShape basesize="1600" bold="1" italic="0" underline="bottom" text-color="#FF0000" shade-color="#FEF08A"><FontFace ko="1" en="0"/></CharShape>'
+        '<CharShape basesize="1600" bold="1" italic="0" underline="underline" text-color="#FF0000" shade-color="#FEF08A"><FontFace ko="1" en="0"/></CharShape>'
         '<CharShape basesize="1000" bold="0" italic="1" underline="none" text-color="#000000" shade-color="#ffffff"><FontFace ko="0" en="0"/></CharShape>'
         '<ParaShape align="both" linespacing-type="ratio" linespacing="160" doubled-margin-left="0" doubled-margin-top="0" doubled-margin-bottom="0" head-shape="none" level="0"/>'
         '<ParaShape align="center" linespacing-type="ratio" linespacing="200" doubled-margin-left="3000" doubled-margin-top="1500" doubled-margin-bottom="0" head-shape="outline" level="0"/>'
         '<BorderFill colorpattern="0" fillflags="00000000"><Border stroke-type="none" width="0.1mm" color="#000000" attribute-name="left"/><Border stroke-type="none" width="0.1mm" color="#000000" attribute-name="right"/>'
         '<Border stroke-type="none" width="0.1mm" color="#000000" attribute-name="top"/><Border stroke-type="none" width="0.1mm" color="#000000" attribute-name="bottom"/><FillColorPattern background-color="#ffffff"/></BorderFill>'
-        '<BorderFill colorpattern="1" fillflags="00000001"><Border stroke-type="dot" width="0.12mm" color="#9CCFE0" attribute-name="left"/><Border stroke-type="none" width="0.1mm" color="#000000" attribute-name="right"/>'
+        '<BorderFill colorpattern="1" fillflags="00000001"><Border stroke-type="dotted" width="0.12mm" color="#9CCFE0" attribute-name="left"/><Border stroke-type="none" width="0.1mm" color="#000000" attribute-name="right"/>'
         '<Border stroke-type="none" width="0.1mm" color="#000000" attribute-name="top"/><Border stroke-type="solid" width="0.4mm" color="#5FB3D0" attribute-name="bottom"/><FillColorPattern background-color="#DDF2F8"/></BorderFill>'
         f"{bindata}{styles}"
         f"</IdMappings></DocInfo><BodyText><SectionDef><ColumnSet>{body}</ColumnSet></SectionDef></BodyText></HwpDoc>"
@@ -1316,6 +1316,34 @@ def test_hwp5_guards(monkeypatch) -> None:
     monkeypatch.setattr(convert.httpx, "stream", boom)
     with pytest.raises(convert.HwpUnavailable):
         convert.to_html("a.hwp", b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1" + b"x" * 100)
+    # 변환기 응답별: 504 → 시간 초과(422 「너무 오래」), 200 아님 → 형식 오류, 상한 초과 → TooLarge, DOCTYPE → 거부, 정상 → 루트
+    import xml.etree.ElementTree as ET2
+
+    def serve(resp: httpx.Response):
+        client = httpx.Client(transport=httpx.MockTransport(lambda req: resp))
+        monkeypatch.setattr(
+            convert.httpx, "stream", lambda method, url, **kw: client.stream(method, url, **kw)
+        )
+
+    ole = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1" + b"x" * 100
+    serve(httpx.Response(504))
+    with pytest.raises(TimeoutError):
+        convert._hwp5_xml(ole)
+    serve(httpx.Response(422, content=b"not hwp5"))
+    with pytest.raises(Unsupported):
+        convert._hwp5_xml(ole)
+    monkeypatch.setattr(convert, "MAX_HWP5_XML_BYTES", 64)
+    serve(httpx.Response(200, content=b"<HwpDoc>" + b"<a/>" * 100 + b"</HwpDoc>"))
+    with pytest.raises(convert.TooLarge):
+        convert._hwp5_xml(ole)
+    monkeypatch.setattr(convert, "MAX_HWP5_XML_BYTES", 1 << 20)
+    serve(httpx.Response(200, content=b'<!DOCTYPE x [<!ENTITY a "b">]><HwpDoc>&a;</HwpDoc>'))
+    with pytest.raises(Unsupported):
+        convert._hwp5_xml(ole)
+    serve(httpx.Response(200, content=b"<HwpDoc><DocInfo/><BodyText/></HwpDoc>"))
+    assert (
+        isinstance(convert._hwp5_xml(ole), ET2.Element) and convert._hwp5_xml(ole).tag == "HwpDoc"
+    )
     # 빈 행·DocInfo 없는 XML 은 형식 오류
     monkeypatch.setattr(convert, "_hwp5_xml", lambda data: ET.fromstring("<HwpDoc/>"))
     with pytest.raises(Unsupported):
@@ -1387,6 +1415,22 @@ async def test_import_route(
     r = await _import(client, "a.docx", DOCX, folder_id=str(uuid.uuid4()))
     assert (r.status_code, r.json()["detail"]) == (422, "없는 폴더입니다.")
     assert len((await app_db.execute(select(Document))).scalars().all()) == len(before)
+
+    # 503: 변환기(infra/hwp) 불통 — 파일 탓이 아니라 HWP_UNAVAILABLE, 감사는 docs.import_unavailable(하루 상한에 안 센다)
+    def down(name, data):
+        raise convert.HwpUnavailable()
+
+    monkeypatch.setattr(convert, "to_html", down)
+    r = await _import(client, "a.hwp", b"\xd0\xcf\x11\xe0" + b"x" * 64, folder_id=str(root.id))
+    assert (r.status_code, r.json()["code"]) == (503, "HWP_UNAVAILABLE")
+    monkeypatch.setattr(convert, "to_html", _real_to_html)
+    kinds = [
+        e.kind
+        for e in (
+            await app_db.execute(select(AuditEvent).where(AuditEvent.kind.like("docs.import_%")))
+        ).scalars()
+    ]
+    assert kinds.count("docs.import_unavailable") == 1
 
     # 그림이 든 파일 — 그림도 그 문서의 첨부로 올라가고(감사 1건씩) imageBlock 이 그 주소를 가리킨다
     r = await _import(client, "그림.docx", make_rich_docx(), folder_id=str(root.id))

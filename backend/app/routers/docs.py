@@ -580,7 +580,9 @@ async def import_doc(
         audit.record(
             db,
             # 변환기(infra/hwp) 장애는 사용자 잘못이 아니라 하루 상한(`docs.import_failed`)에 세지 않는다(리뷰)
-            "docs.import_unavailable" if isinstance(e, convert.HwpUnavailable) else "docs.import_failed",
+            "docs.import_unavailable"
+            if isinstance(e, convert.HwpUnavailable)
+            else "docs.import_failed",
             request=request,
             actor_id=user.id,
             detail={"actor": str(user.id), "name": name, "why": type(e).__name__},
@@ -594,11 +596,12 @@ async def import_doc(
                 "hwp 변환기에 연결할 수 없습니다. 잠시 후 다시 시도하거나 hwpx 로 저장해 올려 주세요.",
             ) from None
         if isinstance(e, convert.Unsupported):
-            detail = (
-                "docx·xlsx·hwpx·hwp 파일만 가져올 수 있습니다."
-                if settings.hwp_url
-                else "docx·xlsx·hwpx 파일만 가져올 수 있습니다(hwp 는 hwpx 로 저장해 주세요)."
-            )
+            if not settings.hwp_url:
+                detail = "docx·xlsx·hwpx 파일만 가져올 수 있습니다(hwp 는 hwpx 로 저장해 주세요)."
+            elif name.lower().endswith(".hwp"):
+                detail = "한글 97 이전 형식이거나 손상된 hwp 입니다. hwpx 로 저장해 올려 주세요."
+            else:
+                detail = "docx·xlsx·hwpx·hwp 파일만 가져올 수 있습니다."
         elif isinstance(e, convert.Empty):
             detail = "읽을 내용이 없는 파일입니다."
         elif isinstance(e, convert.TooLarge):

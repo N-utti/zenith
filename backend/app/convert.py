@@ -111,7 +111,9 @@ class HwpUnavailable(RuntimeError):
     """구형 hwp 변환기(infra/hwp 컨테이너)에 닿지 못했다 — 파일 탓이 아니라 503."""
 
 
-MAX_HWP5_XML_BYTES = 32 * 1024 * 1024  # hwp5proc xml 은 장황하고(LineSeg…) 그림이 base64 로 들어 있다. ET 트리는 XML 의 5~6배(리뷰)
+MAX_HWP5_XML_BYTES = (
+    32 * 1024 * 1024
+)  # hwp5proc xml 은 장황하고(LineSeg…) 그림이 base64 로 들어 있다. ET 트리는 XML 의 5~6배(리뷰)
 _OLE_MAGIC = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
 
 
@@ -1544,7 +1546,9 @@ def _hwp5_xml(data: bytes):
                 raise Unsupported("hwp")
             for chunk in r.iter_bytes():
                 if total == 0 and (b"<!DOCTYPE" in chunk or b"<!ENTITY" in chunk):
-                    raise Unsupported("xml-dtd")  # DOCTYPE 는 루트 앞에만 올 수 있다 — 첫 조각만 보면 된다
+                    raise Unsupported(
+                        "xml-dtd"
+                    )  # DOCTYPE 는 루트 앞에만 올 수 있다 — 첫 조각만 보면 된다
                 total += len(chunk)
                 if total > MAX_HWP5_XML_BYTES:
                     raise TooLarge("hwp")
@@ -1629,7 +1633,9 @@ class _Hwp5:
         for bf in info.iter("BorderFill"):
             sides = {b.get("attribute-name", ""): b for b in bf.findall("Border")}
             fc = bf.find("FillColorPattern")
-            filled = bf.get("colorpattern") == "1" or bf.get("fillflags", "0").strip("0") != ""
+            filled = (
+                bf.get("colorpattern") == "1"
+            )  # 그러데이션·그림 채우기의 남은 색은 배경이 아니다(리뷰)
             bg = _hex(fc.get("background-color")) if fc is not None and filled else None
             self.fills.append(
                 {
@@ -1703,12 +1709,16 @@ class _Hwp5:
                     text.append(_HWP5_CHARS.get(el.get("name", ""), ""))
                 elif el.tag == "TableControl":
                     flush()
-                    (self._lifted if self._depth else out).append(self._table(el))  # 칸 안의 표는 바깥 표 뒤로
+                    (self._lifted if self._depth else out).append(
+                        self._table(el)
+                    )  # 칸 안의 표는 바깥 표 뒤로
                 elif el.tag == "GShapeObjectControl":
                     flush()
                     out.append(self._pic(el))
                 elif el.tag.startswith("Field"):
-                    inline(el)  # 계산식(FieldFormula)·하이퍼링크(FieldHyperLink) 안의 글자 — 합계 금액이 비지 않게(리뷰)
+                    inline(
+                        el
+                    )  # 계산식(FieldFormula)·하이퍼링크(FieldHyperLink) 안의 글자 — 합계 금액이 비지 않게(리뷰)
 
         for seg in p.findall("LineSeg"):
             inline(seg)
@@ -1766,11 +1776,15 @@ class _Hwp5:
         key = f"bin:{bid}"
         width = _px_from_hwpunit(gso.get("width"))
         if key in self.seen:  # 같은 그림을 또 넣은 자리 — 다시 풀지 않는다(9MB 300번 = 8.8초, 리뷰)
-            return _image_bytes(b"", key, self.images, width, self.seen) if self.seen[key] >= 0 else ""
+            return (
+                _image_bytes(b"", key, self.images, width, self.seen) if self.seen[key] >= 0 else ""
+            )
         emb = self.bins[int(bid)] if _digits(bid) and 0 < int(bid) < len(self.bins) else None
         b64 = (emb.text or "").strip() if emb is not None else ""
         data = b""
-        if b64 and len(b64) <= MAX_IMAGE_BYTES * 4 // 3 + 4:  # 연결 그림(storage=link)·너무 큰 그림은 비운다
+        if (
+            b64 and len(b64) <= MAX_IMAGE_BYTES * 4 // 3 + 4
+        ):  # 연결 그림(storage=link)·너무 큰 그림은 비운다
             try:
                 data = base64.b64decode(b64)
             except (ValueError, binascii.Error):
