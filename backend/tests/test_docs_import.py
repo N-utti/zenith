@@ -837,9 +837,9 @@ def test_fmt3_hwpx_fonts_spacing_cells() -> None:
         th("a.hwpx", buf.getvalue())[0]
         == (
             '<p style="line-height:1.8;margin-left:20px;margin-top:10px">기본 <span style="font-family:나눔스퀘어;font-size:16pt"><strong>큰 스퀘어</strong></span></p>'
-            '<table><tr><td style="background-color:#bfdbfe;width:100px"><p>칸</p></td></tr></table>'
+            '<table><tr style="height:13px"><td style="background-color:#bfdbfe;width:100px"><p>칸</p></td></tr></table>'
         )
-    )  # height 1600 = 16pt, 1500 HWPUNIT = 20px, 7500 = 100px, 기본 글자 모양(id 0)의 글꼴·크기는 싣지 않는다
+    )  # height 1600 = 16pt, 1500 HWPUNIT = 20px, 7500 = 100px(1000 = 13px 행), 기본 글자 모양(id 0)의 글꼴·크기는 싣지 않는다
 
 
 def test_fmt3_xlsx_fonts_and_column_widths() -> None:
@@ -1010,7 +1010,10 @@ def test_fmt3_review_regressions(monkeypatch) -> None:
             if info.filename != "word/styles.xml":
                 dst.writestr(info, src.read(info.filename))
         dst.writestr("word/styles.xml", styles)
-    assert th("a.docx", out.getvalue())[0] == "<p>a</p><table><tr><td><p>x</p></td></tr></table>"
+    assert (
+        th("a.docx", out.getvalue())[0]
+        == '<p>a</p><table><tr><td style="border-top:none"><p>x</p></td></tr></table>'
+    )  # 표는 테두리 있음(스타일이 그린다), 지운 윗변만 칸 변으로(서식 4차)
     # (7) 병합 칸(colspan>1)엔 colwidth 를 싣지 않는다
     frag = ydoc_fragment(
         ydoc.build('<table><tr><td colspan="2" style="width:120px"><p>a</p></td></tr></table>', "t")
@@ -1048,6 +1051,108 @@ def test_fmt3_theme_fonts_are_document_default() -> None:
     assert (
         th("a.docx", buf.getvalue())[0]
         == '<p>기본 테마 제목 글꼴 <span style="font-family:돋움">돋움</span></p>'
+    )
+
+
+def test_fmt4_docx_nested_table_row_height_cell_borders() -> None:
+    """서식 4차(README 64, 실제 지출품의서 대조): 칸 안의 표(결재란)는 바깥 표 바로 뒤로 꺼내고(편집기 셀은 문단만),
+    행 높이(trHeight twip÷15)와 칸 변 테두리(tcBorders, 없으면 tblBorders 의 바깥 변/inside*)를 계약 값으로 싣는다."""
+    grey = 'w:val="single" w:color="BFBFBF" w:sz="6"'
+    inner_tbl = (
+        '<w:tbl><w:tblPr><w:tblBorders><w:top w:val="none"/><w:left w:val="none"/><w:bottom w:val="none"/><w:right w:val="none"/></w:tblBorders></w:tblPr>'
+        '<w:tr><w:trPr><w:trHeight w:val="800" w:hRule="exact"/></w:trPr>'
+        f'<w:tc><w:tcPr><w:tcBorders><w:top {grey}/><w:left w:val="none"/><w:bottom {grey}/><w:right w:val="none"/></w:tcBorders></w:tcPr><w:p><w:r><w:t>담당</w:t></w:r></w:p></w:tc>'
+        f'<w:tc><w:tcPr><w:tcBorders><w:top {grey}/><w:start w:val="dotted" w:color="BFBFBF" w:sz="6"/><w:bottom {grey}/><w:end w:val="none"/></w:tcBorders></w:tcPr><w:p/></w:tc>'
+        "</w:tr></w:tbl>"
+    )
+    layout = (
+        '<w:tbl><w:tblPr><w:tblBorders><w:top w:val="none"/><w:left w:val="none"/><w:bottom w:val="none"/><w:right w:val="none"/>'
+        '<w:insideH w:val="none"/><w:insideV w:val="none"/></w:tblBorders></w:tblPr>'
+        f"<w:tr><w:tc><w:p><w:r><w:t>지출품의서</w:t></w:r></w:p></w:tc><w:tc>{inner_tbl}<w:p/></w:tc></w:tr></w:tbl>"
+    )
+    assert th("a.docx", make_docx(layout))[0] == (
+        '<table data-borders="none"><tr><td><p>지출품의서</p></td><td><p></p></td></tr></table>'
+        # 꺼낸 안쪽 표: 800 twip = 53px, sz 6(1/8pt) = 1px, start/end 도 left/right 로. 테두리 없는 표라 none 변은 싣지 않는다
+        '<table data-borders="none"><tr style="height:53px">'
+        '<td style="border-top:1px solid #bfbfbf;border-bottom:1px solid #bfbfbf"><p>담당</p></td>'
+        '<td style="border-top:1px solid #bfbfbf;border-bottom:1px solid #bfbfbf;border-left:1px dotted #bfbfbf"><p></p></td>'
+        "</tr></table>"
+    )
+
+    # 표 테두리(tblBorders): 바깥 변은 top/left/bottom/right, 안쪽 선은 insideH(가로)·insideV(세로). 편집기 기본 선과 같은 값(single·auto·≤1px)은 생략
+    def cell(text: str) -> str:
+        return f"<w:tc><w:p><w:r><w:t>{text}</w:t></w:r></w:p></w:tc>"
+
+    bordered = (
+        '<w:tbl><w:tblPr><w:tblBorders><w:top w:val="single" w:sz="4" w:color="auto"/><w:left w:val="single" w:sz="4"/>'
+        '<w:bottom w:val="single" w:sz="4"/><w:right w:val="single" w:sz="4"/>'
+        '<w:insideH w:val="single" w:color="FFFFFF" w:sz="12"/><w:insideV w:val="dashed" w:color="FF0000" w:sz="18"/></w:tblBorders></w:tblPr>'
+        f"<w:tr>{cell('a')}{cell('b')}</w:tr><w:tr>{cell('c')}{cell('d')}</w:tr></w:tbl>"
+    )
+    assert th("a.docx", make_docx(bordered))[0] == (
+        "<table><tr>"
+        '<td style="border-right:3px dashed #ff0000;border-bottom:2px solid #ffffff"><p>a</p></td>'
+        '<td style="border-bottom:2px solid #ffffff;border-left:3px dashed #ff0000"><p>b</p></td></tr>'
+        '<tr><td style="border-top:2px solid #ffffff;border-right:3px dashed #ff0000"><p>c</p></td>'
+        '<td style="border-top:2px solid #ffffff;border-left:3px dashed #ff0000"><p>d</p></td></tr></table>'
+    )
+
+
+def test_fmt4_hwpx_nested_table_row_height_cell_borders() -> None:
+    """hwpx: 행 높이는 그 행 칸들의 cellSz height 최대(HWPUNIT÷75), 칸 변은 borderFill 의 *Border(type·width mm·color),
+    칸 안의 표는 바깥 표 뒤로."""
+    hh = "http://www.hancom.co.kr/hwpml/2011/head"
+    header = (
+        f'<hh:head xmlns:hh="{hh}"><hh:refList><hh:borderFills>'
+        '<hh:borderFill id="1"><hh:leftBorder type="NONE"/><hh:rightBorder type="NONE"/><hh:topBorder type="NONE"/><hh:bottomBorder type="NONE"/></hh:borderFill>'
+        '<hh:borderFill id="2"><hh:leftBorder type="DOT" width="0.12 mm" color="#9CCFE0"/><hh:rightBorder type="NONE"/>'
+        '<hh:topBorder type="NONE"/><hh:bottomBorder type="SOLID" width="0.4 mm" color="#5FB3D0"/></hh:borderFill>'
+        "</hh:borderFills></hh:refList></hh:head>"
+    )
+    inner = '<hp:tbl borderFillIDRef="1"><hp:tr><hp:tc borderFillIDRef="1"><hp:subList><hp:p><hp:run charPrIDRef="0"><hp:t>내부</hp:t></hp:run></hp:p></hp:subList></hp:tc></hp:tr></hp:tbl>'
+    section = (
+        '<hp:p paraPrIDRef="0"><hp:run charPrIDRef="0"><hp:tbl borderFillIDRef="1"><hp:tr>'
+        f'<hp:tc borderFillIDRef="2"><hp:cellSz width="7500" height="1500"/><hp:subList><hp:p><hp:run charPrIDRef="0"><hp:t>칸</hp:t>{inner}</hp:run></hp:p></hp:subList></hp:tc>'
+        '<hp:tc borderFillIDRef="2"><hp:cellSpan colSpan="1" rowSpan="2"/><hp:cellSz width="7500" height="3000"/><hp:subList><hp:p><hp:run charPrIDRef="0"><hp:t>둘</hp:t></hp:run></hp:p></hp:subList></hp:tc>'
+        "</hp:tr></hp:tbl></hp:run></hp:p>"
+    )
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("mimetype", "application/hwp+zip")
+        z.writestr("Contents/header.xml", header)
+        z.writestr(
+            "Contents/section0.xml",
+            f'<?xml version="1.0"?><hs:sec xmlns:hs="{_HS}" xmlns:hp="{_HP}">{section}</hs:sec>',
+        )
+    side = "border-top:none;border-right:none;border-bottom:2px solid #5fb3d0;border-left:1px dotted #9ccfe0"
+    assert th("a.hwpx", buf.getvalue())[0] == (
+        # 세로 병합 칸(rowSpan 2, 3000)은 행 높이에 안 센다 → 1500 = 20px. 0.12mm → 1px(최소), 0.4mm → 2px. 표에 선이 있으니 none 도 싣는다
+        f'<table><tr style="height:20px"><td style="width:100px;{side}"><p>칸</p></td>'
+        f'<td rowspan="2" style="width:100px;{side}"><p>둘</p></td></tr></table>'
+        '<table data-borders="none"><tr><td><p>내부</p></td></tr></table>'
+    )
+
+
+def test_fmt4_filter_and_ydoc_row_height_cell_borders() -> None:
+    f = convert._Filter()
+    f.feed(
+        '<table><tr style="height: 40px; color: red"><td style="border-top: none; border-left: 2px dashed #9CCFE0; border-right: 9px solid #000; '
+        'border-bottom: 1px wavy #000; border-top: 1px solid #ABC">x</td></tr><tr style="height:99999px"><td style="border-left:url(x)">y</td></tr></table>'
+    )
+    f.close()
+    assert f.result() == (
+        # 상한 밖 굵기(9px)·모르는 선 종류(wavy)·url 은 버림, 같은 변이 두 번이면 마지막 것, 색은 소문자 6자리
+        '<table><tr style="height:40px"><td style="border-top:1px solid #aabbcc;border-left:2px dashed #9ccfe0">x</td></tr><tr><td>y</td></tr></table>',
+        False,
+    )
+    frag = ydoc_fragment(
+        ydoc.build(
+            '<table><tr style="height:40px"><td style="border-top:none;border-left:1px dotted #9ccfe0"><p>x</p></td></tr></table>',
+            "t",
+        )
+    )
+    assert frag == (
+        '<table><tableRow height="40"><tableCell borderLeft="1px dotted #9ccfe0" borderTop="none"><paragraph>x</paragraph></tableCell></tableRow></table>'
     )
 
 

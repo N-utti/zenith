@@ -277,10 +277,25 @@ class _Builder(HTMLParser):
             props = _style_props(a.get("style", ""))
             if bg := props.get("background-color"):
                 node_attrs["backgroundColor"] = bg.lower()
-            if (w := props.get("width", "")).endswith("px") and w[:-2].isdigit() and a.get("colspan", "1") == "1":
-                node_attrs["colwidth"] = [int(w[:-2])]  # Tiptap 표준 속성(px 배열, 길이 = colspan — 병합 칸은 싣지 않는다)
+            if (
+                (w := props.get("width", "")).endswith("px")
+                and w[:-2].isdigit()
+                and a.get("colspan", "1") == "1"
+            ):
+                node_attrs["colwidth"] = [
+                    int(w[:-2])
+                ]  # Tiptap 표준 속성(px 배열, 길이 = colspan — 병합 칸은 싣지 않는다)
+            for side in ("top", "right", "bottom", "left"):
+                if css := props.get(f"border-{side}"):
+                    node_attrs[f"border{side.capitalize()}"] = (
+                        css  # 계약(#574 확장): "1px solid #000000" | "none"
+                    )
         elif name == "table" and a.get("data-borders") == "none":
             node_attrs["borders"] = "none"
+        elif name == "tableRow":
+            h = _style_props(a.get("style", "")).get("height", "")
+            if h.endswith("px") and h[:-2].isdigit():
+                node_attrs["height"] = int(h[:-2])  # 편집기 행 속성(px, 최소 높이)
         if name == "heading":
             node_attrs["level"] = int(tag[1])
         elif name in ("tableCell", "tableHeader"):
