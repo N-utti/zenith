@@ -3,6 +3,7 @@ import { afterEach, expect, it } from 'vitest'
 import { docContentExtensions } from './editorExtensions'
 import { CellSelection } from '@tiptap/pm/tables'
 import { changeIndent, setBlockFormat, setCellBackground } from './editorFormats'
+import { safeFontFamily } from './docFormat'
 
 // 서식 3차 계약(이슈 #574): 서버 가져오기가 Y.Doc 에 싣는 속성을 편집기가 버리지 않고 그린다.
 const editors: Editor[] = []
@@ -67,6 +68,12 @@ it('가져온 서식을 버리지 않는다(문서 JSON 이 그대로 남는다)
   const table = json.content?.[1]
   expect(table?.attrs?.borders).toBe('none')
   expect(JSON.stringify(table)).toContain('"backgroundColor":"#eeeeee"')
+})
+
+it('서버가 남기는 글꼴 이름(마침표·전각 빈칸·감싼 100자)을 버리지 않는다', () => {
+  for (const name of ["'Font 1.0'", `'가\u3000나'`, `'${'가'.repeat(99)} '`]) {
+    expect(safeFontFamily(name)).toBe(name)
+  }
 })
 
 it('가져온 서식을 스타일로 그린다(인쇄·복사가 쓰는 HTML)', () => {
