@@ -2,6 +2,7 @@
 
 정본은 [ARCHITECTURE · 시스템 설계](https://app.notion.com/p/3aaa471660468173baf8e1dd19d77ede) §7.
 서버 1대 + Docker Compose 단일 스택.
+외부 회사에 우리 서버로 내주는 다중 스택은 [hosted/](hosted/README.md) — 이 문서는 사내 설치 기준이다.
 
 ## 지금 있는 것
 
@@ -25,6 +26,7 @@ docker compose up -d --build     # 전부 — backend/.env 에 JWT_SECRET 이 �
 db·redis·minio 의 호스트 포트는 **127.0.0.1 에만** 묶인다 — 다른 PC 에서는 caddy(80·443)만 보인다.
 
 **서버에 올릴 때 바꿀 것**: `ZENITH_DB_PASSWORD` · `ZENITH_MINIO_PASSWORD`(기본값은 개발용 `zenith`·`zenith-minio`), `backend/.env` 의 `JWT_SECRET`. compose 옆 `.env` 파일(미커밋)에 두면 된다.
+caddy 는 `caddy/` 디렉터리째 마운트한다(`Caddyfile` 이 `zenith.caddy` 스니펫을 import — 외부 호스팅과 같이 쓴다).
 프론트 코드가 바뀌면 `docker compose up -d --build caddy` 로 이미지를 다시 만든다(빌드 컨텍스트는 레포 루트, 루트 `.dockerignore` 가 frontend 만 남긴다).
 
 ### TLS · 사이트 이름

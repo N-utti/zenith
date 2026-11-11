@@ -1,0 +1,42 @@
+# 회사 하나의 api. tenant.sh 가 `TENANT=<회사> docker compose -p zt-<회사> -f tenant.yml ...` 로 부른다.
+# 회사마다 프로세스·DB 계정·버킷 키·JWT 비밀값이 다르다 — 한 회사의 api 가 뚫려도 다른 회사 DB·파일을 못 연다.
+services:
+  api:
+    image: zenith-api:hosted  # tenant.sh 가 ../../backend 로 빌드한다. 전 회사가 같은 이미지
+    restart: unless-stopped
+    env_file:
+      # 전 회사 공통(ANTHROPIC_API_KEY·CORS_ORIGINS 등). 없어도 뜬다 — AI 만 답을 못 한다.
+      - path: ./api.env
+        required: false
+      # 회사별 비밀값(DATABASE_URL·MINIO_*·JWT_SECRET) — tenant.sh add 가 만든다. 뒤에 와서 공통을 덮는다.
+      - ./tenants/${TENANT:?tenant.sh 로 부를 것}.env
+    environment:
+      MINIO_ENDPOINT: minio:9000
+      EMBED_URL: ${ZENITH_EMBED_URL-http://ollama:11434}
+      HWP_URL: ${ZENITH_HWP_URL-http://hwp:8080}
+      COOKIE_SECURE: "true"
+    # 기동 때 그 회사 DB 스키마를 최신으로 올린다(단일 스택과 같다).
+    command: >
+      sh -c "uv run --no-dev alembic upgrade head
+      && uv run --no-dev uvicorn app.main:app --host 0.0.0.0 --port 8000 --ws-max-size 1048576"
+    # tenant.sh 의 `up --wait` 가 이걸 본다 — 마이그레이션이 깨지면 uvicorn 이 안 떠서 healthy 가 안 된다.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/healthz', timeout=3)"]
+      interval: 5s
+      timeout: 5s
+      retries: 3
+      start_period: 120s
+    # 한 회사가 서버 메모리를 다 먹지 않게. 평소 약 180MB(2026-11 실측), 파일 변환·AI 스트림 때 오른다.
+    mem_limit: ${ZENITH_API_MEM:-768m}
+    networks:
+      default:
+        aliases: ["api-${TENANT}"]  # caddy 의 sites/<회사>.caddy 가 이 이름으로 넘긴다
+      hwp_net: {}
+
+networks:
+  default:
+    name: zenith_hosted
+    external: true
+  hwp_net:
+    name: zenith_hosted_hwp
+    external: true
