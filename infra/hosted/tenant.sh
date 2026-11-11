@@ -136,6 +136,7 @@ $company 준비 끝.
   임원 계정 $email
   비밀번호  $adminpw   (지금만 보인다 — 전달 뒤 바꾸게 할 것)
 EOF
+	[ -z "$exists" ] || echo "  (REATTACH: 이 이메일의 계정이 이미 있었다면 비밀번호는 예전 그대로다 — 위 값은 안 맞는다)"
 }
 
 update() {

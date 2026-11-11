@@ -29,7 +29,7 @@
 ## 처음 한 번
 
 1. DNS: `*.<도메인>` A 레코드 → 서버 공인 IP. 방화벽은 80·443 만 연다(80 은 인증서 발급에 쓴다).
-2. `docker login ghcr.io`(MinIO 미러, ../README "MinIO 이미지").
+2. Docker Compose v2.24 이상(`env_file` 의 `required: false`, `up --wait`). `docker login ghcr.io`(MinIO 미러, ../README "MinIO 이미지").
 3. `cp .env.example .env` 후 채운다. 비밀번호는 `openssl rand -hex 24`.
 4. (선택) `api.env` — 전 회사 api 에 들어가는 공통 값. `ANTHROPIC_API_KEY`(없으면 AI 가 답을 못 한다 — **있으면 전 회사의 AI 비용을 우리가 낸다**),
    데스크톱 앱을 받으려면 `CORS_ORIGINS=["http://tauri.localhost"]`.
@@ -71,8 +71,8 @@ MinIO 파일(`miniodata` 볼륨)과 `tenants/*.env` 는 이 백업에 없다.
 
 ## 용량
 
-회사 하나 = api 약 160MB(대기, 2026-11 실측) + DB 접속 최대 15. 공유 쪽은 db·minio·ollama(상한 3GB)·caddy.
-8GB 서버면 20곳 안팎. `max_connections` 는 300(`ZENITH_PG_MAX_CONN`) — 회사 수 × 15 가 넘기 전에 올린다.
+회사 하나 = api 약 160MB(대기, 2026-11 실측) + DB 접속 최대 20(계정 상한, 평소 풀은 15 까지). 공유 쪽은 db·minio·ollama(상한 3GB)·caddy.
+8GB 서버면 20곳 안팎. `max_connections` 는 300(`ZENITH_PG_MAX_CONN`) — 회사 수 × 20 이 넘기 전에 올린다(15곳부터).
 Let's Encrypt 는 등록 도메인당 주 50장이다 — 한 주에 50곳 넘게 붙이지 않는다. 50곳을 넘기면 구조(B안: 스키마 분리)를 다시 본다.
 
 ## 알고 둘 것

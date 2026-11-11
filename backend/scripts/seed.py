@@ -66,7 +66,12 @@ async def get_or_create[T: Base](
 
 async def main() -> None:
     async with SessionLocal() as db:
-        ws = await get_or_create(db, Workspace, name=WORKSPACE)
+        # 회사 모드로 다시 돌릴 때(tenant.sh REATTACH) 이름을 다르게 줘도 워크스페이스를 하나 더 만들지 않는다 —
+        # 라우터가 `select(Workspace.id).limit(1)` 로 집어서 둘이면 어느 쪽이 쓰일지 모른다.
+        ws = None
+        if ADMIN_EMAIL:
+            ws = (await db.execute(select(Workspace).limit(1))).scalar_one_or_none()
+        ws = ws or await get_or_create(db, Workspace, name=WORKSPACE)
         for name, min_role in BOARDS:
             await get_or_create(db, Board, defaults={"min_role": min_role}, name=name)
         for name in CHANNELS:
