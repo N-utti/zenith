@@ -42,6 +42,15 @@ USERS = [
     ("박동현", "donghyun@zenith.co.kr", "lead"),
     ("최재호", "jaeho@zenith.co.kr", "exec"),
 ]
+# 외부 호스팅(infra/hosted/tenant.sh)이 새 회사를 만들 때: 데모 계정·개발팀 대신 그 회사 임원 계정 하나만 만든다.
+WORKSPACE = os.environ.get("SEED_WORKSPACE", "제니스")
+# 로그인이 소문자로 찾는다(routers/auth.py) — 대문자가 섞여 저장되면 그 계정은 영영 못 들어온다.
+ADMIN_EMAIL = os.environ.get("SEED_ADMIN_EMAIL", "").strip().lower() or None
+if ADMIN_EMAIL:
+    # 인터넷에 열리는 서버다 — 알려진 기본 비밀번호(zenith1234)로 임원 계정이 생기지 않게 한다.
+    if "SEED_PASSWORD" not in os.environ:
+        raise SystemExit("SEED_ADMIN_EMAIL 을 주면 SEED_PASSWORD 도 줘야 한다")
+    USERS = [(os.environ.get("SEED_ADMIN_NAME", "관리자"), ADMIN_EMAIL, "exec")]
 
 
 async def get_or_create[T: Base](
@@ -57,7 +66,7 @@ async def get_or_create[T: Base](
 
 async def main() -> None:
     async with SessionLocal() as db:
-        ws = await get_or_create(db, Workspace, name="제니스")
+        ws = await get_or_create(db, Workspace, name=WORKSPACE)
         for name, min_role in BOARDS:
             await get_or_create(db, Board, defaults={"min_role": min_role}, name=name)
         for name in CHANNELS:
@@ -65,16 +74,21 @@ async def main() -> None:
             await get_or_create(db, Channel, ws_id=ws.id, name=name, is_dm=False, is_private=False)
         # 문서는 폴더 안에만 산다(03 documents.folder_id NOT NULL). 루트 폴더 하나로 시작한다.
         await get_or_create(db, Folder, ws_id=ws.id, parent_id=None, title=ROOT_FOLDER)
-        team = await get_or_create(db, Team, name="개발팀")
+        team = None if ADMIN_EMAIL else await get_or_create(db, Team, name="개발팀")
         pw_hash = hash_password(PASSWORD)
         for name, email, role in USERS:
             user = await get_or_create(
                 db,
                 User,
-                defaults={"name": name, "role": role, "pw_hash": pw_hash, "team_id": team.id},
+                defaults={
+                    "name": name,
+                    "role": role,
+                    "pw_hash": pw_hash,
+                    "team_id": team and team.id,
+                },
                 email=email,
             )
-            if role == "lead":
+            if team and role == "lead":
                 team.lead_id = user.id
         for day, name in HOLIDAYS_2026.items():
             await get_or_create(

@@ -1,0 +1,5 @@
+# 외부 호스팅의 입구. 회사마다 사이트 블록 하나(sites/<회사>.caddy, tenant.sh 가 쓴다) — 호스트 이름으로 그 회사 api 에 넘긴다.
+# 라우팅·보안 헤더·CSP 는 단일 스택과 같은 스니펫(../caddy/zenith.caddy)이다.
+# 등록 안 된 호스트 이름은 사이트가 없어 인증서도 응답도 없다.
+import zenith.caddy
+import sites/*.caddy

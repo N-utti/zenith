@@ -52,3 +52,10 @@ infra/backups/
 .claude/settings.local.json
 # Tailscale/사내 CA 인증서 (infra/README "TLS")
 infra/certs/
+# 외부 호스팅(infra/hosted) — 회사별 비밀값·사이트 블록·공통 api 설정·덤프
+# (디렉터리는 .gitkeep 으로 둔다 — 없으면 docker 가 root 소유로 만들어 tenant.sh 가 못 쓴다)
+infra/hosted/tenants/*
+infra/hosted/sites/*
+!infra/hosted/*/.gitkeep
+infra/hosted/api.env
+infra/hosted/backups/
