@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, ApiError, apiEvents, type SseEvent } from '@/lib/api'
+import { docKeys } from '@/features/docs/api'
 import { markOnboarding } from '@/features/home/onboarding'
 import { uuid } from '@/lib/uuid'
 import type { Schema } from '@/types'
@@ -287,7 +288,12 @@ export function useAsk(store: ThreadStore = aiThread) {
       }
     },
     // 새 대화가 목록에 생기고, 방금 물은 대화가 맨 위로 온다.
-    onSettled: () => qc.invalidateQueries({ queryKey: aiSessionsKey }),
+    // AI 가 새 문서를 만들었을 수 있어(create_document, 백엔드 #610) 사이드바 트리도 다시 받는다.
+    // ponytail: 답마다 /tree 한 번. 무거워지면 답 본문에 문서 링크가 있을 때만.
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: aiSessionsKey })
+      void qc.invalidateQueries({ queryKey: docKeys.tree })
+    },
   })
 }
 
