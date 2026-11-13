@@ -15,7 +15,7 @@
 | `minio` | `ghcr.io/n-utti/zenith-minio:RELEASE…` | 채팅 첨부(`app/storage.py`). 조직 레지스트리의 미러 — 아래 "MinIO 이미지" |
 | `ollama` | `ollama/ollama:0.12.3` | 임베딩(bge-m3)만 — AI 근거 벡터 검색(backend/README 45). 설치 때 `docker compose exec ollama ollama pull bge-m3:567m` 한 번(약 1.2GB, 인터넷) → `uv run python scripts/reindex.py`. 모델이 없거나 느리면 api 는 핵심어 검색으로만 답한다. CPU 2·메모리 3GB 상한 |
 | `hwp` | `hwp/Dockerfile` (python:3.11-slim + pyhwp 0.1b15) | 구형 `.hwp` → XML 변환기(backend/README 65). pyhwp 가 AGPL 이라 api 와 다른 컨테이너·프로세스에 둔다. 호스트 포트·인증 없음 — api 만 `hwp:8080` 으로 부른다. CPU 1·메모리 512MB, read-only |
-| `backup` | `pgvector/pgvector:pg16` | 24시간마다 `pg_dump -Fc` → `ZENITH_BACKUP_DIR`(기본 `./backups`), 14일 지난 덤프 삭제 |
+| `backup` | `pgvector/pgvector:pg16` | 24시간마다 `pg_dump -Fc` + 첨부 파일(MinIO 볼륨) tar → `ZENITH_BACKUP_DIR`(기본 `./backups`), 14일 지난 것 삭제 |
 
 ```sh
 docker compose up -d db          # 개발: DB만 띄우고 API는 uv 로, 프론트는 vite 로
@@ -87,7 +87,21 @@ docker compose exec backup sh -c 'createdb zenith_restore_test && pg_restore -d 
 docker compose stop api && docker compose exec backup pg_restore -d zenith --clean --if-exists /backups/zenith-2026-09-16.dump && docker compose start api
 ```
 
-MinIO 의 첨부 파일(`miniodata` 볼륨)은 이 백업에 없다 — 볼륨을 따로 복사한다.
+첨부 파일(MinIO `miniodata` 볼륨)은 같은 주기로 `backups/files-YYYY-MM-DD.tgz`(14일 보관, 2026-11-13). 덤프와 한 쌍이다 — DB 만 되살리면 첨부가 전부 깨진 링크가 된다. 복구(2026-11-13 리허설 통과 — 볼륨을 비우고 풀어 원본을 다시 읽음):
+
+```sh
+# 기존 파일을 지우는 명령이다. 사람이 확인하고 돌린다. 볼륨 이름은 `docker volume ls`(프로젝트가 infra 면 infra_miniodata).
+docker compose stop api minio
+# 묶음이 읽히는지 먼저 보고 나서 지운다. `$PWD/backups` 는 ZENITH_BACKUP_DIR 을 옮겼으면 그 경로로.
+# Git Bash 면 앞에 MSYS_NO_PATHCONV=1, PowerShell 이면 한 줄로 붙인다.
+docker run --rm -v infra_miniodata:/data -v "$PWD/backups":/b:ro pgvector/pgvector:pg16 \
+  sh -c 'f=/b/files-2026-11-13.tgz; tar -tzf $f >/dev/null && find /data -mindepth 1 -delete && tar -xzf $f -C /data'
+docker compose start minio api
+```
+
+서버가 재부팅되면 `backup` 은 db 가 뜰 때까지 기다린다. 실패하면 1시간 뒤 다시 한다(전에는 하루를 건너뛰었다 — 재부팅한 날마다 백업이 빠졌다).
+
+**아직 없는 것 — 서버 밖 사본.** 백업이 서버와 같은 디스크에 있다. 디스크가 죽거나 폴더가 지워지면(2026-11-06 에 체크아웃 폴더가 통째로 사라진 적이 있다) 같이 잃는다. `ZENITH_BACKUP_DIR` 을 다른 디스크·NAS 로 돌리거나 그쪽으로 복사한다. `.env`(JWT_SECRET·API 키)도 이 백업에 없다 — 레포·서버 밖에 사본을 둔다.
 
 ## 아직 없는 것
 

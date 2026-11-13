@@ -161,15 +161,26 @@ services:
       - |
         umask 077
         while :; do
-          if pg_dump -Fc -f /backups/.partial.dump && mv /backups/.partial.dump /backups/zenith-$$(date +%F).dump; then
-            find /backups -name 'zenith-*.dump' -mtime +14 -delete
+          # 서버가 재부팅되면 db 와 같이 뜬다(depends_on 은 `up` 때만 순서를 지킨다) — 기다리지 않으면 그날 백업이 통째로 빠진다.
+          until pg_isready -q; do echo "backup waiting for db $$(date -Is)" >&2; sleep 30; done
+          ok=1
+          pg_dump -Fc -f /backups/.partial.dump && mv /backups/.partial.dump /backups/zenith-$$(date +%F).dump || ok=0
+          # 첨부 파일(MinIO 볼륨)도 같이. tar 종료 1 은 「읽는 중 파일이 바뀜」이라 넘어간다(그 파일만 다음 날 것이 온전하다).
+          # ponytail: 매일 통째로 묶는다 — 첨부가 수 GB 로 커지면 증분(`mc mirror`·rsync)으로.
+          tar -czf /backups/.partial.tgz --exclude=./.minio.sys/tmp --exclude=./.minio.sys/multipart -C /miniodata .
+          [ $$? -le 1 ] && mv /backups/.partial.tgz /backups/files-$$(date +%F).tgz || ok=0
+          if [ $$ok = 1 ]; then
+            find /backups \( -name 'zenith-*.dump' -o -name 'files-*.tgz' \) -mtime +14 -delete
+            sleep 86400
           else
             echo "backup FAILED $$(date -Is)" >&2
+            rm -f /backups/.partial.dump /backups/.partial.tgz  # 쓰다 만 것이 디스크를 잡고 있지 않게
+            sleep 3600  # 하루를 기다리지 않고 다시 — 성공해야 옛 것을 지운다
           fi
-          sleep 86400
         done
     volumes:
       - ${ZENITH_BACKUP_DIR:-./backups}:/backups
+      - miniodata:/miniodata:ro
     depends_on:
       db:
         condition: service_healthy

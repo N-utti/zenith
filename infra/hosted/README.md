@@ -67,7 +67,10 @@ rm sites/acme.caddy && docker compose exec caddy caddy reload --config /etc/cadd
 
 `backup` 이 24시간마다 회사 DB 마다 `backups/zt_<회사>-YYYY-MM-DD.dump`(14일 보관)를 만든다. 복구는 ../README "백업 · 복구" 와 같되
 DB 이름이 `zt_<회사>` 이고, 복구 뒤 소유자가 회사 계정이어야 한다: `pg_restore -d zt_acme --clean --if-exists --no-owner --role zt_acme …`.
-MinIO 파일(`miniodata` 볼륨)과 `tenants/*.env` 는 이 백업에 없다.
+전 회사 첨부 파일(MinIO 볼륨, 회사별 접근 키 포함)은 `backups/files-YYYY-MM-DD.tgz` 하나로 같이 묶는다(14일 보관, 복구는 ../README) —
+회사 하나만 되살리는 절차는 아직 리허설하지 않았다(전체 복구만 확인). 재부팅 때는 db 를 기다리고, 실패하면 1시간 뒤 다시 한다.
+`tenants/*.env` 와 `.env` 는 이 백업에 없다. **백업은 서버와 같은 디스크에 있다 — 서버 밖 사본은 아직 없다**(`ZENITH_BACKUP_DIR` 을
+다른 디스크·NAS 로, #603).
 
 ## 용량
 

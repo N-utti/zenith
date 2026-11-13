@@ -75,18 +75,33 @@ services:
       - |
         umask 077
         while :; do
-          dbs=$$(psql -Atc "select datname from pg_database where datname like 'zt\_%'") || echo "backup FAILED list $$(date -Is)" >&2
+          # 재부팅 때 db 와 같이 뜬다 — 기다리지 않으면 그날 백업이 통째로 빠진다(단일 스택과 같다).
+          until pg_isready -q; do echo "backup waiting for db $$(date -Is)" >&2; sleep 30; done
+          ok=1
+          dbs=$$(psql -Atc "select datname from pg_database where datname like 'zt\_%'") || { echo "backup FAILED list $$(date -Is)" >&2; ok=0; }
           for d in $$dbs; do
             if pg_dump -Fc -d "$$d" -f /backups/.partial.dump && mv /backups/.partial.dump "/backups/$$d-$$(date +%F).dump"; then
               find /backups -name "$$d-*.dump" -mtime +14 -delete
             else
               echo "backup FAILED $$d $$(date -Is)" >&2
+              ok=0
             fi
           done
-          sleep 86400
+          # 전 회사 첨부 파일(MinIO 볼륨 — 회사별 접근 키도 .minio.sys 에 있다). tar 종료 1 은 「읽는 중 바뀜」이라 넘어간다.
+          # ponytail: 매일 통째로 묶는다 — 수 GB 로 커지면 증분(`mc mirror`·rsync)으로.
+          tar -czf /backups/.partial.tgz --exclude=./.minio.sys/tmp --exclude=./.minio.sys/multipart -C /miniodata .
+          if [ $$? -le 1 ] && mv /backups/.partial.tgz /backups/files-$$(date +%F).tgz; then
+            find /backups -name 'files-*.tgz' -mtime +14 -delete
+          else
+            echo "backup FAILED files $$(date -Is)" >&2
+            ok=0
+          fi
+          # 실패면 쓰다 만 것을 치우고(디스크를 잡고 있지 않게) 하루를 기다리지 않고 다시
+          if [ $$ok = 1 ]; then sleep 86400; else rm -f /backups/.partial.dump /backups/.partial.tgz; sleep 3600; fi
         done
     volumes:
       - ${ZENITH_BACKUP_DIR:-./backups}:/backups
+      - miniodata:/miniodata:ro
     depends_on:
       db:
         condition: service_healthy
