@@ -21,6 +21,7 @@ import {
   personName,
   PROJECT_DESCRIPTION_MAX,
   PROJECT_NAME_MAX,
+  deleteTaskMessage,
   TASK_NOTE_MAX,
   TASK_PRIORITIES,
   TASK_STAGES,
@@ -284,7 +285,7 @@ export function TaskFormModal({
           size="sm"
           className="text-danger"
           onClick={() => {
-            if (!confirm(`"${task.title}" 업무를 지웁니다. 되돌릴 수 없습니다.`)) return
+            if (!confirm(deleteTaskMessage(task))) return
             remove.mutate(task.id, {
               onSuccess: done('업무를 지웠습니다.'),
               onError: (err) => setError(errorText(err, '지우지 못했습니다.')),

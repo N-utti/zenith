@@ -16,6 +16,7 @@ import {
   useCreateDeal,
   useCreateOrg,
   useDeals,
+  useDropDeal,
   useOrgs,
   useSaveActivity,
   useSaveContact,
@@ -38,11 +39,12 @@ import {
   DEAL_KINDS,
   DEAL_NAME_MAX,
   DEAL_STATUS_LABEL,
+  REASON_MAX,
   contactName,
   type Activity,
   type ActivityKind,
   type Contact,
-  type DealDetail,
+  type Deal,
   type DealKind,
   type OrgDetail,
   type OrgType,
@@ -620,7 +622,7 @@ export function DealFormModal({
   orgId: presetOrg = '',
   onClose,
 }: {
-  deal?: DealDetail
+  deal?: Deal
   kind?: DealKind
   orgId?: string
   onClose: () => void
@@ -802,5 +804,69 @@ export function DealFormModal({
         </Field>
       </div>
     </FormModal>
+  )
+}
+
+/** 중단. 사유 필수(15 FR-CRM-12). 나중에 재개하면 같은 안건으로 이어진다. */
+export function DropDealModal({ deal, onClose }: { deal: Deal; onClose: () => void }) {
+  const toast = useToast()
+  const drop = useDropDeal()
+  const [baseVersion] = useState(deal.version)
+  const [reason, setReason] = useState('')
+  const [error, setError] = useState<string | null>(null)
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title="안건 중단"
+      description="다시 진행하게 되면 재개할 수 있습니다. 활동 기록은 그대로 이어집니다."
+      size="sm"
+      footer={
+        <>
+          <Button variant="secondary" size="sm" onClick={onClose}>
+            취소
+          </Button>
+          <Button
+            variant="danger"
+            size="sm"
+            disabled={!reason.trim() || drop.isPending}
+            onClick={() => {
+              setError(null)
+              drop.mutate(
+                { id: deal.id, version: baseVersion, reason: reason.trim() },
+                {
+                  onSuccess: () => {
+                    toast.success('중단했습니다.')
+                    onClose()
+                  },
+                  onError: (err) => setError(errorText(err, '중단하지 못했습니다.')),
+                },
+              )
+            }}
+          >
+            {drop.isPending ? <Spinner /> : '중단'}
+          </Button>
+        </>
+      }
+    >
+      <Field label="중단 사유" required>
+        {(slot) => (
+          <Textarea
+            {...slot}
+            rows={3}
+            value={reason}
+            maxLength={REASON_MAX}
+            autoFocus
+            onChange={(e) => setReason(e.target.value)}
+          />
+        )}
+      </Field>
+      {error && (
+        <p role="alert" className="text-danger mt-3 text-sm">
+          {error}
+        </p>
+      )}
+    </Modal>
   )
 }
