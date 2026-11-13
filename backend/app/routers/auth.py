@@ -291,6 +291,10 @@ async def change_password(
     db: AsyncSession = Depends(get_db),
 ) -> None:
     user, session = auth
+    # 행 잠금 — 같은 임시 비밀번호를 아는 두 요청이 동시에 오면 둘 다 옛 해시를 통과해 204 를 받는다
+    # (정해 준 사람이 본인과 동시에 바꿔 계속 아는 채로 남는다). 둘째는 첫째의 커밋 뒤 새 해시를 보고 400.
+    # 임원의 재설정(admin.update_user)과도 같은 잠금으로 줄을 선다. (Codex 리뷰)
+    await db.refresh(user, with_for_update=True)
     if not await verify_password_async(body.current_password, user.pw_hash):
         raise ApiError(400, "PASSWORD_MISMATCH", "현재 비밀번호가 올바르지 않습니다.")
     if body.new_password == body.current_password:

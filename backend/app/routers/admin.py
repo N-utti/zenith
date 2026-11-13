@@ -281,7 +281,8 @@ async def update_user(
     actor: User = Depends(require_exec),
     db: AsyncSession = Depends(get_db),
 ) -> User:
-    user = await db.get(User, user_id)
+    # 행 잠금 — 본인의 비밀번호 변경(auth.change_password)과 겹치면 임시 비밀번호·강제 변경 표시가 덮인다
+    user = await db.get(User, user_id, with_for_update=True, populate_existing=True)
     if user is None:
         raise ApiError(404, "NOT_FOUND", "없는 계정입니다.")
     if user.email == chat_command.AI_EMAIL:

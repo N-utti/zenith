@@ -452,6 +452,12 @@ async def test_given_password_must_be_changed_before_anything_else(
             assert (r.status_code, r.json()["code"]) == (403, "PASSWORD_CHANGE_REQUIRED"), path
         assert (await new.post("/api/auth/refresh", headers=csrf(new))).status_code == 204
 
+        # 등급·활성만 바꾸는 수정은 표시를 건드리지 않는다
+        r = await client.patch(
+            f"/api/admin/users/{created['id']}", json={"role": "lead"}, headers=csrf(client)
+        )
+        assert r.json()["must_change_password"] is True
+
         # 현재 비밀번호가 틀리면 그대로 잠겨 있다
         wrong = {"current_password": "nope", "new_password": "my-own-password"}
         r = await new.post("/api/me/password", json=wrong, headers=csrf(new))
@@ -479,6 +485,8 @@ async def test_given_password_must_be_changed_before_anything_else(
         assert (await new.get("/api/me")).status_code == 401
         await login(new, "new@zenith.co.kr", "temp-password-9")
         assert (await new.get("/api/me/todos")).json()["code"] == "PASSWORD_CHANGE_REQUIRED"
+        # 안 바꾸고 나갈 수는 있다
+        assert (await new.post("/api/auth/logout", headers=csrf(new))).status_code == 204
 
     # 임원이 관리자 화면에서 자기 비밀번호를 바꾼 건 본인이 정한 값이다 — 강제하지 않는다
     r = await client.patch(
