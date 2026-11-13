@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { useToast } from '@/components/ui/ToastContext'
 import { useCurrentUser } from '@/features/auth/AuthContext'
-import { meQueryKey } from '@/features/auth/queries'
+import { meQueryKey, reloadMe } from '@/features/auth/queries'
 import { api, ApiError } from '@/lib/api'
 import { clearNotifications, notify } from '@/lib/desktop'
 import { wsUrl } from '@/lib/serverOrigin'
@@ -216,6 +216,14 @@ export function useChatSocket(): ChatSocket {
         failures += 1
         const retry = () => {
           if (!closed) reconnectTimer = window.setTimeout(connect, delay)
+        }
+        // 4428 은 비밀번호를 먼저 바꾸라는 거절이다(백엔드 #601). 다시 붙어도 같은 거절이니 프로필부터
+        // 다시 받는다. 표시가 켜져 있으면 `RequireAuth` 가 이 소켓째로 걷어 낸다. 그사이 다른 탭에서
+        // 바꿔 표시가 꺼졌거나 프로필을 못 받았으면 다시 붙어 본다.
+        if (event.code === 4428) {
+          return void reloadMe(qc).then((me) => {
+            if (!me.must_change_password) retry()
+          }, retry)
         }
         if (event.code !== 4401) return retry()
         // 4401 은 서버가 세션을 거절했다는 뜻이다(쿠키 없음·세션 회수·비활성 계정, 이슈 #340).

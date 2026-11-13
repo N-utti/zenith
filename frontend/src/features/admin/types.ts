@@ -21,7 +21,8 @@ type Nullable = 'team_id' | 'hire_date'
  * 막는데, 그 판정이 값이 아니라 "필드가 왔는지" 로 갈린다. 내 줄에서 이름만 고쳐도 등급을
  * 같이 실으면 400 이 된다.
  *
- * `password` 를 보내면 임시 비밀번호로 재설정하고 그 사람의 세션을 전부 닫는다.
+ * `password` 를 보내면 임시 비밀번호로 재설정하고 그 사람의 세션을 전부 닫는다. 남의 것이면
+ * `must_change_password` 가 켜져 다음 로그인 때 본인이 바꿔야 한다(백엔드 #601).
  */
 export type UserPatch = Pick<Schema<'UserPatchIn'>, Nullable> & {
   [K in Exclude<keyof Schema<'UserPatchIn'>, Nullable>]?: NonNullable<Schema<'UserPatchIn'>[K]>

@@ -103,7 +103,7 @@ export function UserModal({
             // 임시 비밀번호는 그 사람의 로그인을 전부 끊는다. 되돌릴 수 없는 일에는 말이 있어야 한다.
             if (patch.password) {
               toast.success(
-                `${user.name} 님의 비밀번호를 임시 비밀번호로 바꿨습니다. 로그인은 모두 해제됩니다.`,
+                `${user.name} 님의 비밀번호를 임시 비밀번호로 바꿨습니다. 로그인은 모두 해제되고, 다음 로그인 때 본인이 바꿉니다.`,
               )
             } else if (patch.active === false) {
               toast.success(`${user.name} 님의 계정을 비활성화했습니다.`)
@@ -199,8 +199,8 @@ export function UserModal({
           required={!user}
           hint={
             user
-              ? `채우면 임시 비밀번호로 바꾸고 그 사람의 로그인을 모두 해제합니다. ${PASSWORD_MIN}자 이상.`
-              : `${PASSWORD_MIN}자 이상. 첫 로그인 뒤 본인이 설정에서 바꿉니다.`
+              ? `채우면 임시 비밀번호로 바꾸고 그 사람의 로그인을 모두 해제합니다. 다음 로그인 때 본인이 바꿉니다. ${PASSWORD_MIN}자 이상.`
+              : `${PASSWORD_MIN}자 이상. 첫 로그인 때 본인이 바꿉니다.`
           }
           error={passwordTooShort ? `${PASSWORD_MIN}자 이상이어야 합니다.` : null}
         >

@@ -132,7 +132,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 비밀번호 변경 — 지금 세션 외 다른 세션은 모두 종료 */
+        /** 비밀번호 변경 — 지금 세션 외 다른 세션은 모두 종료. 강제 변경(must_change_password)도 여기서 풀린다 */
         post: operations["change_password_api_me_password_post"];
         delete?: never;
         options?: never;
@@ -3894,6 +3894,8 @@ export interface components {
             /** Avatar */
             avatar: string | null;
             team: components["schemas"]["TeamOut"] | null;
+            /** Must Change Password */
+            must_change_password: boolean;
         };
         /** MembersIn */
         MembersIn: {
@@ -4865,6 +4867,8 @@ export interface components {
             avatar: string | null;
             /** Active */
             active: boolean;
+            /** Must Change Password */
+            must_change_password: boolean;
             /** Team Id */
             team_id: string | null;
             /** Hire Date */
@@ -4878,6 +4882,8 @@ export interface components {
         /**
          * UserPatchIn
          * @description 보낸 필드만 바꾼다. password 를 보내면 임시 비밀번호로 재설정하고 그 사람의 세션을 전부 닫는다.
+         *
+         *     남의 임시 비밀번호는 다음 로그인 때 본인이 바꿔야 한다(must_change_password).
          */
         UserPatchIn: {
             /** Name */
@@ -5269,6 +5275,13 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description PASSWORD_MISMATCH(현재 비밀번호 불일치) · PASSWORD_UNCHANGED(지금과 같은 비밀번호) */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };

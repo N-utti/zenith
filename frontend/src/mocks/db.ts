@@ -50,6 +50,7 @@ export const MOCK_USERS: User[] = users.map((u) => ({
   role: u.role as Role,
   avatar: null,
   team: u.team ? MOCK_TEAMS[u.team] : null,
+  must_change_password: false,
 }))
 
 /**

@@ -3,6 +3,7 @@ import * as Y from 'yjs'
 import { IndexeddbPersistence } from 'y-indexeddb'
 import { WebsocketProvider } from 'y-websocket'
 import { api } from '@/lib/api'
+import { reloadMe } from '@/features/auth/queries'
 import { queryClient } from '@/lib/queryClient'
 import { wsUrl } from '@/lib/serverOrigin'
 import { docKeys } from './api'
@@ -78,6 +79,14 @@ export function useCollabSession(docId: string): CollabSession | null {
           setSession(null)
           setReopened(true)
         })
+        return
+      }
+      // 비밀번호를 먼저 바꾸라는 거절(백엔드 #601). 채팅 소켓과 같이 프로필을 다시 받아 변경 화면으로 보낸다.
+      if (event.code === 4428) {
+        void reloadMe(queryClient).then(
+          (me) => me.must_change_password || provider.connect(),
+          () => undefined,
+        )
         return
       }
       if (event.code !== 4401) return

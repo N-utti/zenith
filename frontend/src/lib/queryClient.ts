@@ -1,5 +1,5 @@
 import { MutationCache, QueryCache, QueryClient } from '@tanstack/react-query'
-import { meQueryKey } from '@/features/auth/queries'
+import { meQueryKey, reloadMe } from '@/features/auth/queries'
 import { ApiError } from './api'
 import { clearNotifications } from './desktop'
 
@@ -13,6 +13,12 @@ function dropSessionOn401(error: unknown) {
     queryClient.setQueryData(meQueryKey, null)
     // 로그인 화면에 앉아 있는 동안 알림 센터로 앞사람의 DM 을 읽지 않게 한다. 나머지는 다음 로그인이 비운다.
     clearNotifications()
+  }
+  // 같은 브라우저의 다른 탭에서 임시 비밀번호로 다시 로그인해 쿠키가 바뀐 경우(백엔드 #601). 이 탭의
+  // 프로필은 아직 표시가 꺼져 있어 앱이 떠 있다. 다시 받으면 `RequireAuth` 가 변경 화면으로 바꾼다.
+  // ponytail: 한꺼번에 실패한 요청 수만큼 `/me` 를 부른다. 드문 경우라 묶지 않는다.
+  if (error instanceof ApiError && error.code === 'PASSWORD_CHANGE_REQUIRED') {
+    reloadMe(queryClient).catch(() => undefined)
   }
 }
 

@@ -17,6 +17,7 @@ const ACCOUNTS: AdminUser[] = MOCK_USERS.map((user, index) => ({
   role: user.role,
   avatar: null,
   active: true,
+  must_change_password: user.must_change_password,
   team_id: user.team?.id ?? null,
   // 입사일이 다 같으면 정렬·연차 화면에서 쓸모가 없다. 자리마다 한 해씩 벌린다.
   hire_date: `${2018 + (index % 6)}-0${1 + (index % 9)}-${String(1 + ((index * 3) % 27)).padStart(2, '0')}`,
@@ -48,6 +49,8 @@ export function createAccount(body: UserCreate): AdminUser {
     role: body.role,
     avatar: null,
     active: true,
+    // 서버처럼 관리자가 정해 준 비밀번호는 첫 로그인 때 본인이 바꿔야 한다(백엔드 #601).
+    must_change_password: true,
     team_id: body.team_id ?? null,
     hire_date: body.hire_date ?? null,
     created_at: new Date().toISOString(),
@@ -57,13 +60,15 @@ export function createAccount(body: UserCreate): AdminUser {
 }
 
 /**
- * 보낸 칸만 바꾼다. 비밀번호는 목이 저장하지 않으므로 받기만 하고 버린다.
+ * 보낸 칸만 바꾼다. 비밀번호는 목이 저장하지 않으므로 받기만 하고 버린다. 다만 남의 비밀번호를
+ * 바꾸면 서버처럼 다음 로그인 때 본인이 바꾸게 한다(백엔드 #601). 내 것을 바꾸면 그 표시를 지운다.
  *
  * 이름·등급은 `MOCK_USERS` 쪽에도 같이 심는다. 실제 서버는 계정 한 줄을 고치는 것이라
  * `GET /me` 와 사이드바·검색이 전부 따라오는데, 목에서 둘이 갈라져 있으면 내 이름을 바꿔도
  * 헤더가 옛 이름을 들고 있다. 그러면 프로필 캐시 무효화가 도는지 확인할 방법이 없다.
  */
-export function patchAccount(account: AdminUser, patch: UserPatch): AdminUser {
+export function patchAccount(account: AdminUser, patch: UserPatch, actorId?: string): AdminUser {
+  if (patch.password !== undefined) account.must_change_password = account.id !== actorId
   if (patch.name !== undefined) account.name = patch.name.trim()
   if (patch.role !== undefined) account.role = patch.role
   if (patch.active !== undefined) account.active = patch.active
@@ -74,6 +79,7 @@ export function patchAccount(account: AdminUser, patch: UserPatch): AdminUser {
   if (mirror) {
     mirror.name = account.name
     mirror.role = account.role
+    mirror.must_change_password = account.must_change_password
     // 소속도 같이 심는다. 갈라져 있으면 소속을 옮겨 놓고 오른쪽 위 프로필은 옛 팀을 들고 있다.
     mirror.team = MOCK_TEAM_LIST.find((team) => team.id === account.team_id) ?? null
   }
