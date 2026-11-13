@@ -160,6 +160,76 @@ def test_pdf_to_html(monkeypatch) -> None:
     assert th("a.pdf", pdf_bytes("Hello PDF")) == ("<p>Hello</p>" + convert.TRUNCATED_NOTE, True)
 
 
+def _pdf_objs(*objs: bytes) -> bytes:
+    out = io.BytesIO()
+    out.write(b"%PDF-1.4\n")
+    offs = []
+    for i, body in enumerate(objs, start=1):
+        offs.append(out.tell())
+        out.write(f"{i} 0 obj\n".encode() + body + b"\nendobj\n")
+    xref = out.tell()
+    out.write(f"xref\n0 {len(objs) + 1}\n0000000000 65535 f \n".encode())
+    for off in offs:
+        out.write(f"{off:010d} 00000 n \n".encode())
+    out.write(
+        f"trailer\n<< /Size {len(objs) + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n".encode()
+    )
+    return out.getvalue()
+
+
+def _pdf_stream(raw: bytes, extra: bytes = b"") -> bytes:
+    head = b"<< /Length " + str(len(raw)).encode() + extra + b" >>"
+    return head + b"\nstream\n" + raw + b"\nendstream"
+
+
+_PDF_HEAD = (b"<< /Type /Catalog /Pages 2 0 R >>", b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>")
+_PDF_PAGE = b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> %s >> >>"
+_PDF_FONT = b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"
+
+
+def test_pdf_review_regressions(monkeypatch) -> None:
+    """리뷰: ① 짝 없는 서로게이트·제어 문자가 500·본문으로 새지 않는다 ② Form XObject 반복(스트림 상한이 못 세는 CPU)은
+    시간 상한에서 Unsupported ③ 쪽 수 상한에서 끊기면 본문에 적는다."""
+    cmap = (
+        b"/CIDInit /ProcSet findresource begin 12 dict begin begincmap /CMapName /X def\n"
+        b"1 begincodespacerange <00> <FF> endcodespacerange\n1 beginbfchar <41> <D800> endbfchar\n"
+        b"endcmap CMapName currentdict /CMap defineresource pop end end"
+    )
+    bad = _pdf_objs(
+        *_PDF_HEAD,
+        _PDF_PAGE % b"",
+        _pdf_stream(b"BT /F1 12 Tf 10 100 Td (A) Tj ET"),
+        _PDF_FONT[:-2] + b"/ToUnicode 6 0 R >>",
+        _pdf_stream(cmap),
+    )
+    assert th("a.pdf", bad) == ("<p>?</p>", False)
+    ctrl = _pdf_objs(
+        *_PDF_HEAD,
+        _PDF_PAGE % b"",
+        _pdf_stream(b"BT /F1 12 Tf (a\x01\x02\x1b\x7fb) Tj ET"),
+        _PDF_FONT,
+    )
+    assert th("a.pdf", ctrl) == ("<p>ab</p>", False)
+    form = _pdf_stream(
+        b"BT /F1 12 Tf " + b"(x) Tj\n" * 500 + b"ET",
+        b" /Type /XObject /Subtype /Form /BBox [0 0 200 200] /Resources << /Font << /F1 5 0 R >> >>",
+    )
+    slow = _pdf_objs(
+        *_PDF_HEAD,
+        _PDF_PAGE % b"/XObject << /X0 6 0 R >>",
+        _pdf_stream(b"/X0 Do\n" * 20),
+        _PDF_FONT,
+        form,
+    )
+    assert th("a.pdf", slow)[0].startswith("<p>x")  # 상한 안이면 그냥 읽힌다
+    monkeypatch.setattr("app.ai.extract.MAX_PDF_SECONDS", -1)
+    with pytest.raises(Unsupported):
+        th("a.pdf", slow)
+    monkeypatch.setattr("app.ai.extract.MAX_PDF_SECONDS", 30)
+    monkeypatch.setattr("app.ai.extract.MAX_PDF_PAGES", 0)
+    assert th("a.pdf", pdf_bytes("Hello"))[0] == "<p>(0쪽을 넘어 여기서 끊는다)</p>"
+
+
 def test_filter_strips_unknown_tags_and_dangerous_attrs() -> None:
     f = convert._Filter()
     f.feed(
@@ -1601,4 +1671,4 @@ async def test_import_pdf_route(client: AsyncClient, users: Users, app_db, minio
     r = await _import(client, "스캔.pdf", pdf_bytes(""), folder_id=str(root.id))
     assert r.status_code == 422 and "스캔본" in r.json()["detail"]
     r = await _import(client, "깨짐.pdf", b"%PDF-1.4", folder_id=str(root.id))
-    assert r.status_code == 422 and "PDF" in r.json()["detail"]
+    assert r.status_code == 422 and "암호" in r.json()["detail"]

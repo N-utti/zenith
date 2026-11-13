@@ -597,7 +597,7 @@ async def import_doc(
             ) from None
         if isinstance(e, convert.Unsupported):
             if name.lower().endswith(".pdf"):
-                detail = "암호가 걸렸거나 손상된 PDF 입니다."
+                detail = "암호가 걸렸거나 손상됐거나 너무 큰 PDF 입니다."
             elif not settings.hwp_url:
                 detail = (
                     "docx·xlsx·hwpx·pdf 파일만 가져올 수 있습니다(hwp 는 hwpx 로 저장해 주세요)."

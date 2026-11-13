@@ -182,7 +182,8 @@ def _pdf(name: str, data: bytes) -> tuple[str, bool]:
     서식은 없다(원본은 본문 끝 fileChip). 모양이 필요해지면 pdfplumber 류의 배치 분석으로."""
     text = extract.extract(name, data)
     body = "".join(f"<p>{html.escape(line, quote=False)}</p>" for line in text.splitlines() if line)
-    return body, len(text) >= extract.MAX_CHARS  # 추출기가 20만 자에서 자른다 — 필터가 못 끊는 양이면 여기서 안내
+    # 추출기가 20만 자에서 자른다 — 필터가 못 끊는 양이면 여기서 안내
+    return body, len(text) >= extract.MAX_CHARS
 
 
 def _digits(value: str | None) -> bool:
