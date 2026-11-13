@@ -230,7 +230,7 @@ def from_html(raw: str) -> Converted:
     """이미 HTML 인 글(AI 가 쓴 본문, README 69)을 파일과 같은 필터로 — 허용 태그·속성만 남기고 MAX_SEED_COST 에서 끊는다.
     그림은 없다(img 는 버려진다). 글자가 없으면 `Empty`."""
     f = _Filter()
-    f.feed(raw)
+    f.feed(extract._clean(raw))  # NUL·제어 문자·짝 없는 서로게이트 — DB·Y.Doc 이 거절한다(리뷰)
     f.close()
     if f.chars == 0:
         raise Empty("html")
