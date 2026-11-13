@@ -29,7 +29,7 @@ export type DocImport = Schema<'DocImportOut'>
 
 /**
  * 가져올 수 있는 형식. 서버가 같은 목록으로 다시 거른다. 옛 한글(.hwp)은 서버의 변환기가 따로 맡는다(README 65).
- * pdf 는 글자만 들어온다(README 67).
+ * pdf 는 서버가 표·제목·문단을 짐작해 살린다(스캔본·그림은 안 들어온다, README 68).
  */
 export const IMPORT_ACCEPT = '.docx,.xlsx,.hwpx,.hwp,.pdf'
 
