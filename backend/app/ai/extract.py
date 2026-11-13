@@ -9,6 +9,8 @@ pdf(pdfplumber — 문단·표, README 68) · hwpx(zip 안 Contents/section*.xml
 import csv
 import io
 import json
+import logging
+import os
 import re
 import subprocess
 import sys
@@ -30,6 +32,10 @@ MAX_ZIP_ENTRIES = 2000  # 항목 수 — 빈 항목 10만 개로 ZipInfo·이름
 # PDF 한 건의 시간 상한 — 넘으면 작업자 프로세스를 죽인다. 1KB 파일이 Form XObject 반복(`/X0 Do`)으로 수십 초~수십
 # 분을 붙잡을 수 있다(리뷰 재현). 쪽 수(300)·글자·칸·메모리 상한은 작업자(pdfwork.py)가 건다
 MAX_PDF_SECONDS = 30.0
+MAX_PDF_JSON = (
+    8 * 1024 * 1024
+)  # 작업자 출력 상한 — 정상 상한(19만 자·2만 칸·2만 블록)이면 3MB 안쪽이다
+log = logging.getLogger(__name__)
 _PDF_WORKER = Path(__file__).with_name("pdfwork.py")
 _PDF_SLOTS = threading.BoundedSemaphore(
     2
@@ -230,6 +236,9 @@ def pdf_blocks(data: bytes) -> dict:
                 input=data,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.DEVNULL,
+                # 신뢰불가 입력을 읽는 프로세스에 api 의 비밀(JWT·AI 키·DB 주소)을 물려주지 않는다(리뷰). 윈도는
+                # SYSTEMROOT 가 없으면 파이썬이 안 뜬다
+                env={k: v for k in ("SYSTEMROOT", "PATH") if (v := os.environ.get(k))},
                 timeout=max(0.001, deadline - time.monotonic()),
                 check=False,
             )
@@ -238,7 +247,11 @@ def pdf_blocks(data: bytes) -> dict:
     finally:
         _PDF_SLOTS.release()
     if proc.returncode:
+        if proc.returncode != 3:  # 운영에서 OOM(-9)·메모리 상한(1)·형식 오류를 가릴 단서
+            log.warning("PDF 작업자 실패 rc=%s size=%s", proc.returncode, len(data))
         raise Unsupported("pdf-encrypted" if proc.returncode == 3 else "pdf")
+    if len(proc.stdout) > MAX_PDF_JSON:
+        raise Unsupported("pdf-too-large")
     out = json.loads(proc.stdout)
 
     def tidy(text: str) -> str:

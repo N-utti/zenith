@@ -200,6 +200,33 @@ def test_pdf_layout_table_heading_paragraph() -> None:
     )
 
 
+def test_pdf_layout_review_regressions() -> None:
+    """리뷰 재현: ① 길이가 비슷한 짧은 줄(주소·서명란)은 한 문단으로 뭉치지 않는다 ② 칸 선에 걸친 글자(행 높이 = 글자
+    높이)가 사라지지 않는다 ③ 세로 병합은 rowspan ④ 「3.5%」 로 시작하는 줄은 머리 기호가 아니라 이어진 줄."""
+    full = b"x" * 60
+    content = (
+        b"BT /F1 10 Tf 50 380 Td (Seoul) Tj ET BT /F1 10 Tf 50 368 Td (Busan) Tj ET\n"
+        b"BT /F1 10 Tf 50 356 Td (Daegu) Tj ET\n"
+        b"BT /F1 10 Tf 50 320 Td (" + full + b" ) Tj ET BT /F1 10 Tf 50 308 Td (3.5% up) Tj ET\n"
+        # 2행 표(행 높이 14): 왼쪽 칸은 두 행 병합, 오른쪽 글자는 아래 선에서 1.9pt 위(글자 상자가 선에 걸친다)
+        b"0.5 w 50 200 300 28 re S 200 200 m 200 228 l S 200 214 m 350 214 l S\n"
+        b"BT /F1 10 Tf 60 210 Td (L) Tj ET BT /F1 10 Tf 210 215.9 Td (Tight) Tj ET\n"
+        b"BT /F1 10 Tf 210 201.9 Td (R2) Tj ET\n"
+    )
+    data = _pdf_objs(
+        *_PDF_HEAD,
+        (_PDF_PAGE % b"").replace(b"200 200", b"400 400"),
+        _pdf_stream(content),
+        _PDF_FONT,
+    )
+    assert th("a.pdf", data)[0] == (
+        "<p>Seoul</p><p>Busan</p><p>Daegu</p>"
+        f"<p>{full.decode()} 3.5% up</p>"
+        '<table><tr><td rowspan="2"><p>L</p></td><td><p>Tight</p></td></tr>'
+        "<tr><td><p>R2</p></td></tr></table>"
+    )
+
+
 def _pdf_objs(*objs: bytes) -> bytes:
     out = io.BytesIO()
     out.write(b"%PDF-1.4\n")
