@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app import audit
 from app.config import settings
 from app.db import get_db
-from app.deps import Auth, current_auth, current_user
+from app.deps import Auth, current_auth_pending, current_user
 from app.errors import ApiError
 from app.models import AuthSession, Team, User
 from app.security import (
@@ -62,6 +62,8 @@ class MeOut(BaseModel):
     role: str
     avatar: str | None
     team: TeamOut | None
+    # true 면 `/me`·`/me/password` 밖은 전부 403 PASSWORD_CHANGE_REQUIRED — 화면은 변경 화면만 띄운다(README 66)
+    must_change_password: bool
 
 
 class PasswordIn(BaseModel):
@@ -239,7 +241,9 @@ async def logout(request: Request, response: Response, db: AsyncSession = Depend
 
 @router.get("/me", response_model=MeOut, summary="내 프로필")
 async def me(
-    response: Response, auth: Auth = Depends(current_auth), db: AsyncSession = Depends(get_db)
+    response: Response,
+    auth: Auth = Depends(current_auth_pending),
+    db: AsyncSession = Depends(get_db),
 ) -> MeOut:
     user, session = auth
     # 셸은 csrf 쿠키를 못 읽는다(security.set_auth_cookies) — 앱을 다시 켜면 메모리의 토큰이 없으므로 로그인
@@ -253,6 +257,7 @@ async def me(
         role=user.role,
         avatar=user.avatar,
         team=TeamOut.model_validate(team) if team else None,
+        must_change_password=user.must_change_password,
     )
 
 
@@ -272,17 +277,26 @@ async def yjs_check(response: Response, user: User = Depends(current_user)) -> N
     "/me/password",
     status_code=204,
     response_class=Response,
-    summary="비밀번호 변경 — 지금 세션 외 다른 세션은 모두 종료",
+    summary="비밀번호 변경 — 지금 세션 외 다른 세션은 모두 종료. 강제 변경(must_change_password)도 여기서 풀린다",
+    responses={
+        400: {
+            "description": "PASSWORD_MISMATCH(현재 비밀번호 불일치) · PASSWORD_UNCHANGED(지금과 같은 비밀번호)"
+        }
+    },
 )
 async def change_password(
     body: PasswordIn,
     request: Request,
-    auth: Auth = Depends(current_auth),
+    auth: Auth = Depends(current_auth_pending),
     db: AsyncSession = Depends(get_db),
 ) -> None:
     user, session = auth
     if not await verify_password_async(body.current_password, user.pw_hash):
         raise ApiError(400, "PASSWORD_MISMATCH", "현재 비밀번호가 올바르지 않습니다.")
+    if body.new_password == body.current_password:
+        # 같은 값으로 「바꿔」 강제 변경을 넘기지 못하게 — 남이 아는 비밀번호가 그대로 남는다
+        raise ApiError(400, "PASSWORD_UNCHANGED", "지금과 다른 비밀번호를 입력해 주세요.")
+    user.must_change_password = False
     user.pw_hash = await hash_password_async(body.new_password)
     await db.execute(
         update(AuthSession)

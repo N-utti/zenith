@@ -89,6 +89,8 @@ async def main() -> None:
                     "name": name,
                     "role": role,
                     "pw_hash": pw_hash,
+                    # 회사 개설(tenant.sh): 운영자가 화면에서 본 초기 비밀번호다 — 첫 로그인 때 바꾸게 한다
+                    "must_change_password": bool(ADMIN_EMAIL),
                     "team_id": team and team.id,
                 },
                 email=email,

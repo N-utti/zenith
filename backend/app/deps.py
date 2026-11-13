@@ -25,7 +25,11 @@ Auth = tuple[User, AuthSession]
 
 
 async def authenticate(
-    cookies: Mapping[str, str], db: AsyncSession, *, verify_exp: bool = True
+    cookies: Mapping[str, str],
+    db: AsyncSession,
+    *,
+    verify_exp: bool = True,
+    allow_password_change: bool = False,
 ) -> Auth:
     """access 쿠키 → (사용자, 세션). HTTP 와 WebSocket 핸드셰이크가 같이 쓴다.
 
@@ -34,6 +38,10 @@ async def authenticate(
     `verify_exp=False` 는 열린 WebSocket 의 주기 재검증 전용 — 소켓의 쿠키는 핸드셰이크 시점에 고정돼
     refresh 로 새 access 가 나와도 볼 수 없다. 회수·만료·비활성 판정은 어차피 세션 행이 하므로 토큰의
     exp 만 빼고 본다(소켓은 세션이 살아 있는 동안 유지된다).
+    `allow_password_change=True` 는 `/me`·`/me/password` 전용(`current_auth_pending`) — 남이 정해 준
+    비밀번호를 아직 안 바꾼 계정은 그 둘 말고는 전부 403 `PASSWORD_CHANGE_REQUIRED`(README 66). 기본값이
+    막는 쪽이라 새 라우트·소켓은 따로 손대지 않아도 닫혀 있다. 감사 기록은 남기지 않는다 — 권한 거부가
+    아니라 계정 상태이고(AUTH_DISABLED 와 같다), 화면이 한 번에 여러 요청을 보내 기록이 넘친다.
     """
     token = cookies.get("access")
     if not token:
@@ -53,11 +61,18 @@ async def authenticate(
         raise ApiError(401, "AUTH_DISABLED", "비활성화된 계정입니다. 관리자에게 문의하세요.")
     if session.revoked_at is not None or session.expires_at <= datetime.now(UTC):
         raise ApiError(401, "AUTH_INVALID", "세션이 종료되었습니다. 다시 로그인해 주세요.")
+    if user.must_change_password and not allow_password_change:
+        raise ApiError(403, "PASSWORD_CHANGE_REQUIRED", "비밀번호를 먼저 바꿔 주세요.")
     return user, session
 
 
 async def current_auth(request: Request, db: AsyncSession = Depends(get_db)) -> Auth:
     return await authenticate(request.cookies, db)
+
+
+async def current_auth_pending(request: Request, db: AsyncSession = Depends(get_db)) -> Auth:
+    """비밀번호를 아직 안 바꾼 계정도 통과 — `/me`(상태를 알려 줌)와 `/me/password`(바꿈)만 쓴다."""
+    return await authenticate(request.cookies, db, allow_password_change=True)
 
 
 async def current_user(auth: Auth = Depends(current_auth)) -> User:
@@ -142,6 +157,12 @@ async def csrf_guard(request: Request) -> None:
         header = request.headers.get("x-csrf-token", "")
         if session_id is None or not hmac.compare_digest(header, csrf_token(session_id)):
             raise ApiError(403, "CSRF_TOKEN", "CSRF 토큰이 없거나 일치하지 않습니다.")
+
+
+def ws_auth_code(e: ApiError) -> int:
+    """소켓에서 인증 거부를 닫는 코드. 강제 변경은 4428 — 4401 이면 화면이 `/me`(200) 를 보고 곧바로
+    다시 붙어 지연 없는 재접속 루프가 된다(README 66, 보안 리뷰 M1). 그 밖은 4401(#340)."""
+    return 4428 if e.code == "PASSWORD_CHANGE_REQUIRED" else 4401
 
 
 async def ws_reject(websocket: WebSocket, code: int) -> None:

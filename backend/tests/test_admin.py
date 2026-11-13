@@ -46,6 +46,7 @@ async def test_exec_lists_creates_and_updates_accounts(client: AsyncClient, user
         "role",
         "avatar",
         "active",
+        "must_change_password",
         "team_id",
         "hire_date",
         "created_at",

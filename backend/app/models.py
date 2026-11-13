@@ -75,6 +75,11 @@ class User(Base):
     hire_date: Mapped[date | None] = mapped_column(Date)
     # 알림 수신·시작 화면 (app/prefs.py). null 이면 기본값 — 03 에 없던 컬럼 (2026-09-17)
     preferences: Mapped[dict | None] = mapped_column(JSONB)
+    # 남이 정해 준 비밀번호(계정 생성·임시 비밀번호·회사 개설)로는 `/me`·`/me/password` 밖을 못 쓴다
+    # (deps.authenticate). 본인이 바꾸면 꺼진다 — 03 에 없던 컬럼 (README 66)
+    must_change_password: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=sql_text("false")
+    )
     created_at: Mapped[datetime] = created_at_col()
 
 

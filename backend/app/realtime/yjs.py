@@ -44,7 +44,7 @@ from sqlalchemy import func, update
 from app import acl, audit
 from app.ai import embed
 from app.db import session_scope
-from app.deps import _own_origin, authenticate, origin_allowed, ws_reject
+from app.deps import _own_origin, authenticate, origin_allowed, ws_auth_code, ws_reject
 from app.errors import ApiError
 from app.models import Document
 
@@ -344,7 +344,7 @@ async def yjs_endpoint(websocket: WebSocket, doc_id: uuid.UUID) -> None:
         room = await _open_room(doc_id)
     except ApiError as e:
         log.info("yjs 거부 %s: %s", doc_id, e.code)
-        await ws_reject(websocket, 4401)
+        await ws_reject(websocket, ws_auth_code(e))
         return
     except Exception as e:  # noqa: BLE001 — DB 접속 실패 등
         log.warning("yjs 핸드셰이크 실패 %s: %s %s", doc_id, type(e).__name__, e)
@@ -424,7 +424,7 @@ async def yjs_endpoint(websocket: WebSocket, doc_id: uuid.UUID) -> None:
     except ApiError as e:
         log.info("yjs 세션 종료 %s: %s", doc_id, e.code)
         with contextlib.suppress(Exception):
-            await websocket.close(code=4401)
+            await websocket.close(code=ws_auth_code(e))
     except Exception as e:  # noqa: BLE001
         # 잘린 varuint·빈 프레임·TEXT 프레임·깨진 awareness JSON 같은 입력, 또는 저장 실패. 자기 연결만 닫고 방은 살린다.
         log.info("yjs 연결 종료 %s: %s %s", doc_id, type(e).__name__, e)
