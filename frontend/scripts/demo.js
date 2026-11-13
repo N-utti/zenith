@@ -3,7 +3,7 @@
  *
  *   npm run demo                # 시연 빌드(dist-demo) 후 http://localhost:8080
  *   npm run demo -- --no-build  # 이미 만든 dist-demo 로 바로 띄운다
- *   npm run demo -- --build-only  # 빌드와 실명 검사만 하고 끝낸다(클라우드 빌드 단계)
+ *   npm run demo -- --build-only  # 빌드와 실명 검사만 하고 끝낸다(시연 msi 빌드 단계)
  *   PORT=9000 npm run demo
  *   HOST=0.0.0.0 npm run demo   # 다른 PC 에서도 받는다(기본은 이 PC 안에서만)
  *
@@ -45,7 +45,7 @@ if (!process.argv.includes('--no-build')) {
     console.error(`[demo] 시연 빌드에 실명이 남았습니다: ${[...leaks].join(', ')}. scripts/demo-names.js 에 넣으세요.`)
     process.exit(1)
   }
-  // 클라우드는 빌드와 실행을 따로 돌린다(빌드 명령 --build-only, 시작 명령 --no-build).
+  // 시연 msi 는 빌드만 쓴다(apps/desktop 의 tauri.demo.conf.json).
   if (process.argv.includes('--build-only')) process.exit(0)
 }
 if (!existsSync(path.join(outDir, 'index.html'))) {
