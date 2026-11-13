@@ -615,3 +615,13 @@ async def test_marks_do_not_leak_into_plain_text(
         await app_db.refresh(row)
         assert row.text_cache == "굵게 링크 그대로"
         assert "bold" not in str(row.tsv)  # tsv 도 같이 다시 썼다
+
+
+async def test_given_password_closes_with_4428(app: FastAPI, users: Users, app_db) -> None:
+    """README 66: 정해 준 비밀번호를 안 바꾼 계정은 문서 소켓도 못 연다 — 4401 이 아닌 4428(재접속 루프 방지)."""
+    users.member.must_change_password = True
+    await app_db.flush()
+    async with ws_client(app) as client:
+        await login(client, "sujin@zenith.co.kr")
+        async with aconnect_ws(f"https://test/api/yjs/{uuid.uuid4()}", client) as ws:
+            await expect_close(ws, 4428)

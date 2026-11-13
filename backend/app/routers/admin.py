@@ -45,6 +45,7 @@ class UserOut(BaseModel):
     role: str
     avatar: str | None
     active: bool
+    must_change_password: bool  # 정해 준 비밀번호를 아직 안 바꿨다(README 66)
     team_id: uuid.UUID | None
     hire_date: date | None
     created_at: datetime
@@ -60,7 +61,9 @@ class UserCreateIn(BaseModel):
 
 
 class UserPatchIn(BaseModel):
-    """보낸 필드만 바꾼다. password 를 보내면 임시 비밀번호로 재설정하고 그 사람의 세션을 전부 닫는다."""
+    """보낸 필드만 바꾼다. password 를 보내면 임시 비밀번호로 재설정하고 그 사람의 세션을 전부 닫는다.
+
+    남의 임시 비밀번호는 다음 로그인 때 본인이 바꿔야 한다(must_change_password)."""
 
     name: Name | None = None
     role: Role | None = None
@@ -241,6 +244,7 @@ async def create_user(
         name=body.name,
         email=email,
         pw_hash=await hash_password_async(body.password),
+        must_change_password=True,  # 만든 사람이 아는 비밀번호다 — 첫 로그인 때 본인이 바꾼다
         role=body.role,
         team_id=body.team_id,
         hire_date=body.hire_date,
@@ -277,7 +281,8 @@ async def update_user(
     actor: User = Depends(require_exec),
     db: AsyncSession = Depends(get_db),
 ) -> User:
-    user = await db.get(User, user_id)
+    # 행 잠금 — 본인의 비밀번호 변경(auth.change_password)과 겹치면 임시 비밀번호·강제 변경 표시가 덮인다
+    user = await db.get(User, user_id, with_for_update=True, populate_existing=True)
     if user is None:
         raise ApiError(404, "NOT_FOUND", "없는 계정입니다.")
     if user.email == chat_command.AI_EMAIL:
@@ -296,6 +301,8 @@ async def update_user(
         setattr(user, key, value)  # name 은 스키마(Name)가 이미 다듬었다
     if password:
         user.pw_hash = await hash_password_async(password)
+        # 자기 것을 여기서 바꾼 건 본인이 정한 비밀번호다. 남의 것은 정해 준 사람이 안다 — 본인이 바꾸게 한다.
+        user.must_change_password = user.id != actor.id
     if password or changes.get("active") is False:
         await _revoke_sessions(db, user.id)
 

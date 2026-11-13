@@ -160,7 +160,7 @@
         "tags": [
           "auth"
         ],
-        "summary": "비밀번호 변경 — 지금 세션 외 다른 세션은 모두 종료",
+        "summary": "비밀번호 변경 — 지금 세션 외 다른 세션은 모두 종료. 강제 변경(must_change_password)도 여기서 풀린다",
         "operationId": "change_password_api_me_password_post",
         "requestBody": {
           "content": {
@@ -175,6 +175,9 @@
         "responses": {
           "204": {
             "description": "Successful Response"
+          },
+          "400": {
+            "description": "PASSWORD_MISMATCH(현재 비밀번호 불일치) · PASSWORD_UNCHANGED(지금과 같은 비밀번호)"
           },
           "422": {
             "description": "Validation Error",
@@ -11926,6 +11929,10 @@
                 "type": "null"
               }
             ]
+          },
+          "must_change_password": {
+            "type": "boolean",
+            "title": "Must Change Password"
           }
         },
         "type": "object",
@@ -11935,7 +11942,8 @@
           "email",
           "role",
           "avatar",
-          "team"
+          "team",
+          "must_change_password"
         ],
         "title": "MeOut",
         "description": "04 §1 `GET /me` → {id, name, email, role, avatar} + team (03 §2.6 조직, 계약 확장)."
@@ -14570,6 +14578,10 @@
             "type": "boolean",
             "title": "Active"
           },
+          "must_change_password": {
+            "type": "boolean",
+            "title": "Must Change Password"
+          },
           "team_id": {
             "anyOf": [
               {
@@ -14608,6 +14620,7 @@
           "role",
           "avatar",
           "active",
+          "must_change_password",
           "team_id",
           "hire_date",
           "created_at"
@@ -14695,7 +14708,7 @@
         },
         "type": "object",
         "title": "UserPatchIn",
-        "description": "보낸 필드만 바꾼다. password 를 보내면 임시 비밀번호로 재설정하고 그 사람의 세션을 전부 닫는다."
+        "description": "보낸 필드만 바꾼다. password 를 보내면 임시 비밀번호로 재설정하고 그 사람의 세션을 전부 닫는다.\n\n남의 임시 비밀번호는 다음 로그인 때 본인이 바꿔야 한다(must_change_password)."
       },
       "ValidationError": {
         "properties": {

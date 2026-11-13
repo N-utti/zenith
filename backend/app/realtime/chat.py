@@ -44,7 +44,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app import acl, audit
 from app.ai import chat_command
 from app.db import session_scope
-from app.deps import _own_origin, authenticate, origin_allowed, ws_reject
+from app.deps import _own_origin, authenticate, origin_allowed, ws_auth_code, ws_reject
 from app.errors import ApiError
 from app.models import (
     Channel,
@@ -558,7 +558,7 @@ async def ws_endpoint(websocket: WebSocket) -> None:
             user, _session = await authenticate(websocket.cookies, db)
     except ApiError as e:
         log.info("ws 거부: %s", e.code)
-        await ws_reject(websocket, 4401)
+        await ws_reject(websocket, ws_auth_code(e))
         return
     except Exception as e:  # noqa: BLE001 — DB 접속 실패 등
         log.warning("ws 핸드셰이크 실패: %s %s", type(e).__name__, e)
@@ -623,7 +623,7 @@ async def ws_endpoint(websocket: WebSocket) -> None:
     except ApiError as e:
         log.info("ws 세션 종료 %s: %s", user.id, e.code)
         with contextlib.suppress(Exception):
-            await websocket.close(code=4401)
+            await websocket.close(code=ws_auth_code(e))
     except Exception as e:  # noqa: BLE001 — 바이너리 프레임·DB 오류 등. 자기 연결만 닫는다
         log.info("ws 연결 종료 %s: %s %s", user.id, type(e).__name__, e)
         with contextlib.suppress(Exception):

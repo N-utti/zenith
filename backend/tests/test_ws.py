@@ -512,3 +512,14 @@ async def test_dm_mention_notice_has_no_channel_name(app: FastAPI, users: Users,
             notice = await recv_until(b_ws, "notice")
             assert notice["payload"]["channel_name"] is None  # DM 표식 — 이름은 from 에
             assert notice["payload"]["from"]["name"] == "김수진"
+
+
+async def test_given_password_closes_sockets_with_4428(app: FastAPI, users: Users, app_db) -> None:
+    """README 66: 정해 준 비밀번호를 안 바꾼 계정은 소켓도 못 연다. 4401 이 아니라 4428 —
+    4401 이면 화면이 `/me`(200) 를 보고 곧바로 다시 붙는다."""
+    users.member.must_change_password = True
+    await app_db.flush()
+    async with ws_client(app) as client:
+        await login(client, "sujin@zenith.co.kr")
+        async with aconnect_ws(WS, client) as ws:
+            await expect_close(ws, 4428)

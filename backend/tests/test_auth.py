@@ -47,6 +47,7 @@ async def test_login_sets_three_cookies_then_me(client: AsyncClient, users: User
         "role": "member",
         "avatar": None,
         "team": {"id": str(users.team.id), "name": "개발팀"},
+        "must_change_password": False,
     }
 
 
@@ -426,3 +427,71 @@ async def test_password_change_keeps_this_session_and_kills_others(
         assert (await other.get("/api/me")).status_code == 401
     assert (await login(client, "sujin@zenith.co.kr")).status_code == 401
     assert (await login(client, "sujin@zenith.co.kr", "new-password-1")).status_code == 204
+
+
+async def test_given_password_must_be_changed_before_anything_else(
+    client: AsyncClient, make_client, users: Users, app_db
+) -> None:
+    """README 66: 임원이 만든 계정·임시 비밀번호는 `/me`·`/me/password` 밖이 전부 403 이다. 본인이 바꾸면 풀린다."""
+    await login(client, "jaeho@zenith.co.kr")
+    body = {"name": "이신입", "email": "new@zenith.co.kr", "password": "welcome-123"}
+    created = (await client.post("/api/admin/users", json=body, headers=csrf(client))).json()
+    assert created["must_change_password"] is True
+
+    async with make_client() as new:
+        assert (await login(new, "new@zenith.co.kr", "welcome-123")).status_code == 204
+        me = await new.get("/api/me")
+        assert (me.status_code, me.json()["must_change_password"]) == (200, True)
+        for method, path in (
+            ("GET", "/api/channels"),
+            ("GET", "/api/me/preferences"),
+            ("GET", "/api/auth/yjs-check"),
+            ("POST", "/api/me/todos"),
+        ):
+            r = await new.request(method, path, json={}, headers=csrf(new))
+            assert (r.status_code, r.json()["code"]) == (403, "PASSWORD_CHANGE_REQUIRED"), path
+        assert (await new.post("/api/auth/refresh", headers=csrf(new))).status_code == 204
+
+        # 등급·활성만 바꾸는 수정은 표시를 건드리지 않는다
+        r = await client.patch(
+            f"/api/admin/users/{created['id']}", json={"role": "lead"}, headers=csrf(client)
+        )
+        assert r.json()["must_change_password"] is True
+
+        # 현재 비밀번호가 틀리면 그대로 잠겨 있다
+        wrong = {"current_password": "nope", "new_password": "my-own-password"}
+        r = await new.post("/api/me/password", json=wrong, headers=csrf(new))
+        assert (r.status_code, r.json()["code"]) == (400, "PASSWORD_MISMATCH")
+        assert (await new.get("/api/me/todos")).status_code == 403
+
+        # 같은 값으로는 못 넘긴다
+        same = {"current_password": "welcome-123", "new_password": "welcome-123"}
+        r = await new.post("/api/me/password", json=same, headers=csrf(new))
+        assert (r.status_code, r.json()["code"]) == (400, "PASSWORD_UNCHANGED")
+        assert (await new.get("/api/me/todos")).status_code == 403
+
+        mine = {"current_password": "welcome-123", "new_password": "my-own-password"}
+        assert (await new.post("/api/me/password", json=mine, headers=csrf(new))).status_code == 204
+        assert (await new.get("/api/me")).json()["must_change_password"] is False
+        assert (await new.get("/api/me/todos")).status_code == 200
+
+        # 임원이 임시 비밀번호로 재설정 → 세션이 닫히고 다시 강제 변경
+        r = await client.patch(
+            f"/api/admin/users/{created['id']}",
+            json={"password": "temp-password-9"},
+            headers=csrf(client),
+        )
+        assert r.json()["must_change_password"] is True
+        assert (await new.get("/api/me")).status_code == 401
+        await login(new, "new@zenith.co.kr", "temp-password-9")
+        assert (await new.get("/api/me/todos")).json()["code"] == "PASSWORD_CHANGE_REQUIRED"
+        # 안 바꾸고 나갈 수는 있다
+        assert (await new.post("/api/auth/logout", headers=csrf(new))).status_code == 204
+
+    # 임원이 관리자 화면에서 자기 비밀번호를 바꾼 건 본인이 정한 값이다 — 강제하지 않는다
+    r = await client.patch(
+        f"/api/admin/users/{users.exec.id}",
+        json={"password": "exec-own-password"},
+        headers=csrf(client),
+    )
+    assert r.json()["must_change_password"] is False
