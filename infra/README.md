@@ -92,12 +92,14 @@ docker compose stop api && docker compose exec backup pg_restore -d zenith --cle
 ```sh
 # 기존 파일을 지우는 명령이다. 사람이 확인하고 돌린다. 볼륨 이름은 `docker volume ls`(프로젝트가 infra 면 infra_miniodata).
 docker compose stop api minio
+# 묶음이 읽히는지 먼저 보고 나서 지운다. `$PWD/backups` 는 ZENITH_BACKUP_DIR 을 옮겼으면 그 경로로.
+# Git Bash 면 앞에 MSYS_NO_PATHCONV=1, PowerShell 이면 한 줄로 붙인다.
 docker run --rm -v infra_miniodata:/data -v "$PWD/backups":/b:ro pgvector/pgvector:pg16 \
-  sh -c 'find /data -mindepth 1 -delete && tar -xzf /b/files-2026-11-13.tgz -C /data'
+  sh -c 'f=/b/files-2026-11-13.tgz; tar -tzf $f >/dev/null && find /data -mindepth 1 -delete && tar -xzf $f -C /data'
 docker compose start minio api
 ```
 
-서버가 재부팅되면 `backup` 은 db 가 뜰 때까지 기다린다. 실패하면 10분 뒤 다시 한다(전에는 하루를 건너뛰었다 — 재부팅한 날마다 백업이 빠졌다).
+서버가 재부팅되면 `backup` 은 db 가 뜰 때까지 기다린다. 실패하면 1시간 뒤 다시 한다(전에는 하루를 건너뛰었다 — 재부팅한 날마다 백업이 빠졌다).
 
 **아직 없는 것 — 서버 밖 사본.** 백업이 서버와 같은 디스크에 있다. 디스크가 죽거나 폴더가 지워지면(2026-11-06 에 체크아웃 폴더가 통째로 사라진 적이 있다) 같이 잃는다. `ZENITH_BACKUP_DIR` 을 다른 디스크·NAS 로 돌리거나 그쪽으로 복사한다. `.env`(JWT_SECRET·API 키)도 이 백업에 없다 — 레포·서버 밖에 사본을 둔다.
 

@@ -76,9 +76,9 @@ services:
         umask 077
         while :; do
           # 재부팅 때 db 와 같이 뜬다 — 기다리지 않으면 그날 백업이 통째로 빠진다(단일 스택과 같다).
-          until pg_isready -q; do sleep 5; done
+          until pg_isready -q; do echo "backup waiting for db $$(date -Is)" >&2; sleep 30; done
           ok=1
-          dbs=$$(psql -Atc "select datname from pg_database where datname like 'zt\_%'") || ok=0
+          dbs=$$(psql -Atc "select datname from pg_database where datname like 'zt\_%'") || { echo "backup FAILED list $$(date -Is)" >&2; ok=0; }
           for d in $$dbs; do
             if pg_dump -Fc -d "$$d" -f /backups/.partial.dump && mv /backups/.partial.dump "/backups/$$d-$$(date +%F).dump"; then
               find /backups -name "$$d-*.dump" -mtime +14 -delete
@@ -96,7 +96,8 @@ services:
             echo "backup FAILED files $$(date -Is)" >&2
             ok=0
           fi
-          if [ $$ok = 1 ]; then sleep 86400; else sleep 600; fi  # 실패면 하루를 기다리지 않고 다시
+          # 실패면 쓰다 만 것을 치우고(디스크를 잡고 있지 않게) 하루를 기다리지 않고 다시
+          if [ $$ok = 1 ]; then sleep 86400; else rm -f /backups/.partial.dump /backups/.partial.tgz; sleep 3600; fi
         done
     volumes:
       - ${ZENITH_BACKUP_DIR:-./backups}:/backups
