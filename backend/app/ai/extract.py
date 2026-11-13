@@ -13,6 +13,7 @@ import re
 import subprocess
 import sys
 import threading
+import time
 import xml.etree.ElementTree as ET
 import zipfile
 from pathlib import Path
@@ -218,18 +219,24 @@ def pdf_blocks(data: bytes) -> dict:
     돌려주는 모양은 pdfwork 의 docstring. 글자는 `_clean` 을 지난다. app/convert.py 도 쓴다."""
     if not data.startswith(b"%PDF"):
         raise Unsupported("pdf")
-    with _PDF_SLOTS:
+    # 시간 상한 하나를 줄 서기와 분석이 나눠 쓴다 — 요청은 끝났는데 줄 선 스레드가 뒤늦게 작업자를 띄우지 않게(Codex 리뷰)
+    deadline = time.monotonic() + MAX_PDF_SECONDS
+    if not _PDF_SLOTS.acquire(timeout=max(0, MAX_PDF_SECONDS)):
+        raise Unsupported("pdf-busy")
+    try:
         try:
             proc = subprocess.run(  # noqa: S603 — 인자는 고정, 파일은 표준 입력으로만 간다
                 [sys.executable, "-I", str(_PDF_WORKER)],
                 input=data,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.DEVNULL,
-                timeout=MAX_PDF_SECONDS,
+                timeout=max(0.001, deadline - time.monotonic()),
                 check=False,
             )
         except subprocess.TimeoutExpired:
             raise Unsupported("pdf-too-slow") from None
+    finally:
+        _PDF_SLOTS.release()
     if proc.returncode:
         raise Unsupported("pdf-encrypted" if proc.returncode == 3 else "pdf")
     out = json.loads(proc.stdout)

@@ -7,6 +7,7 @@
 import base64
 import io
 import re
+import threading
 import time
 import uuid
 import xml.etree.ElementTree as ET
@@ -169,9 +170,11 @@ def test_pdf_layout_table_heading_paragraph() -> None:
     full = b"x" * 60  # 400pt 쪽에서 오른쪽 끝까지 차는 줄
     content = (
         b"BT /F1 20 Tf 50 370 Td (Title) Tj ET\n"
-        b"BT /F1 10 Tf 50 340 Td (" + full + b" ) Tj ET\n"
-        b"BT /F1 10 Tf 50 328 Td (tail) Tj ET\n"
-        b"BT /F1 10 Tf 50 316 Td (1. item) Tj ET\n"
+        b"BT /F1 10 Tf 50 350 Td (" + full + b" ) Tj ET\n"
+        b"BT /F1 10 Tf 50 340 Td (tail) Tj ET\n"
+        b"BT /F1 10 Tf 50 330 Td (1. item) Tj ET\n"
+        b"BT /F1 10 Tf 50 320 Td (" + full + b") Tj ET\n"
+        b"BT /F1 10 Tf 70 310 Td (Indented) Tj ET\n"
         b"0.5 w 50 200 300 100 re S 200 200 m 200 250 l S 50 250 m 350 250 l S\n"  # 윗줄은 한 칸(병합)
         b"BT /F1 10 Tf 60 270 Td (Top) Tj ET BT /F1 10 Tf 60 220 Td (A2) Tj ET\n"
         b"BT /F1 10 Tf 210 220 Td (B<2) Tj ET\n"
@@ -188,11 +191,12 @@ def test_pdf_layout_table_heading_paragraph() -> None:
         "<h1>Title</h1>"
         f"<p>{full.decode()} tail</p>"  # 줄 끝 공백 글리프 = 낱말 사이에서 꺾였다 → 띄워 잇는다
         "<p>1. item</p>"  # 머리 기호로 시작하는 줄은 새 문단
+        f"<p>{full.decode()}</p><p>Indented</p>"  # 꽉 찬 줄 뒤라도 들여 쓴 줄은 새 문단(Codex 리뷰)
         '<table><tr><td colspan="2"><p>Top</p></td></tr>'
         "<tr><td><p>A2</p></td><td><p>B&lt;2</p></td></tr></table>"
     )
     assert extract.extract("a.pdf", data) == (
-        f"Title\n{full.decode()} tail\n1. item\nTop\nA2 | B<2"
+        f"Title\n{full.decode()} tail\n1. item\n{full.decode()}\nIndented\nTop\nA2 | B<2"
     )
 
 
@@ -258,9 +262,28 @@ def test_pdf_review_regressions(monkeypatch) -> None:
         form,
     )
     assert th("a.pdf", slow)[0].startswith("<p>x")  # 상한 안이면 그냥 읽힌다
-    monkeypatch.setattr("app.ai.extract.MAX_PDF_SECONDS", 0.01)  # 작업자 프로세스를 죽인다
+    # 진짜로 오래 걸리는 파일(Form 1만 연산 × 20번 = 수 초)을 2초 상한에 건다 — 분석에 들어간 작업자를 죽이고 바로 돌아온다
+    form = _pdf_stream(
+        b"BT /F1 12 Tf " + b"(x) Tj\n" * 10000 + b"ET",
+        b" /Type /XObject /Subtype /Form /BBox [0 0 200 200] /Resources << /Font << /F1 5 0 R >> >>",
+    )
+    slow = _pdf_objs(
+        *_PDF_HEAD,
+        _PDF_PAGE % b"/XObject << /X0 6 0 R >>",
+        _pdf_stream(b"/X0 Do\n" * 20),
+        _PDF_FONT,
+        form,
+    )
+    monkeypatch.setattr("app.ai.extract.MAX_PDF_SECONDS", 2)
+    started = time.monotonic()
     with pytest.raises(Unsupported):
         th("a.pdf", slow)
+    assert 1.5 < time.monotonic() - started < 10
+    # 슬롯이 다 찼으면 같은 상한까지만 줄을 서고 포기한다 — 뒤늦게 작업자를 띄우지 않는다
+    monkeypatch.setattr("app.ai.extract.MAX_PDF_SECONDS", 0.2)
+    monkeypatch.setattr("app.ai.extract._PDF_SLOTS", threading.BoundedSemaphore(1))
+    with extract._PDF_SLOTS, pytest.raises(Unsupported, match="pdf-busy"):
+        extract.pdf_blocks(pdf_bytes("Hello"))
 
 
 def test_filter_strips_unknown_tags_and_dangerous_attrs() -> None:

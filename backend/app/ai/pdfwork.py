@@ -22,7 +22,9 @@ from collections import Counter
 MAX_PAGES = 300
 MAX_OUT_CHARS = 400_000  # 부모가 다시 자른다(extract.MAX_CHARS) — 여기는 일을 멈추는 선
 MAX_CELLS = 20_000
-MAX_MEMORY = 2 * 1024**3  # 주소 공간 상한(리눅스) — 압축 폭탄이 api 컨테이너 메모리를 먹지 않게
+# 주소 공간 상한(리눅스) — 압축 폭탄이 api 컨테이너 메모리를 먹지 않게. 실제 문서는 40MB 남짓 쓴다(실측). 작업자 2개가
+# 동시에 꽉 채워도 외부 호스팅 api 컨테이너(768MB, infra/hosted/tenant.yml)에 들어가는 값이다(Codex 리뷰)
+MAX_MEMORY = 256 * 1024**2
 
 # 새 문단을 여는 머리 — 「1.」「가.」「①」「-」「제3조」… 앞줄이 꽉 차 있어도 이어 붙이지 않는다
 _MARKER = re.compile(
@@ -82,6 +84,7 @@ def _paragraphs(lines: list[dict], width: float) -> list[tuple[float, dict]]:
     out: list[tuple[float, dict]] = []
     cur: dict | None = None
     prev: dict | None = None
+    first: dict | None = None  # 지금 문단의 첫 줄
     for ln in lines:
         size = ln["size"] or 10
         wrapped = (
@@ -92,6 +95,9 @@ def _paragraphs(lines: list[dict], width: float) -> list[tuple[float, dict]]:
             and prev["run"] == ln["run"]
             and prev["x1"] >= rights[ln["run"]] - 2 * size
             and not _MARKER.match(ln["text"])
+            # 앞줄보다 들여 쓴 줄은 새 문단의 첫 줄이다(Codex 리뷰). 머리 기호 문단의 둘째 줄은 글자 밑으로 들어가는 게
+            # 보통이라(내어쓰기) 예외
+            and (ln["x0"] <= prev["x0"] + size or (prev is first and _MARKER.match(cur["text"])))
         )
         if wrapped:
             cur["text"] = _join(cur["text"], ln["text"])
@@ -106,6 +112,7 @@ def _paragraphs(lines: list[dict], width: float) -> list[tuple[float, dict]]:
                 "center": abs(mid - width / 2) <= width * 0.02 and ln["x0"] > width * 0.2,
             }
             out.append((ln["top"], cur))
+            first = ln
         prev = ln
     for _, p in out:
         p["text"] = p["text"].strip()
@@ -166,7 +173,6 @@ def main() -> int:
                 if block is None:
                     continue
                 boxes.append(t.bbox)
-                cells += sum(len(r) for r in block["rows"])
                 items.append((t.bbox[1], block))
 
             def outside(obj, boxes=boxes) -> bool:
@@ -187,16 +193,25 @@ def main() -> int:
                 groups.setdefault(sum(1 for e in edges if e <= ln["top"]), []).append(ln)
             for group in groups.values():
                 items += _paragraphs(group, float(page.width))
+            # 상한은 블록마다 본다 — 쪽 하나가 45만 자여도 출력(부모가 통째로 읽는다)은 상한을 넘지 않는다(Codex 리뷰)
             for _, block in sorted(items, key=lambda it: it[0]):
+                room = MAX_OUT_CHARS - chars
+                if block["t"] == "p":
+                    n = len(block["text"])
+                    if n > room:
+                        block["text"] = block["text"][:room]
+                else:
+                    n = sum(len(c["text"]) for r in block["rows"] for c in r)
+                    cells += sum(len(r) for r in block["rows"])
+                if n > room or cells > MAX_CELLS:
+                    cut = True
+                    if block["t"] == "p" and room > 0:
+                        blocks.append(block)
+                    break
                 blocks.append(block)
-                chars += (
-                    len(block["text"])
-                    if block["t"] == "p"
-                    else sum(len(c["text"]) for r in block["rows"] for c in r)
-                )
+                chars += n
             page.close()  # 쪽마다 캐시를 비운다 — 300쪽을 다 쥐고 있지 않게
-            if chars > MAX_OUT_CHARS or cells > MAX_CELLS:
-                cut = True
+            if cut:
                 break
         cut = cut or total > MAX_PAGES
     body = sizes.most_common(1)[0][0] if sizes else 0

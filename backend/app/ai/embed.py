@@ -22,7 +22,9 @@ log = logging.getLogger("zenith.ai")
 CHUNK_CHARS = 500
 CHUNK_OVERLAP = 100
 MAX_CHUNKS = 400  # 문서당 상한(20만 자) — 그 뒤는 색인되지 않는다. 2 CPU 에서 500자 조각당 약 3초(10-14 실측)
-EMBED_BATCH = 16  # 한 호출에 보내는 조각 수 — 타임아웃은 묶음마다. 42조각을 한 번에 보내면 120초를 넘겼다
+EMBED_BATCH = (
+    16  # 한 호출에 보내는 조각 수 — 타임아웃은 묶음마다. 42조각을 한 번에 보내면 120초를 넘겼다
+)
 DEBOUNCE_S = 5.0  # 저장이 잇따르면(30초 주기 저장·퇴장 저장) 마지막 것만 색인
 EMBED_TIMEOUT_S = 120.0  # 색인 — 묶음(EMBED_BATCH 조각)당. ponytail: 400조각이면 최악 25묶음×120초 동안 _index_lock 을 쥔다, 문서가 커지면 묶음 병렬화
 QUERY_TIMEOUT_S = (
