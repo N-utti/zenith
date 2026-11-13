@@ -1,6 +1,7 @@
 import { createContext, use, useState, type ReactNode } from 'react'
 import Markdown, { type Components, type Options } from 'react-markdown'
 import remarkBreaks from 'remark-breaks'
+import { Link, useInRouterContext } from 'react-router'
 import remarkGfm from 'remark-gfm'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { ToastContext } from '@/components/ui/ToastContext'
@@ -48,6 +49,7 @@ function Anchor({
   node?: HastNode
 }) {
   const cite = use(CiteContext)
+  const routed = useInRouterContext()
   if (!href) return <>{children}</>
   const match = CITE.exec(href)
   if (!match) {
@@ -69,6 +71,9 @@ function Anchor({
         </>
       )
     }
+    // 화면에서는 채팅 본문 링크(MentionText)처럼 앱 안에서 옮긴다. 새 탭은 데스크탑 셸에서 주소창 없는
+    // 창이 된다. 라우터 밖은 편집기에 넣을 HTML 을 굽는 `markdownToHtml` 이다.
+    if (routed) return <Link to={href}>{children}</Link>
     return (
       <a href={href} target="_blank" rel="noopener noreferrer">
         {children}
