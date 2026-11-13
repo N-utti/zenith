@@ -69,7 +69,7 @@ def xlsx_bytes() -> bytes:
 
 
 def pdf_bytes(text: str = "Hello PDF") -> bytes:
-    """글자 하나 있는 최소 PDF(pypdf 가 추출한다)."""
+    """글자 하나 있는 최소 PDF."""
     content = f"BT /F1 12 Tf 20 100 Td ({text}) Tj ET".encode()
     objs = [
         b"<< /Type /Catalog /Pages 2 0 R >>",

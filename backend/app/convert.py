@@ -1,4 +1,4 @@
-"""파일 → 문서 본문 HTML(README 60·62) — docx·xlsx·hwpx·hwp·pdf(글자만, README 67)를 편집기(Tiptap)가 읽는 HTML 로 바꾼다.
+"""파일 → 문서 본문 HTML(README 60·62) — docx·xlsx·hwpx·hwp·pdf(문단·표, README 67·68)를 편집기(Tiptap)가 읽는 HTML 로 바꾼다.
 
 이 HTML 은 app/ydoc.py 가 Y.Doc 으로 옮긴다(README 61). 편집기 스키마와 어긋난 노드는 Tiptap 이 통째로 버리므로
 태그는 ALLOWED 로 좁히고 속성은 정해진 것만 남긴다: colspan·rowspan(셀), href(링크, http·https·mailto),
@@ -157,7 +157,7 @@ def to_html(name: str, data: bytes) -> Converted:
         elif ext == "hwp":
             raw, cut = _Hwp5(_hwp5_xml(data), images).run()
         elif ext == "pdf":
-            raw, cut = _pdf(name, data)
+            raw, cut = _pdf(data)
         else:
             raw, cut = _Hwpx(_zip(data), images).run()
     except (Unsupported, Empty, TooLarge, HwpUnavailable, TimeoutError):
@@ -175,15 +175,55 @@ def to_html(name: str, data: bytes) -> Converted:
     return Converted(body, truncated or cut, images)
 
 
-def _pdf(name: str, data: bytes) -> tuple[str, bool]:
-    """PDF → 줄마다 문단(README 67). 글자는 AI 첨부와 같은 추출기(extract — 서명·암호·300쪽·스트림 20MB 상한, NUL 제거)를
-    그대로 쓴다. 스캔본처럼 글자가 없으면 `Empty`.
-    ponytail: PDF 엔 문단·표·제목 구조가 없어 글자만 싣는다 — 줄바꿈은 화면 줄 그대로(이어 붙이지 않는다), 그림·표 모양·
-    서식은 없다(원본은 본문 끝 fileChip). 모양이 필요해지면 pdfplumber 류의 배치 분석으로."""
-    text = extract.extract(name, data)
-    body = "".join(f"<p>{html.escape(line, quote=False)}</p>" for line in text.splitlines() if line)
-    # 추출기가 20만 자에서 자른다 — 필터가 못 끊는 양이면 여기서 안내
-    return body, len(text) >= extract.MAX_CHARS
+_PDF_MAX_HEADING = 120  # 이보다 긴 큰 글자는 제목이 아니라 본문이다
+
+
+def _pdf(data: bytes) -> tuple[str, bool]:
+    """PDF → 문단·제목·표(README 68). 블록은 AI 첨부와 같은 분석기(extract.pdf_blocks — 별도 프로세스, 시간 상한)가 낸다.
+    PDF 엔 구조가 적혀 있지 않아 전부 짐작이다: 본문보다 큰 글자는 제목(1.5배 h1 · 1.25배 h2 · 1.12배+굵게 h3), 줄 전체가
+    굵은 글꼴이면 굵게, 쪽 가운데 놓인 짧은 줄은 가운데 정렬, 선으로 그린 격자는 표(병합은 colspan·rowspan).
+    ponytail: 선 없는 표·다단·그림·글자색은 못 가져온다(pdfwork.py 머리말). 원본은 본문 끝 fileChip."""
+    out = extract.pdf_blocks(data)
+    body = out["body"] or 0
+    parts: list[str] = []
+    for block in out["blocks"]:
+        if block["t"] == "table":
+            rows = []
+            for row in block["rows"]:
+                cells = []
+                for c in row:
+                    attrs = (f' colspan="{c["cs"]}"' if c["cs"] > 1 else "") + (
+                        f' rowspan="{c["rs"]}"' if c["rs"] > 1 else ""
+                    )
+                    inner = "".join(
+                        f"<p>{html.escape(line, quote=False)}</p>"
+                        for line in c["text"].splitlines() or [""]
+                    )
+                    cells.append(f"<td{attrs}>{inner}</td>")
+                rows.append(f"<tr>{''.join(cells)}</tr>")
+            parts.append(f"<table>{''.join(rows)}</table>")
+            continue
+        text = html.escape(block["text"], quote=False)
+        if not text:
+            continue
+        ratio = block["size"] / body if body else 1
+        level = None
+        if len(block["text"]) <= _PDF_MAX_HEADING:
+            level = (
+                1
+                if ratio >= 1.5
+                else 2
+                if ratio >= 1.25
+                else 3
+                if ratio >= 1.12 and block["bold"]
+                else None
+            )
+        if level is None and block["bold"]:
+            text = f"<strong>{text}</strong>"
+        parts.append(
+            _block(f"h{level}" if level else "p", text, "center" if block["center"] else None)
+        )
+    return "".join(parts), bool(out["cut"])
 
 
 def _digits(value: str | None) -> bool:

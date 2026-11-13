@@ -7,6 +7,7 @@
 import base64
 import io
 import re
+import threading
 import time
 import uuid
 import xml.etree.ElementTree as ET
@@ -20,6 +21,7 @@ from pycrdt import Doc, Map, XmlElement, XmlFragment, XmlText
 from sqlalchemy import select
 
 from app import convert, ydoc
+from app.ai import extract
 from app.ai.extract import Empty, Unsupported
 from app.models import AuditEvent, Document, Folder, StoredFile
 from app.routers import files
@@ -154,10 +156,75 @@ def test_hwpx_to_html() -> None:
 
 
 def test_pdf_to_html(monkeypatch) -> None:
-    """PDF 는 글자만 — 줄마다 문단, 꺾쇠는 escape(README 67). 추출 상한에서 잘리면 안내가 붙는다."""
+    """꺾쇠는 escape(README 67). 분석기가 상한에서 끊었으면 안내가 붙는다."""
     assert th("a.PDF", pdf_bytes("Hello <b>PDF")) == ("<p>Hello &lt;b&gt;PDF</p>", False)
-    monkeypatch.setattr("app.ai.extract.MAX_CHARS", 5)
-    assert th("a.pdf", pdf_bytes("Hello PDF")) == ("<p>Hello</p>" + convert.TRUNCATED_NOTE, True)
+    real = extract.pdf_blocks
+    monkeypatch.setattr(extract, "pdf_blocks", lambda data: real(data) | {"cut": True})
+    assert th("a.pdf", pdf_bytes("Hello")) == ("<p>Hello</p>" + convert.TRUNCATED_NOTE, True)
+    assert extract.extract("a.pdf", pdf_bytes("Hello")) == "Hello\n" + extract.PDF_CUT_NOTE
+
+
+def test_pdf_layout_table_heading_paragraph() -> None:
+    """배치 분석(README 68) — 선으로 그린 격자는 표(병합은 colspan), 본문보다 큰 글자는 제목, 오른쪽 끝까지 찬 줄은
+    다음 줄과 한 문단. AI 첨부용 평문은 같은 블록을 행마다 ' | ' 로."""
+    full = b"x" * 60  # 400pt 쪽에서 오른쪽 끝까지 차는 줄
+    content = (
+        b"BT /F1 20 Tf 50 370 Td (Title) Tj ET\n"
+        b"BT /F1 10 Tf 50 350 Td (" + full + b" ) Tj ET\n"
+        b"BT /F1 10 Tf 50 340 Td (tail) Tj ET\n"
+        b"BT /F1 10 Tf 50 330 Td (1. item) Tj ET\n"
+        b"BT /F1 10 Tf 50 320 Td (" + full + b") Tj ET\n"
+        b"BT /F1 10 Tf 70 310 Td (Indented) Tj ET\n"
+        b"0.5 w 50 200 300 100 re S 200 200 m 200 250 l S 50 250 m 350 250 l S\n"  # 윗줄은 한 칸(병합)
+        b"BT /F1 10 Tf 60 270 Td (Top) Tj ET BT /F1 10 Tf 60 220 Td (A2) Tj ET\n"
+        b"BT /F1 10 Tf 210 220 Td (B<2) Tj ET\n"
+    )
+    data = _pdf_objs(
+        *_PDF_HEAD,
+        (_PDF_PAGE % b"").replace(b"200 200", b"400 400"),
+        _pdf_stream(content),
+        _PDF_FONT,
+    )
+    body, cut = th("a.pdf", data)
+    assert not cut
+    assert body == (
+        "<h1>Title</h1>"
+        f"<p>{full.decode()} tail</p>"  # 줄 끝 공백 글리프 = 낱말 사이에서 꺾였다 → 띄워 잇는다
+        "<p>1. item</p>"  # 머리 기호로 시작하는 줄은 새 문단
+        f"<p>{full.decode()}</p><p>Indented</p>"  # 꽉 찬 줄 뒤라도 들여 쓴 줄은 새 문단(Codex 리뷰)
+        '<table><tr><td colspan="2"><p>Top</p></td></tr>'
+        "<tr><td><p>A2</p></td><td><p>B&lt;2</p></td></tr></table>"
+    )
+    assert extract.extract("a.pdf", data) == (
+        f"Title\n{full.decode()} tail\n1. item\n{full.decode()}\nIndented\nTop\nA2 | B<2"
+    )
+
+
+def test_pdf_layout_review_regressions() -> None:
+    """리뷰 재현: ① 길이가 비슷한 짧은 줄(주소·서명란)은 한 문단으로 뭉치지 않는다 ② 칸 선에 걸친 글자(행 높이 = 글자
+    높이)가 사라지지 않는다 ③ 세로 병합은 rowspan ④ 「3.5%」 로 시작하는 줄은 머리 기호가 아니라 이어진 줄."""
+    full = b"x" * 60
+    content = (
+        b"BT /F1 10 Tf 50 380 Td (Seoul) Tj ET BT /F1 10 Tf 50 368 Td (Busan) Tj ET\n"
+        b"BT /F1 10 Tf 50 356 Td (Daegu) Tj ET\n"
+        b"BT /F1 10 Tf 50 320 Td (" + full + b" ) Tj ET BT /F1 10 Tf 50 308 Td (3.5% up) Tj ET\n"
+        # 2행 표(행 높이 14): 왼쪽 칸은 두 행 병합, 오른쪽 글자는 아래 선에서 1.9pt 위(글자 상자가 선에 걸친다)
+        b"0.5 w 50 200 300 28 re S 200 200 m 200 228 l S 200 214 m 350 214 l S\n"
+        b"BT /F1 10 Tf 60 210 Td (L) Tj ET BT /F1 10 Tf 210 215.9 Td (Tight) Tj ET\n"
+        b"BT /F1 10 Tf 210 201.9 Td (R2) Tj ET\n"
+    )
+    data = _pdf_objs(
+        *_PDF_HEAD,
+        (_PDF_PAGE % b"").replace(b"200 200", b"400 400"),
+        _pdf_stream(content),
+        _PDF_FONT,
+    )
+    assert th("a.pdf", data)[0] == (
+        "<p>Seoul</p><p>Busan</p><p>Daegu</p>"
+        f"<p>{full.decode()} 3.5% up</p>"
+        '<table><tr><td rowspan="2"><p>L</p></td><td><p>Tight</p></td></tr>'
+        "<tr><td><p>R2</p></td></tr></table>"
+    )
 
 
 def _pdf_objs(*objs: bytes) -> bytes:
@@ -189,7 +256,7 @@ _PDF_FONT = b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"
 
 def test_pdf_review_regressions(monkeypatch) -> None:
     """리뷰: ① 짝 없는 서로게이트·제어 문자가 500·본문으로 새지 않는다 ② Form XObject 반복(스트림 상한이 못 세는 CPU)은
-    시간 상한에서 Unsupported ③ 쪽 수 상한에서 끊기면 본문에 적는다."""
+    시간 상한에서 Unsupported."""
     cmap = (
         b"/CIDInit /ProcSet findresource begin 12 dict begin begincmap /CMapName /X def\n"
         b"1 begincodespacerange <00> <FF> endcodespacerange\n1 beginbfchar <41> <D800> endbfchar\n"
@@ -198,11 +265,11 @@ def test_pdf_review_regressions(monkeypatch) -> None:
     bad = _pdf_objs(
         *_PDF_HEAD,
         _PDF_PAGE % b"",
-        _pdf_stream(b"BT /F1 12 Tf 10 100 Td (A) Tj ET"),
+        _pdf_stream(b"BT /F1 12 Tf 10 100 Td (AB) Tj ET"),
         _PDF_FONT[:-2] + b"/ToUnicode 6 0 R >>",
         _pdf_stream(cmap),
     )
-    assert th("a.pdf", bad) == ("<p>?</p>", False)
+    assert th("a.pdf", bad) == ("<p>B</p>", False)  # 서로게이트로 가는 글자는 분석기가 버린다
     ctrl = _pdf_objs(
         *_PDF_HEAD,
         _PDF_PAGE % b"",
@@ -222,12 +289,28 @@ def test_pdf_review_regressions(monkeypatch) -> None:
         form,
     )
     assert th("a.pdf", slow)[0].startswith("<p>x")  # 상한 안이면 그냥 읽힌다
-    monkeypatch.setattr("app.ai.extract.MAX_PDF_SECONDS", -1)
+    # 진짜로 오래 걸리는 파일(Form 1만 연산 × 20번 = 수 초)을 2초 상한에 건다 — 분석에 들어간 작업자를 죽이고 바로 돌아온다
+    form = _pdf_stream(
+        b"BT /F1 12 Tf " + b"(x) Tj\n" * 10000 + b"ET",
+        b" /Type /XObject /Subtype /Form /BBox [0 0 200 200] /Resources << /Font << /F1 5 0 R >> >>",
+    )
+    slow = _pdf_objs(
+        *_PDF_HEAD,
+        _PDF_PAGE % b"/XObject << /X0 6 0 R >>",
+        _pdf_stream(b"/X0 Do\n" * 20),
+        _PDF_FONT,
+        form,
+    )
+    monkeypatch.setattr("app.ai.extract.MAX_PDF_SECONDS", 2)
+    started = time.monotonic()
     with pytest.raises(Unsupported):
         th("a.pdf", slow)
-    monkeypatch.setattr("app.ai.extract.MAX_PDF_SECONDS", 30)
-    monkeypatch.setattr("app.ai.extract.MAX_PDF_PAGES", 0)
-    assert th("a.pdf", pdf_bytes("Hello"))[0] == "<p>(0쪽을 넘어 여기서 끊는다)</p>"
+    assert 1.5 < time.monotonic() - started < 10
+    # 슬롯이 다 찼으면 같은 상한까지만 줄을 서고 포기한다 — 뒤늦게 작업자를 띄우지 않는다
+    monkeypatch.setattr("app.ai.extract.MAX_PDF_SECONDS", 0.2)
+    monkeypatch.setattr("app.ai.extract._PDF_SLOTS", threading.BoundedSemaphore(1))
+    with extract._PDF_SLOTS, pytest.raises(Unsupported, match="pdf-busy"):
+        extract.pdf_blocks(pdf_bytes("Hello"))
 
 
 def test_filter_strips_unknown_tags_and_dangerous_attrs() -> None:
