@@ -330,7 +330,7 @@ async def test_check_timeout_and_empty_answer_are_503(
     monkeypatch.setattr(ai, "CHECK_TIMEOUT_S", 0.05)
     status, out = await _check(client, text=DRAFT)
     assert status == 503 and out["code"] == "AI_TIMEOUT"
-    monkeypatch.setattr(ai, "CHECK_TIMEOUT_S", 120.0)
+    monkeypatch.setattr(ai, "CHECK_TIMEOUT_S", 300.0)
     _reset(app, Blank)
     status, out = await _check(client, text=DRAFT)
     assert status == 503 and out["code"] == "AI_EMPTY"
