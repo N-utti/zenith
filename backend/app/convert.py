@@ -226,6 +226,18 @@ def _pdf(data: bytes) -> tuple[str, bool]:
     return "".join(parts), bool(out["cut"])
 
 
+def from_html(raw: str) -> Converted:
+    """이미 HTML 인 글(AI 가 쓴 본문, README 69)을 파일과 같은 필터로 — 허용 태그·속성만 남기고 MAX_SEED_COST 에서 끊는다.
+    그림은 없다(img 는 버려진다). 글자가 없으면 `Empty`."""
+    f = _Filter()
+    f.feed(raw)
+    f.close()
+    if f.chars == 0:
+        raise Empty("html")
+    body, truncated = f.result()
+    return Converted(body, truncated)
+
+
 def _digits(value: str | None) -> bool:
     """ASCII 숫자만, 9자리까지. `isdigit()` 는 `²` 도 참이고 int() 는 4300자리에서 ValueError 다(리뷰)."""
     return bool(value) and value.isascii() and value.isdigit() and len(value) <= 9
