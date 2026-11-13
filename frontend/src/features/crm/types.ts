@@ -258,6 +258,13 @@ export interface DealDetail extends Deal {
   can_delete: boolean
 }
 
+/**
+ * 안건을 지우기 전 확인 문구. 상세 화면과 보드 카드 메뉴가 같이 쓴다.
+ * 활동 기록이 붙은 안건은 임원만 지운다. 그 안내는 임원에게만 뜻이 있다.
+ */
+export const deleteDealMessage = (name: string, exec: boolean) =>
+  `${name} 안건을 지웁니다. 보드와 목록에서 빠지고 되돌릴 수 없습니다.${exec ? ' 붙어 있던 활동 기록은 기관에 남습니다.' : ''}`
+
 export interface DealInput {
   kind: DealKind
   name: string

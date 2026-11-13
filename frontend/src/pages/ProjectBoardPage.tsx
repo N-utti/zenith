@@ -1,22 +1,37 @@
 import { useState, type DragEvent } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router'
-import { Plus } from 'lucide-react'
+import { Pencil, Plus, Trash2 } from 'lucide-react'
 import { BackLink } from '@/components/ui/BackLink'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
+import { ContextMenu, ContextMenuItem } from '@/components/ui/ContextMenu'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { SkeletonRows } from '@/components/ui/Skeleton'
 import { Tabs } from '@/components/ui/Tabs'
 import { useToast } from '@/components/ui/ToastContext'
-import { useDeleteProject, useProject, useTasks, useUpdateTask } from '@/features/projects/api'
+import {
+  useDeleteProject,
+  useDeleteTask,
+  useProject,
+  useTasks,
+  useUpdateTask,
+} from '@/features/projects/api'
 import { ProjectFormModal, TaskFormModal } from '@/features/projects/ProjectForms'
 import { ProjectProgress } from '@/features/projects/ProjectProgress'
 import { ProjectTimeline } from '@/features/projects/ProjectTimeline'
 import { formatTaskDate, isOverdue } from '@/features/projects/timeline'
-import { personName, TASK_STAGES, type Task, type TaskStage } from '@/features/projects/types'
+import {
+  deleteProjectMessage,
+  deleteTaskMessage,
+  personName,
+  TASK_STAGES,
+  type Task,
+  type TaskStage,
+} from '@/features/projects/types'
 import { ApiError } from '@/lib/api'
 import { cn } from '@/lib/cn'
 import { toISODate } from '@/lib/datetime'
+import { useContextMenuAt } from '@/lib/useContextMenuAt'
 
 /** 끌어 옮기는 카드의 id 를 싣는 형식. 다른 곳에서 끌어 온 글자·파일은 무시한다. */
 const DRAG_TYPE = 'application/x-zenith-task'
@@ -83,12 +98,7 @@ export function ProjectBoardPage() {
   const data = project.data
 
   const onDelete = () => {
-    if (
-      !confirm(
-        `"${data.name}" 프로젝트와 업무 ${data.task_count}개를 지웁니다. 되돌릴 수 없습니다.`,
-      )
-    )
-      return
+    if (!confirm(deleteProjectMessage(data))) return
     remove.mutate(data.id, {
       onSuccess: () => {
         toast.success('프로젝트를 지웠습니다.')
@@ -185,9 +195,19 @@ function Board({
   const move = useUpdateTask(projectId, (err) =>
     toast.error(err instanceof ApiError ? err.message : '단계를 옮기지 못했습니다.'),
   )
+  const remove = useDeleteTask()
   /** 끌고 있는 카드 위에 떠 있는 열. 떨어뜨릴 자리를 칠해 보인다. */
   const [over, setOver] = useState<TaskStage | null>(null)
   const items = tasks.data?.items ?? []
+
+  // 업무 창의 지우기와 같은 확인. 보드에 두어야 카드가 빠진 뒤에도 알림이 뜬다.
+  const removeTask = (task: Task) => {
+    if (!confirm(deleteTaskMessage(task))) return
+    remove.mutate(task.id, {
+      onSuccess: () => toast.success('업무를 지웠습니다.'),
+      onError: (err) => toast.error(err instanceof ApiError ? err.message : '지우지 못했습니다.'),
+    })
+  }
 
   const moveTo = (task: Task, stage: TaskStage) => {
     if (stage === task.stage) return
@@ -248,7 +268,13 @@ function Board({
               </header>
               <ul className="space-y-2">
                 {inStage.map((task) => (
-                  <TaskCard key={task.id} task={task} onOpen={onOpen} />
+                  <TaskCard
+                    key={task.id}
+                    task={task}
+                    onOpen={onOpen}
+                    deleting={remove.isPending}
+                    onDelete={() => removeTask(task)}
+                  />
                 ))}
               </ul>
             </section>
@@ -268,49 +294,86 @@ function Timeline({ projectId, onOpen }: { projectId: string; onOpen: (task: Tas
   return <ProjectTimeline tasks={tasks.data.items} onOpen={onOpen} />
 }
 
-function TaskCard({ task, onOpen }: { task: Task; onOpen: (task: Task) => void }) {
+/** 업무 카드. 우클릭(손가락 기기는 꾹 누르기) 메뉴로 수정 창을 열거나 지운다. */
+function TaskCard({
+  task,
+  onOpen,
+  deleting,
+  onDelete,
+}: {
+  task: Task
+  onOpen: (task: Task) => void
+  /** 앞 삭제가 도는 중. 끝나기 전에 또 지우면 404 알림이 뜬다. */
+  deleting: boolean
+  onDelete: () => void
+}) {
   const done = task.stage === 'done'
   const overdue = isOverdue(task, toISODate(new Date()))
+  const menu = useContextMenuAt()
   return (
-    <li
-      draggable={CAN_DRAG}
-      onDragStart={(e) => {
-        e.dataTransfer.setData(DRAG_TYPE, task.id)
-        e.dataTransfer.effectAllowed = 'move'
-      }}
-      className={cn(
-        'border-line bg-surface space-y-1.5 rounded-lg border p-3',
-        CAN_DRAG && 'cursor-grab active:cursor-grabbing',
-      )}
-    >
-      <button
-        type="button"
-        data-task-open={task.id}
-        onClick={() => onOpen(task)}
+    <>
+      <li
+        {...menu.triggers}
+        draggable={CAN_DRAG}
+        onDragStart={(e) => {
+          // 터치 화면 노트북은 꾹 눌러 메뉴를 연 채로 끌 수 있다. 끌기 시작하면 메뉴를 닫는다.
+          menu.close()
+          e.dataTransfer.setData(DRAG_TYPE, task.id)
+          e.dataTransfer.effectAllowed = 'move'
+        }}
         className={cn(
-          'hover:text-accent block w-full cursor-pointer text-left text-sm font-medium break-words hover:underline',
-          done ? 'text-subtle line-through' : 'text-fg',
+          'border-line bg-surface space-y-1.5 rounded-lg border p-3',
+          'pointer-coarse:select-none pointer-coarse:[-webkit-touch-callout:none]',
+          CAN_DRAG && 'cursor-grab active:cursor-grabbing',
+          // 어느 카드의 메뉴인지 보이게 메뉴가 떠 있는 동안 카드를 칠해 둔다.
+          menu.at && 'bg-surface-hover',
         )}
       >
-        {task.title}
-      </button>
-      <p className="text-muted flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs">
-        {task.priority === 'high' && <Badge tone="danger">높음</Badge>}
-        {task.priority === 'low' && <Badge tone="subtle">낮음</Badge>}
-        {task.assignee ? (
-          personName(task.assignee)
-        ) : (
-          <span className="text-subtle">담당자 없음</span>
-        )}
-        {task.due_date && (
-          <span
-            className={cn('whitespace-nowrap', overdue ? 'text-danger font-medium' : 'text-subtle')}
-          >
-            {overdue ? '기한 지남 ' : ''}
-            {formatTaskDate(task.due_date)}
-          </span>
-        )}
-      </p>
-    </li>
+        <button
+          type="button"
+          data-task-open={task.id}
+          onClick={() => onOpen(task)}
+          className={cn(
+            'hover:text-accent block w-full cursor-pointer text-left text-sm font-medium break-words hover:underline',
+            done ? 'text-subtle line-through' : 'text-fg',
+          )}
+        >
+          {task.title}
+        </button>
+        <p className="text-muted flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs">
+          {task.priority === 'high' && <Badge tone="danger">높음</Badge>}
+          {task.priority === 'low' && <Badge tone="subtle">낮음</Badge>}
+          {task.assignee ? (
+            personName(task.assignee)
+          ) : (
+            <span className="text-subtle">담당자 없음</span>
+          )}
+          {task.due_date && (
+            <span
+              className={cn(
+                'whitespace-nowrap',
+                overdue ? 'text-danger font-medium' : 'text-subtle',
+              )}
+            >
+              {overdue ? '기한 지남 ' : ''}
+              {formatTaskDate(task.due_date)}
+            </span>
+          )}
+        </p>
+      </li>
+      {/* 카드 밖에 둔다. 포털이어도 React 이벤트는 위로 올라가서, 카드 안에 두면 메뉴 위 우클릭이 카드 메뉴를 다시 연다. */}
+      {menu.at && (
+        <ContextMenu at={menu.at} label={`${task.title} 메뉴`} onClose={menu.close}>
+          <ContextMenuItem icon={Pencil} label="수정" onSelect={() => onOpen(task)} />
+          <ContextMenuItem
+            icon={Trash2}
+            label="삭제"
+            danger
+            disabledReason={deleting ? '지우는 중' : undefined}
+            onSelect={onDelete}
+          />
+        </ContextMenu>
+      )}
+    </>
   )
 }

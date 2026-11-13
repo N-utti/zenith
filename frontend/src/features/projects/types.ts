@@ -34,8 +34,16 @@ export const TASK_NOTE_MAX = 2000
 /** `can_delete` 는 만든 사람과 임원에게만 참이다. 판정은 서버가 한다. */
 export type Project = Schema<'ProjectOut'>
 
+/** 프로젝트를 지우기 전 확인 문구. 보드 머리줄과 목록 카드 메뉴가 같이 쓴다. */
+export const deleteProjectMessage = (project: Project) =>
+  `"${project.name}" 프로젝트와 업무 ${project.task_count}개를 지웁니다. 되돌릴 수 없습니다.`
+
 /** `start_date`·`due_date` 는 `YYYY-MM-DD`. 시작일이 없으면 일정 탭 막대는 마감일 하루짜리다(`timeline.ts`). */
 export type Task = Schema<'TaskOut'>
+
+/** 업무를 지우기 전 확인 문구. 업무 창과 보드 카드 메뉴가 같이 쓴다. */
+export const deleteTaskMessage = (task: Task) =>
+  `"${task.title}" 업무를 지웁니다. 되돌릴 수 없습니다.`
 
 // 서버는 이름·제목 말고는 기본값을 채워 주지만, 화면은 늘 전부 보낸다.
 export type ProjectInput = Required<Schema<'ProjectIn'>>

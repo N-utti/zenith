@@ -4,35 +4,24 @@ import { Plus } from 'lucide-react'
 import { BackLink } from '@/components/ui/BackLink'
 import { Button } from '@/components/ui/Button'
 import { Card, CardHeader } from '@/components/ui/Card'
-import { Field } from '@/components/ui/Field'
-import { Modal } from '@/components/ui/Modal'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { Select } from '@/components/ui/Select'
 import { SkeletonRows } from '@/components/ui/Skeleton'
-import { Spinner } from '@/components/ui/Spinner'
-import { Textarea } from '@/components/ui/Textarea'
 import { useToast } from '@/components/ui/ToastContext'
 import { useCurrentUser } from '@/features/auth/AuthContext'
 import { ActivityCard } from '@/features/crm/ActivityCard'
-import {
-  useDeal,
-  useDeleteDeal,
-  useDropDeal,
-  useOrg,
-  useReopenDeal,
-  useUpdateDeal,
-} from '@/features/crm/api'
-import { ActivityFormModal, DealFormModal } from '@/features/crm/CrmForms'
+import { useDeal, useDeleteDeal, useOrg, useReopenDeal, useUpdateDeal } from '@/features/crm/api'
+import { ActivityFormModal, DealFormModal, DropDealModal } from '@/features/crm/CrmForms'
 import { DealStatusBadge, NextAction } from '@/features/crm/DealBits'
 import {
   DEAL_KIND_LABEL,
   DEAL_STAGES,
+  deleteDealMessage,
   formatEok,
   stageLabel,
   type Activity,
   type DealDetail,
   type DealEvent,
-  REASON_MAX,
 } from '@/features/crm/types'
 import { ApiError } from '@/lib/api'
 import { formatDateTime, formatISOYearDate } from '@/lib/datetime'
@@ -114,10 +103,7 @@ export function CrmDealPage() {
   const board = d.kind === 'fundraising' ? '/crm' : `/crm?kind=${d.kind}`
   // 잘못 만든 안건을 치우는 길이다. 진행하다 접는 안건은 중단한다(사유가 남는다).
   const removeDeal = () => {
-    // 활동 기록이 붙은 안건은 임원만 지운다. 그 안내는 임원에게만 뜻이 있다.
-    const records = me.role === 'exec' ? ' 붙어 있던 활동 기록은 기관에 남습니다.' : ''
-    if (!confirm(`${d.name} 안건을 지웁니다. 보드와 목록에서 빠지고 되돌릴 수 없습니다.${records}`))
-      return
+    if (!confirm(deleteDealMessage(d.name, me.role === 'exec'))) return
     remove.mutate(d.id, {
       onSuccess: () => {
         toast.success('안건을 지웠습니다.')
@@ -280,69 +266,5 @@ export function CrmDealPage() {
         />
       )}
     </>
-  )
-}
-
-/** 중단. 사유 필수(15 FR-CRM-12). 나중에 재개하면 같은 안건으로 이어진다. */
-function DropDealModal({ deal, onClose }: { deal: DealDetail; onClose: () => void }) {
-  const toast = useToast()
-  const drop = useDropDeal()
-  const [baseVersion] = useState(deal.version)
-  const [reason, setReason] = useState('')
-  const [error, setError] = useState<string | null>(null)
-
-  return (
-    <Modal
-      open
-      onClose={onClose}
-      title="안건 중단"
-      description="다시 진행하게 되면 재개할 수 있습니다. 활동 기록은 그대로 이어집니다."
-      size="sm"
-      footer={
-        <>
-          <Button variant="secondary" size="sm" onClick={onClose}>
-            취소
-          </Button>
-          <Button
-            variant="danger"
-            size="sm"
-            disabled={!reason.trim() || drop.isPending}
-            onClick={() => {
-              setError(null)
-              drop.mutate(
-                { id: deal.id, version: baseVersion, reason: reason.trim() },
-                {
-                  onSuccess: () => {
-                    toast.success('중단했습니다.')
-                    onClose()
-                  },
-                  onError: (err) => setError(errorText(err, '중단하지 못했습니다.')),
-                },
-              )
-            }}
-          >
-            {drop.isPending ? <Spinner /> : '중단'}
-          </Button>
-        </>
-      }
-    >
-      <Field label="중단 사유" required>
-        {(slot) => (
-          <Textarea
-            {...slot}
-            rows={3}
-            value={reason}
-            maxLength={REASON_MAX}
-            autoFocus
-            onChange={(e) => setReason(e.target.value)}
-          />
-        )}
-      </Field>
-      {error && (
-        <p role="alert" className="text-danger mt-3 text-sm">
-          {error}
-        </p>
-      )}
-    </Modal>
   )
 }
