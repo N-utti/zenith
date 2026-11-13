@@ -9,6 +9,7 @@ pdf(pypdf) · hwpx(zip 안 Contents/section*.xml). 구형 hwp(바이너리)·이
 import csv
 import io
 import re
+import time
 import xml.etree.ElementTree as ET
 import zipfile
 
@@ -26,6 +27,9 @@ MAX_PDF_STREAM = (
     20 * 1024 * 1024
 )  # PDF 내용 스트림 누적 상한 — 102KB 파일이 풀면 40MB·300초였다(보안 리뷰)
 MAX_PDF_PAGES = 300
+# PDF 글자 추출 시간 상한 — 호출자의 60초 타임아웃은 스레드를 못 끊는다. 1KB 파일이 Form XObject 를 수백 번
+# 불러(`/X0 Do` — MAX_PDF_STREAM 이 못 센다) 47초를 붙잡았다(리뷰). 여기서 스스로 그만둔다
+MAX_PDF_SECONDS = 30.0
 MAX_XLSX_CELLS = 200_000
 SUPPORTED = ("txt", "md", "csv", "docx", "xlsx", "pdf", "hwpx")
 
@@ -67,9 +71,11 @@ def extract(name: str, data: bytes) -> str:
         raise Unsupported(ext) from e
     text = "\n".join(line.rstrip() for line in text.splitlines())
     text = re.sub(r"\n{3,}", "\n\n", text).strip()  # 빈 줄 연속은 둘로 — 예산을 먹지 않게(리뷰)
-    text = text.replace(
-        "\x00", ""
-    )  # Postgres text 는 NUL 을 거절한다(위장 바이너리·PDF 출력, 보안 리뷰)
+    # Postgres text 는 NUL 을 거절한다(위장 바이너리·PDF 출력, 보안 리뷰). 나머지 제어 문자도 PDF 가 낼 수 있다 —
+    # XML(docx·hwpx 내보내기)에 못 들어가는 글자라 같이 지운다. 탭·줄바꿈은 남는다
+    text = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", text)
+    # 짝 없는 서로게이트(PDF ToUnicode 가 <D800> 을 낼 수 있다)는 UTF-8 로 못 쓴다 — `?` 로(리뷰: 500 이었다)
+    text = text.encode("utf-8", "replace").decode("utf-8")
     if not text:
         raise Empty(ext)
     return text[:MAX_CHARS]
@@ -198,7 +204,6 @@ def _xlsx(data: bytes) -> str:
 
 
 def _pdf(data: bytes) -> str:
-    # ponytail: 조작된 PDF 가 pypdf 에서 CPU 를 오래 붙잡을 수 있다 — 스레드에서 돌고 10MB·300쪽 상한뿐. 잦으면 시간 상한.
     if not data.startswith(b"%PDF"):
         raise Unsupported("pdf")
     reader = pypdf.PdfReader(io.BytesIO(data))
@@ -206,10 +211,27 @@ def _pdf(data: bytes) -> str:
         raise Unsupported("pdf-encrypted")
     parts: list[str] = []
     total = 0
+    deadline = time.monotonic() + MAX_PDF_SECONDS
+    ops = 0
+    late = False
+
+    def guard(*_args) -> None:
+        """연산자마다 불린다(Form XObject 안까지) — 4096번에 한 번 시계를 본다. pypdf 는 Form 안에서 난 예외를 삼키고
+        다음 연산자로 가므로(실측), 한 번 넘으면 계속 던진다 — 페이지 수준 연산자에서 던진 것은 밖으로 나온다."""
+        nonlocal ops, late
+        ops += 1
+        if late or (ops & 0xFFF == 0 and time.monotonic() > deadline):
+            late = True
+            raise Unsupported("pdf-too-slow")
+
     for page in reader.pages[:MAX_PDF_PAGES]:
         c = page.get_contents()
         total += len(c.get_data()) if c is not None else 0
         if total > MAX_PDF_STREAM:
             raise Unsupported("pdf-too-large")
-        parts.append(page.extract_text() or "")
+        parts.append(page.extract_text(visitor_operand_before=guard) or "")
+        if late:  # 마지막 Form 안에서 넘었으면 예외가 삼켜진 채 돌아온다
+            raise Unsupported("pdf-too-slow")
+    if len(reader.pages) > MAX_PDF_PAGES:
+        parts.append(f"({MAX_PDF_PAGES}쪽을 넘어 여기서 끊는다)")  # 조용히 버리지 않는다(리뷰)
     return "\n".join(parts)
