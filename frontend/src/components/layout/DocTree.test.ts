@@ -126,6 +126,7 @@ test('여러 파일은 하나씩 차례로 가져오고, 보던 화면에 남아
       new File(['b'], 'b.xlsx'),
       new File(['c'], 'c.png'),
       new File(['d'], 'd.hwpx'),
+      new File(['e'], 'e.pdf'),
     ]),
   )
 
@@ -134,12 +135,13 @@ test('여러 파일은 하나씩 차례로 가져오고, 보던 화면에 남아
     'a.docx',
     'b.xlsx',
     'd.hwpx',
+    'e.pdf',
   ])
   expect(probe(container).path).toBe('/')
   // 성공 수와 실패 목록을 한 토스트에(따로 띄우면 성공이 실패 뒤에 접힌다).
   expect(toast.success).not.toHaveBeenCalled()
   const [message] = toast.error.mock.calls[0] as [string]
-  expect(message).toMatch(/^2개를 가져왔습니다\. /)
+  expect(message).toMatch(/^3개를 가져왔습니다\. /)
   expect(message).toContain('b.xlsx(빈 파일입니다.)')
   expect(message).toContain('c.png')
 })
@@ -160,7 +162,7 @@ test('가져오는 도중 트리가 새로 마운트돼도 진행 표시와 중�
   expect(toast.info).toHaveBeenCalledOnce()
 })
 
-test('docx·xlsx·hwpx·hwp 가 아니면 올리지 않고 바로 알린다', async () => {
+test('docx·xlsx·hwpx·hwp·pdf 가 아니면 올리지 않고 바로 알린다', async () => {
   const container = render()
   await act(async () => dropFiles(folderRow(container), [new File(['a'], '사진.png')]))
   expect(api).not.toHaveBeenCalled()

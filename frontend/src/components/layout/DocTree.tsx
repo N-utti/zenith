@@ -479,7 +479,7 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
     const files = picked.filter(ok)
     const failed = picked
       .filter((f) => !ok(f))
-      .map((f) => ({ name: f.name, why: 'docx·xlsx·hwpx·hwp 가 아님' }))
+      .map((f) => ({ name: f.name, why: 'docx·xlsx·hwpx·hwp·pdf 가 아님' }))
     // hwp 변환기가 멎으면(503 HWP_UNAVAILABLE) 남은 hwp 만 보내지 않는다. 다른 형식은 된다.
     let hwpDown = false
     const isHwp = (f: File) => f.name.toLowerCase().endsWith('.hwp')
@@ -530,7 +530,7 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
     if (picked.length === 1 && failed[0]) {
       // 서버 문구를 그대로(크기·하루 상한 등). 형식이 아니면 받는 형식을 알린다.
       return toast.error(
-        ok(picked[0]) ? failed[0].why : 'docx·xlsx·hwpx·hwp 파일만 가져올 수 있습니다.',
+        ok(picked[0]) ? failed[0].why : 'docx·xlsx·hwpx·hwp·pdf 파일만 가져올 수 있습니다.',
       )
     }
     // 여럿이면 결과를 한 토스트에. 따로 띄우면 앞의 것이 뒤의 것 밑에 접혀 안 보인다.

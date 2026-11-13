@@ -2397,8 +2397,8 @@ export const handlers = [
     }
     if (file.size > MAX_UPLOAD_BYTES) return validationError('10MB 이하 파일만 올릴 수 있습니다.')
     if (file.size === 0) return validationError('빈 파일입니다.')
-    if (!/\.(docx|xlsx|hwpx|hwp)$/i.test(file.name)) {
-      return validationError('docx·xlsx·hwpx·hwp 파일만 가져올 수 있습니다.')
+    if (!/\.(docx|xlsx|hwpx|hwp|pdf)$/i.test(file.name)) {
+      return validationError('docx·xlsx·hwpx·hwp·pdf 파일만 가져올 수 있습니다.')
     }
     await delay(800)
 
