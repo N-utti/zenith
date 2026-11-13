@@ -20,6 +20,7 @@ from pycrdt import Doc, Map, XmlElement, XmlFragment, XmlText
 from sqlalchemy import select
 
 from app import convert, ydoc
+from app.ai import extract
 from app.ai.extract import Empty, Unsupported
 from app.models import AuditEvent, Document, Folder, StoredFile
 from app.routers import files
@@ -154,10 +155,45 @@ def test_hwpx_to_html() -> None:
 
 
 def test_pdf_to_html(monkeypatch) -> None:
-    """PDF 는 글자만 — 줄마다 문단, 꺾쇠는 escape(README 67). 추출 상한에서 잘리면 안내가 붙는다."""
+    """꺾쇠는 escape(README 67). 분석기가 상한에서 끊었으면 안내가 붙는다."""
     assert th("a.PDF", pdf_bytes("Hello <b>PDF")) == ("<p>Hello &lt;b&gt;PDF</p>", False)
-    monkeypatch.setattr("app.ai.extract.MAX_CHARS", 5)
-    assert th("a.pdf", pdf_bytes("Hello PDF")) == ("<p>Hello</p>" + convert.TRUNCATED_NOTE, True)
+    real = extract.pdf_blocks
+    monkeypatch.setattr(extract, "pdf_blocks", lambda data: real(data) | {"cut": True})
+    assert th("a.pdf", pdf_bytes("Hello")) == ("<p>Hello</p>" + convert.TRUNCATED_NOTE, True)
+    assert extract.extract("a.pdf", pdf_bytes("Hello")) == "Hello\n" + extract.PDF_CUT_NOTE
+
+
+def test_pdf_layout_table_heading_paragraph() -> None:
+    """배치 분석(README 68) — 선으로 그린 격자는 표(병합은 colspan), 본문보다 큰 글자는 제목, 오른쪽 끝까지 찬 줄은
+    다음 줄과 한 문단. AI 첨부용 평문은 같은 블록을 행마다 ' | ' 로."""
+    full = b"x" * 60  # 400pt 쪽에서 오른쪽 끝까지 차는 줄
+    content = (
+        b"BT /F1 20 Tf 50 370 Td (Title) Tj ET\n"
+        b"BT /F1 10 Tf 50 340 Td (" + full + b" ) Tj ET\n"
+        b"BT /F1 10 Tf 50 328 Td (tail) Tj ET\n"
+        b"BT /F1 10 Tf 50 316 Td (1. item) Tj ET\n"
+        b"0.5 w 50 200 300 100 re S 200 200 m 200 250 l S 50 250 m 350 250 l S\n"  # 윗줄은 한 칸(병합)
+        b"BT /F1 10 Tf 60 270 Td (Top) Tj ET BT /F1 10 Tf 60 220 Td (A2) Tj ET\n"
+        b"BT /F1 10 Tf 210 220 Td (B<2) Tj ET\n"
+    )
+    data = _pdf_objs(
+        *_PDF_HEAD,
+        (_PDF_PAGE % b"").replace(b"200 200", b"400 400"),
+        _pdf_stream(content),
+        _PDF_FONT,
+    )
+    body, cut = th("a.pdf", data)
+    assert not cut
+    assert body == (
+        "<h1>Title</h1>"
+        f"<p>{full.decode()} tail</p>"  # 줄 끝 공백 글리프 = 낱말 사이에서 꺾였다 → 띄워 잇는다
+        "<p>1. item</p>"  # 머리 기호로 시작하는 줄은 새 문단
+        '<table><tr><td colspan="2"><p>Top</p></td></tr>'
+        "<tr><td><p>A2</p></td><td><p>B&lt;2</p></td></tr></table>"
+    )
+    assert extract.extract("a.pdf", data) == (
+        f"Title\n{full.decode()} tail\n1. item\nTop\nA2 | B<2"
+    )
 
 
 def _pdf_objs(*objs: bytes) -> bytes:
@@ -189,7 +225,7 @@ _PDF_FONT = b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"
 
 def test_pdf_review_regressions(monkeypatch) -> None:
     """리뷰: ① 짝 없는 서로게이트·제어 문자가 500·본문으로 새지 않는다 ② Form XObject 반복(스트림 상한이 못 세는 CPU)은
-    시간 상한에서 Unsupported ③ 쪽 수 상한에서 끊기면 본문에 적는다."""
+    시간 상한에서 Unsupported."""
     cmap = (
         b"/CIDInit /ProcSet findresource begin 12 dict begin begincmap /CMapName /X def\n"
         b"1 begincodespacerange <00> <FF> endcodespacerange\n1 beginbfchar <41> <D800> endbfchar\n"
@@ -198,11 +234,11 @@ def test_pdf_review_regressions(monkeypatch) -> None:
     bad = _pdf_objs(
         *_PDF_HEAD,
         _PDF_PAGE % b"",
-        _pdf_stream(b"BT /F1 12 Tf 10 100 Td (A) Tj ET"),
+        _pdf_stream(b"BT /F1 12 Tf 10 100 Td (AB) Tj ET"),
         _PDF_FONT[:-2] + b"/ToUnicode 6 0 R >>",
         _pdf_stream(cmap),
     )
-    assert th("a.pdf", bad) == ("<p>?</p>", False)
+    assert th("a.pdf", bad) == ("<p>B</p>", False)  # 서로게이트로 가는 글자는 분석기가 버린다
     ctrl = _pdf_objs(
         *_PDF_HEAD,
         _PDF_PAGE % b"",
@@ -222,12 +258,9 @@ def test_pdf_review_regressions(monkeypatch) -> None:
         form,
     )
     assert th("a.pdf", slow)[0].startswith("<p>x")  # 상한 안이면 그냥 읽힌다
-    monkeypatch.setattr("app.ai.extract.MAX_PDF_SECONDS", -1)
+    monkeypatch.setattr("app.ai.extract.MAX_PDF_SECONDS", 0.01)  # 작업자 프로세스를 죽인다
     with pytest.raises(Unsupported):
         th("a.pdf", slow)
-    monkeypatch.setattr("app.ai.extract.MAX_PDF_SECONDS", 30)
-    monkeypatch.setattr("app.ai.extract.MAX_PDF_PAGES", 0)
-    assert th("a.pdf", pdf_bytes("Hello"))[0] == "<p>(0쪽을 넘어 여기서 끊는다)</p>"
 
 
 def test_filter_strips_unknown_tags_and_dangerous_attrs() -> None:

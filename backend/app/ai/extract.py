@@ -1,20 +1,23 @@
 """AI 첨부 글자 추출(README 51) — 올린 파일에서 평문을 뽑는다. 신뢰불가 입력 파싱이라 상한을 먼저 건다.
 
 형식: txt·md·csv(UTF-8, 안 되면 CP949) · docx(zip 안 word/document.xml) · xlsx(openpyxl 읽기 전용) ·
-pdf(pypdf) · hwpx(zip 안 Contents/section*.xml). 구형 hwp(바이너리)·이미지·그 밖은 `Unsupported`.
+pdf(pdfplumber — 문단·표, README 68) · hwpx(zip 안 Contents/section*.xml). 구형 hwp(바이너리)·이미지·그 밖은 `Unsupported`.
 글자가 하나도 없으면(스캔 PDF 등) `Empty`. 결과는 MAX_CHARS 에서 자른다 — 프롬프트에 들어갈 때 다시
 예산(AI_DOC_MAX_CHARS)에 맞춰 잘린다. CPU 작업이라 호출자는 스레드로 돌린다(`asyncio.to_thread`).
 """
 
 import csv
 import io
+import json
 import re
-import time
+import subprocess
+import sys
+import threading
 import xml.etree.ElementTree as ET
 import zipfile
+from pathlib import Path
 
 import openpyxl
-import pypdf
 
 MAX_CHARS = 200_000  # 저장 상한 — 그 뒤는 버린다(프롬프트 예산 5만 자보다 넉넉히)
 MAX_ZIP_MEMBER = (
@@ -23,13 +26,15 @@ MAX_ZIP_MEMBER = (
 # zip 전체 압축 해제 상한(docx·hwpx·xlsx 공통 — openpyxl 은 sharedStrings 를 통째로 올린다)
 MAX_ZIP_TOTAL = 30 * 1024 * 1024
 MAX_ZIP_ENTRIES = 2000  # 항목 수 — 빈 항목 10만 개로 ZipInfo·이름 색인을 부풀리는 걸 막는다(리뷰). 실제 문서는 수십 개
-MAX_PDF_STREAM = (
-    20 * 1024 * 1024
-)  # PDF 내용 스트림 누적 상한 — 102KB 파일이 풀면 40MB·300초였다(보안 리뷰)
-MAX_PDF_PAGES = 300
-# PDF 글자 추출 시간 상한 — 호출자의 60초 타임아웃은 스레드를 못 끊는다. 1KB 파일이 Form XObject 를 수백 번
-# 불러(`/X0 Do` — MAX_PDF_STREAM 이 못 센다) 47초를 붙잡았다(리뷰). 여기서 스스로 그만둔다
+# PDF 한 건의 시간 상한 — 넘으면 작업자 프로세스를 죽인다. 1KB 파일이 Form XObject 반복(`/X0 Do`)으로 수십 초~수십
+# 분을 붙잡을 수 있다(리뷰 재현). 쪽 수(300)·글자·칸·메모리 상한은 작업자(pdfwork.py)가 건다
 MAX_PDF_SECONDS = 30.0
+_PDF_WORKER = Path(__file__).with_name("pdfwork.py")
+_PDF_SLOTS = threading.BoundedSemaphore(
+    2
+)  # 동시에 뜨는 작업자 수 — AI 첨부 경로엔 다른 동시성 상한이 없다
+_CID = re.compile(r"\(cid:\d+\)")
+PDF_CUT_NOTE = "(PDF 가 길어 여기서 끊는다)"
 MAX_XLSX_CELLS = 200_000
 SUPPORTED = ("txt", "md", "csv", "docx", "xlsx", "pdf", "hwpx")
 
@@ -71,11 +76,7 @@ def extract(name: str, data: bytes) -> str:
         raise Unsupported(ext) from e
     text = "\n".join(line.rstrip() for line in text.splitlines())
     text = re.sub(r"\n{3,}", "\n\n", text).strip()  # 빈 줄 연속은 둘로 — 예산을 먹지 않게(리뷰)
-    # Postgres text 는 NUL 을 거절한다(위장 바이너리·PDF 출력, 보안 리뷰). 나머지 제어 문자도 PDF 가 낼 수 있다 —
-    # XML(docx·hwpx 내보내기)에 못 들어가는 글자라 같이 지운다. 탭·줄바꿈은 남는다
-    text = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", text)
-    # 짝 없는 서로게이트(PDF ToUnicode 가 <D800> 을 낼 수 있다)는 UTF-8 로 못 쓴다 — `?` 로(리뷰: 500 이었다)
-    text = text.encode("utf-8", "replace").decode("utf-8")
+    text = _clean(text)
     if not text:
         raise Empty(ext)
     return text[:MAX_CHARS]
@@ -203,35 +204,61 @@ def _xlsx(data: bytes) -> str:
     return "\n".join(lines)
 
 
-def _pdf(data: bytes) -> str:
+def _clean(text: str) -> str:
+    """DB·Y.Doc·XML 에 못 들어가는 글자를 지운다 — NUL(Postgres text 가 거절, 보안 리뷰)과 나머지 제어 문자(PDF 가 낼 수
+    있다. docx·hwpx 내보내기의 XML 에 못 들어간다), 짝 없는 서로게이트(PDF ToUnicode 의 <D800> — UTF-8 로 못 써 500 이었다,
+    리뷰)는 `?` 로. 탭·줄바꿈은 남는다."""
+    text = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", text)
+    return text.encode("utf-8", "replace").decode("utf-8")
+
+
+def pdf_blocks(data: bytes) -> dict:
+    """PDF → 본문 순서의 블록(문단·표) — `pdfwork.py` 를 **별도 프로세스**로 돌린다(README 68). 스레드는 못 끊지만
+    프로세스는 죽일 수 있어, 조작된 파일이 MAX_PDF_SECONDS 넘게 CPU 를 붙잡지 못한다(GIL 도 api 와 따로다). 동시에 2개까지.
+    돌려주는 모양은 pdfwork 의 docstring. 글자는 `_clean` 을 지난다. app/convert.py 도 쓴다."""
     if not data.startswith(b"%PDF"):
         raise Unsupported("pdf")
-    reader = pypdf.PdfReader(io.BytesIO(data))
-    if reader.is_encrypted:
-        raise Unsupported("pdf-encrypted")
-    parts: list[str] = []
-    total = 0
-    deadline = time.monotonic() + MAX_PDF_SECONDS
-    ops = 0
-    late = False
+    with _PDF_SLOTS:
+        try:
+            proc = subprocess.run(  # noqa: S603 — 인자는 고정, 파일은 표준 입력으로만 간다
+                [sys.executable, "-I", str(_PDF_WORKER)],
+                input=data,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                timeout=MAX_PDF_SECONDS,
+                check=False,
+            )
+        except subprocess.TimeoutExpired:
+            raise Unsupported("pdf-too-slow") from None
+    if proc.returncode:
+        raise Unsupported("pdf-encrypted" if proc.returncode == 3 else "pdf")
+    out = json.loads(proc.stdout)
 
-    def guard(*_args) -> None:
-        """연산자마다 불린다(Form XObject 안까지) — 4096번에 한 번 시계를 본다. pypdf 는 Form 안에서 난 예외를 삼키고
-        다음 연산자로 가므로(실측), 한 번 넘으면 계속 던진다 — 페이지 수준 연산자에서 던진 것은 밖으로 나온다."""
-        nonlocal ops, late
-        ops += 1
-        if late or (ops & 0xFFF == 0 and time.monotonic() > deadline):
-            late = True
-            raise Unsupported("pdf-too-slow")
+    def tidy(text: str) -> str:
+        # pdfminer 는 유니코드로 못 옮긴 글리프를 「(cid:12)」 로 적는다(글꼴에 대응표가 없는 PDF) — 읽을 수 없는 잡음이라 지운다
+        return _clean(_CID.sub("", text))
 
-    for page in reader.pages[:MAX_PDF_PAGES]:
-        c = page.get_contents()
-        total += len(c.get_data()) if c is not None else 0
-        if total > MAX_PDF_STREAM:
-            raise Unsupported("pdf-too-large")
-        parts.append(page.extract_text(visitor_operand_before=guard) or "")
-        if late:  # 마지막 Form 안에서 넘었으면 예외가 삼켜진 채 돌아온다
-            raise Unsupported("pdf-too-slow")
-    if len(reader.pages) > MAX_PDF_PAGES:
-        parts.append(f"({MAX_PDF_PAGES}쪽을 넘어 여기서 끊는다)")  # 조용히 버리지 않는다(리뷰)
-    return "\n".join(parts)
+    for block in out["blocks"]:
+        if block["t"] == "p":
+            block["text"] = tidy(block["text"])
+        else:
+            for row in block["rows"]:
+                for cell in row:
+                    cell["text"] = tidy(cell["text"])
+    return out
+
+
+def _pdf(data: bytes) -> str:
+    """문단은 한 줄, 표는 행마다 ' | '(docx 와 같은 모양) — AI 가 칸을 구분해 읽는다."""
+    out = pdf_blocks(data)
+    lines: list[str] = []
+    for block in out["blocks"]:
+        if block["t"] == "p":
+            lines.append(block["text"])
+        else:
+            lines += [
+                " | ".join(c["text"].replace("\n", " ") for c in row) for row in block["rows"]
+            ]
+    if out["cut"]:
+        lines.append(PDF_CUT_NOTE)
+    return "\n".join(lines)
