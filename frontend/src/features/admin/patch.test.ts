@@ -9,6 +9,7 @@ const USER: AdminUser = {
   role: 'member',
   avatar: null,
   active: true,
+  must_change_password: false,
   team_id: '5f8d0c31-6a24-4b93-9e10-2c7a4f0b8d15',
   hire_date: '2021-03-02',
   created_at: '2026-01-02T00:00:00Z',

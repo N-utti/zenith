@@ -74,6 +74,7 @@ export function AccountList() {
                     <span className="truncate font-medium">{user.name}</span>
                     {user.id === me.id && <Badge tone="accent">나</Badge>}
                     {!user.active && <Badge tone="danger">비활성</Badge>}
+                    {user.must_change_password && <Badge>비밀번호 변경 전</Badge>}
                   </span>
                 </TD>
                 <TD>

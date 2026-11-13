@@ -462,7 +462,27 @@ function authed(resolve: (user: User, request: Request) => Response) {
   }
 }
 
+/** 비밀번호를 바꾸기 전에도 열리는 경로(백엔드 `deps.authenticate`). 나머지는 전부 403 이다. */
+const PASSWORD_CHANGE_OPEN = [
+  '/api/me',
+  '/api/me/password',
+  '/api/auth/refresh',
+  '/api/auth/logout',
+  // 인증을 안 거치는 경로라 서버에서도 막히지 않는다.
+  '/api/auth/login',
+]
+
 export const handlers = [
+  // 첫 로그인 강제 변경(백엔드 #601). 맨 앞에서 막고, 아무것도 돌려주지 않으면 뒤 핸들러로 넘어간다.
+  http.all('/api/*', ({ request }) => {
+    if (!authenticate()?.must_change_password) return
+    if (PASSWORD_CHANGE_OPEN.includes(new URL(request.url).pathname)) return
+    return HttpResponse.json(
+      { detail: '비밀번호를 먼저 바꿔야 합니다.', code: 'PASSWORD_CHANGE_REQUIRED' },
+      { status: 403 },
+    )
+  }),
+
   // 채팅은 MSW가 흉내 내지 않는다. 브라우저마다 따로 도는 목으로는 메시지가
   // 공유되지 않기 때문이다. vite가 개발 서버(`npm run server`)로 넘기도록
   // 그대로 통과시킨다.
@@ -543,10 +563,11 @@ export const handlers = [
     return new HttpResponse(null, { status: 204 })
   }),
 
-  // backend/README §1 확장. 성공 시 204, 현재 비밀번호 불일치는 400 PASSWORD_MISMATCH.
+  // backend/README §1 확장. 성공 시 204, 현재 비밀번호 불일치는 400 PASSWORD_MISMATCH, 같은 비밀번호는 400 PASSWORD_UNCHANGED.
   // ponytail: 목은 비밀번호를 실제로 바꾸지 않는다. 데모 계정 전부가 DEMO_PASSWORD 하나를 쓴다.
   http.post('/api/me/password', async ({ request }) => {
-    if (!authenticate()) return unauthorized()
+    const user = authenticate()
+    if (!user) return unauthorized()
     const { current_password, new_password } = (await request.json()) as {
       current_password: string
       new_password: string
@@ -563,6 +584,16 @@ export const handlers = [
         { status: 422 },
       )
     }
+    if (new_password === current_password) {
+      return HttpResponse.json(
+        { detail: '지금과 같은 비밀번호로는 바꿀 수 없습니다.', code: 'PASSWORD_UNCHANGED' },
+        { status: 400 },
+      )
+    }
+    // 첫 로그인 강제 변경은 여기서 풀린다(백엔드 #601). 관리 화면의 계정 줄도 같이 지운다.
+    user.must_change_password = false
+    const account = findAccount(user.id)
+    if (account) account.must_change_password = false
     return new HttpResponse(null, { status: 204 })
   }),
 
@@ -1295,7 +1326,7 @@ export const handlers = [
     }
     if (unknownTeam(patch.team_id)) return validationError('없는 팀입니다.')
     const before = { role: target.role, active: target.active }
-    const updated = patchAccount(target, patch)
+    const updated = patchAccount(target, patch, user.id)
     recordAudit({
       kind: 'admin.user_updated',
       actor_id: user.id,

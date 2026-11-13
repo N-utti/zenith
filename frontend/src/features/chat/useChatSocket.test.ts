@@ -118,6 +118,24 @@ test('4401 뒤 세션 확인이 서버 오류로 실패하면 프로필을 두�
   expect(qc.getQueryData(meQueryKey)).toEqual(me)
 })
 
+test('4428(비밀번호 먼저 변경)로 닫히면 다시 붙지 않고 표시가 켜진 프로필로 바꾼다', async () => {
+  const locked = { ...me, must_change_password: true }
+  fetchMe.mockResolvedValue(locked)
+  const { qc, close } = await mount()
+  await close(4428)
+
+  expect(FakeSocket.opened).toHaveLength(1)
+  expect(qc.getQueryData(meQueryKey)).toEqual(locked)
+})
+
+test('4428 뒤 받은 프로필의 표시가 이미 꺼져 있으면(다른 탭에서 바꿈) 다시 붙는다', async () => {
+  fetchMe.mockResolvedValue({ ...me, must_change_password: false })
+  const { close } = await mount()
+  await close(4428)
+
+  expect(FakeSocket.opened).toHaveLength(2)
+})
+
 test('세션 확인이 도는 동안 화면이 내려가면 소켓을 새로 열지 않는다', async () => {
   let answer: (value: unknown) => void = () => {}
   fetchMe.mockReturnValue(new Promise((resolve) => (answer = resolve)))
