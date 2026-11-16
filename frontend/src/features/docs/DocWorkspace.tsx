@@ -1322,6 +1322,8 @@ function DocSurface({
                     editor?.commands.focus('start')
                   }}
                   readOnly={locked}
+                  // 막 만든 문서는 바로 제목부터 친다. 폰은 키보드가 화면을 덮어 두지 않는다.
+                  autoFocus={!coarsePointer && !locked && meta.title === UNTITLED_DOC}
                   placeholder={UNTITLED_DOC}
                   aria-label="문서 제목"
                   className="text-fg placeholder:text-subtle w-full bg-transparent py-2 text-3xl font-bold tracking-tight outline-none"
