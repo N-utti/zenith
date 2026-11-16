@@ -200,9 +200,23 @@ const MIN_ROLE_LABEL: Record<Folder['min_role'], string> = {
  */
 export function folderAccessLabel(folder: Folder): string | null {
   const people = folder.allowed_users.length
+  // 개인 폴더(백엔드 README 72·74). 주인과 주인이 고른 사람만 본다. 등급은 걸리지 않는다.
+  if (folder.owner_id) return `열람: 주인${people ? ` + 지정한 ${people}명` : '만'}`
   if (folder.min_role === 'member' && !people) return null
   const role = MIN_ROLE_LABEL[folder.min_role] ?? folder.min_role
   return `열람: ${role}${people ? ` + 지정한 ${people}명` : ''}`
+}
+
+/** 이 폴더가 든 개인 폴더(최상위). 개인 폴더 밖이면 `null`. 개인 폴더는 최상위에만 있다. */
+export function privateRootOf(folders: Folder[], id: string): Folder | null {
+  const byId = new Map(folders.map((f) => [f.id, f]))
+  let cursor = byId.get(id)
+  // 깊이 상한은 고리 방어다(서버의 `_assert_no_cycle` 과 같은 64).
+  for (let depth = 0; cursor && depth < 64; depth += 1) {
+    if (!cursor.parent_id) return cursor.owner_id ? cursor : null
+    cursor = byId.get(cursor.parent_id)
+  }
+  return null
 }
 
 /**
@@ -217,7 +231,8 @@ export function folderAccessChange(
   minRole: Folder['min_role'],
   picked: string[],
 ): { min_role?: Folder['min_role']; allowed_users?: string[] } | null {
-  const people = minRole === 'member' ? [] : [...new Set(picked)].sort()
+  // 개인 폴더는 등급이 늘 전원(member)인 채로 볼 사람만 고른다. 「전원이면 비운다」는 등급 폴더의 규칙이다.
+  const people = minRole === 'member' && !folder.owner_id ? [] : [...new Set(picked)].sort()
   const change: { min_role?: Folder['min_role']; allowed_users?: string[] } = {}
   if (minRole !== folder.min_role) change.min_role = minRole
   if (people.join() !== [...folder.allowed_users].sort().join()) change.allowed_users = people

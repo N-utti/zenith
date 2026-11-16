@@ -20,6 +20,8 @@ const ROLE_CHOICES: { value: Folder['min_role']; label: string; description: str
 /**
  * 폴더 열람 권한(백엔드 #421). 등급 셋 중 하나와 그 등급이 아니어도 볼 사람. 임원만 연다(서버도 403).
  *
+ * 개인 폴더(`owner_id` 가 있다, 백엔드 README 74)는 등급 없이 「같이 볼 사람」만 고른다. 주인만 연다.
+ *
  * 부르는 쪽이 열 때 마운트한다(`FolderNameModal` 과 같은 이유).
  */
 export function FolderAccessModal({ folder, onClose }: { folder: Folder; onClose: () => void }) {
@@ -34,6 +36,7 @@ export function FolderAccessModal({ folder, onClose }: { folder: Folder; onClose
   const save = useSetFolderAccess()
   const toast = useToast()
 
+  const isPrivate = base.owner_id !== null
   const change = folderAccessChange(base, minRole, picked)
   // 명단(`/people`)은 나와 비활성 계정을 빼고 준다. 그런 사람도 지정에서 지우지 않고 그대로 둔다.
   const unlisted = loadingPeople
@@ -50,7 +53,11 @@ export function FolderAccessModal({ folder, onClose }: { folder: Folder; onClose
     // 실패는 `save.error` 가 창 안에 보인다. 받아 두지 않으면 처리 안 된 거절로 남는다.
     void save.mutateAsync({ id: folder.id, ...change }).then(
       () => {
-        toast.success(`${folder.title} 폴더의 열람 권한을 바꿨습니다.`)
+        toast.success(
+          isPrivate
+            ? `${folder.title} 폴더를 볼 사람을 바꿨습니다.`
+            : `${folder.title} 폴더의 열람 권한을 바꿨습니다.`,
+        )
         onClose()
       },
       () => undefined,
@@ -61,7 +68,7 @@ export function FolderAccessModal({ folder, onClose }: { folder: Folder; onClose
     <Modal
       open
       onClose={close}
-      title={`${folder.title} 열람 권한`}
+      title={isPrivate ? `${folder.title} 볼 사람` : `${folder.title} 열람 권한`}
       footer={
         <>
           <Button variant="secondary" size="sm" onClick={close} disabled={save.isPending}>
@@ -74,7 +81,7 @@ export function FolderAccessModal({ folder, onClose }: { folder: Folder; onClose
       }
     >
       <div className="flex flex-col gap-5">
-        <fieldset className="flex flex-col gap-2.5">
+        <fieldset className={isPrivate ? 'hidden' : 'flex flex-col gap-2.5'}>
           <legend className="text-fg mb-2 text-sm font-medium">볼 수 있는 등급</legend>
           {ROLE_CHOICES.map((choice) => (
             <Radio
@@ -94,9 +101,9 @@ export function FolderAccessModal({ folder, onClose }: { folder: Folder; onClose
 
         <div role="group" aria-labelledby={peopleLabel}>
           <p id={peopleLabel} className="text-fg mb-2 text-sm font-medium">
-            따로 볼 사람
+            {isPrivate ? '같이 볼 사람' : '따로 볼 사람'}
           </p>
-          {minRole === 'member' ? (
+          {minRole === 'member' && !isPrivate ? (
             <p className="text-subtle text-xs">
               전원이 보는 폴더라 따로 지정하지 않습니다.
               {picked.length > 0 && ` 저장하면 지정한 ${picked.length}명이 빠집니다.`}
@@ -127,8 +134,9 @@ export function FolderAccessModal({ folder, onClose }: { folder: Folder; onClose
         </div>
 
         <p className="text-subtle text-xs leading-relaxed">
-          아래 폴더와 문서도 이 설정을 따릅니다. 위 폴더가 막혀 있으면 여기서 지정한 사람도 볼 수
-          없습니다. 제한이 걸린 폴더를 오가는 이동은 임원만 할 수 있습니다.
+          {isPrivate
+            ? '나와 여기서 고른 사람만 봅니다. 임원도 고르지 않으면 볼 수 없습니다. 고른 사람은 안의 문서를 보고 고칠 수 있고, 폴더 이름과 볼 사람은 나만 바꿉니다. 아무도 고르지 않으면 나만 봅니다.'
+            : '아래 폴더와 문서도 이 설정을 따릅니다. 위 폴더가 막혀 있으면 여기서 지정한 사람도 볼 수 없습니다. 제한이 걸린 폴더를 오가는 이동은 임원만 할 수 있습니다.'}
         </p>
 
         {save.isError && (

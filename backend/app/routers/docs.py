@@ -17,12 +17,13 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Form, Query, Request, Response, UploadFile
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, exists, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import defer
 
 from app import acl, audit, convert, storage, ydoc
 from app.ai import embed
+from app.ai.chat_command import AI_EMAIL
 from app.config import settings
 from app.db import get_db, session_scope
 from app.deps import current_user
@@ -296,6 +297,11 @@ async def _set_members(db: AsyncSession, folder: Folder, user_ids: list[uuid.UUI
         found = set(await db.scalars(select(User.id).where(User.id.in_(wanted))))
         if found != wanted:
             raise ApiError(422, "VALIDATION", "없는 사용자가 있습니다.")
+        # 개인 폴더에 AI 봇을 넣으면 채팅 `/ai` 의 답(방 전원이 본다)에 그 문서가 근거로 실린다 — 받지 않는다(리뷰)
+        if folder.owner_id is not None and await db.scalar(
+            select(exists().where(User.id.in_(wanted), User.email == AI_EMAIL))
+        ):
+            raise ApiError(422, "VALIDATION", "AI 어시스턴트는 볼 사람으로 고를 수 없습니다.")
     await db.execute(delete(FolderMember).where(FolderMember.folder_id == folder.id))
     db.add_all([FolderMember(folder_id=folder.id, user_id=uid) for uid in wanted])
 
@@ -391,12 +397,13 @@ async def create_folder(
             409, "CONFLICT", "워크스페이스가 없습니다. scripts/seed.py 를 먼저 돌리세요."
         )
     graded = body.min_role != "member" or bool(body.allowed_users)
-    if body.private and (body.parent_id is not None or graded):
-        # 개인 폴더는 최상위에만 — 남들과 쓰는 폴더 안에 안 보이는 폴더가 끼지 않게. 하위는 그냥 만들면 따라간다
+    if body.private and (body.parent_id is not None or body.min_role != "member"):
+        # 개인 폴더는 최상위에만 — 남들과 쓰는 폴더 안에 안 보이는 폴더가 끼지 않게. 하위는 그냥 만들면 따라간다.
+        # 등급은 못 건다(주인과 주인이 고른 사람만 본다). 볼 사람(allowed_users)은 주인이 고른다(README 74)
         raise ApiError(
-            422, "VALIDATION", "개인 폴더는 최상위에만 만들고 등급·사람 지정을 함께 걸 수 없습니다."
+            422, "VALIDATION", "개인 폴더는 최상위에만 만들고 등급을 함께 걸 수 없습니다."
         )
-    if graded:
+    if graded and not body.private:
         acl.require_acl_editor(user)  # 등급·사람 지정은 임원만(README 57) — 다른 검사보다 먼저
     if body.parent_id is not None:
         await _require_folder(db, body.parent_id, user)
@@ -432,7 +439,10 @@ async def update_folder(
         raise ApiError(404, "NOT_FOUND", "없는 폴더입니다.")
     changes = body.model_dump(exclude_unset=True)
     allowed = changes.pop("allowed_users", "unset")
-    if "min_role" in changes or allowed != "unset":
+    # 개인 폴더 자체(이름·정렬·볼 사람)는 주인만 고친다(README 74) — 주인이 고른 사람은 안을 보고 고칠 뿐이다
+    acl.require_private_owner(user, folder.owner_id)
+    own_private = folder.owner_id is not None  # 여기까지 왔으면 내 개인 폴더다
+    if "min_role" in changes or (allowed != "unset" and not own_private):
         acl.require_acl_editor(user)  # 등급·사람 지정은 임원만(README 57) — 다른 검사보다 먼저
     if allowed is None:
         raise ApiError(422, "VALIDATION", "allowed_users 는 null 일 수 없습니다.")
@@ -442,7 +452,8 @@ async def update_folder(
         # ponytail: 전역 잠금 — 폴더 이동은 드물다. 잦아지면 워크스페이스별 키로.
         await db.execute(select(func.pg_advisory_xact_lock(FOLDER_MOVE_LOCK)))
     private = await acl.is_private(db, folder.id)
-    if private and ("min_role" in changes or allowed != "unset"):
+    # 개인 폴더 안에는 등급을 못 건다. 볼 사람은 개인 폴더 자신에만(하위 폴더는 따라간다)
+    if private and ("min_role" in changes or (allowed != "unset" and not own_private)):
         raise ApiError(422, "VALIDATION", PRIVATE_NO_GRADE)
     if "parent_id" in changes:
         # 이동은 등급을 바꾸는 것과 같다(등급 폴더에서 꺼내면 공개, 넣으면 숨김) — 어느 쪽이든 「전원 열람」이 아니면 임원만
@@ -464,6 +475,10 @@ async def update_folder(
             raise ApiError(
                 422, "VALIDATION", "폴더는 개인 폴더 안팎으로 옮길 수 없습니다. 문서를 옮겨 주세요."
             )
+        if changes["parent_id"] != folder.parent_id and private:
+            # 개인 폴더끼리도 경계다(README 74, 리뷰) — 볼 사람으로 지정받은 사람이 남의 하위 폴더를 자기 개인 폴더로
+            # 통째로 가져가거나, 볼 사람이 다른 폴더로 옮겨 주인이 고르지 않은 사람에게 보여 주지 못하게
+            await acl.require_same_private_root(db, user, folder.id, changes["parent_id"])
     for key, value in changes.items():
         if value is None and key != "parent_id":  # NOT NULL 컬럼 — DB 409 대신 422
             raise ApiError(422, "VALIDATION", f"{key} 는 null 일 수 없습니다.")
@@ -495,6 +510,7 @@ async def delete_folder(
     folder = await db.get(Folder, id, with_for_update=True, populate_existing=True)
     if folder is None:
         raise ApiError(404, "NOT_FOUND", "없는 폴더입니다.")
+    acl.require_private_owner(user, folder.owner_id)  # 개인 폴더 자체는 주인만 지운다(README 74)
     # 문서는 폴더 안에만 있을 수 있어(DocCreateIn.folder_id 필수) 휴지통 문서가 남은 폴더를 지우면 되살릴 자리가
     # 없다 — 휴지통 문서도 막는다. 트리에 안 보여 화면이 미리 못 막는 경우라 문구를 따로 둔다.
     if (await db.execute(select(Folder.id).where(Folder.parent_id == id).limit(1))).first():
@@ -791,17 +807,27 @@ async def update_doc(
     if not changes:
         editor = await db.get(User, doc.updated_by) if doc.updated_by else None
         return _doc_out(doc, editor)  # 빈 본문으로 "이어서 작업" 순서를 흔들지 않는다
-    if "locked" in changes and user.role != "exec":
-        audit.record(
-            db,
-            "acl.denied",
-            request=request,
-            actor_id=user.id,
-            target_id=doc.id,
-            detail={"path": request.url.path, "min_role": "exec"},
-        )
-        await db.commit()
-        raise ApiError(403, "FORBIDDEN", "문서 잠금은 임원만 바꿀 수 있습니다.")
+    if "locked" in changes:
+        # 개인 폴더의 문서는 주인이 잠그고 푼다(README 74, 리뷰) — 볼 사람으로 지정받은 임원이 잠그고 명단에서 빠지면
+        # 아무도 못 푸는 문서가 된다. 그 밖의 문서는 임원만(README 70)
+        owner = await acl.private_owner(db, doc.folder_id)
+        if (owner != user.id) if owner is not None else (user.role != "exec"):
+            audit.record(
+                db,
+                "acl.denied",
+                request=request,
+                actor_id=user.id,
+                target_id=doc.id,
+                detail={"path": request.url.path, "min_role": "owner" if owner else "exec"},
+            )
+            await db.commit()
+            raise ApiError(
+                403,
+                "FORBIDDEN",
+                "개인 폴더의 문서 잠금은 주인만 바꿀 수 있습니다."
+                if owner
+                else "문서 잠금은 임원만 바꿀 수 있습니다.",
+            )
     if changes.keys() - {"locked"}:
         # 잠긴 채로는 잠금 말고 아무것도 못 바꾼다 — 풀고 고친다(README 70)
         acl.require_unlocked(doc)
@@ -813,11 +839,16 @@ async def update_doc(
             db, changes["folder_id"]
         ):
             acl.require_acl_editor(user)
-        # 개인 폴더 안팎 이동(README 72)은 주인이면 된다(양쪽을 볼 수 있어야 여기까지 온다). 대신 남긴다 — 넣으면 임원도
-        # 못 보게 되므로, 같이 쓰던 문서가 사라졌을 때 누가 가져갔는지 감사 기록으로 찾는다(제목은 넣을 때만: 그때까진 공개였다)
-        was = await acl.is_private(db, doc.folder_id)
-        now = await acl.is_private(db, changes["folder_id"])
-        hidden = now and not was
+        # 개인 폴더 안팎 이동(README 72)은 주인만 한다 — 주인이 고른 사람(README 74)도 양쪽을 보지만, 꺼내면 공개되고
+        # 넣으면 숨는 일이라 그 개인 폴더의 주인이어야 한다(다른 개인 폴더로 옮기는 것도 양쪽 주인이어야 한다). 대신 남긴다 —
+        # 넣으면 임원도 못 보게 되므로, 같이 쓰던 문서가 사라졌을 때 누가 가져갔는지 감사 기록으로 찾는다(제목은 넣을 때만)
+        # 같은 주인의 다른 개인 폴더로 옮기는 것도 경계다 — 볼 사람이 다르다(리뷰)
+        root_was, root_now = await acl.require_same_private_root(
+            db, user, doc.folder_id, changes["folder_id"]
+        )
+        was, now = root_was is not None, root_now is not None
+        # 다른 개인 폴더로 들어가면 볼 사람이 바뀐다 — 열어 둔 사람들을 끊는다(볼 수 있는 사람은 다시 붙는다)
+        hidden = now and root_was != root_now
         if was != now:
             audit.record(
                 db,
@@ -894,8 +925,11 @@ async def delete_doc(
             # 스냅샷을 편집자 것으로 덮어쓴다. 휴지통 문서는 새로 열 수도 없으니(yjs 핸드셰이크) 방만 남는다.
             await yjs.close_room(doc.id)
         return Response(status_code=204)
-    # 개인 폴더의 문서는 주인이 영구 삭제한다(README 72) — 임원은 못 보니 못 지우고, 여기까지 온 사람이 곧 주인이다
-    private = await acl.is_private(db, doc.folder_id)
+    # 개인 폴더의 문서는 주인이 영구 삭제한다(README 72) — 임원은 못 보니 못 지우고, 주인이 고른 사람(README 74)은
+    # 보고 고치지만 영구 삭제는 못 한다
+    owner = await acl.private_owner(db, doc.folder_id)
+    acl.require_private_owner(user, owner)
+    private = owner is not None
     if ROLE_RANK.get(user.role, 0) < ROLE_RANK["exec"] and not private:
         audit.record(
             db,

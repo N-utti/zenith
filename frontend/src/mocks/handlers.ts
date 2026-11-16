@@ -2260,9 +2260,11 @@ export const handlers = [
     ) {
       return validationError('min_role 은 member·lead·exec 중 하나입니다.')
     }
+    // 개인 폴더(백엔드 README 72·74). 볼 사람은 임원이 아니어도 주인이 고른다.
+    const isPrivate = (body as { private?: unknown }).private === true
     const restricting =
       (body.min_role !== undefined && body.min_role !== 'member') ||
-      (Array.isArray(body.allowed_users) && body.allowed_users.length > 0)
+      (!isPrivate && Array.isArray(body.allowed_users) && body.allowed_users.length > 0)
     if (restricting && user.role !== 'exec') return forbidden(ACL_EXEC_ONLY)
     const acl = readAcl(body)
     if ('error' in acl) return acl.error
@@ -2274,12 +2276,18 @@ export const handlers = [
       return validationError('없는 폴더입니다.')
     }
 
+    // 최상위에만, 등급과 같이는 안 된다.
+    // ponytail: 목은 주인과 볼 사람을 적어 두기만 한다. 실제로 가리는 것은 서버다(목의 열람 판정은 등급만 본다).
+    if (isPrivate && (parentId !== null || acl.min_role)) {
+      return validationError('개인 폴더는 최상위에만 만들고 등급을 함께 걸 수 없습니다.')
+    }
     const created = createFolder({
       title: body.title.trim(),
       parent_id: parentId,
       sort: typeof body.sort === 'number' ? body.sort : 0,
+      ...(isPrivate && { owner_id: user.id, allowed_users: acl.allowed_users ?? [] }),
     })
-    return HttpResponse.json(updateFolder(created, acl), { status: 201 })
+    return HttpResponse.json(isPrivate ? created : updateFolder(created, acl), { status: 201 })
   }),
 
   http.patch('/api/folders/:folderId', async ({ request, params }) => {

@@ -6,6 +6,7 @@ import {
   findFolder,
   folderAccessChange,
   folderAccessLabel,
+  privateRootOf,
   folderRows,
   folderSummary,
   foldersTo,
@@ -192,4 +193,27 @@ it('folderAccessChange: 바뀐 칸만, 전원이면 사람 지정을 비운다',
     min_role: 'member',
     allowed_users: [],
   })
+})
+
+it('개인 폴더: 주인과 고른 사람으로 설명하고, 볼 사람만 바꾼다', () => {
+  const mine = { ...folder('p', null, '내 것'), owner_id: 'u-me' }
+  expect(folderAccessLabel(mine)).toBe('열람: 주인만')
+  expect(folderAccessLabel({ ...mine, allowed_users: ['u1', 'u2'] })).toBe(
+    '열람: 주인 + 지정한 2명',
+  )
+  // 등급 폴더와 달리 「전원」이어도 고른 사람을 비우지 않는다. 개인 폴더는 등급이 늘 전원이다.
+  expect(folderAccessChange(mine, 'member', ['u2', 'u1'])).toEqual({ allowed_users: ['u1', 'u2'] })
+  expect(folderAccessChange({ ...mine, allowed_users: ['u1'] }, 'member', ['u1'])).toBeNull()
+  expect(folderAccessChange({ ...mine, allowed_users: ['u1'] }, 'member', [])).toEqual({
+    allowed_users: [],
+  })
+})
+
+it('privateRootOf: 개인 폴더와 그 아래에서만 그 최상위를 준다', () => {
+  const mine = { ...folder('p', null, '내 것'), owner_id: 'u-me' }
+  const folders = [mine, folder('p1', 'p', '하위'), folder('p2', 'p1', '더 아래'), folder('a', null, '공용')]
+  expect(privateRootOf(folders, 'p')).toBe(mine)
+  expect(privateRootOf(folders, 'p2')).toBe(mine)
+  expect(privateRootOf(folders, 'a')).toBeNull()
+  expect(privateRootOf(folders, 'none')).toBeNull()
 })
