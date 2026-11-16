@@ -32,11 +32,12 @@ export const WEEK_STARTS_ON = 0
 const SHOW_KEY = 'zenith.calendarShow'
 
 /**
- * 범례 토글 상태. 처음엔 개인만 켠다(사용자 결정). 사이드바 구획 접기처럼 브라우저에 남긴다. 홈 카드는
+ * 범례 토글 상태. 처음엔 둘 다 켠다(2026-11-16 사용자 결정: 동료 일정이 보여야 한다. 그 전에는 개인만 켰다).
+ * 한 번이라도 직접 누른 사람은 그 값이 남는다. 사이드바 구획 접기처럼 브라우저에 남긴다. 홈 카드는
  * 홈에 들어올 때마다 다시 그려져서, 컴포넌트 상태만으로는 켜 둔 동료가 매번 꺼진다.
  */
 function readShow(): Record<CalendarGroup, boolean> {
-  const show = { personal: true, colleague: false }
+  const show = { personal: true, colleague: true }
   try {
     const raw: unknown = JSON.parse(localStorage.getItem(SHOW_KEY) ?? 'null')
     if (raw && typeof raw === 'object') {
