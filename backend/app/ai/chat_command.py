@@ -1,6 +1,7 @@
 """채팅창 `/ai` 커맨드(README 52, 두 번째 계획 C) — 채널·DM 에 `/ai 질문` 을 보내면 시스템 계정 「AI 어시스턴트」가
-그 채널에 답 메시지를 단다. **그 메시지와 그 메시지의 첨부만** 보고 채널 대화는 읽지 않는다(10-14 사용자 결정 —
-채팅을 AI 에 넣지 않는다는 09-30 결정은 그대로). 근거는 규정 전문·검색 도구, 첨부는 51 의 추출기로 읽는다.
+그 채널에 답 메시지를 단다. **그 메시지와 그 메시지의 첨부, 그리고 같은 방에서 앞서 오간 `/ai` 질문과 봇의 답**만
+본다(`_history` — 2026-11-16 사용자 요청 「이전 대화 맥락을 못 읽는다」, README 71). 사람끼리 나눈 보통 대화는 여전히
+읽지 않는다(채팅을 AI 에 넣지 않는다는 09-30 결정). 근거는 규정 전문·검색 도구, 첨부는 51 의 추출기로 읽는다.
 
 소켓 핸들러는 사용자 메시지를 저장·방송한 뒤 `spawn()` 으로 백그라운드 태스크를 띄우고 바로 돌아간다. 태스크는
 자기 세션(`session_scope`)으로 돈다 — worker 1개 전제(yjs·purge 와 같다).
@@ -15,7 +16,7 @@ import time
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import select, update
+from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -36,6 +37,11 @@ AI_EMAIL = (
 AI_NAME = "AI 어시스턴트"
 MAX_COMMAND_ATTACHMENTS = 3
 REPLY_TIMEOUT_S = 120.0
+HELP_MESSAGE = "질문을 적어 주세요. 예: `/ai 연차는 며칠이야`"
+FAIL_MESSAGE = "AI 답변을 만들지 못했습니다. 잠시 후 다시 시도해 주세요."
+# 이어 보는 앞 문답의 상한 — 메시지 수와 글자 수(최근 것부터 채운다). 질문마다 다시 보내는 양이라 작게 둔다
+HISTORY_MESSAGES = 12
+HISTORY_CHARS = 12_000
 _tasks: set[asyncio.Task] = set()  # 이벤트 루프는 태스크를 약하게만 잡는다
 _reply_slots = asyncio.Semaphore(4)  # 동시에 도는 답변 수 상한(보안 리뷰) — 넘는 건 줄을 선다
 
@@ -70,8 +76,9 @@ def spawn(
     asker_id: uuid.UUID,
     question: str,
     attachments: list[dict] | None,
+    asked_at: datetime | None = None,
 ) -> None:
-    task = asyncio.create_task(reply(channel_id, asker_id, question, attachments or []))
+    task = asyncio.create_task(reply(channel_id, asker_id, question, attachments or [], asked_at))
     _tasks.add(task)
     task.add_done_callback(_tasks.discard)
 
@@ -180,8 +187,78 @@ async def _attachment_block(
     return "<첨부>\n" + "\n\n".join(lines) + "\n</첨부>" if lines else None
 
 
+_CITE_RE = re.compile(r"\[\[\d+\]\]")
+
+
+async def _history(
+    db: AsyncSession, channel_id: uuid.UUID, bot_id: uuid.UUID, before: datetime | None
+) -> list[dict[str, str]]:
+    """같은 방에서 이 질문보다 먼저 오간 `/ai` 질문과 봇의 답을 대화 턴으로(오래된 것부터). 사람끼리의 보통 대화는
+    넣지 않는다 — 이미 AI 에게 보낸 글과 AI 가 그 방에 단 글뿐이라 새로 사내망 밖으로 나가는 종류가 없다.
+    답의 각주 표식·「근거:」 줄은 뗀다(번호가 이번 답의 근거 번호와 섞인다). 안내·실패 문구는 답이 아니라 뺀다.
+    편집된 질문은 뺀다 — 봇이 답한 글이 아니고, 편집은 감사에도 답에도 흔적이 없어 남의 다음 질문에 지시를 심는
+    길이 된다(보안 리뷰). 실패 문구로 끝난 질문도 짝째 뺀다(이번 질문에 합쳐져 두 질문에 답하지 않게).
+    ponytail: 앞 질문의 첨부는 다시 읽지 않는다 — 첨부 내용은 그때의 답에 녹아 있는 만큼만 이어진다.
+    ponytail: `/ai` 가 드문 큰 방은 12개를 채울 때까지 그 방 메시지를 최신부터 다 읽는다 — 느려지면 기간 하한을 둔다."""
+    if before is None:
+        return []
+    rows = (
+        await db.execute(
+            select(Message.author_id, Message.body)
+            .where(
+                Message.channel_id == channel_id,
+                Message.created_at < before,
+                or_(
+                    and_(Message.author_id == bot_id, Message.body != HELP_MESSAGE),
+                    and_(
+                        func.ltrim(Message.body).like(f"{PREFIX} %"),
+                        Message.edited_at.is_(None),
+                    ),
+                ),
+            )
+            .order_by(Message.created_at.desc(), Message.id.desc())
+            .limit(HISTORY_MESSAGES)
+        )
+    ).all()
+    turns: list[tuple[str, str]] = []
+    used = 0
+    failed = False  # 바로 뒤(더 최근)에 실패 문구를 봤다 — 그 질문은 답을 못 받았으니 같이 뺀다
+    for author_id, body in rows:  # 최근 것부터 — 한도를 넘으면 오래된 쪽을 버린다
+        if author_id == bot_id:
+            failed = body == FAIL_MESSAGE
+            if failed:
+                continue
+            # 서버가 붙인 「근거:」 줄은 늘 마지막이다 — 본문에 같은 글귀가 있어도 거기서 자르지 않는다
+            role, text = "assistant", _CITE_RE.sub("", body.rsplit("\n\n근거: ", 1)[0]).strip()
+        else:
+            skip, failed = failed, False
+            role, text = "user", "" if skip else parse(body) or ""
+        if not text:
+            continue
+        used += len(text)
+        if used > HISTORY_CHARS:
+            break
+        turns.append((role, text))
+    return _alternate(reversed(turns))
+
+
+def _alternate(turns) -> list[dict[str, str]]:
+    """공급자는 user 로 시작해 역할이 번갈아 오는 대화만 받는다 — 같은 역할이 이어지면 합치고 맨 앞의 답은 버린다."""
+    out: list[dict[str, str]] = []
+    for role, text in turns:
+        if out and out[-1]["role"] == role:
+            out[-1]["content"] += "\n\n" + text
+        elif out or role == "user":
+            out.append({"role": role, "content": text})
+    return out
+
+
 async def reply(
-    channel_id: uuid.UUID, asker_id: uuid.UUID, question: str, attachments: list[dict]
+    channel_id: uuid.UUID,
+    asker_id: uuid.UUID,
+    question: str,
+    attachments: list[dict],
+    asked_at: datetime | None = None,
 ) -> None:
     """답을 만들어 채널에 AI 메시지로 단다. 실패하면 짧은 실패 메시지(원인은 로그에만)."""
     from app.routers import ai as ai_router
@@ -196,20 +273,24 @@ async def reply(
             if asker is None:
                 return
             if not question and not attachments:
-                await post_message(
-                    db, channel_id, bot, "질문을 적어 주세요. 예: `/ai 연차는 며칠이야`"
-                )
+                await post_message(db, channel_id, bot, HELP_MESSAGE)
                 return
             sources: list = []
             rules_block = await ai_router._rules_sources(
                 db, bot, sources
             )  # 문서 판정은 봇(전원 열람만, README 57)
+            history = await _history(db, channel_id, bot.id, asked_at)
             audit.record(
                 db,
                 "ai.chat_command",
                 actor_id=asker_id,
                 target_id=channel_id,
-                detail={"chars": len(question), "attachments": len(attachments or [])},
+                detail={
+                    "chars": len(question),
+                    # 같이 나가는 앞 문답의 양 — 반출량을 추적할 수 있게(보안 리뷰)
+                    "history_chars": sum(len(t["content"]) for t in history),
+                    "attachments": len(attachments or []),
+                },
             )
             await (
                 db.commit()
@@ -231,11 +312,15 @@ async def reply(
             blocks.append(
                 {
                     "type": "text",
-                    "text": "이 질문은 채팅방에서 /ai 커맨드로 들어왔다. 채팅방의 다른 대화는 모른다 — 질문과 첨부만으로 답한다. "
+                    "text": "이 질문은 채팅방에서 /ai 커맨드로 들어왔다. 앞의 대화는 이 방에서 먼저 오간 /ai 질문과 그 답이다 — "
+                    "이어지는 질문이면 참고한다. 채팅방의 다른 대화는 모른다 — 그것과 질문·첨부만으로 답한다. "
                     "답은 채팅 메시지 한 개 분량으로 간결하게.",
                 }
             )
-            messages: list = [{"role": "user", "content": question or "첨부 파일을 요약해 줘"}]
+            messages: list = _alternate(
+                [(t["role"], t["content"]) for t in history]
+                + [("user", question or "첨부 파일을 요약해 줘")]
+            )
             parts: list[str] = []
             last_round: list[str] = []
 
@@ -287,9 +372,7 @@ async def reply(
         try:
             async with session_scope() as db:
                 bot = await ai_user(db)
-                await post_message(
-                    db, channel_id, bot, "AI 답변을 만들지 못했습니다. 잠시 후 다시 시도해 주세요."
-                )
+                await post_message(db, channel_id, bot, FAIL_MESSAGE)
         except Exception:  # noqa: BLE001
             log.exception("AI 채팅 커맨드 실패 메시지도 못 보냄 channel=%s", channel_id)
     finally:
