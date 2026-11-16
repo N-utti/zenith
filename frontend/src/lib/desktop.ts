@@ -103,33 +103,32 @@ export function installExternalLinkHandler(): () => void {
 }
 
 /**
- * 새 버전이 있으면 설치할지 묻고, 고르면 셸이 받아서 설치한다. 앱이 닫혔다가 다시 뜬다.
+ * 서버에 새 버전이 있으면 그 번호를, 없으면 null 을 돌려준다. 묻고 설치하는 화면은 `UpdateCard` 가 한다.
  *
- * 묻는 이유: 설치에는 관리자 확인(UAC)이 필요하다. 권한이 없는 사람이 묻지도 않고 설치로
- * 넘어가면 앱이 꺼진 채로 남고, 켤 때마다 되풀이된다. 거절하면 지금 버전으로 계속 쓴다.
- *
- * 서버 주소를 모르면(개발 모드) 확인할 곳이 없으니 건너뛴다. 서버가 매니페스트를 아직
- * 안 내놓았거나 사내망 밖이면 콘솔에만 남긴다. 다음에 켤 때 다시 본다.
+ * 서버 주소를 모르면(개발 모드, 브라우저) 확인할 곳이 없으니 null 이다. 서버가 매니페스트를 아직
+ * 안 내놓았거나 사내망 밖이면 콘솔에만 남기고 null 이다. 다음 확인 때 다시 본다.
  */
-export function checkForUpdate(): void {
+export async function findUpdate(): Promise<string | null> {
   const tauri = typeof window !== 'undefined' ? window.__TAURI__ : undefined
   const origin = serverOrigin()
-  if (!tauri || !origin) return
-
-  void (async () => {
+  if (!tauri || !origin) return null
+  try {
     const version = await tauri.core.invoke('check_update', { origin })
-    if (typeof version !== 'string') return
-    // PC 켤 때 트레이로만 뜬 경우 창이 숨어 있다. 안 보이는 창에 물으면 답할 사람이 없고 그동안 페이지가 멈춘다.
-    if (!document.hasFocus())
-      await new Promise((resolve) => window.addEventListener('focus', resolve, { once: true }))
-    if (
-      !window.confirm(
-        `새 버전 ${version} 이 있습니다. 지금 설치할까요?\n앱이 닫혔다가 다시 열립니다.`,
-      )
-    )
-      return
-    await tauri.core.invoke('install_update')
-  })().catch((error: unknown) => console.warn('업데이트 확인 실패', error))
+    return typeof version === 'string' ? version : null
+  } catch (error) {
+    console.warn('업데이트 확인 실패', error)
+    return null
+  }
+}
+
+/**
+ * `findUpdate` 가 찾아 둔 새 버전을 셸이 받아서 설치한다. 앱이 닫혔다가 다시 뜬다.
+ *
+ * 사용자가 고른 뒤에만 부른다. 설치에는 관리자 확인(UAC)이 필요하다. 권한이 없는 사람이 묻지도 않고
+ * 설치로 넘어가면 앱이 꺼진 채로 남고, 켤 때마다 되풀이된다.
+ */
+export async function installUpdate(): Promise<void> {
+  await window.__TAURI__?.core.invoke('install_update')
 }
 
 export interface DesktopNotification {

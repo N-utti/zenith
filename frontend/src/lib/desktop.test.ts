@@ -1,7 +1,9 @@
 import { afterEach, expect, test, vi } from 'vitest'
 import {
   clearNotifications,
+  findUpdate,
   installExternalLinkHandler,
+  installUpdate,
   openExternal,
   restrictImageSources,
 } from './desktop'
@@ -93,4 +95,35 @@ test('바깥 주소 열기: 데스크톱 앱은 기본 브라우저로, 브라�
     with: null,
   })
   expect(open).not.toHaveBeenCalled()
+})
+
+test('새 버전이 있으면 번호를, 없거나 확인하지 못하면 null 을 돌려준다', async () => {
+  server.origin = 'https://zenith.example'
+  expect(await findUpdate()).toBeNull() // 브라우저: 셸이 없다
+
+  const invoke = vi.fn<(cmd: string, args?: Record<string, unknown>) => Promise<unknown>>()
+  window.__TAURI__ = { core: { invoke } }
+  invoke.mockResolvedValueOnce('0.1.1')
+  expect(await findUpdate()).toBe('0.1.1')
+  expect(invoke).toHaveBeenCalledWith('check_update', { origin: 'https://zenith.example' })
+
+  invoke.mockResolvedValueOnce(null) // 이미 최신
+  expect(await findUpdate()).toBeNull()
+
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+  invoke.mockRejectedValueOnce(new Error('매니페스트 없음'))
+  expect(await findUpdate()).toBeNull()
+  expect(warn).toHaveBeenCalled()
+
+  server.origin = '' // 개발 모드: 서버 주소를 모른다
+  invoke.mockClear()
+  expect(await findUpdate()).toBeNull()
+  expect(invoke).not.toHaveBeenCalled()
+})
+
+test('설치는 셸에 맡기고, 실패는 부른 쪽이 알게 던진다', async () => {
+  const invoke = vi.fn(() => Promise.reject(new Error('받지 못함')))
+  window.__TAURI__ = { core: { invoke } }
+  await expect(installUpdate()).rejects.toThrow('받지 못함')
+  expect(invoke).toHaveBeenCalledWith('install_update')
 })
