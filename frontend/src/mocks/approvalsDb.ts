@@ -399,7 +399,7 @@ function validate(user: User, input: DraftInput, docId?: string): Failure | null
     if (new Set(input.references).size !== input.references.length) {
       return fail('참조자가 겹칩니다.', 422, 'VALIDATION')
     }
-    if (input.references.some((id) => !userById(id))) {
+    if (input.references.some((id) => !userById(id) || findAccount(id)?.active === false)) {
       return fail('없는 사람을 참조로 걸 수 없습니다.', 422, 'VALIDATION')
     }
   }
