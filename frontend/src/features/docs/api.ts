@@ -2,7 +2,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, ApiError } from '@/lib/api'
 import { useWithoutPending } from '@/lib/deferDelete'
 import { queryClient } from '@/lib/queryClient'
-import { homeKeys } from '@/features/home/keys'
 import { meQueryKey } from '@/features/auth/queries'
 import type { TreeItem } from './tree'
 import type {
@@ -93,7 +92,7 @@ export function useDeleteFolder() {
 /**
  * 문서·폴더를 다른 폴더로 옮긴다. `to` 가 null 이면 최상위인데 폴더만 된다(문서는 422).
  *
- * 서버는 문서 이동도 수정으로 친다. 수정 시각이 지금이 되어 "이어서 작업" 맨 위로 온다.
+ * 서버는 문서 이동도 수정으로 친다.
  */
 export function useMoveNode() {
   const qc = useQueryClient()
@@ -105,7 +104,6 @@ export function useMoveNode() {
       }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: docKeys.tree })
-      void qc.invalidateQueries({ queryKey: homeKeys.home })
       // 검색 결과는 문서가 든 폴더 이름을 같이 보여 준다.
       void qc.invalidateQueries({ queryKey: ['search'] })
     },
@@ -170,15 +168,13 @@ export function useTouchDoc(docId: string) {
     onSuccess: (doc) => {
       qc.setQueryData(docKeys.detail(docId), doc)
       void qc.invalidateQueries({ queryKey: docKeys.tree })
-      // 홈의 "이어서 작업" 도 같은 문서를 본다.
-      void qc.invalidateQueries({ queryKey: homeKeys.home })
     },
   })
 }
 
 /**
  * AI 가 이 문서를 근거로 써도 되는지를 켜고 끈다. 로그인한 누구나 바꿀 수 있고 서버가 감사에 남긴다.
- * 내용 변경이 아니라서 서버가 수정 시각을 올리지 않는다. 홈의 "이어서 작업" 은 그대로다.
+ * 내용 변경이 아니라서 서버가 수정 시각을 올리지 않는다.
  */
 export function useSetAiSource(docId: string) {
   const qc = useQueryClient()
@@ -231,7 +227,6 @@ export function useRenameDoc() {
     // 릴레이가 닫히며 제목을 스스로 맞춘다(`yjs.py` 의 `save_room`). 트리가 옛 이름으로 남으면 안 된다.
     onSettled: () => {
       void qc.invalidateQueries({ queryKey: docKeys.tree })
-      void qc.invalidateQueries({ queryKey: homeKeys.home })
     },
   })
 }
@@ -247,8 +242,6 @@ function invalidateDocLists(qc: ReturnType<typeof useQueryClient>) {
   // 휴지통은 살아 있는 목록의 여집합이다. 한쪽이 바뀌면 다른 쪽도 바뀐다.
   void qc.invalidateQueries({ queryKey: docKeys.trash })
   void qc.invalidateQueries({ queryKey: ['search'] })
-  // 홈의 "이어서 작업" 도 같은 문서를 본다.
-  void qc.invalidateQueries({ queryKey: homeKeys.home })
 }
 
 /** 휴지통으로 보낸다. 30일 뒤 서버가 영구 삭제한다. 그 전에는 휴지통 화면에서 되돌릴 수 있다. */
