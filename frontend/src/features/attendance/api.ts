@@ -5,6 +5,7 @@ import { downloadBytes } from '@/lib/download'
 import { buildXlsx } from '@/lib/xlsx'
 import { REPORT_FIXED_COLS, reportRows } from './report'
 import { toISODate } from '@/lib/datetime'
+import type { Schema } from '@/types'
 import type {
   Arrangement,
   ArrangementInput,
@@ -411,5 +412,53 @@ export function useRemoveHoliday() {
     mutationFn: (date: string) =>
       api<void>(`/admin/holidays/${encodeURIComponent(date)}`, { method: 'DELETE' }),
     onSuccess: refetch,
+  })
+}
+
+// ── 근태 담당자·대표, 결근 처리 (백엔드 README 76) ─────────────────────────
+
+/** 근태 담당자와 대표. 지정 전이면 `null`. 누구나 읽는다(신청이 누구에게 가는지 보인다). */
+export type AttendanceRoles = Schema<'RolesOut'>
+
+const rolesKey = ['attendance', 'roles']
+
+export function useAttendanceRoles() {
+  return useQuery({
+    queryKey: rolesKey,
+    queryFn: () => api<AttendanceRoles>('/attendance/roles'),
+  })
+}
+
+/** 지정은 임원만(그 외 403). `null` 은 해제다. */
+export function useSetAttendanceRoles() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: Schema<'RolesIn'>) =>
+      api<AttendanceRoles>('/attendance/roles', { method: 'PUT', body: JSON.stringify(input) }),
+    onSuccess: (roles) => qc.setQueryData(rolesKey, roles),
+  })
+}
+
+/** 결근 처리. 근태 담당자와 임원만(그 외 403). 다시 보내면 메모만 바뀐다. */
+export function useSetAbsence() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: Schema<'AbsenceIn'>) =>
+      api<Schema<'AbsenceOut'>>('/attendance/absences', {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['attendance'] }),
+  })
+}
+
+export function useClearAbsence() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ user_id, work_date }: { user_id: string; work_date: string }) =>
+      api<void>(`/attendance/absences?user_id=${user_id}&work_date=${work_date}`, {
+        method: 'DELETE',
+      }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['attendance'] }),
   })
 }

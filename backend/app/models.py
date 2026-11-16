@@ -130,6 +130,10 @@ class Workspace(Base):
 
     id: Mapped[uuid.UUID] = uuid_pk()
     name: Mapped[str] = mapped_column(Text, nullable=False)
+    # 근태 담당자와 대표(03 에 없던 칸, 2026-11-16 — README 76). 임원이 지정한다. 근태 신청의 결재가 이 순서로 가고,
+    # 담당자는 전사 근태 관리(조회·결근 확정·연차·마감·리포트)를 임원처럼 한다. NULL 이면 예전 규칙 그대로
+    attendance_manager_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
+    ceo_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
 
 
 class Folder(Base):
@@ -854,6 +858,21 @@ class AttCorrection(Base):
     approval_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("approval_documents.id"), nullable=False, unique=True
     )
+    created_at: Mapped[datetime] = created_at_col()
+
+
+class AttAbsence(Base):
+    """결근 확정(03 에 없던 표, 2026-11-16 — README 76). 근태 담당자·임원이 사람과 날짜를 골라 적는다.
+    정상 근무로 잡힌 날에만 통한다 — 휴가·예외 근무가 승인된 날은 그쪽이 이기고, 본인의 승인된 정정이 마지막에 덮는다."""
+
+    __tablename__ = "att_absences"
+    __table_args__ = (UniqueConstraint("user_id", "work_date", name="uq_att_absences_user_date"),)
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    work_date: Mapped[date] = mapped_column(Date, nullable=False)
+    note: Mapped[str | None] = mapped_column(Text)
+    set_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
     created_at: Mapped[datetime] = created_at_col()
 
 

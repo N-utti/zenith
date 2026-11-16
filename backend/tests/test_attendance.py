@@ -6,9 +6,9 @@ from types import SimpleNamespace
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import select
+from sqlalchemy import func, select
 
-from app.models import AuditEvent, Holiday, Team, User
+from app.models import AuditEvent, Holiday, Team, User, Workspace
 from app.routers.attendance import overtime_minutes
 
 from .conftest import PW_HASH, Users, csrf, login
@@ -609,3 +609,146 @@ async def test_report_keeps_inactive_with_rows(c, users: Users, app_db) -> None:
     assert "김수진" in text and "가나다" not in text
     grid = (await c.exec.get("/api/attendance/team?month=2030-03")).json()["items"]
     assert "김수진" in [r["user"]["name"] for r in grid]
+
+
+async def test_attendance_manager_and_ceo(c, users: Users, app_db, make_client) -> None:
+    """README 76: 임원이 근태 담당자·대표를 지정한다. 근태 신청은 담당자 → 대표 순으로 올라가고, 담당자는 전사 근태를
+    임원처럼 관리한다(조회·연차·리포트·마감·결근 확정)."""
+    app_db.add(Workspace(name="제니스"))
+    manager = User(name="이영희", email="yh@zenith.co.kr", pw_hash=PW_HASH, role="member")
+    app_db.add(manager)
+    await app_db.flush()
+    assert (await c.member.get("/api/attendance/roles")).json() == {"manager": None, "ceo": None}
+
+    # 지정은 임원만. 대표는 임원 중에서, 둘 다 활성 계정이어야 한다
+    roles = {"manager_id": str(manager.id), "ceo_id": str(users.exec.id)}
+    r = await c.lead.put("/api/attendance/roles", json=roles, headers=csrf(c.lead))
+    assert r.status_code == 403
+    for bad in (
+        {"manager_id": str(manager.id), "ceo_id": str(users.lead.id)},  # 대표가 임원이 아니다
+        {"manager_id": "00000000-0000-0000-0000-000000000000", "ceo_id": None},
+        {"manager_id": str(manager.id)},  # 칸이 빠졌다
+    ):
+        r = await c.exec.put("/api/attendance/roles", json=bad, headers=csrf(c.exec))
+        assert r.status_code == 422, bad
+    r = await c.exec.put("/api/attendance/roles", json=roles, headers=csrf(c.exec))
+    assert r.status_code == 200, r.text
+    assert (r.json()["manager"]["name"], r.json()["ceo"]["name"]) == ("이영희", "최재호")
+    assert (await c.member.get("/api/attendance/roles")).json() == r.json()
+    ev = await app_db.scalar(select(AuditEvent).where(AuditEvent.kind == "attendance.roles_set"))
+    assert ev is not None and ev.actor_id == users.exec.id
+
+    async with _as(make_client, "yh@zenith.co.kr") as yh:
+        # 근태 신청의 결재선: 담당자 → 대표. 팀장은 건너뛴다
+        r = await post(c.member, "/api/leaves", {"type_code": "annual", "start_date": "2030-03-04"})
+        assert r.status_code == 201, r.text
+        assert (await c.lead.get("/api/approvals?box=inbox")).json()["items"] == []
+        doc = await _approve(c.member, yh, "[휴가] 연차")
+        assert [s["approver"]["name"] for s in doc["steps"]] == ["이영희", "최재호"]
+        assert doc["status"] == "pending" and doc["waiting_on"]["name"] == "최재호"
+        doc = await _approve(c.member, c.exec, "[휴가] 연차")
+        assert doc["status"] == "approved"
+        # 담당자 본인의 신청은 대표에게 바로 간다. 일반 기안은 이 규칙과 무관하다(팀장 → 임원)
+        r = await post(yh, "/api/leaves", {"type_code": "annual", "start_date": "2030-03-05"})
+        assert r.status_code == 201
+        own = (await c.exec.get("/api/approvals?box=inbox")).json()["items"]
+        assert [i["drafter"]["name"] for i in own] == ["이영희"]
+
+        # 전사 근태 관리: 담당자는 임원처럼, 팀장·사원은 여전히 403
+        for path in (
+            "/api/attendance/team?month=2025-03",
+            "/api/leaves/balances",
+            "/api/attendance/report?month=2025-03",
+        ):
+            assert (await yh.get(path)).status_code == 200, path
+            assert (await c.lead.get(path)).status_code == 403, path
+
+        # 결근 확정: 정상 근무로 잡힌 지난 근무일만
+        day = {"user_id": str(users.member.id), "work_date": "2025-03-04"}
+        r = await post(c.lead, "/api/attendance/absences", day)
+        assert r.status_code == 403
+        for bad in (
+            {**day, "work_date": "2025-03-08"},  # 토요일
+            {**day, "work_date": "2999-01-04"},  # 아직 오지 않은 날
+            {**day, "user_id": "00000000-0000-0000-0000-000000000000"},
+            {**day, "extra": 1},
+        ):
+            r = await post(yh, "/api/attendance/absences", bad)
+            assert r.status_code == 422, bad
+        r = await post(yh, "/api/attendance/absences", {**day, "note": "무단결근"})
+        assert r.status_code == 201, r.text
+
+        async def march(client) -> dict:
+            month = (await client.get("/api/attendance/me?month=2025-03")).json()
+            return {d["work_date"]: d for d in month["days"]} | {"summary": month["summary"]}
+
+        mine = await march(c.member)
+        assert (mine["2025-03-04"]["status"], mine["2025-03-04"]["worked_days"]) == ("absent", 0)
+        assert mine["2025-03-04"]["note"] == "무단결근" and mine["2025-03-05"]["status"] == "normal"
+        assert mine["summary"]["worked_days"] == 20  # 21 근무일에서 하루 빠진다
+        grid = (await yh.get("/api/attendance/team?month=2025-03")).json()["items"]
+        row = next(g for g in grid if g["user"]["name"] == "김수진")
+        assert {d["work_date"]: d["status"] for d in row["days"]}["2025-03-04"] == "absent"
+        # 다시 보내면 메모만 바뀐다
+        r = await post(yh, "/api/attendance/absences", {**day, "note": "연락 두절"})
+        assert r.status_code == 201 and r.json()["note"] == "연락 두절"
+        assert (
+            await app_db.scalar(
+                select(func.count()).select_from(AuditEvent).where(
+                    AuditEvent.kind == "attendance.absent_set"
+                )
+            )
+        ) == 2
+
+        # 마감: 담당자도 마감·해제한다. 마감된 달의 결근은 못 바꾼다
+        r = await post(yh, "/api/attendance/close", {"month": "2025-03"})
+        assert r.status_code == 200, r.text
+        r = await post(yh, "/api/attendance/absences", {**day, "work_date": "2025-03-06"})
+        assert (r.status_code, r.json()["code"]) == (409, "MONTH_CLOSED")
+        q = "/api/attendance/absences?user_id={user_id}&work_date={work_date}".format(**day)
+        assert (await yh.delete(q, headers=csrf(yh))).status_code == 409
+        r = await post(yh, "/api/attendance/reopen", {"month": "2025-03", "reason": "결근 정정"})
+        assert r.status_code == 200, r.text
+        # 취소: 없던 날은 404, 지우면 다시 정상
+        assert (await c.lead.delete(q, headers=csrf(c.lead))).status_code == 403
+        assert (await yh.delete(q, headers=csrf(yh))).status_code == 204
+        assert (await yh.delete(q, headers=csrf(yh))).status_code == 404
+        assert (await march(c.member))["2025-03-04"]["status"] == "normal"
+
+    # 해제하면 예전 규칙으로 돌아간다 — 근태 신청은 팀장에게, 전 담당자는 전사 근태를 못 본다
+    none = {"manager_id": None, "ceo_id": None}
+    assert (await c.exec.put("/api/attendance/roles", json=none, headers=csrf(c.exec))).status_code == 200
+    r = await post(c.member, "/api/leaves", {"type_code": "annual", "start_date": "2030-03-06"})
+    assert r.status_code == 201
+    assert len((await c.lead.get("/api/approvals?box=inbox")).json()["items"]) == 1
+    async with _as(make_client, "yh@zenith.co.kr") as yh:
+        assert (await yh.get("/api/attendance/team?month=2025-03")).status_code == 403
+
+
+async def test_absence_yields_to_leave_and_correction(c, users: Users, app_db) -> None:
+    """결근은 정상 근무로 잡힌 날에만 통한다. 휴가가 승인된 날은 결근으로 못 바꾸고, 본인의 승인된 정정이 마지막에 덮는다."""
+    r = await post(c.member, "/api/leaves", {"type_code": "annual", "start_date": "2025-04-01"})
+    assert r.status_code == 201
+    await _approve(c.member, c.lead, "[휴가] 연차")
+    day = {"user_id": str(users.member.id), "work_date": "2025-04-01"}
+    r = await post(c.exec, "/api/attendance/absences", day)
+    assert r.status_code == 422  # 휴가인 날
+    r = await post(c.exec, "/api/attendance/absences", {**day, "work_date": "2025-04-02"})
+    assert r.status_code == 201
+    # 본인이 정정 신청으로 바로잡는다 — 승인되면 정상으로 돌아온다
+    r = await post(
+        c.member,
+        "/api/attendance/corrections",
+        {"work_date": "2025-04-02", "after": {"status": "normal"}, "reason": "출근했습니다"},
+    )
+    assert r.status_code == 201, r.text
+    await _approve(c.member, c.lead, "[근태 정정]")
+    month = (await c.member.get("/api/attendance/me?month=2025-04")).json()
+    assert {d["work_date"]: d["status"] for d in month["days"]}["2025-04-02"] == "normal"
+    # 정정 뒤에 다시 확정한 결근은 묻히지 않는다 — 늦게 적힌 쪽이 이긴다(리뷰)
+    q = f"/api/attendance/absences?user_id={users.member.id}&work_date=2025-04-02"
+    assert (await c.exec.delete(q, headers=csrf(c.exec))).status_code == 204
+    r = await post(c.exec, "/api/attendance/absences", {**day, "work_date": "2025-04-02"})
+    assert r.status_code == 201
+    month = (await c.member.get("/api/attendance/me?month=2025-04")).json()
+    assert {d["work_date"]: d["status"] for d in month["days"]}["2025-04-02"] == "absent"

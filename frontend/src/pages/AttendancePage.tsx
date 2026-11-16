@@ -1,6 +1,8 @@
 import { useSearchParams } from 'react-router'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { Tabs } from '@/components/ui/Tabs'
+import { useAttendanceRoles } from '@/features/attendance/api'
+import { AttendanceRolesSection } from '@/features/attendance/AttendanceRolesSection'
 import { CompanyAttendanceSection } from '@/features/attendance/CompanyAttendanceSection'
 import { ExceptionSection } from '@/features/attendance/ExceptionSection'
 import { HolidaySection } from '@/features/attendance/HolidaySection'
@@ -32,9 +34,17 @@ const EXEC_TABS = [
   { key: 'settings', label: '근태 설정' },
 ]
 
+/**
+ * 근태 담당자(백엔드 README 76)는 전사 근태·연차 관리·근태 관리를 임원처럼 한다. 근태 설정(회사 휴일, 담당자 지정)은
+ * 임원만이라 뺀다. 숨김은 편의이고 차단은 서버 403.
+ */
+const MANAGER_TABS = EXEC_TABS.filter((tab) => tab.key !== 'settings')
+
 export function AttendancePage() {
   const user = useCurrentUser()
   const isExec = ROLE_RANK[user.role] >= ROLE_RANK.exec
+  const roles = useAttendanceRoles()
+  const isManager = roles.data?.manager?.id === user.id
   // 탭은 URL 에 둔다(`?tab=leave`). 알림에서 휴가 탭으로 바로 들어오고, 새로고침해도 그 자리다.
   const [params, setParams] = useSearchParams()
   const tab = params.get('tab') ?? 'me'
@@ -43,7 +53,7 @@ export function AttendancePage() {
     <>
       <PageHeader title="근태" />
       <Tabs
-        items={isExec ? EXEC_TABS : TABS}
+        items={isExec ? EXEC_TABS : isManager ? MANAGER_TABS : TABS}
         value={tab}
         // 다른 파라미터는 남기고 `tab` 만 바꾼다. 화살표로 탭을 옮길 때마다 히스토리가 쌓이지 않게 replace.
         onChange={(key) =>
@@ -67,7 +77,10 @@ export function AttendancePage() {
           ) : key === 'admin' ? (
             <MonthClosingSection />
           ) : key === 'settings' ? (
-            <HolidaySection />
+            <div className="space-y-6">
+              <AttendanceRolesSection />
+              <HolidaySection />
+            </div>
           ) : key === 'exception' ? (
             <ExceptionSection />
           ) : (

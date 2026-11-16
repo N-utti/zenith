@@ -4230,7 +4230,7 @@
         "tags": [
           "attendance"
         ],
-        "summary": "전 직원의 올해 연차 잔여(연차 관리) — exec, 그 밖 403",
+        "summary": "전 직원의 올해 연차 잔여(연차 관리) — exec·근태 담당자, 그 밖 403",
         "operationId": "all_balances_api_leaves_balances_get",
         "responses": {
           "200": {
@@ -4422,7 +4422,7 @@
         "tags": [
           "attendance"
         ],
-        "summary": "?month=&team_id= 팀원 × 일자 그리드 — 팀장(teams.lead_id)·exec 만, team_id 없으면 전사(exec). 그 밖 403",
+        "summary": "?month=&team_id= 팀원 × 일자 그리드 — 팀장(teams.lead_id)·exec 만, team_id 없으면 전사(exec·근태 담당자). 그 밖 403",
         "operationId": "team_grid_api_attendance_team_get",
         "parameters": [
           {
@@ -4482,7 +4482,7 @@
         "tags": [
           "attendance"
         ],
-        "summary": "?month=&format=csv 월 리포트 (exec) — 사람마다 근무일·휴가일·연장·야간(분). UTF-8 BOM",
+        "summary": "?month=&format=csv 월 리포트 (exec·근태 담당자) — 사람마다 근무일·휴가일·연장·야간(분). UTF-8 BOM",
         "operationId": "report_api_attendance_report_get",
         "parameters": [
           {
@@ -4619,7 +4619,7 @@
         "tags": [
           "attendance"
         ],
-        "summary": "{month} 월 마감 (exec) — 오지 않은 달 422, 이미 마감 409 ALREADY_CLOSED. 감사 attendance.closed",
+        "summary": "{month} 월 마감 (exec·근태 담당자) — 오지 않은 달 422, 이미 마감 409 ALREADY_CLOSED. 감사 attendance.closed",
         "operationId": "close_month_api_attendance_close_post",
         "requestBody": {
           "content": {
@@ -4660,7 +4660,7 @@
         "tags": [
           "attendance"
         ],
-        "summary": "{month, reason} 월 마감 해제 (exec) — 마감 안 된 달 409 NOT_CLOSED, 사유 필수 422. 감사 attendance.reopened",
+        "summary": "{month, reason} 월 마감 해제 (exec·근태 담당자) — 마감 안 된 달 409 NOT_CLOSED, 사유 필수 422. 감사 attendance.reopened",
         "operationId": "reopen_month_api_attendance_reopen_post",
         "requestBody": {
           "content": {
@@ -4682,6 +4682,151 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/attendance/roles": {
+      "get": {
+        "tags": [
+          "attendance"
+        ],
+        "summary": "근태 담당자와 대표 — 로그인하면 누구나(신청이 누구에게 가는지 보인다). 지정 전이면 null (04 밖, README 76)",
+        "operationId": "get_roles_api_attendance_roles_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RolesOut"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "attendance"
+        ],
+        "summary": "{manager_id, ceo_id} 근태 담당자·대표 지정 (exec) — null 은 해제. 담당자는 활성 계정, 대표는 활성 임원(422). 감사 attendance.roles_set",
+        "operationId": "set_roles_api_attendance_roles_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RolesIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RolesOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/attendance/absences": {
+      "post": {
+        "tags": [
+          "attendance"
+        ],
+        "summary": "{user_id, work_date, note?} 결근 확정 (exec·근태 담당자) — 정상 근무로 잡힌 지난·오늘 근무일만(422), 마감된 달 409 MONTH_CLOSED. 다시 보내면 메모만 바꾼다. 감사 attendance.absent_set",
+        "operationId": "set_absence_api_attendance_absences_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AbsenceIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AbsenceOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "attendance"
+        ],
+        "summary": "?user_id=&work_date= 결근 확정 취소 (exec·근태 담당자) — 없으면 404, 마감된 달 409 MONTH_CLOSED. 감사 attendance.absent_cleared",
+        "operationId": "clear_absence_api_attendance_absences_delete",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "User Id"
+            }
+          },
+          {
+            "name": "work_date",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "title": "Work Date"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
           },
           "422": {
             "description": "Validation Error",
@@ -7316,6 +7461,71 @@
   },
   "components": {
     "schemas": {
+      "AbsenceIn": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "User Id"
+          },
+          "work_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Work Date"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "user_id",
+          "work_date"
+        ],
+        "title": "AbsenceIn"
+      },
+      "AbsenceOut": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "User Id"
+          },
+          "work_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Work Date"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "work_date",
+          "note"
+        ],
+        "title": "AbsenceOut"
+      },
       "ActivityIn": {
         "properties": {
           "kind": {
@@ -13664,6 +13874,71 @@
           "version_id"
         ],
         "title": "RestoreIn"
+      },
+      "RolesIn": {
+        "properties": {
+          "manager_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manager Id"
+          },
+          "ceo_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ceo Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "manager_id",
+          "ceo_id"
+        ],
+        "title": "RolesIn"
+      },
+      "RolesOut": {
+        "properties": {
+          "manager": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/app__routers__approvals__Person"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ceo": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/app__routers__approvals__Person"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "manager",
+          "ceo"
+        ],
+        "title": "RolesOut"
       },
       "SessionDetailOut": {
         "properties": {

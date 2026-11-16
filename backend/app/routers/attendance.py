@@ -20,7 +20,7 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
-from sqlalchemy import func, or_, select, union
+from sqlalchemy import delete, func, or_, select, union
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import audit
@@ -29,6 +29,7 @@ from app.deps import current_user, require_role
 from app.errors import ApiError
 from app.models import (
     ApprovalDocument,
+    AttAbsence,
     AttClosing,
     AttCorrection,
     AuditEvent,
@@ -38,12 +39,38 @@ from app.models import (
     Team,
     User,
     WorkArrangement,
+    Workspace,
 )
 from app.routers import approvals
 from app.routers.approvals import Person, today
 
 router = APIRouter(tags=["attendance"], dependencies=[Depends(current_user)])
 require_exec = require_role("exec")
+
+
+async def can_manage(db: AsyncSession, user: User) -> bool:
+    """전사 근태 관리(조회·결근 확정·연차 관리·마감·리포트)를 할 수 있나 — 임원이거나 임원이 지정한 근태 담당자(README 76)."""
+    if user.role == "exec":
+        return True
+    manager = await db.scalar(select(Workspace.attendance_manager_id).limit(1))
+    return manager is not None and manager == user.id
+
+
+async def require_manager(
+    request: Request, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)
+) -> User:
+    if await can_manage(db, user):
+        return user
+    audit.record(
+        db,
+        "acl.denied",
+        request=request,
+        actor_id=user.id,
+        detail={"path": request.url.path, "min_role": "attendance_manager"},
+    )
+    await db.commit()
+    raise ApiError(403, "FORBIDDEN", "근태 담당자나 임원만 할 수 있습니다.")
+
 
 RANGE_MAX_DAYS = 366  # 기간 조회·신청 상한(목과 같다)
 OVERTIME_MAX_MINUTES = 12 * 60  # 연장근로 한 건(하루) 상한
@@ -404,6 +431,35 @@ async def _days(
         for row in await db.scalars(stmt.order_by(model.created_at)):
             by_user[(row.user_id, model)].append(row)
 
+    decided = dict(
+        (
+            await db.execute(
+                select(ApprovalDocument.id, ApprovalDocument.closed_at).where(
+                    ApprovalDocument.id.in_(
+                        [
+                            c.approval_id
+                            for (_, m), rows in by_user.items()
+                            if m is AttCorrection
+                            for c in rows
+                        ]
+                    )
+                )
+            )
+        )
+        .tuples()
+        .all()
+    )
+    absent = {
+        (a.user_id, a.work_date): a
+        for a in await db.scalars(
+            select(AttAbsence).where(
+                AttAbsence.user_id.in_(user_ids),
+                AttAbsence.work_date >= start,
+                AttAbsence.work_date <= end,
+            )
+        )
+    }
+
     out: dict[uuid.UUID, list[DayOut]] = {}
     for uid in user_ids:
         leaves = by_user[(uid, LeaveRequest)]
@@ -448,7 +504,22 @@ async def _days(
                     day.status, day.worked_days = ("half_leave", 0.5) if half else ("leave", 0)
                 elif arr is not None:
                     day.status = arr.kind
+                elif (uid, d) in absent:
+                    # 결근 확정(README 76)은 정상 근무로 잡힌 날에만 — 휴가·예외 근무가 승인된 날은 그쪽이 이긴다.
+                    # 아래의 승인된 정정과는 늦게 적힌 쪽이 이긴다 — 본인이 정정 신청으로 바로잡을 수 있고,
+                    # 정정 뒤에 확정한 결근도 조용히 묻히지 않는다(리뷰)
+                    day.status, day.worked_days = "absent", WORKED["absent"]
+                    day.note = absent[(uid, d)].note
             for c in corrections[d]:  # 승인된 정정이 마지막에 덮는다(늦게 낸 것이 이긴다)
+                gone = absent.get((uid, d))
+                approved_at = decided.get(c.approval_id)
+                if (
+                    day.status == "absent"
+                    and gone is not None
+                    and approved_at is not None
+                    and gone.created_at > approved_at
+                ):
+                    continue  # 이 정정이 승인된 뒤에 확정된 결근이다
                 if c.after.get("status"):
                     day.status = c.after["status"]
                     day.worked_days = WORKED[day.status]
@@ -935,10 +1006,10 @@ async def _staff(
 @router.get(
     "/leaves/balances",
     response_model=Items[LeaveBalanceRow],
-    summary="전 직원의 올해 연차 잔여(연차 관리) — exec, 그 밖 403",
+    summary="전 직원의 올해 연차 잔여(연차 관리) — exec·근태 담당자, 그 밖 403",
 )
 async def all_balances(
-    _: User = Depends(require_exec), db: AsyncSession = Depends(get_db)
+    _: User = Depends(require_manager), db: AsyncSession = Depends(get_db)
 ) -> Items[LeaveBalanceRow]:
     year = today().year
     staff = await _staff(db)
@@ -1093,7 +1164,7 @@ async def cancel_leave(
 @router.get(
     "/attendance/team",
     response_model=Grid,
-    summary="?month=&team_id= 팀원 × 일자 그리드 — 팀장(teams.lead_id)·exec 만, team_id 없으면 전사(exec). 그 밖 403",
+    summary="?month=&team_id= 팀원 × 일자 그리드 — 팀장(teams.lead_id)·exec 만, team_id 없으면 전사(exec·근태 담당자). 그 밖 403",
 )
 async def team_grid(
     month: MonthStr,
@@ -1105,7 +1176,7 @@ async def team_grid(
     team = await db.get(Team, team_id) if team_id is not None else None
     # 팀장 판정은 teams.lead_id 로만, fail-closed(README 18(b)) — NULL 은 "팀장 없음"이지 "아무나"가 아니다
     is_lead = team is not None and team.lead_id is not None and team.lead_id == user.id
-    if user.role != "exec" and not is_lead:
+    if not is_lead and not await can_manage(db, user):
         audit.record(
             db,
             "acl.denied",
@@ -1118,7 +1189,7 @@ async def team_grid(
         raise ApiError(
             403,
             "FORBIDDEN",
-            "권한이 부족합니다." if team_id else "전사 근태는 임원만 볼 수 있습니다.",
+            "권한이 부족합니다." if team_id else "전사 근태는 근태 담당자나 임원만 볼 수 있습니다.",
         )
     if team_id is not None and team is None:
         raise ApiError(404, "NOT_FOUND", "없는 팀입니다.")
@@ -1142,14 +1213,14 @@ def _cell(value) -> str:
 
 @router.get(
     "/attendance/report",
-    summary="?month=&format=csv 월 리포트 (exec) — 사람마다 근무일·휴가일·연장·야간(분). UTF-8 BOM",
+    summary="?month=&format=csv 월 리포트 (exec·근태 담당자) — 사람마다 근무일·휴가일·연장·야간(분). UTF-8 BOM",
     response_class=Response,
     responses={200: {"content": {"text/csv": {}}}},
 )
 async def report(
     month: MonthStr,
     format: Literal["csv"] = "csv",
-    _: User = Depends(require_exec),
+    _: User = Depends(require_manager),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
     first, last = _month_bounds(month)
@@ -1242,12 +1313,12 @@ async def get_closing(month: MonthStr, db: AsyncSession = Depends(get_db)) -> Cl
 @router.post(
     "/attendance/close",
     response_model=ClosingOut,
-    summary="{month} 월 마감 (exec) — 오지 않은 달 422, 이미 마감 409 ALREADY_CLOSED. 감사 attendance.closed",
+    summary="{month} 월 마감 (exec·근태 담당자) — 오지 않은 달 422, 이미 마감 409 ALREADY_CLOSED. 감사 attendance.closed",
 )
 async def close_month(
     body: CloseIn,
     request: Request,
-    user: User = Depends(require_exec),
+    user: User = Depends(require_manager),
     db: AsyncSession = Depends(get_db),
 ) -> ClosingOut:
     if body.month > f"{today():%Y-%m}":
@@ -1272,12 +1343,12 @@ async def close_month(
 @router.post(
     "/attendance/reopen",
     response_model=ClosingOut,
-    summary="{month, reason} 월 마감 해제 (exec) — 마감 안 된 달 409 NOT_CLOSED, 사유 필수 422. 감사 attendance.reopened",
+    summary="{month, reason} 월 마감 해제 (exec·근태 담당자) — 마감 안 된 달 409 NOT_CLOSED, 사유 필수 422. 감사 attendance.reopened",
 )
 async def reopen_month(
     body: ReopenIn,
     request: Request,
-    user: User = Depends(require_exec),
+    user: User = Depends(require_manager),
     db: AsyncSession = Depends(get_db),
 ) -> ClosingOut:
     await _lock(db, f"closing:{body.month}")
@@ -1298,3 +1369,181 @@ async def reopen_month(
     )
     await db.commit()
     return (await _closings(db, [body.month]))[0]
+
+
+# ── 근태 담당자·대표, 결근 확정 (04 밖 — README 76) ─────────────────────────
+
+
+class RolesOut(BaseModel):
+    manager: Person | None  # 근태 담당자 — 전사 근태 관리, 근태 신청의 첫 결재자
+    ceo: Person | None  # 대표 — 근태 신청의 마지막 결재자
+
+
+class RolesIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    manager_id: uuid.UUID | None
+    ceo_id: uuid.UUID | None
+
+
+async def _roles_out(db: AsyncSession) -> RolesOut:
+    row = (
+        await db.execute(select(Workspace.attendance_manager_id, Workspace.ceo_id).limit(1))
+    ).first()
+    ids = [i for i in (row or ()) if i is not None]
+    names = dict(
+        (await db.execute(select(User.id, User.name).where(User.id.in_(ids)))).tuples().all()
+        if ids
+        else []
+    )
+
+    def person(uid: uuid.UUID | None) -> Person | None:
+        return Person(id=uid, name=names[uid]) if uid in names else None
+
+    return RolesOut(manager=person(row[0] if row else None), ceo=person(row[1] if row else None))
+
+
+@router.get(
+    "/attendance/roles",
+    response_model=RolesOut,
+    summary="근태 담당자와 대표 — 로그인하면 누구나(신청이 누구에게 가는지 보인다). 지정 전이면 null (04 밖, README 76)",
+)
+async def get_roles(db: AsyncSession = Depends(get_db)) -> RolesOut:
+    return await _roles_out(db)
+
+
+@router.put(
+    "/attendance/roles",
+    response_model=RolesOut,
+    summary="{manager_id, ceo_id} 근태 담당자·대표 지정 (exec) — null 은 해제. 담당자는 활성 계정, 대표는 활성 임원(422). 감사 attendance.roles_set",
+)
+async def set_roles(
+    body: RolesIn,
+    request: Request,
+    user: User = Depends(require_exec),
+    db: AsyncSession = Depends(get_db),
+) -> RolesOut:
+    ws = (await db.execute(select(Workspace).limit(1).with_for_update())).scalar_one_or_none()
+    if ws is None:
+        raise ApiError(
+            409, "CONFLICT", "워크스페이스가 없습니다. scripts/seed.py 를 먼저 돌리세요."
+        )
+    for uid, need_exec, label in (
+        (body.manager_id, False, "근태 담당자"),
+        (body.ceo_id, True, "대표"),
+    ):
+        if uid is None:
+            continue
+        target = await db.get(User, uid)
+        if target is None or not target.active:
+            raise ApiError(422, "VALIDATION", f"{label}로 지정할 수 없는 사람입니다.")
+        if need_exec and target.role != "exec":
+            raise ApiError(422, "VALIDATION", "대표는 임원 중에서 지정합니다.")
+    ws.attendance_manager_id, ws.ceo_id = body.manager_id, body.ceo_id
+    audit.record(
+        db,
+        "attendance.roles_set",
+        request=request,
+        actor_id=user.id,
+        detail={
+            "manager_id": str(body.manager_id) if body.manager_id else None,
+            "ceo_id": str(body.ceo_id) if body.ceo_id else None,
+        },
+    )
+    await db.commit()
+    return await _roles_out(db)
+
+
+class AbsenceIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    user_id: uuid.UUID
+    work_date: date
+    note: str | None = Field(None, max_length=200)
+
+
+class AbsenceOut(BaseModel):
+    user_id: uuid.UUID
+    work_date: date
+    note: str | None
+
+
+@router.post(
+    "/attendance/absences",
+    status_code=201,
+    response_model=AbsenceOut,
+    summary="{user_id, work_date, note?} 결근 확정 (exec·근태 담당자) — 정상 근무로 잡힌 지난·오늘 근무일만(422), 마감된 달 409 MONTH_CLOSED. 다시 보내면 메모만 바꾼다. 감사 attendance.absent_set",
+)
+async def set_absence(
+    body: AbsenceIn,
+    request: Request,
+    user: User = Depends(require_manager),
+    db: AsyncSession = Depends(get_db),
+) -> AbsenceOut:
+    target = await db.get(User, body.user_id)
+    if target is None or not target.active:
+        raise ApiError(422, "VALIDATION", "없는 사람입니다.")
+    if body.work_date > today():
+        raise ApiError(422, "VALIDATION", "아직 오지 않은 날은 결근으로 처리할 수 없습니다.")
+    if await closed_between(db, body.work_date, body.work_date):
+        raise _month_closed()
+    row = await db.scalar(
+        select(AttAbsence).where(
+            AttAbsence.user_id == body.user_id, AttAbsence.work_date == body.work_date
+        )
+    )
+    if row is None:
+        # 지금 정상 근무로 잡힌 날에만 — 쉬는 날·휴가·예외 근무가 승인된 날은 결근이 아니다
+        days = (await _days(db, [body.user_id], body.work_date, body.work_date))[body.user_id]
+        if not days or days[0].status != "normal":
+            raise ApiError(422, "VALIDATION", "정상 근무로 잡힌 날만 결근으로 처리할 수 있습니다.")
+        # 앱 시각으로 찍는다 — 정정이 승인된 시각(closed_at, 앱 시각)과 선후를 가른다(DB now() 는 트랜잭션 시작 시각)
+        row = AttAbsence(
+            user_id=body.user_id,
+            work_date=body.work_date,
+            set_by=user.id,
+            created_at=datetime.now(UTC),
+        )
+        db.add(row)
+    row.note = body.note
+    audit.record(
+        db,
+        "attendance.absent_set",
+        request=request,
+        actor_id=user.id,
+        target_id=body.user_id,
+        detail={"work_date": body.work_date.isoformat()},
+    )
+    await db.commit()
+    return AbsenceOut(user_id=row.user_id, work_date=row.work_date, note=row.note)
+
+
+@router.delete(
+    "/attendance/absences",
+    status_code=204,
+    summary="?user_id=&work_date= 결근 확정 취소 (exec·근태 담당자) — 없으면 404, 마감된 달 409 MONTH_CLOSED. 감사 attendance.absent_cleared",
+)
+async def clear_absence(
+    user_id: uuid.UUID,
+    work_date: date,
+    request: Request,
+    user: User = Depends(require_manager),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    if await closed_between(db, work_date, work_date):
+        raise _month_closed()
+    done = await db.execute(
+        delete(AttAbsence).where(AttAbsence.user_id == user_id, AttAbsence.work_date == work_date)
+    )
+    if not done.rowcount:
+        raise ApiError(404, "NOT_FOUND", "결근으로 처리된 날이 아닙니다.")
+    audit.record(
+        db,
+        "attendance.absent_cleared",
+        request=request,
+        actor_id=user.id,
+        target_id=user_id,
+        detail={"work_date": work_date.isoformat()},
+    )
+    await db.commit()
+    return Response(status_code=204)

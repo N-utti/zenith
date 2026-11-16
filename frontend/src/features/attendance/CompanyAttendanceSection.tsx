@@ -4,8 +4,9 @@ import { Card } from '@/components/ui/Card'
 import { TableEmpty } from '@/components/ui/Table'
 import { ApiError } from '@/lib/api'
 import { cn } from '@/lib/cn'
-import { currentMonth, formatISODate, formatMonth } from '@/lib/datetime'
+import { currentMonth, formatISODate, formatMonth, toISODate } from '@/lib/datetime'
 import { ROLE_LABEL } from '@/types'
+import { AbsenceModal } from './AbsenceModal'
 import { useCompanyAttendance } from './api'
 import { AttendanceLegend } from './AttendanceLegend'
 import {
@@ -46,6 +47,13 @@ export function CompanyAttendanceSection() {
   const days = daysOf(month)
   const rows = grid.data?.items ?? []
   const span = days.length + 2
+  /** 결근 처리 창을 연 칸. */
+  const [marking, setMarking] = useState<{
+    user: { id: string; name: string }
+    date: string
+    absent: boolean
+    note: string | null
+  } | null>(null)
 
   return (
     <Card className="p-4">
@@ -116,18 +124,36 @@ export function CompanyAttendanceSection() {
               <TableEmpty colSpan={span}>직원이 없습니다.</TableEmpty>
             )}
             {rows.map((row) => (
-              <GridRow key={row.user.id} row={row} days={days} />
+              <GridRow key={row.user.id} row={row} days={days} onMark={setMarking} />
             ))}
           </tbody>
         </table>
       </div>
       <AttendanceLegend className="mt-3 flex sm:hidden" />
+      <p className="text-subtle mt-3 text-xs">
+        정상 근무로 잡힌 지난 날의 칸을 누르면 결근으로 처리합니다. 결근인 칸을 누르면 고치거나 취소합니다.
+      </p>
+      {marking && <AbsenceModal {...marking} onClose={() => setMarking(null)} />}
     </Card>
   )
 }
 
-function GridRow({ row, days }: { row: AttendanceGridRow; days: GridDay[] }) {
+function GridRow({
+  row,
+  days,
+  onMark,
+}: {
+  row: AttendanceGridRow
+  days: GridDay[]
+  onMark: (target: {
+    user: { id: string; name: string }
+    date: string
+    absent: boolean
+    note: string | null
+  }) => void
+}) {
   const byDate = indexByDate(row.days)
+  const todayIso = toISODate(new Date())
   // 임원은 팀이 없다(조직도). 그 외에 팀이 비면 등급을 소속인 양 쓰지 않고 그냥 이름만.
   // 이름 열이 내용 폭으로 고정돼 있어 팀명을 넣어도 딱 그만큼만 넓어진다(2026-09-15).
   const team = row.user.team?.name ?? (row.user.role === 'exec' ? ROLE_LABEL.exec : '')
@@ -156,19 +182,44 @@ function GridRow({ row, days }: { row: AttendanceGridRow; days: GridDay[] }) {
         ]
           .filter(Boolean)
           .join(' · ')
+        // 결근 처리는 정상 근무로 잡힌 지난 근무일과 이미 결근인 날에만(백엔드 README 76). 판정은 서버가 한다.
+        const markable =
+          cell?.day_kind === 'workday' &&
+          d.iso <= todayIso &&
+          (status === 'normal' || status === 'absent')
+        const box = cn(
+          'block h-6 w-full rounded leading-6',
+          tone ?? (status === 'none' ? 'bg-sunken/60' : ''),
+        )
+        const inner = (
+          <>
+            {/* 보이는 한 글자는 소리에서 빼고 전체 라벨만 읽힌다. 안 그러면 "휴 휴가"로 두 번 읽는다. */}
+            <span aria-hidden="true">{SHORT[status]}</span>
+            {label && <span className="sr-only">{label}</span>}
+          </>
+        )
         return (
           <td key={d.iso} title={title} className="p-0.5 text-center">
             {/* 글자가 없는 칸도 같은 높이여야 한 줄이 맞는다. 빈 블록은 줄상자가 없어 leading 이 안 먹는다. */}
-            <span
-              className={cn(
-                'block h-6 rounded leading-6',
-                tone ?? (status === 'none' ? 'bg-sunken/60' : ''),
-              )}
-            >
-              {/* 보이는 한 글자는 소리에서 빼고 전체 라벨만 읽힌다. 안 그러면 "휴 휴가"로 두 번 읽는다. */}
-              <span aria-hidden="true">{SHORT[status]}</span>
-              {label && <span className="sr-only">{label}</span>}
-            </span>
+            {markable ? (
+              <button
+                type="button"
+                aria-label={`${row.user.name} ${title} 결근 처리`}
+                className={cn(box, 'hover:ring-line-strong cursor-pointer hover:ring-1')}
+                onClick={() =>
+                  onMark({
+                    user: { id: row.user.id, name: row.user.name },
+                    date: d.iso,
+                    absent: status === 'absent',
+                    note: cell.note ?? null,
+                  })
+                }
+              >
+                {inner}
+              </button>
+            ) : (
+              <span className={box}>{inner}</span>
+            )}
           </td>
         )
       })}
