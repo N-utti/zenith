@@ -5,6 +5,8 @@ import type { ApprovalStep, StepStatus } from './types'
 
 /** 참조 단계. 결재 차례가 아니므로 상태와 상관없이 이 모양으로 그린다. */
 const REFERENCE = { label: '참조', icon: Eye, tone: 'bg-sunken text-subtle' }
+/** 임시저장에서 기안자가 고른 결재자. 상신하면 대기가 된다. */
+const BEFORE_SUBMIT = { label: '상신 전', icon: Clock, tone: 'bg-sunken text-subtle' }
 
 const STATUS: Record<StepStatus, { label: string; icon: typeof Check; tone: string }> = {
   // 13 §10: 대기 muted. 목록 배지(statusTone)와 같은 색.
@@ -28,11 +30,11 @@ export function StepTimeline({
 }: {
   steps: ApprovalStep[]
   currentStep: number | null
-  /** 상신 전(임시저장). 결재선은 상신할 때 정해져 아직 없다. */
+  /** 상신 전(임시저장). 기안자가 고른 결재자만 있고, 고르지 않았으면 상신할 때 정해진다. */
   draft?: boolean
 }) {
   // 결재자가 없으면 기안과 동시에 확정된 문서다(임원 기안). 참조만 걸린 경우에도 그 줄은
-  // 그려야 하므로, 개수가 아니라 **결재 단계가 있는지**로 가른다. 상신 전이면 아직 안 정해진 것이다.
+  // 그려야 하므로, 개수가 아니라 **결재 단계가 있는지**로 가른다. 상신 전이면 고르지 않은 것이다.
   const hasApprover = steps.some((step) => step.role === 'approve')
 
   return (
@@ -40,7 +42,7 @@ export function StepTimeline({
       {!hasApprover && (
         <p className="text-subtle text-sm">
           {draft
-            ? '결재선은 상신할 때 정해집니다.'
+            ? '결재자를 고르지 않아 상신할 때 정해집니다.'
             : '결재선이 없습니다. 기안과 동시에 확정된 문서입니다.'}
         </p>
       )}
@@ -48,8 +50,10 @@ export function StepTimeline({
         <ol className={cn('space-y-3', !hasApprover && 'mt-3')}>
           {steps.map((step) => {
             // 참조는 결재 차례가 아니다. 상태로 읽으면 "대기" 나 "생략" 으로 보여 무슨 일인지
-            // 알 수 없다. 역할이 참조면 상태를 안 본다.
-            const meta = step.role === 'reference' ? REFERENCE : STATUS[step.status]
+            // 알 수 없다. 역할이 참조면 상태를 안 본다. 상신 전에 고른 결재자도 서버가 skipped 로
+            // 주지만 생략된 게 아니라 아직 차례가 안 온 것이다.
+            const meta =
+              step.role === 'reference' ? REFERENCE : draft ? BEFORE_SUBMIT : STATUS[step.status]
             const Icon = meta.icon
             const isCurrent = step.role === 'approve' && step.step_no === currentStep
             return (

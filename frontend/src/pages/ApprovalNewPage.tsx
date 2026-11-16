@@ -53,8 +53,11 @@ import { ApiError } from '@/lib/api'
  * 올린 문서에 딸려 있어 다른 문서에 붙일 수 없다).
  * 첨부(영수증, FR-APV-05)는 문서에 딸려 올라가서 문서 id 가 있어야 한다. 고른 파일은 들고 있다가
  * 저장할 때 올린다. 새 기안이면 먼저 임시저장을 만들고, 올린 뒤 첨부 목록을 한 번 더 저장한다.
- * 결재선 미리보기는 서버가 만들어 주는 값이라 상신 뒤 상세에서 본다.
+ * 결재선은 기안자가 고른다. 고르지 않으면 서버가 상신할 때 만들고, 그 결재선은 상신 뒤 상세에서 본다.
  */
+/** 서버 `DraftIn.approvers` 의 `maxItems`. */
+const MAX_APPROVERS = 10
+
 export function ApprovalNewPage() {
   const [params] = useSearchParams()
   const arrangementId = params.get('arrangement')
@@ -164,17 +167,23 @@ export function ApprovalNewPage() {
   // 임시저장(`seed`)에서만 물려받는다. 다른 문서를 본떠 새로 쓸 때 그 문서의 결재선까지 가져오면, 서버가 그때
   // 만든 결재선이 「내가 고른 것」으로 굳어 그 사이 바뀐 팀장·임원을 놓친다.
   // 지금 고를 수 없는 사람(비활성)은 뺀다. 칩이 없어 화면에서 뺄 길이 없고, 서버는 422 로 저장을 막는다.
-  const savedApprovers = (seed?.steps ?? [])
+  // 사람 목록을 못 불러왔을 때는 거르지 않는다. 다 걸러진 채 저장하면 `[]` 가 가서 고른 결재선이 지워지고,
+  // 상신하면 자동 결재선으로 올라간다.
+  const savedSteps = (seed?.steps ?? [])
     .filter((step) => step.role === 'approve')
     .sort((a, b) => a.step_no - b.step_no)
+  const savedApprovers = savedSteps
     .map((step) => step.approver.id)
-    .filter((id) => peoplePending || people.some((p) => p.id === id))
+    .filter((id) => peoplePending || peopleError || people.some((p) => p.id === id))
   const approverIds = approvers ?? savedApprovers
   const toggleApprover = (id: string) =>
     setApprovers((prev) => {
       const current = prev ?? savedApprovers
+      if (current.includes(id)) return current.filter((each) => each !== id)
+      // 서버 상한. 넘기면 422 문구가 배열로 와서 일반 실패로만 보인다.
+      if (current.length >= MAX_APPROVERS) return current
       // 뒤에 붙인다. 누른 순서가 결재 순서다.
-      return current.includes(id) ? current.filter((each) => each !== id) : [...current, id]
+      return [...current, id]
     })
   const toggleReference = (id: string) =>
     // 저장돼 있던 값에서 출발한다. `null` 은 "아직 안 건드림" 이라 그때는 그 값이 시작점이다.
@@ -344,7 +353,7 @@ export function ApprovalNewPage() {
             ? `${tripPeriod} 출장에 딸린 지출 결의서입니다.`
             : source.data
               ? '끝난 문서의 내용을 가져온 새 기안입니다. 첨부는 가져오지 않으니 다시 붙여 주세요.'
-              : '결재선은 상신할 때 정해집니다.'
+              : undefined
         }
       />
       {/* 카드가 하나뿐이라 머리 라벨을 달지 않는다. 페이지 제목이 이미 무엇을 쓰는 곳인지 말한다. */}
@@ -498,7 +507,7 @@ export function ApprovalNewPage() {
           )}
           <Field
             label="결재선"
-            hint="고른 사람만, 누른 순서대로 결재합니다. 고르지 않으면 팀장, 그다음 임원 전원에게 올라갑니다."
+            hint={`고른 사람만, 누른 순서대로 결재합니다(${MAX_APPROVERS}명까지). 고르지 않으면 팀장, 그다음 임원 전원에게 올라갑니다.`}
             error={peopleError ? '사람 목록을 불러오지 못했습니다.' : null}
           >
             {(slot) => (
@@ -519,7 +528,12 @@ export function ApprovalNewPage() {
                   <p className="text-muted text-sm">
                     결재 순서:{' '}
                     {approverIds
-                      .map((id) => people.find((p) => p.id === id)?.name ?? '알 수 없는 사람')
+                      .map(
+                        (id) =>
+                          people.find((p) => p.id === id)?.name ??
+                          savedSteps.find((step) => step.approver.id === id)?.approver.name ??
+                          '알 수 없는 사람',
+                      )
                       .join(' → ')}
                   </p>
                 )}

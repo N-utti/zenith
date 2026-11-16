@@ -13,6 +13,7 @@ import type {
 import { toISODate } from '@/lib/datetime'
 import type { User } from '@/types'
 import { DEMO_ACCOUNTS } from './accounts'
+import { findAccount } from './adminDb'
 import { MOCK_USERS } from './db'
 
 /** 13 §4.1 `approval_types` 시드. 기본 결재선은 13 §5.2. */
@@ -166,7 +167,7 @@ function create(drafter: User, input: DraftInput, at = now()): Stored {
 
 function submit(doc: Stored, at = now()) {
   const drafter = userById(doc.drafter_id)
-  // 결재선은 상신할 때 서버가 만든다(13 §4.2.2). 기안 때 고른 참조자는 그 뒤에 붙는다.
+  // 결재선은 상신할 때 고정된다(13 §4.2.2). 기안 때 고른 참조자는 그 뒤에 붙는다.
   const references = doc.steps.filter((s) => s.role === 'reference').map((s) => s.approver.id)
   // 기안자가 고른 결재선이 있으면 그 사람들만, 고른 순서대로(백엔드 README 75). 없으면 서버가 만든다.
   const picked = doc.steps.filter((s) => s.role === 'approve')
@@ -175,7 +176,7 @@ function submit(doc: Stored, at = now()) {
     : drafter
       ? buildSteps(drafter)
       : []
-  // 결재자와 기안자는 참조에서 뺀다. 결재선은 상신할 때 정해져서 화면이 미리 거를 수 없다.
+  // 결재자와 기안자는 참조에서 뺀다. 고르지 않은 결재선은 여기서 정해져 화면이 미리 거를 수 없다.
   // 그대로 두면 같은 사람이 결재선에 두 줄로 서고, 받은 결재함과 참조함에 같이 뜬다.
   const already = new Set([doc.drafter_id, ...approvers.map((s) => s.approver.id)])
   const kept = references.filter((id) => !already.has(id))
@@ -335,11 +336,9 @@ export function getApproval(user: User, id: string): ApprovalDocument | Failure 
     // 대신 눌러 준 뒤에도 남는다. 누르자마자 다음 차례로 넘어가 그 문서를 잃으면,
     // 방금 자기가 무엇을 승인했는지 확인할 길이 없다.
     doc.steps.some((s) => s.acted_by?.id === user.id) ||
-    // 참조자는 **상신한 뒤에만** 볼 수 있다. 목록도 같은 기준이다. 기안 때 고른 참조자가
-    // `steps` 에 먼저 들어가므로, 여기서 안 막으면 주소만 바꿔 남의 초안을 열 수 있다.
-    doc.steps.some(
-      (s) => s.approver.id === user.id && (s.role !== 'reference' || doc.status !== 'draft'),
-    ) ||
+    // 결재자·참조자는 **상신한 뒤에만** 볼 수 있다. 목록도 같은 기준이다. 기안 때 고른 사람들이
+    // `steps` 에 먼저 들어가므로, 여기서 안 막으면 주소만 바꿔 남의 초안을 열 수 있다(서버도 403).
+    (doc.status !== 'draft' && doc.steps.some((s) => s.approver.id === user.id)) ||
     user.role === 'exec'
   if (!related) return fail('열람 권한이 없습니다.', 403, 'FORBIDDEN')
   return expose(doc, user)
@@ -375,7 +374,7 @@ function ownsAttachment(docId: string, url: string | undefined): boolean {
  * 내 문서를 볼 수 있는 사람이 그 파일을 받게 된다(채팅 첨부의 `VALIDATION` 과 같은 규칙).
  * 새로 만들 때는 문서 id 가 없어 올린 파일도 없다. 그래서 `docId` 가 없으면 빈 목록만 받는다.
  */
-function validate(input: DraftInput, docId?: string): Failure | null {
+function validate(user: User, input: DraftInput, docId?: string): Failure | null {
   if (input.type_code !== 'general')
     return fail('v1 은 일반 기안만 기안할 수 있습니다.', 422, 'VALIDATION')
   if (!input.title?.trim()) return fail('제목을 입력해 주세요.', 422, 'VALIDATION')
@@ -411,7 +410,11 @@ function validate(input: DraftInput, docId?: string): Failure | null {
     if (new Set(input.approvers).size !== input.approvers.length) {
       return fail('결재자가 겹칩니다.', 422, 'VALIDATION')
     }
-    if (input.approvers.some((id) => !userById(id))) {
+    if (input.approvers.includes(user.id)) {
+      return fail('자기 자신을 결재자로 고를 수 없습니다.', 422, 'VALIDATION')
+    }
+    // 서버는 비활성 계정도 없는 사람으로 친다.
+    if (input.approvers.some((id) => !userById(id) || findAccount(id)?.active === false)) {
       return fail('없는 사람을 결재자로 고를 수 없습니다.', 422, 'VALIDATION')
     }
   }
@@ -420,7 +423,7 @@ function validate(input: DraftInput, docId?: string): Failure | null {
 
 export function createDraft(user: User, input: DraftInput): ApprovalDocument | Failure {
   seed()
-  const invalid = validate(input)
+  const invalid = validate(user, input)
   if (invalid) return invalid
   return expose(create(user, input), user)
 }
@@ -429,7 +432,7 @@ export function updateDraft(user: User, id: string, input: DraftInput): Approval
   const doc = docs.find((d) => d.id === id)
   if (!doc || doc.drafter_id !== user.id) return fail('문서를 찾을 수 없습니다.', 404, 'NOT_FOUND')
   if (doc.status !== 'draft') return fail('상신한 문서는 고칠 수 없습니다.', 409, 'NOT_DRAFT')
-  const invalid = validate(input, doc.id)
+  const invalid = validate(user, input, doc.id)
   if (invalid) return invalid
   doc.title = input.title.trim()
   doc.subject = input.subject
@@ -483,6 +486,15 @@ export function submitApproval(user: User, id: string): ApprovalDocument | Failu
   if (!doc || doc.drafter_id !== user.id) return fail('문서를 찾을 수 없습니다.', 404, 'NOT_FOUND')
   if (doc.status !== 'draft') return fail('이미 상신한 문서입니다.', 409, 'NOT_DRAFT')
   if (!doc.subject.body.trim()) return fail('본문을 입력해 주세요.', 422, 'VALIDATION')
+  // 고른 뒤에 비활성이 된 결재자가 있으면 그 단계에서 영영 멈춘다. 서버처럼 다시 고르게 한다.
+  const picked = doc.steps.filter((s) => s.role === 'approve')
+  if (picked.some((s) => findAccount(s.approver.id)?.active === false)) {
+    return fail(
+      '결재선에 지금은 결재할 수 없는 사람이 있습니다. 다시 골라 주세요.',
+      422,
+      'VALIDATION',
+    )
+  }
   submit(doc)
   return expose(doc, user)
 }

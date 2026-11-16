@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { toISODate } from '@/lib/datetime'
+import { findAccount, patchAccount } from './adminDb'
 import { MOCK_USERS } from './db'
 import {
   attachmentPrefix,
@@ -564,5 +565,52 @@ describe('금액 검증', () => {
     expect(draftWith(10 ** 13 + 1)).toMatchObject({ code: 'VALIDATION' })
     expect(draftWith(10 ** 13)).not.toHaveProperty('error')
     expect(draftWith(0)).not.toHaveProperty('error')
+  })
+})
+
+describe('기안자가 고른 결재선 (백엔드 #640)', () => {
+  const draftWith = (approvers: string[]) =>
+    createDraft(member, {
+      type_code: 'general',
+      title: '결재선',
+      subject: { body: '본문', amount: null, related: null },
+      approvers,
+    })
+
+  it('고른 사람만 고른 순서대로 결재하고, 초안은 고른 결재자도 못 연다', () => {
+    const draft = draftWith([other.id, senior.id])
+    if ('error' in draft) throw new Error(draft.error)
+    expect(getApproval(other, draft.id)).toMatchObject({ code: 'FORBIDDEN' })
+
+    const pending = submitApproval(member, draft.id)
+    if ('error' in pending) throw new Error(pending.error)
+    expect(pending.steps.map((s) => s.approver.id)).toEqual([other.id, senior.id])
+    expect(pending.waiting_on?.id).toBe(other.id)
+    expect(getApproval(other, draft.id)).toMatchObject({ id: draft.id })
+  })
+
+  it('겹침·본인은 422', () => {
+    expect(draftWith([ceo.id, ceo.id])).toMatchObject({ code: 'VALIDATION' })
+    expect(draftWith([member.id])).toMatchObject({
+      error: '자기 자신을 결재자로 고를 수 없습니다.',
+    })
+  })
+
+  it('비활성 계정은 고를 수 없고, 고른 뒤 비활성이 되면 상신을 막는다', () => {
+    const account = findAccount(other.id)!
+    try {
+      patchAccount(account, { active: false })
+      expect(draftWith([other.id])).toMatchObject({ code: 'VALIDATION' })
+
+      patchAccount(account, { active: true })
+      const draft = draftWith([other.id])
+      if ('error' in draft) throw new Error(draft.error)
+      patchAccount(account, { active: false })
+      expect(submitApproval(member, draft.id)).toMatchObject({
+        error: '결재선에 지금은 결재할 수 없는 사람이 있습니다. 다시 골라 주세요.',
+      })
+    } finally {
+      patchAccount(account, { active: true })
+    }
   })
 })
