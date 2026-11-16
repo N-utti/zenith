@@ -910,7 +910,9 @@ async def delete_draft(
     summary="결재함 ?box=inbox|sent|reference|draft|done · ?type=&status=&from=&to=&drafter= 필터. done 은 끝난 문서 전부(exec 만, 그 밖 403)",
 )
 async def list_approvals(
-    request: Request,
+    # 기본값이 있어야 한다 — AI 열람 도구(app/ai/data_tools.py)가 이 함수를 request 없이 직접 부른다(리뷰).
+    # FastAPI 는 타입으로 요청을 넣어 주므로 HTTP 경로에서는 늘 채워진다
+    request: Request = None,  # type: ignore[assignment]
     box: Literal["inbox", "sent", "reference", "draft", "done"] = "inbox",
     type: TypeCode | None = None,
     status: DocStatus | None = None,
