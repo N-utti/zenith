@@ -1529,7 +1529,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** {type_code: general, title, subject, references?} 임시저장. 첨부는 저장 뒤 그 문서에 올린다 */
+        /** {type_code: general, title, subject, references?, approvers?} 임시저장. 첨부는 저장 뒤 그 문서에 올린다 */
         post: operations["create_draft_api_approvals_drafts_post"];
         delete?: never;
         options?: never;
@@ -1551,7 +1551,7 @@ export interface paths {
         delete: operations["delete_draft_api_approvals_drafts__id__delete"];
         options?: never;
         head?: never;
-        /** 임시저장 수정 — 내 것만(404), 상신한 문서 409 NOT_DRAFT. references 생략은 그대로, [] 는 전부 해제 */
+        /** 임시저장 수정 — 내 것만(404), 상신한 문서 409 NOT_DRAFT. references·approvers 생략은 그대로, [] 는 전부 해제 */
         patch: operations["update_draft_api_approvals_drafts__id__patch"];
         trace?: never;
     };
@@ -5023,6 +5023,8 @@ export interface components {
             subject: components["schemas"]["Subject-Input"];
             /** References */
             references?: string[] | null;
+            /** Approvers */
+            approvers?: string[] | null;
         };
         /** Person */
         app__routers__approvals__Person: {

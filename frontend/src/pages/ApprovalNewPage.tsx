@@ -92,6 +92,8 @@ export function ApprovalNewPage() {
   const [values, setValues] = useState<TemplateValues | null>(null)
   /** 고른 참조자. 임시저장을 열면 저장돼 있던 것으로 시작한다. */
   const [references, setReferences] = useState<string[] | null>(null)
+  /** 고른 결재자, 누른 순서대로. `null` 은 아직 안 건드림이라 임시저장에 있던 것이 시작점이다. */
+  const [approvers, setApprovers] = useState<string[] | null>(null)
   const { people, isPending: peoplePending, isError: peopleError } = useColleagues()
   // 상신이 실패해도 방금 만든 임시저장을 잃지 않는다. 다음 시도는 새로 만들지 않고 이것을 고친다.
   const [createdId, setCreatedId] = useState<string | null>(null)
@@ -158,6 +160,22 @@ export function ApprovalNewPage() {
   const savedReferences =
     base?.steps.filter((step) => step.role === 'reference').map((step) => step.approver.id) ?? []
   const referenceIds = references ?? savedReferences
+  // 결재선도 같은 줄에 저장돼 있다. 단계 번호가 결재 순서다.
+  // 임시저장(`seed`)에서만 물려받는다. 다른 문서를 본떠 새로 쓸 때 그 문서의 결재선까지 가져오면, 서버가 그때
+  // 만든 결재선이 「내가 고른 것」으로 굳어 그 사이 바뀐 팀장·임원을 놓친다.
+  // 지금 고를 수 없는 사람(비활성)은 뺀다. 칩이 없어 화면에서 뺄 길이 없고, 서버는 422 로 저장을 막는다.
+  const savedApprovers = (seed?.steps ?? [])
+    .filter((step) => step.role === 'approve')
+    .sort((a, b) => a.step_no - b.step_no)
+    .map((step) => step.approver.id)
+    .filter((id) => peoplePending || people.some((p) => p.id === id))
+  const approverIds = approvers ?? savedApprovers
+  const toggleApprover = (id: string) =>
+    setApprovers((prev) => {
+      const current = prev ?? savedApprovers
+      // 뒤에 붙인다. 누른 순서가 결재 순서다.
+      return current.includes(id) ? current.filter((each) => each !== id) : [...current, id]
+    })
   const toggleReference = (id: string) =>
     // 저장돼 있던 값에서 출발한다. `null` 은 "아직 안 건드림" 이라 그때는 그 값이 시작점이다.
     setReferences((prev) => {
@@ -260,7 +278,8 @@ export function ApprovalNewPage() {
       related,
       attachments: attached,
     },
-    references: referenceIds,
+    references: referenceIds.filter((id) => !approverIds.includes(id)),
+    approvers: approverIds,
   }
   const fail = (err: unknown, prefix = '') =>
     setError(prefix + (err instanceof ApiError ? err.message : '저장하지 못했습니다.'))
@@ -478,6 +497,36 @@ export function ApprovalNewPage() {
             </Field>
           )}
           <Field
+            label="결재선"
+            hint="고른 사람만, 누른 순서대로 결재합니다. 고르지 않으면 팀장, 그다음 임원 전원에게 올라갑니다."
+            error={peopleError ? '사람 목록을 불러오지 못했습니다.' : null}
+          >
+            {(slot) => (
+              <div
+                role="group"
+                aria-label="결재자"
+                aria-describedby={slot['aria-describedby']}
+                className="flex flex-col gap-2"
+              >
+                {peoplePending && <Spinner />}
+                {!peoplePending && !peopleError && people.length === 0 && (
+                  <p className="text-subtle text-sm">고를 수 있는 사람이 없습니다.</p>
+                )}
+                {people.length > 0 && (
+                  <PersonChips people={people} picked={approverIds} onToggle={toggleApprover} />
+                )}
+                {approverIds.length > 0 && (
+                  <p className="text-muted text-sm">
+                    결재 순서:{' '}
+                    {approverIds
+                      .map((id) => people.find((p) => p.id === id)?.name ?? '알 수 없는 사람')
+                      .join(' → ')}
+                  </p>
+                )}
+              </div>
+            )}
+          </Field>
+          <Field
             label="참조"
             hint="결재선에 오른 사람은 목록에서 빠집니다."
             error={peopleError ? '참조자 목록을 불러오지 못했습니다.' : null}
@@ -494,7 +543,12 @@ export function ApprovalNewPage() {
                   <p className="text-subtle text-sm">고를 수 있는 사람이 없습니다.</p>
                 )}
                 {people.length > 0 && (
-                  <PersonChips people={people} picked={referenceIds} onToggle={toggleReference} />
+                  <PersonChips
+                    // 결재선에 고른 사람은 참조에서 뺀다. 같이 고르면 서버가 참조 줄을 조용히 지운다.
+                    people={people.filter((p) => !approverIds.includes(p.id))}
+                    picked={referenceIds}
+                    onToggle={toggleReference}
+                  />
                 )}
               </div>
             )}

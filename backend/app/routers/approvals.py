@@ -173,6 +173,9 @@ class DraftIn(BaseModel):
     subject: Subject
     # 참조자 id. PATCH 에서 생략(null)은 그대로, [] 는 전부 해제
     references: list[uuid.UUID] | None = Field(None, max_length=50)
+    # 기안자가 고른 결재선(README 75) — 적은 순서대로 결재한다. 생략(null)은 그대로, [] 는 「고르지 않음」.
+    # 고르지 않고 상신하면 서버가 만든다(팀장 → 임원 전원, 13 §5.2 — 옛 화면이 그대로 돌게)
+    approvers: list[uuid.UUID] | None = Field(None, max_length=10)
 
 
 class ApproveIn(BaseModel):
@@ -313,8 +316,8 @@ async def _can_view(
     for s in steps:
         if s.acted_by_id == user.id:  # 대신 눌러 준 문서는 그 뒤에도 본다
             return True
-        # 참조자는 상신 뒤에만 — 기안 때 고른 참조자가 steps 에 먼저 들어가 있다
-        if s.approver_id == user.id and (s.role != "reference" or doc.status != "draft"):
+        # 결재자·참조자는 상신 뒤에만 — 기안 때 고른 사람들이 steps 에 먼저 들어가 있다(README 75)
+        if s.approver_id == user.id and doc.status != "draft":
             return True
     return await _acting(db, user, doc, steps) is not None
 
@@ -457,6 +460,20 @@ async def _approvers(db: AsyncSession, drafter: User, type_code: str) -> list[uu
     return ids if type_code == "general" else ids[:1]
 
 
+def _draft_steps(
+    doc_id: uuid.UUID, approvers: list[uuid.UUID], refs: list[uuid.UUID]
+) -> list[ApprovalStep]:
+    """임시저장에 달아 두는 줄 — 기안자가 고른 결재자(적은 순서)와 참조자. 아직 결재 차례가 아니라 둘 다 skipped 로
+    둔다(대기 사슬·결재함에 안 잡힌다). 상신(`_submit`)이 이 줄을 읽어 결재선을 새로 만든다."""
+    picked = [
+        ApprovalStep(
+            doc_id=doc_id, step_no=i + 1, approver_id=uid, role="approve", status="skipped", version=1
+        )
+        for i, uid in enumerate(approvers)
+    ]
+    return picked + _ref_steps(doc_id, refs, len(picked) + 1)
+
+
 def _ref_steps(doc_id: uuid.UUID, ids: list[uuid.UUID], start: int) -> list[ApprovalStep]:
     return [
         ApprovalStep(
@@ -477,8 +494,20 @@ async def _submit(
     """상신 — 결재선을 이 시점에 고정한다(13 §4.2.2). 기안 때 고른 참조자는 결재자 뒤에 붙는다."""
     old = (await _steps_of(db, [doc.id]))[doc.id]
     refs = [s.approver_id for s in old if s.role == "reference"]
+    picked = [s.approver_id for s in old if s.role == "approve"]  # 기안자가 고른 결재선, 적은 순서(README 75)
     await db.execute(delete(ApprovalStep).where(ApprovalStep.doc_id == doc.id))
-    approvers = await _approvers(db, drafter, doc.type_code)
+    if picked:
+        # 고른 뒤에 비활성이 된 사람이 있으면 그 단계에서 영영 멈춘다 — 조용히 빼지 않고 다시 고르게 한다
+        alive = set(
+            await db.scalars(select(User.id).where(User.id.in_(picked), User.active.is_(True)))
+        )
+        if alive != set(picked):
+            raise ApiError(
+                422, "VALIDATION", "결재선에 지금은 결재할 수 없는 사람이 있습니다. 다시 골라 주세요."
+            )
+        approvers = picked
+    else:
+        approvers = await _approvers(db, drafter, doc.type_code)
     if not approvers and drafter.role != "exec":
         # 결재할 사람이 아무도 없다고 사원 문서를 자동 확정하면 안 된다 — 닫힌 쪽으로
         raise ApiError(422, "VALIDATION", "결재할 사람이 없습니다. 관리자에게 문의하세요.")
@@ -739,6 +768,17 @@ async def _check(db: AsyncSession, user: User, body: DraftIn, doc_id: uuid.UUID 
         )
         if found != len(refs):
             raise ApiError(422, "VALIDATION", "없는 사람을 참조로 걸 수 없습니다.")
+    line = body.approvers
+    if line:
+        if len(set(line)) != len(line):
+            raise ApiError(422, "VALIDATION", "결재자가 겹칩니다.")
+        if user.id in line:
+            raise ApiError(422, "VALIDATION", "자기 자신을 결재자로 고를 수 없습니다.")
+        found = await db.scalar(
+            select(func.count()).select_from(User).where(User.id.in_(line), User.active.is_(True))
+        )
+        if found != len(line):
+            raise ApiError(422, "VALIDATION", "없는 사람을 결재자로 고를 수 없습니다.")
 
 
 def _subject_json(subject: Subject) -> dict:
@@ -753,7 +793,7 @@ def _subject_json(subject: Subject) -> dict:
     "/approvals/drafts",
     status_code=201,
     response_model=ApprovalOut,
-    summary="{type_code: general, title, subject, references?} 임시저장. 첨부는 저장 뒤 그 문서에 올린다",
+    summary="{type_code: general, title, subject, references?, approvers?} 임시저장. 첨부는 저장 뒤 그 문서에 올린다",
 )
 async def create_draft(
     body: DraftIn, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)
@@ -770,7 +810,7 @@ async def create_draft(
     )
     db.add(doc)
     await db.flush()
-    db.add_all(_ref_steps(doc.id, body.references or [], 1))
+    db.add_all(_draft_steps(doc.id, body.approvers or [], body.references or []))
     await db.commit()
     return await _out(db, doc, user)
 
@@ -778,7 +818,7 @@ async def create_draft(
 @router.patch(
     "/approvals/drafts/{id}",
     response_model=ApprovalOut,
-    summary="임시저장 수정 — 내 것만(404), 상신한 문서 409 NOT_DRAFT. references 생략은 그대로, [] 는 전부 해제",
+    summary="임시저장 수정 — 내 것만(404), 상신한 문서 409 NOT_DRAFT. references·approvers 생략은 그대로, [] 는 전부 해제",
 )
 async def update_draft(
     id: uuid.UUID,
@@ -793,9 +833,17 @@ async def update_draft(
     doc.title = body.title
     doc.subject = _subject_json(body.subject)
     doc.amount = body.subject.amount
-    if body.references is not None:
+    if body.references is not None or body.approvers is not None:
+        # 안 보낸 쪽(null)은 지금 것을 그대로 둔다 — 한쪽만 고쳐도 다른 쪽이 지워지지 않게
+        old = (await _steps_of(db, [doc.id]))[doc.id]
+        approvers = body.approvers
+        if approvers is None:
+            approvers = [s.approver_id for s in old if s.role == "approve"]
+        refs = body.references
+        if refs is None:
+            refs = [s.approver_id for s in old if s.role == "reference"]
         await db.execute(delete(ApprovalStep).where(ApprovalStep.doc_id == doc.id))
-        db.add_all(_ref_steps(doc.id, body.references, 1))
+        db.add_all(_draft_steps(doc.id, approvers, refs))
     await db.commit()
     return await _out(db, doc, user)
 

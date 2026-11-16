@@ -1,5 +1,6 @@
 """13 §9 전자결재 — 기안·상신·승인·반려·회수·강제 종결·위임·참조·첨부. 규칙은 프론트 목(mocks/approvalsDb.ts)과 같다."""
 
+import uuid
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
@@ -601,3 +602,95 @@ async def test_delegation_period_limit_and_auto_approve_audit(c, users: Users, a
         select(AuditEvent).where(AuditEvent.kind == "approvals.auto_approved")
     )
     assert event is not None and event.actor_id == users.exec.id
+
+
+async def test_drafter_picks_the_approval_line(c, users: Users, outsider: User, app_db) -> None:
+    """README 75: 기안자가 고른 사람만, 고른 순서대로 결재한다. 고르지 않으면 예전처럼 서버가 만든다."""
+    # 다른 팀 사원 한 사람만 고른다 — 팀장·임원에게는 가지 않는다
+    r = await post(c.member, "/api/approvals/drafts", draft(approvers=[str(outsider.id)]))
+    assert r.status_code == 201, r.text
+    doc = r.json()
+    assert [(s["approver"]["name"], s["role"], s["status"]) for s in doc["steps"]] == [
+        ("이영희", "approve", "skipped")  # 아직 결재 차례가 아니다
+    ]
+    # 상신 전 초안은 고른 결재자도 못 열고, 결재함에도 없다
+    assert (await c.other.get(f"/api/approvals/{doc['id']}")).status_code == 403
+    assert (await c.other.get("/api/approvals?box=inbox")).json()["items"] == []
+
+    r = await post(c.member, f"/api/approvals/{doc['id']}/submit")
+    assert r.status_code == 200, r.text
+    sent = r.json()
+    assert [(s["approver"]["name"], s["role"], s["status"]) for s in sent["steps"]] == [
+        ("이영희", "approve", "waiting")
+    ]
+    assert sent["waiting_on"]["name"] == "이영희"
+    assert [i["id"] for i in (await c.other.get("/api/approvals?box=inbox")).json()["items"]] == [
+        doc["id"]
+    ]
+    # 팀장의 결재함에는 없고, 결재선 밖의 팀장은 열지도 못한다(임원은 원래 전부 본다)
+    assert (await c.lead.get("/api/approvals?box=inbox")).json()["items"] == []
+    assert (await c.exec.get("/api/approvals?box=inbox")).json()["items"] == []
+    assert (await c.lead.get(f"/api/approvals/{doc['id']}")).status_code == 403
+    r = await post(
+        c.other, f"/api/approvals/{doc['id']}/approve", {"version": sent["steps"][0]["version"]}
+    )
+    assert r.status_code == 200 and r.json()["status"] == "approved"  # 한 사람이 끝이다
+
+    # 여럿이면 적은 순서대로. 참조자와 겹치면 참조에서 뺀다
+    r = await post(
+        c.member,
+        "/api/approvals/drafts",
+        draft(
+            approvers=[str(users.exec.id), str(users.lead.id)],
+            references=[str(users.lead.id), str(outsider.id)],
+        ),
+    )
+    two = r.json()
+    r = await post(c.member, f"/api/approvals/{two['id']}/submit")
+    assert [(s["approver"]["name"], s["role"]) for s in r.json()["steps"]] == [
+        ("최재호", "approve"),
+        ("박동현", "approve"),
+        ("이영희", "reference"),
+    ]
+    assert r.json()["waiting_on"]["name"] == "최재호"
+
+    # 고친다 — 안 보낸 쪽은 그대로, [] 는 「고르지 않음」(서버가 만든 결재선으로 돌아간다)
+    r = await post(
+        c.member,
+        "/api/approvals/drafts",
+        draft(approvers=[str(outsider.id)], references=[str(users.lead.id)]),
+    )
+    edit = r.json()
+    url = f"/api/approvals/drafts/{edit['id']}"
+    r = await c.member.patch(url, json=draft(references=[]), headers=csrf(c.member))
+    assert [(s["approver"]["name"], s["role"]) for s in r.json()["steps"]] == [("이영희", "approve")]
+    r = await c.member.patch(url, json=draft(approvers=[]), headers=csrf(c.member))
+    assert r.json()["steps"] == []
+    r = await post(c.member, f"/api/approvals/{edit['id']}/submit")
+    assert [s["approver"]["name"] for s in r.json()["steps"]] == ["박동현", "최재호"]
+
+    # 검증: 나 자신·겹친 사람·없는 사람·너무 많은 사람
+    for bad in (
+        [str(users.member.id)],
+        [str(outsider.id), str(outsider.id)],
+        [str(uuid.uuid4())],
+        [str(uuid.uuid4()) for _ in range(11)],
+    ):
+        r = await post(c.member, "/api/approvals/drafts", draft(approvers=bad))
+        assert (r.status_code, r.json()["code"]) == (422, "VALIDATION"), bad
+
+    # 고른 뒤 비활성이 된 사람이 있으면 상신이 막힌다 — 그 단계에서 영영 멈추지 않게
+    r = await post(c.member, "/api/approvals/drafts", draft(approvers=[str(outsider.id)]))
+    gone = r.json()["id"]
+    outsider.active = False
+    await app_db.flush()
+    r = await post(c.member, f"/api/approvals/{gone}/submit")
+    assert (r.status_code, r.json()["code"]) == (422, "VALIDATION")
+
+
+async def test_exec_can_ask_for_approval_by_picking(c, users: Users) -> None:
+    """임원 기안은 결재선을 고르지 않으면 바로 확정(13 TC-APV-04), 고르면 그 사람의 결재를 받는다."""
+    r = await post(c.exec, "/api/approvals/drafts", draft(approvers=[str(users.lead.id)]))
+    r = await post(c.exec, f"/api/approvals/{r.json()['id']}/submit")
+    assert r.status_code == 200 and r.json()["status"] == "pending"
+    assert r.json()["waiting_on"]["name"] == "박동현"

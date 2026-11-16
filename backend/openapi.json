@@ -4818,7 +4818,7 @@
         "tags": [
           "approvals"
         ],
-        "summary": "{type_code: general, title, subject, references?} 임시저장. 첨부는 저장 뒤 그 문서에 올린다",
+        "summary": "{type_code: general, title, subject, references?, approvers?} 임시저장. 첨부는 저장 뒤 그 문서에 올린다",
         "operationId": "create_draft_api_approvals_drafts_post",
         "requestBody": {
           "content": {
@@ -4859,7 +4859,7 @@
         "tags": [
           "approvals"
         ],
-        "summary": "임시저장 수정 — 내 것만(404), 상신한 문서 409 NOT_DRAFT. references 생략은 그대로, [] 는 전부 해제",
+        "summary": "임시저장 수정 — 내 것만(404), 상신한 문서 409 NOT_DRAFT. references·approvers 생략은 그대로, [] 는 전부 해제",
         "operationId": "update_draft_api_approvals_drafts__id__patch",
         "parameters": [
           {
@@ -15059,6 +15059,22 @@
               }
             ],
             "title": "References"
+          },
+          "approvers": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "type": "array",
+                "maxItems": 10
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approvers"
           }
         },
         "type": "object",
