@@ -72,6 +72,8 @@ function PinForm({ onSave, onCancel }: { onSave: (pin: string) => void; onCancel
             type="password"
             inputMode="numeric"
             autoComplete="one-time-code"
+            // 「잠금 번호 정하기」를 눌러야 나타나는 칸이다. 누른 다음 바로 친다.
+            autoFocus
             value={pin}
             onChange={(e) => setPin(digits(e.target.value))}
           />
