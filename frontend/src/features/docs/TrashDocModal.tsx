@@ -70,7 +70,13 @@ export function TrashDocModal({
           <Button variant="secondary" size="sm" onClick={onClose} disabled={trash.isPending}>
             취소
           </Button>
-          <Button variant="danger" size="sm" onClick={moveToTrash} disabled={trash.isPending}>
+          <Button
+            variant="danger"
+            size="sm"
+            onClick={moveToTrash}
+            disabled={trash.isPending}
+            data-autofocus
+          >
             {trash.isPending ? <Spinner className="border-t-white" /> : '휴지통으로'}
           </Button>
         </>

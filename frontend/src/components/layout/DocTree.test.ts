@@ -40,8 +40,8 @@ const newClient = () =>
   new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: false } } })
 
 /** `qc` 를 넘기면 그 캐시로 다시 그린다(편집기를 드나들 때 트리가 새로 마운트되는 것). */
-function render(qc = newClient()) {
-  qc.setQueryData(docKeys.tree, tree)
+function render(qc = newClient(), data: DocTreeData = tree) {
+  qc.setQueryData(docKeys.tree, data)
   const container = document.createElement('div')
   root = createRoot(container)
   act(() =>
@@ -265,4 +265,30 @@ test('코드 없는 503(프록시 등)은 변환기 장애로 보지 않고 남�
   )
   expect(imports()).toHaveLength(1)
   expect(toast.error.mock.calls[0]![0]).toContain('나머지 1개(보내지 않음)')
+})
+
+const pressDelete = (el: Element) =>
+  act(() => {
+    el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }))
+  })
+
+test('빈 폴더 줄에서 Delete 를 누르면 메뉴의 폴더 지우기처럼 바로 지운다', async () => {
+  api.mockResolvedValue(undefined)
+  const container = render()
+  await pressDelete(container.querySelector('a[data-drag="folder"]')!)
+  expect(api).toHaveBeenCalledWith('/folders/f-1', { method: 'DELETE' })
+})
+
+test('문서 줄에서 Delete 를 누르면 휴지통 확인 창이 뜨고 초점이 휴지통으로 버튼에 간다(엔터가 그 버튼을 누른다)', async () => {
+  const container = render(newClient(), {
+    ...tree,
+    docs: [{ id: 'd-1', folder_id: 'f-1', title: '회의록', updated_at: '2026-11-16T00:00:00Z' }],
+  } as unknown as DocTreeData)
+  // 펼침 상태는 모듈 전역이라 앞 테스트(파일 가져오기)가 펼쳐 뒀을 수 있다.
+  act(() => container.querySelector<HTMLButtonElement>('button[aria-expanded="false"]')?.click())
+
+  await pressDelete(container.querySelector('a[data-drag="doc"]')!)
+
+  expect(document.activeElement?.textContent).toBe('휴지통으로')
+  expect(api).not.toHaveBeenCalled()
 })

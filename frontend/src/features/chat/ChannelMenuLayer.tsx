@@ -170,7 +170,13 @@ export function ChannelMenuLayer({
           <Button variant="secondary" size="sm" onClick={close} disabled={remove.isPending}>
             취소
           </Button>
-          <Button variant="danger" size="sm" onClick={deleteChannel} disabled={remove.isPending}>
+          <Button
+            variant="danger"
+            size="sm"
+            onClick={deleteChannel}
+            disabled={remove.isPending}
+            data-autofocus
+          >
             {remove.isPending ? <Spinner className="border-t-white" /> : '지우기'}
           </Button>
         </>

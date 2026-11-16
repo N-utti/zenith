@@ -52,7 +52,11 @@ export function useFocusTrap(
     // 안의 입력칸이 autoFocus 로 먼저 가져갔으면 그대로 둔다. 첫 요소(대개 닫기 X)로 뺏으면
     // 이름 입력창을 열고 바로 쳐도 글자가 안 들어간다.
     if (!panel?.contains(opener)) {
-      const first = panel?.querySelector<HTMLElement>(FOCUSABLE)
+      // `data-autofocus` 를 단 요소가 먼저다. 확인 창의 주 버튼이 초점을 받아 엔터 한 번으로 눌린다.
+      // autoFocus 를 쓰지 않는 건 그러면 opener 가 그 버튼이 되어, 닫은 뒤 열었던 줄로 초점이 못 돌아가서다.
+      const first =
+        panel?.querySelector<HTMLElement>('[data-autofocus]:not([disabled])') ??
+        panel?.querySelector<HTMLElement>(FOCUSABLE)
       // preventScroll: 폰 시트는 아래에서 올라오는 중(화면 밖)에 초점을 받는다. 굴리게 두면 아이폰 사파리가
       // 그 자리를 보이려고 화면을 위로 밀고, 시트가 제자리에 온 뒤에도 밀린 채 남는다. 창은 고정이라 굴릴 일이 없다.
       ;(first ?? panel)?.focus({ preventScroll: true })

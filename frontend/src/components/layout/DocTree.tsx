@@ -1,4 +1,11 @@
-import { useMemo, useRef, useState, type DragEvent, type MouseEvent } from 'react'
+import {
+  useMemo,
+  useRef,
+  useState,
+  type DragEvent,
+  type KeyboardEvent,
+  type MouseEvent,
+} from 'react'
 import { useMutationState } from '@tanstack/react-query'
 import { Link, NavLink, useLocation, useNavigate, useParams, useSearchParams } from 'react-router'
 import {
@@ -689,6 +696,25 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
   // 손가락 기기는 꾹 누르기로 같은 메뉴를 연다(폴더 줄의 버튼 셋을 대신한다).
   const longPress = useLongPress(openMenuAt)
 
+  /**
+   * 줄에 초점을 두고 Delete. 메뉴의 맨 아래 항목과 같은 일이다. 문서는 휴지통 확인 창을 띄우고(엔터로
+   * 확인), 폴더는 메뉴처럼 빈 것만 바로 지운다. 이름 입력창 같은 대화상자는 포털이라 DOM 에서 줄 밖이다.
+   */
+  const onKeyDown = (e: KeyboardEvent) => {
+    if (e.key !== 'Delete' || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return
+    if (!(e.target instanceof Element)) return
+    const link = e.target.closest('[data-row]')?.querySelector<HTMLAnchorElement>('a[data-drag]')
+    const id = link?.dataset.id
+    if (!id) return
+    e.preventDefault()
+    const item: TreeItem = { kind: link.dataset.drag === 'folder' ? 'folder' : 'doc', id }
+    const target = find(item)
+    if (!target) return
+    if (item.kind === 'doc') return setTrashing({ id, title: target.title })
+    if (folderHasChildren(id)) return void toast.error('안에 문서나 폴더가 있어 지울 수 없습니다.')
+    removeFolder(id, target.title)
+  }
+
   const copyLink = (id: string) =>
     // 받은 사람의 채팅·댓글에서 문서 제목 칩으로 바뀌는 주소(서버 주소 기준).
     void copyText(`${serverOrigin() || location.origin}/docs/${id}`).then(
@@ -800,7 +826,7 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
   }
 
   return (
-    <div {...dragHandlers} {...longPress} onContextMenu={openMenu}>
+    <div {...dragHandlers} {...longPress} onContextMenu={openMenu} onKeyDown={onKeyDown}>
       <input
         ref={filePicker}
         type="file"
