@@ -32,7 +32,10 @@ from app.models import (
     ApprovalDelegation,
     ApprovalDocument,
     ApprovalStep,
+    AttCorrection,
+    LeaveRequest,
     Notification,
+    OvertimeRequest,
     Team,
     User,
     WorkArrangement,
@@ -1210,6 +1213,57 @@ async def force_close(
     await db.commit()
     await push(notes)
     return await _out(db, doc, user)
+
+
+@router.delete(
+    "/approvals/{id}",
+    status_code=204,
+    summary="끝난 문서 지우기 — exec 만. 승인·반려·종결만(409 NOT_DONE), 근태 신청 문서는 409 ATTENDANCE_LINKED. 결재선·알림·첨부도 같이, 감사 approvals.deleted",
+)
+async def delete_done(
+    id: uuid.UUID,
+    request: Request,
+    user: User = Depends(require_exec),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    """완료 문서함(README 77)에서 문서 하나를 지운다(README 78). 되돌릴 수 없다 — 남는 것은 감사 기록뿐이다."""
+    doc = await _get_doc(db, id, lock=True)
+    if doc.status not in ("approved", "rejected", "closed"):
+        raise ApiError(409, "NOT_DONE", "끝난 문서만 지울 수 있습니다.")
+    # 근태 신청 4종은 신청 행이 이 문서를 가리키고 상태도 여기서 읽는다(13 §7.2) — 지우면 근태 기록이 깨진다
+    for table in (LeaveRequest, WorkArrangement, OvertimeRequest, AttCorrection):
+        if await db.scalar(select(exists().where(table.approval_id == doc.id))):
+            raise ApiError(409, "ATTENDANCE_LINKED", "근태 신청 문서는 지울 수 없습니다.")
+    audit.record(
+        db,
+        "approvals.deleted",
+        request=request,
+        actor_id=user.id,
+        target_id=doc.id,
+        detail={
+            "title": doc.title,
+            "status": doc.status,
+            "type_code": doc.type_code,
+            "drafter_id": str(doc.drafter_id),
+            # 지운 뒤에도 「언제 끝난 얼마짜리 문서였나」를 답할 수 있게(리뷰)
+            "amount": doc.amount,
+            "submitted_at": doc.submitted_at.isoformat() if doc.submitted_at else None,
+            "closed_at": doc.closed_at.isoformat() if doc.closed_at else None,
+        },
+    )
+    await db.execute(
+        delete(Notification).where(Notification.payload["approval_id"].astext == str(doc.id))
+    )
+    await db.execute(delete(ApprovalStep).where(ApprovalStep.doc_id == doc.id))
+    await db.delete(doc)
+    await db.commit()
+    # 첨부가 없어도 부른다 — 올리고 저장하지 않은 파일까지 치운다.
+    # ponytail: 응답이 저장소를 기다린다. 저장소가 느려 삭제 버튼이 오래 돌면 BackgroundTasks 로 넘긴다
+    try:  # 문서는 이미 지웠다 — 저장소가 잠깐 안 되면 오브젝트만 남는다(delete_draft 와 같은 한계)
+        await storage.remove_prefix(f"approvals/{id}/")
+    except ApiError:
+        log.warning("지운 결재 문서 %s 의 첨부를 지우지 못했다", id)
+    return Response(status_code=204)
 
 
 # ── 첨부 (13 FR-APV-05) — 채팅 첨부와 같은 규약, 열람은 문서 열람 판정 ────────────

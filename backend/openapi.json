@@ -5275,6 +5275,41 @@
             }
           }
         }
+      },
+      "delete": {
+        "tags": [
+          "approvals"
+        ],
+        "summary": "끝난 문서 지우기 — exec 만. 승인·반려·종결만(409 NOT_DONE), 근태 신청 문서는 409 ATTENDANCE_LINKED. 결재선·알림·첨부도 같이, 감사 approvals.deleted",
+        "description": "완료 문서함(README 77)에서 문서 하나를 지운다(README 78). 되돌릴 수 없다 — 남는 것은 감사 기록뿐이다.",
+        "operationId": "delete_done_api_approvals__id__delete",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/approvals/{id}/submit": {
