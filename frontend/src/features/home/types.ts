@@ -2,8 +2,8 @@ import type { Role, Schema } from '@/types'
 import type { Notification } from '@/features/notifications/types'
 
 /**
- * 이어서 작업 카드의 문서. 백엔드 `RecentDoc`. 문서 목록의 `DocSummary` 와 다르다.
- * `path` 는 최상위부터의 폴더 이름이고 카드에 경로로 그린다.
+ * 홈 한 벌의 최근 문서(홈 화면은 안 쓴다). 백엔드 `RecentDoc`. 문서 목록의 `DocSummary` 와 다르다.
+ * `path` 는 최상위부터의 폴더 이름이다.
  */
 export type RecentDoc = Schema<'RecentDoc'>
 

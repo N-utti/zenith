@@ -337,7 +337,7 @@ export function listTrash(limit: number, user?: Pick<User, 'id' | 'role'>): DocS
 }
 
 /**
- * 홈의 "이어서 작업". 백엔드 `RecentDoc` 과 같은 모양이다. 문서 목록의 `DocSummary` 와 달리
+ * 홈 한 벌의 최근 문서. 백엔드 `RecentDoc` 과 같은 모양이다. 문서 목록의 `DocSummary` 와 달리
  * 폴더 경로(`path`)가 실려 있다.
  */
 export function recentDocs(user: User, limit: number): RecentDoc[] {
@@ -559,7 +559,7 @@ export function touchDoc(
   if (input.locked !== undefined) doc.locked = input.locked
   // 「AI 근거로 쓰기」 스위치는 내용 변경이 아니다. 백엔드도 수정 시각과 수정한 사람을 그대로 둔다.
   if (input.ai_source !== undefined) doc.ai_source = input.ai_source
-  // 빈 본문으로 "이어서 작업" 순서를 흔들지 않는다. 백엔드도 아무것도 안 바꾸고 그대로 준다.
+  // 빈 본문으로 최근 문서 순서를 흔들지 않는다. 백엔드도 아무것도 안 바꾸고 그대로 준다.
   if (input.title === undefined && input.folder_id === undefined) return doc
   if (input.title !== undefined) doc.title = input.title
   if (input.folder_id !== undefined) doc.folder_id = input.folder_id
