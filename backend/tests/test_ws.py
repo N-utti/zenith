@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from httpx import AsyncClient
 from httpx_ws import HTTPXWSException, WebSocketDisconnect, aconnect_ws
 from httpx_ws.transport import ASGIWebSocketTransport
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 
 from app.models import (
     AuditEvent,
@@ -18,6 +18,7 @@ from app.models import (
     ChannelMember,
     Folder,
     Message,
+    MessageReaction,
     Notification,
     Workspace,
 )
@@ -523,3 +524,94 @@ async def test_given_password_closes_sockets_with_4428(app: FastAPI, users: User
         await login(client, "sujin@zenith.co.kr")
         async with aconnect_ws(WS, client) as ws:
             await expect_close(ws, 4428)
+
+
+async def test_reactions(app: FastAPI, users: Users, app_db) -> None:
+    """README 79: 멤버가 공감을 달고 떼면 그 메시지의 공감 전체가 멤버 전원에게 온다. 과거 메시지 조회에도 실린다.
+    두 번 눌러도 한 번, 모르는 이모지 VALIDATION, 다른 채널의 메시지 NOT_FOUND, 멤버 아니면 FORBIDDEN, 메시지를 지우면 같이 사라진다."""
+    channel = await make_channel(app_db, [users.member, users.lead])
+    other = await make_channel(app_db, [users.member, users.lead], name="딴 방")
+    cid = str(channel.id)
+    async with ws_client(app) as a, ws_client(app) as b, ws_client(app) as c:
+        await login(a, "sujin@zenith.co.kr")
+        await login(b, "donghyun@zenith.co.kr")
+        await login(c, "jaeho@zenith.co.kr")  # 멤버 아님
+        async with (
+            aconnect_ws(WS, a) as a_ws,
+            aconnect_ws(WS, b) as b_ws,
+            aconnect_ws(WS, c) as c_ws,
+        ):
+            await send(a_ws, op="msg", channel_id=cid, body="공감해 주세요")
+            mid = (await recv_until(a_ws, "msg"))["message"]["id"]
+            await recv_until(b_ws, "msg")
+
+            await send(b_ws, op="react", channel_id=cid, message_id=mid, emoji="👍", on=True)
+            for sock in (a_ws, b_ws):  # 누른 사람에게도 온다
+                ev = await recv_until(sock, "reaction")
+                assert ev["message_id"] == mid and ev["channel_id"] == cid
+                assert [(r["emoji"], [u["name"] for u in r["users"]]) for r in ev["reactions"]] == [
+                    ("👍", ["박동현"])
+                ]
+            # 같은 것을 또 눌러도 바뀐 게 없어 방송하지 않는다(리뷰)
+            await send(b_ws, op="react", channel_id=cid, message_id=mid, emoji="👍", on=True)
+            await silent(a_ws)
+            # 다른 사람이 누르면 누른 순으로 붙는다
+            await send(a_ws, op="react", channel_id=cid, message_id=mid, emoji="👍", on=True)
+            ev = await recv_until(a_ws, "reaction")
+            assert [u["name"] for u in ev["reactions"][0]["users"]] == ["박동현", "김수진"]
+            await send(a_ws, op="react", channel_id=cid, message_id=mid, emoji="❤️", on=True)
+            ev = await recv_until(a_ws, "reaction")
+            assert [r["emoji"] for r in ev["reactions"]] == ["👍", "❤️"]
+
+            # 과거 메시지 조회에도 같은 모양으로 실린다. 공감은 안읽음을 늘리지 않는다
+            items = (await b.get(f"/api/channels/{cid}/messages")).json()["items"]
+            assert [r["emoji"] for r in items[-1]["reactions"]] == ["👍", "❤️"]
+            mine = next(
+                ch for ch in (await a.get("/api/channels")).json()["items"] if ch["id"] == cid
+            )
+            assert mine["unread"] == 0
+
+            # 떼기 — 남의 공감은 그대로
+            await send(b_ws, op="react", channel_id=cid, message_id=mid, emoji="👍", on=False)
+            ev = await recv_until(a_ws, "reaction")
+            assert [(r["emoji"], len(r["users"])) for r in ev["reactions"]] == [("👍", 1), ("❤️", 1)]
+
+            # 모르는 이모지, 다른 채널의 메시지, 멤버 아님
+            await send(a_ws, op="react", channel_id=cid, message_id=mid, emoji="💩", on=True)
+            assert (await recv_until(a_ws, "error"))["code"] == "VALIDATION"
+            await send(
+                a_ws, op="react", channel_id=str(other.id), message_id=mid, emoji="👍", on=True
+            )
+            assert (await recv_until(a_ws, "error"))["code"] == "NOT_FOUND"
+            await send(c_ws, op="react", channel_id=cid, message_id=mid, emoji="👍", on=True)
+            assert (await recv_until(c_ws, "error"))["code"] == "FORBIDDEN"
+            await silent(c_ws)  # 멤버가 아니면 reaction 방송도 받지 않는다
+            # 안 누른 것을 떼면 바뀐 게 없어 방송하지 않는다 (a_ws 는 앞의 reaction 을 다 읽어 비어 있다)
+            await send(a_ws, op="react", channel_id=cid, message_id=mid, emoji="😂", on=False)
+            await silent(a_ws)
+
+            # 메시지를 지우면 공감도 사라진다
+            await send(a_ws, op="del", channel_id=cid, message_id=mid)
+            await recv_until(a_ws, "msg_del")
+    left = await app_db.scalar(select(func.count()).select_from(MessageReaction))
+    assert left == 0
+
+
+async def test_reactions_cleared_when_channel_is_deleted(
+    app: FastAPI, users: Users, app_db
+) -> None:
+    """채널을 지우면 그 메시지들의 공감도 CASCADE 로 사라진다(리뷰)."""
+    channel = await make_channel(app_db, [users.member, users.exec])
+    msg = Message(
+        channel_id=channel.id, author_id=users.member.id, body="글", created_at=datetime.now(UTC)
+    )
+    app_db.add(msg)
+    await app_db.flush()
+    app_db.add(MessageReaction(message_id=msg.id, user_id=users.member.id, emoji="👍"))
+    await app_db.commit()
+    async with ws_client(app) as x:
+        await login(x, "jaeho@zenith.co.kr")  # 임원이 공개 채널을 지운다(#349)
+        r = await x.delete(f"/api/channels/{channel.id}", headers=csrf(x))
+    assert r.status_code == 204, r.text
+    left = await app_db.scalar(select(func.count()).select_from(MessageReaction))
+    assert left == 0

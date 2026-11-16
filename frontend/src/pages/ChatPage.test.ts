@@ -62,6 +62,7 @@ const toast: ToastApi = { success: vi.fn(), error: vi.fn(), info: vi.fn() }
 function message(channelId: string, n: number): ChatMessage {
   return {
     id: `${channelId}-${n}`,
+    reactions: [],
     channel_id: channelId,
     // 둘째 줄은 내 메시지다. 내 줄에는 고치기·지우기 함수가 넘어가는데, 그 함수가 그릴 때마다
     // 새로 만들어지면 내 줄만 매번 다시 그려진다. 아래 횟수 단언이 그것도 같이 잡는다.

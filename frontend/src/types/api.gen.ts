@@ -4036,6 +4036,11 @@ export interface components {
             created_at: string;
             /** Edited At */
             edited_at: string | null;
+            /**
+             * Reactions
+             * @default []
+             */
+            reactions: components["schemas"]["ReactionOut"][];
         };
         /** MessagePage */
         MessagePage: {
@@ -4554,6 +4559,13 @@ export interface components {
              */
             to: string;
             summary: components["schemas"]["Summary"];
+        };
+        /** ReactionOut */
+        ReactionOut: {
+            /** Emoji */
+            emoji: string;
+            /** Users */
+            users: components["schemas"]["app__routers__channels__Person"][];
         };
         /** ReadIn */
         ReadIn: {

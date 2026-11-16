@@ -12375,6 +12375,14 @@
               }
             ],
             "title": "Edited At"
+          },
+          "reactions": {
+            "items": {
+              "$ref": "#/components/schemas/ReactionOut"
+            },
+            "type": "array",
+            "title": "Reactions",
+            "default": []
           }
         },
         "type": "object",
@@ -13755,6 +13763,27 @@
           "summary"
         ],
         "title": "RangeOut"
+      },
+      "ReactionOut": {
+        "properties": {
+          "emoji": {
+            "type": "string",
+            "title": "Emoji"
+          },
+          "users": {
+            "items": {
+              "$ref": "#/components/schemas/app__routers__channels__Person"
+            },
+            "type": "array",
+            "title": "Users"
+          }
+        },
+        "type": "object",
+        "required": [
+          "emoji",
+          "users"
+        ],
+        "title": "ReactionOut"
       },
       "ReadIn": {
         "properties": {

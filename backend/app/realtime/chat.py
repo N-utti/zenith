@@ -1,8 +1,8 @@
 """04-API §4.1 `/api/ws` — 채팅·알림·presence 단일 소켓.
 
-프레임은 JSON 텍스트. 클라이언트 → 서버 `{"op": sub|msg|read|typing|edit|del, ...}`, 서버 → 클라이언트
-`{"ev": msg|unread|notice|presence|typing|error|msg_edit|msg_del, ...}`. 04 에 없는 `typing`·`error` 이벤트는
-구현이 더했고(README 11), `edit`·`del`·`msg_edit`·`msg_del` 은 이슈 #264(README 27).
+프레임은 JSON 텍스트. 클라이언트 → 서버 `{"op": sub|msg|read|typing|edit|del|react, ...}`, 서버 → 클라이언트
+`{"ev": msg|unread|notice|presence|typing|error|msg_edit|msg_del|reaction, ...}`. 04 에 없는 `typing`·`error` 이벤트는
+구현이 더했고(README 11), `edit`·`del`·`msg_edit`·`msg_del` 은 이슈 #264(README 27), `react`·`reaction` 은 README 79.
 
 구독 범위는 `sub` 가 아니라 DB 의 channel_members 가 정한다 — 내가 멤버인 채널의 일은 전부 받고, `sub` 는
 받아들이되 아무것도 바꾸지 않는다. 소켓이 "무엇을 구독했다" 고 주장하는 것과 권한이 어긋날 수 없게.
@@ -39,6 +39,7 @@ from pydantic import (
     model_validator,
 )
 from sqlalchemy import delete, func, select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import acl, audit
@@ -52,15 +53,18 @@ from app.models import (
     ChannelUpload,
     Document,
     Message,
+    MessageReaction,
     Notification,
     User,
 )
 from app.prefs import wants
 from app.routers.channels import (
     MAX_ATTACHMENTS,
+    REACTIONS,
     AttachmentOut,
     attachment_url,
     parse_attachment_url,
+    reactions_of,
 )
 
 log = logging.getLogger("zenith.ws")
@@ -110,6 +114,16 @@ class DelOp(BaseModel):
     message_id: uuid.UUID
 
 
+class ReactOp(BaseModel):
+    """공감을 달거나(on) 뗀다(README 79). 채널 멤버 누구나, 자기 공감만."""
+
+    op: Literal["react"]
+    channel_id: uuid.UUID
+    message_id: uuid.UUID
+    emoji: str = Field(max_length=16)
+    on: bool
+
+
 class ReadOp(BaseModel):
     op: Literal["read"]
     channel_id: uuid.UUID
@@ -120,7 +134,7 @@ class TypingOp(BaseModel):
     channel_id: uuid.UUID
 
 
-AnyOp = SubOp | MsgOp | EditOp | DelOp | ReadOp | TypingOp
+AnyOp = SubOp | MsgOp | EditOp | DelOp | ReactOp | ReadOp | TypingOp
 ClientOp = TypeAdapter(Annotated[AnyOp, Field(discriminator="op")])
 
 
@@ -519,6 +533,61 @@ async def _handle(ws: WebSocket, user: User, op: AnyOp) -> None:
                     events.append(
                         ([uid], {"ev": "unread", "channel_id": op.channel_id, "count": count})
                     )
+        elif isinstance(op, ReactOp):
+            if op.emoji not in REACTIONS:
+                await _send(
+                    ws,
+                    _dumps(
+                        _error("VALIDATION", "쓸 수 없는 이모지입니다.", channel_id=op.channel_id)
+                    ),
+                )
+                return
+            # 다른 채널의 메시지 id 로는 못 단다 — 멤버 판정은 위에서 이 채널로 했다
+            # 행을 잠근다 — 잠그지 않으면 그 사이 메시지가 지워질 때 insert 가 FK 위반으로 소켓을 닫는다(리뷰).
+            # 잠그면 지우기가 이 커밋을 기다렸다 CASCADE 로 공감까지 지운다. key_share 라 읽기끼린 안 막는다
+            found = await db.scalar(
+                select(Message.id)
+                .where(Message.id == op.message_id, Message.channel_id == op.channel_id)
+                .with_for_update(key_share=True)
+            )
+            if found is None:
+                await _send(
+                    ws, _dumps(_error("NOT_FOUND", "없는 메시지입니다.", channel_id=op.channel_id))
+                )
+                return
+            if op.on:
+                # 두 탭에서 같이 눌러도 한 번 — PK 충돌은 조용히 넘긴다. 앱 시각으로 찍어 누른 순서를 지킨다
+                result = await db.execute(
+                    pg_insert(MessageReaction)
+                    .values(
+                        message_id=op.message_id, user_id=user.id, emoji=op.emoji, created_at=now
+                    )
+                    .on_conflict_do_nothing()
+                )
+            else:
+                result = await db.execute(
+                    delete(MessageReaction).where(
+                        MessageReaction.message_id == op.message_id,
+                        MessageReaction.user_id == user.id,
+                        MessageReaction.emoji == op.emoji,
+                    )
+                )
+            await db.commit()
+            if result.rowcount == 0:
+                return  # 이미 눌렀거나 안 누른 것을 뗀 것 — 바뀐 게 없으니 방송하지 않는다(리뷰)
+            # 그 메시지의 공감 전체를 멤버 전원에게(누른 사람 포함) — 화면은 덮어쓰기만 한다. 알림·안읽음은 건드리지 않는다
+            current = (await reactions_of(db, [op.message_id])).get(op.message_id, [])
+            events.append(
+                (
+                    list(members),
+                    {
+                        "ev": "reaction",
+                        "channel_id": op.channel_id,
+                        "message_id": op.message_id,
+                        "reactions": [r.model_dump() for r in current],
+                    },
+                )
+            )
         elif isinstance(op, ReadOp):
             await db.execute(
                 update(ChannelMember)
