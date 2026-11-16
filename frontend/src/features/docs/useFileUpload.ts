@@ -61,7 +61,8 @@ export function useFileUpload(editor: Editor | null, docId: string) {
 
   const insert = useCallback(
     async (files: File[]) => {
-      if (!editor || files.length === 0) return
+      // 잠긴 문서는 편집기가 읽기 전용이다. 드롭·붙여넣기는 DOM 에 직접 걸려 있어 여기서 거른다.
+      if (!editor?.isEditable || files.length === 0) return
 
       const tooBig = files.find((file) => file.size > MAX_FILE_BYTES)
       if (tooBig) {

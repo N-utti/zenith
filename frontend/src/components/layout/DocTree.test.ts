@@ -305,3 +305,67 @@ test('문서 우클릭 메뉴에서 Delete 를 누르면 휴지통 확인 창이
   expect(document.activeElement?.textContent).toBe('휴지통으로')
   expect(api).not.toHaveBeenCalled()
 })
+
+/** 줄을 우클릭해 메뉴를 연다. 메뉴의 항목 이름들을 돌려준다. */
+function openMenu(row: Element) {
+  document.elementsFromPoint ??= () => []
+  window.matchMedia ??= (() => ({ matches: false })) as unknown as typeof window.matchMedia
+  act(() => {
+    row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))
+  })
+  return [...document.querySelectorAll('[role="menuitem"]')].map((el) => el.textContent)
+}
+
+const lockedTree = {
+  ...tree,
+  docs: [
+    {
+      id: 'd-1',
+      folder_id: 'f-1',
+      title: '취업규칙',
+      updated_at: '2026-11-16T00:00:00Z',
+      locked: true,
+    },
+  ],
+} as unknown as DocTreeData
+
+test('잠긴 문서는 자물쇠가 보이고, 메뉴에 이름 변경·옮기기·휴지통이 없다(사원에게는 잠금 항목도 없다)', () => {
+  const container = render(newClient(), lockedTree)
+  act(() => container.querySelector<HTMLButtonElement>('button[aria-expanded="false"]')?.click())
+  const row = container.querySelector('a[data-drag="doc"]')!
+  expect(row.querySelector('[aria-label="잠긴 문서"]')).not.toBeNull()
+
+  const items = openMenu(row)
+  expect(items).not.toContain('이름 변경')
+  expect(items).not.toContain('다른 폴더로 옮기기')
+  expect(items).not.toContain('휴지통으로')
+  expect(items).not.toContain('잠금 풀기')
+  expect(items).toContain('링크 복사')
+})
+
+test('임원은 문서 메뉴에서 잠그고 풀 수 있다', async () => {
+  auth.user!.role = 'exec'
+  try {
+    // 잠금을 바꾼 뒤 트리를 다시 받는다. 그 요청에는 트리를 준다.
+    api.mockImplementation((path: string) =>
+      Promise.resolve(
+        path === '/docs/d-1' ? { id: 'd-1', title: '취업규칙', locked: false } : lockedTree,
+      ),
+    )
+    const container = render(newClient(), lockedTree)
+    act(() => container.querySelector<HTMLButtonElement>('button[aria-expanded="false"]')?.click())
+    openMenu(container.querySelector('a[data-drag="doc"]')!)
+    const unlock = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
+      (el) => el.textContent === '잠금 풀기',
+    )!
+    act(() => unlock.click())
+    await act(async () => {})
+    expect(api).toHaveBeenCalledWith('/docs/d-1', {
+      method: 'PATCH',
+      body: JSON.stringify({ locked: false }),
+    })
+    expect(toast.success).toHaveBeenCalledWith('취업규칙 문서 잠금을 풀었습니다.')
+  } finally {
+    auth.user!.role = 'member'
+  }
+})

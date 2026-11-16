@@ -32,7 +32,8 @@ export function VersionPreview({
   before: RestoredContent | null
   /** 지금 문서의 본문 폭(`useCollabWidth`). 편집 화면과 같은 폭으로 보여야 표가 같은 모양이다. */
   widthClass: string
-  onRestore: () => void
+  /** 없으면 되돌리기 버튼을 그리지 않는다(잠긴 문서). */
+  onRestore?: () => void
   onClose: () => void
   restoring: boolean
 }) {
@@ -81,9 +82,11 @@ export function VersionPreview({
             </span>
           )}
         </p>
-        <Button size="sm" onClick={onRestore} disabled={restoring}>
-          <RotateCcw className="size-4" />이 버전으로 되돌리기
-        </Button>
+        {onRestore && (
+          <Button size="sm" onClick={onRestore} disabled={restoring}>
+            <RotateCcw className="size-4" />이 버전으로 되돌리기
+          </Button>
+        )}
         <Button variant="ghost" size="sm" onClick={onClose} aria-label="미리보기 닫기">
           <X className="size-4" />
         </Button>

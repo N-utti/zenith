@@ -247,3 +247,15 @@ it('폴더 열람 권한: 조상 하나라도 막히면 아래 전부 안 보이
   updateFolder(top, { allowed_users: [member.id] })
   expect(canViewFolder(member, child.id)).toBe(true)
 })
+
+it('잠금을 바꿔도 수정 시각·수정한 사람은 그대로다(백엔드 #619)', () => {
+  const doc = findDoc('d-12')!
+  const before = { at: doc.updated_at, by: doc.updated_by }
+  try {
+    touchDoc('d-12', user, { locked: false })
+    expect(doc.locked).toBe(false)
+    expect({ at: doc.updated_at, by: doc.updated_by }).toEqual(before)
+  } finally {
+    touchDoc('d-12', user, { locked: true })
+  }
+})
