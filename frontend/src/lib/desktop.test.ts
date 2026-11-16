@@ -4,6 +4,7 @@ import {
   findUpdate,
   installExternalLinkHandler,
   installUpdate,
+  onQuitRequested,
   openExternal,
   restrictImageSources,
 } from './desktop'
@@ -126,4 +127,30 @@ test('설치는 셸에 맡기고, 실패는 부른 쪽이 알게 던진다', asy
   window.__TAURI__ = { core: { invoke } }
   await expect(installUpdate()).rejects.toThrow('받지 못함')
   expect(invoke).toHaveBeenCalledWith('install_update')
+})
+
+test('트레이 종료를 받으면 로그아웃을 마친 뒤 셸을 끄고, 로그아웃이 실패해도 끈다', async () => {
+  const invoke = vi.fn(() => Promise.resolve())
+  let fire = () => {}
+  const listen = vi.fn((_: string, handler: () => void) => {
+    fire = handler
+    return Promise.resolve(() => {})
+  })
+  window.__TAURI__ = { core: { invoke }, event: { listen } }
+  vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+  let done = () => {}
+  const off = onQuitRequested(() => new Promise<void>((resolve) => (done = resolve)))
+  expect(listen).toHaveBeenCalledWith('quit-requested', expect.any(Function))
+  fire()
+  await Promise.resolve()
+  expect(invoke).not.toHaveBeenCalled() // 로그아웃이 끝나기 전에는 끄지 않는다
+  done()
+  await vi.waitFor(() => expect(invoke).toHaveBeenCalledWith('quit_app'))
+  off()
+
+  invoke.mockClear()
+  onQuitRequested(() => Promise.reject(new Error('offline')))
+  fire()
+  await vi.waitFor(() => expect(invoke).toHaveBeenCalledWith('quit_app'))
 })

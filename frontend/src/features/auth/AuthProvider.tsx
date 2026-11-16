@@ -7,7 +7,7 @@ import { claimDocCaches, disownDocCaches } from '@/features/docs/localCache'
 import { setSplitDoc } from '@/features/docs/splitDoc'
 import { setOnboardingOwner } from '@/features/home/onboarding'
 import { api, ApiError } from '@/lib/api'
-import { clearNotifications } from '@/lib/desktop'
+import { clearNotifications, onQuitRequested } from '@/lib/desktop'
 import type { User } from '@/types'
 import { AuthContext, type AuthValue } from './AuthContext'
 import { meQueryKey } from './queries'
@@ -131,6 +131,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // 로그아웃한 사람의 다른 탭도 로그인 화면으로 보낸다. 자리를 뜬 뒤 그 탭에 앞사람 화면이 남지 않게.
     tabs?.postMessage({ userId: null } satisfies TabMessage)
   }, [qc])
+
+  // 데스크톱 앱을 트레이 「종료」로 끄면 로그아웃한다. 다음에 켰을 때 앞사람 세션으로 들어가지 않게.
+  // 로그인 여부는 따지지 않는다. 부팅 때 `/me` 가 실패했어도 쿠키는 남아 있을 수 있다. 셸이 끄기 직전에 쿠키도 지운다.
+  useEffect(() => onQuitRequested(logout), [logout])
 
   const value = useMemo<AuthValue>(() => {
     const status: AuthValue['status'] = isPending

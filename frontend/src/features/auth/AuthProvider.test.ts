@@ -5,6 +5,7 @@ import { afterEach, expect, test, vi } from 'vitest'
 import { appendMessage, getThread } from '@/features/ai/store'
 import { getDraft, setDraft } from '@/features/chat/drafts'
 import { docCacheUsable } from '@/features/docs/localCache'
+import { ApiError } from '@/lib/api'
 import { AuthContext, type AuthValue } from './AuthContext'
 import { AuthProvider } from './AuthProvider'
 
@@ -242,5 +243,26 @@ test('데스크톱 앱이면 로그인·로그아웃 때 알림 센터의 채팅
   await act(() => view.auth!.logout())
   expect(invoke).toHaveBeenCalledTimes(2)
   expect(invoke).toHaveBeenCalledWith('clear_notifications')
+  act(() => root.unmount())
+})
+
+test('데스크톱 앱을 트레이에서 종료하면 로그인 정보를 못 받은 상태여도 로그아웃한 뒤 끈다', async () => {
+  // 부팅 때 `/me` 가 실패해도 쿠키는 남아 있을 수 있다.
+  me.answer = () => Promise.reject(new ApiError(503, '서버 오류'))
+  const invoke = vi.fn<(cmd: string) => Promise<void>>(() => Promise.resolve())
+  let quit = () => {}
+  const listen = vi.fn((_: string, handler: () => void) => {
+    quit = handler
+    return Promise.resolve(() => {})
+  })
+  window.__TAURI__ = { core: { invoke }, event: { listen } }
+  const { view, root, rendered } = mount()
+  await rendered
+  await vi.waitFor(() => expect(view.auth?.status).toBe('anonymous'))
+
+  quit()
+  await vi.waitFor(() => expect(invoke).toHaveBeenCalledWith('quit_app'))
+  // 알림 센터 비우기는 `logout` 이 끝날 때 부른다. 끄기보다 먼저다.
+  expect(invoke.mock.calls.map(([cmd]) => cmd)).toEqual(['clear_notifications', 'quit_app'])
   act(() => root.unmount())
 })
