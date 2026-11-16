@@ -4,7 +4,7 @@ import { useToast } from '@/components/ui/ToastContext'
 import { useCurrentUser } from '@/features/auth/AuthContext'
 import { meQueryKey, reloadMe } from '@/features/auth/queries'
 import { api, ApiError } from '@/lib/api'
-import { clearNotifications, notify } from '@/lib/desktop'
+import { clearNotifications, notify, type DesktopNotification } from '@/lib/desktop'
 import { wsUrl } from '@/lib/serverOrigin'
 import { approvalsKey } from '@/features/approvals/api'
 import { homeKeys } from '@/features/home/keys'
@@ -14,6 +14,7 @@ import { AI_NAME, isAiCommand } from './aiCommand'
 import { chatKeys } from './api'
 import {
   appendMessage,
+  batchAlert,
   errorText,
   removeMessage,
   replaceMessage,
@@ -48,14 +49,24 @@ function socketUrl(): string {
 }
 
 /**
- * 새 메시지를 OS 알림으로 띄운다. 데스크탑 셸이 아니면 notify가 알아서 빠진다.
+ * 몰려온 메시지를 OS 알림 하나로 묶는 시간. 첫 메시지부터 잰다. 계속 와도 이만큼마다 하나만 뜬다.
+ * 그 대신 첫 알림이 이만큼 늦게 뜬다.
+ */
+const ALERT_BATCH_MS = 2000
+
+/**
+ * 새 메시지의 OS 알림 문구. 알릴 게 아니면 null. 데스크탑 셸이 아니면 notify가 알아서 빠진다.
  *
  * 창을 보고 있을 때는 띄우지 않는다. 화면에 이미 메시지가 나타나는데 토스트까지
  * 겹치면 방해만 된다. 최소화·다른 앱 사용 중일 때만 알린다.
  */
-function notifyIncoming(qc: QueryClient, message: ChatMessage, currentUserId: string): void {
-  if (message.author.id === currentUserId) return
-  if (document.hasFocus()) return
+function incomingAlert(
+  qc: QueryClient,
+  message: ChatMessage,
+  currentUserId: string,
+): DesktopNotification | null {
+  if (message.author.id === currentUserId) return null
+  if (document.hasFocus()) return null
 
   const channels = qc.getQueryData<{ items: ChatChannel[] }>(chatKeys.channels)
   const channel = channels?.items.find((item) => item.id === message.channel_id)
@@ -66,7 +77,7 @@ function notifyIncoming(qc: QueryClient, message: ChatMessage, currentUserId: st
       ? `${channel.is_private ? '' : '#'}${channel.name} · ${message.author.name}`
       : message.author.name
 
-  void notify({ title, body: message.body })
+  return { title, body: message.body }
 }
 
 export interface ChatSocket {
@@ -170,6 +181,9 @@ export function useChatSocket(): ChatSocket {
     let closed = false
     let reconnectTimer: number | undefined
     let settleTimer: number | undefined
+    let alertTimer: number | undefined
+    /** 아직 안 띄운 새 메시지 알림. `ALERT_BATCH_MS` 가 지나면 하나로 묶어 띄운다. */
+    let pendingAlerts: { id: string; alert: DesktopNotification }[] = []
     /** 자리 잡지 못하고 연달아 닫힌 횟수. */
     let failures = 0
     // 이 effect가 만든 소켓만 따로 붙잡는다. 공유 ref를 닫으면 effect가 겹칠 때
@@ -269,7 +283,18 @@ export function useChatSocket(): ChatSocket {
           }
           // 홈은 여기서 안 받는다. 홈이 채팅에서 쓰는 것은 멘션뿐이고, 멘션이면 같은 메시지의
           // `notice` 가 따라와 그쪽이 받는다. 여기서도 받으면 메시지 한 통마다 홈을 다시 받는다.
-          notifyIncoming(qc, message, user.id)
+          const alert = incomingAlert(qc, message, user.id)
+          if (alert) {
+            pendingAlerts.push({ id: message.id, alert })
+            alertTimer ??= window.setTimeout(() => {
+              // 모으는 사이 창으로 돌아왔으면 이미 화면에서 봤다.
+              if (pendingAlerts.length && !document.hasFocus()) {
+                void notify(batchAlert(pendingAlerts.map((item) => item.alert)))
+              }
+              pendingAlerts = []
+              alertTimer = undefined
+            }, ALERT_BATCH_MS)
+          }
           // 봇 답이 오면 기다리는 표시를 끈다. 같은 채널에 둘이 물었으면 먼저 온 답에 꺼진다.
           if (message.author.is_bot) hideTyping(message.channel_id, AI_NAME)
           return
@@ -300,6 +325,8 @@ export function useChatSocket(): ChatSocket {
 
         if (event.ev === 'msg_del') {
           const { channel_id, message_id } = event
+          // 모으는 사이 지운 메시지(잘못 보낸 글)는 알림에 싣지 않는다.
+          pendingAlerts = pendingAlerts.filter((item) => item.id !== message_id)
           qc.setQueryData<{ items: ChatMessage[] }>(chatKeys.messages(channel_id), (old) =>
             removeMessage(old, message_id),
           )
@@ -367,7 +394,7 @@ export function useChatSocket(): ChatSocket {
               }
             }
           }
-          // 창을 보고 있으면 사이드바 배지가 오른다. OS 알림은 `notifyIncoming` 과 같은 조건으로.
+          // 창을 보고 있으면 사이드바 배지가 오른다. OS 알림은 `incomingAlert` 와 같은 조건으로.
           const alert = noticeToast(event)
           if (alert && !document.hasFocus()) void notify(alert)
           return
@@ -393,6 +420,8 @@ export function useChatSocket(): ChatSocket {
       closed = true
       window.clearTimeout(reconnectTimer)
       window.clearTimeout(settleTimer)
+      // 로그아웃 뒤에 앞사람 메시지가 뜨지 않게 띄우지 않고 버린다.
+      window.clearTimeout(alertTimer)
       typingTimers.forEach((timer) => window.clearTimeout(timer))
       typingTimers.clear()
       socket?.close()

@@ -1,4 +1,5 @@
 import type { ChatChannel, ChatMessage, MessagePage } from './types'
+import type { DesktopNotification } from '@/lib/desktop'
 
 /**
  * 소켓 이벤트를 캐시에 반영하는 순수 변환들. 훅에서 떼어 둔 이유는 테스트 때문이다.
@@ -160,4 +161,18 @@ export function withUnread(
 export function errorText(event: { code: string; detail: unknown }): string {
   if (typeof event.detail === 'string' && event.detail.trim()) return event.detail
   return '채팅 서버가 요청을 거절했습니다.'
+}
+
+/**
+ * 몰려온 새 메시지 알림을 하나로 묶는다. 하나면 그대로, 여럿이면 개수를 제목에 두고 마지막 것을 본문에 보인다.
+ * Windows 알림이 메시지마다 하나씩 쌓이지 않게 한다.
+ */
+export function batchAlert(pending: DesktopNotification[]): DesktopNotification {
+  const last = pending[pending.length - 1]
+  if (pending.length === 1) return last
+  // 첨부만 보낸 메시지는 본문이 비어 「이름: 」 으로 끝나지 않게 이름만 쓴다.
+  return {
+    title: `새 메시지 ${pending.length}개`,
+    body: last.body ? `${last.title}: ${last.body}` : last.title,
+  }
 }
