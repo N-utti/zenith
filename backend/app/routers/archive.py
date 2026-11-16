@@ -105,6 +105,9 @@ async def list_archive(
         .limit(limit)
     )
     restricted = set(await db.scalars(acl.restricted_folder_ids()))  # 조상 등급까지(README 57)
+    restricted |= set(
+        await db.scalars(acl.private_folder_ids())
+    )  # 개인 폴더도 「전원」이 아니다(72)
     for f, uploader, title, folder_id in doc_rows:
         items.append(
             ArchiveFile(

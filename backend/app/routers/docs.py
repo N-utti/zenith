@@ -89,6 +89,8 @@ class FolderOut(BaseModel):
     allowed_users: list[
         uuid.UUID
     ]  # 등급과 무관하게 여는 사람들(임원만 바꾼다). 보는 사람 누구나 본다(15명 사내)
+    # 개인 폴더(README 72)의 주인 — 값이 있으면 이 폴더와 그 아래는 주인만 본다(트리에 실려 왔다면 곧 나). 하위 폴더는 null
+    owner_id: uuid.UUID | None
 
 
 class FolderCreateIn(BaseModel):
@@ -97,6 +99,8 @@ class FolderCreateIn(BaseModel):
     sort: int = 0
     min_role: MinRole = "member"  # 기본값이 아니면 임원만(403)
     allowed_users: list[uuid.UUID] = Field(default_factory=list, max_length=200)
+    # 개인 폴더(README 72) — 나만 보는 최상위 폴더. 누구나 만든다. parent_id·min_role·allowed_users 와 같이 못 쓴다(422)
+    private: bool = False
 
 
 class FolderPatchIn(BaseModel):
@@ -193,6 +197,8 @@ class Items[T](BaseModel):
 
 # ── 헬퍼 ────────────────────────────────────────────────────────────
 
+PRIVATE_NO_GRADE = "개인 폴더 안에는 등급·사람 지정을 걸 수 없습니다."
+
 
 def _now() -> datetime:
     return datetime.now(UTC)
@@ -277,6 +283,7 @@ async def _folder_out(db: AsyncSession, folders: list[Folder]) -> list[FolderOut
             sort=f.sort,
             min_role=f.min_role,
             allowed_users=sorted(members.get(f.id, []), key=str),  # 응답 순서를 일정하게
+            owner_id=f.owner_id,
         )
         for f in folders
     ]
@@ -382,16 +389,25 @@ async def create_folder(
         raise ApiError(
             409, "CONFLICT", "워크스페이스가 없습니다. scripts/seed.py 를 먼저 돌리세요."
         )
-    if body.min_role != "member" or body.allowed_users:
+    graded = body.min_role != "member" or bool(body.allowed_users)
+    if body.private and (body.parent_id is not None or graded):
+        # 개인 폴더는 최상위에만 — 남들과 쓰는 폴더 안에 안 보이는 폴더가 끼지 않게. 하위는 그냥 만들면 따라간다
+        raise ApiError(
+            422, "VALIDATION", "개인 폴더는 최상위에만 만들고 등급·사람 지정을 함께 걸 수 없습니다."
+        )
+    if graded:
         acl.require_acl_editor(user)  # 등급·사람 지정은 임원만(README 57) — 다른 검사보다 먼저
     if body.parent_id is not None:
         await _require_folder(db, body.parent_id, user)
+        if graded and await acl.is_private(db, body.parent_id):
+            raise ApiError(422, "VALIDATION", PRIVATE_NO_GRADE)
     folder = Folder(
         ws_id=ws_id,
         parent_id=body.parent_id,
         title=body.title,
         sort=body.sort,
         min_role=body.min_role,
+        owner_id=user.id if body.private else None,
     )
     db.add(folder)
     await db.flush()
@@ -419,6 +435,9 @@ async def update_folder(
         acl.require_acl_editor(user)  # 등급·사람 지정은 임원만(README 57) — 다른 검사보다 먼저
     if allowed is None:
         raise ApiError(422, "VALIDATION", "allowed_users 는 null 일 수 없습니다.")
+    private = await acl.is_private(db, folder.id)
+    if private and ("min_role" in changes or allowed != "unset"):
+        raise ApiError(422, "VALIDATION", PRIVATE_NO_GRADE)
     if "parent_id" in changes:
         # 이동은 등급을 바꾸는 것과 같다(등급 폴더에서 꺼내면 공개, 넣으면 숨김) — 어느 쪽이든 「전원 열람」이 아니면 임원만
         if await acl.is_restricted(db, folder.id) or (
@@ -428,6 +447,17 @@ async def update_folder(
         if changes["parent_id"] is not None:
             await _require_folder(db, changes["parent_id"], user)
             await _assert_no_cycle(db, folder.id, changes["parent_id"])
+        # 폴더는 개인 폴더 경계를 못 넘는다(README 72) — 남들과 쓰던 폴더를 통째로 숨기거나, 개인 폴더가 최상위를 떠나는
+        # 일이 없게. 문서는 한 건씩 넘나든다(update_doc). 대상을 볼 수 있는지 확인한 뒤에 판정한다(존재를 새게 하지 않는다)
+        into_private = changes["parent_id"] is not None and await acl.is_private(
+            db, changes["parent_id"]
+        )
+        if changes["parent_id"] != folder.parent_id and (
+            folder.owner_id is not None or private != into_private
+        ):
+            raise ApiError(
+                422, "VALIDATION", "폴더는 개인 폴더 안팎으로 옮길 수 없습니다. 문서를 옮겨 주세요."
+            )
     for key, value in changes.items():
         if value is None and key != "parent_id":  # NOT NULL 컬럼 — DB 409 대신 422
             raise ApiError(422, "VALIDATION", f"{key} 는 null 일 수 없습니다.")
@@ -775,6 +805,20 @@ async def update_doc(
             db, changes["folder_id"]
         ):
             acl.require_acl_editor(user)
+        # 개인 폴더 안팎 이동(README 72)은 주인이면 된다(양쪽을 볼 수 있어야 여기까지 온다). 대신 남긴다 — 넣으면 임원도
+        # 못 보게 되므로, 같이 쓰던 문서가 사라졌을 때 누가 가져갔는지 감사 기록으로 찾는다(제목은 넣을 때만: 그때까진 공개였다)
+        was = await acl.is_private(db, doc.folder_id)
+        now = await acl.is_private(db, changes["folder_id"])
+        if was != now:
+            audit.record(
+                db,
+                "docs.private_move",
+                request=request,
+                actor_id=user.id,
+                target_id=doc.id,
+                detail={"into": now, "from": str(doc.folder_id), "to": str(changes["folder_id"])}
+                | ({"title": doc.title} if now else {}),
+            )
     for key, value in changes.items():
         if value is None:
             raise ApiError(422, "VALIDATION", f"{key} 는 null 일 수 없습니다.")
@@ -805,7 +849,9 @@ async def update_doc(
         )
     await db.commit()
     if "locked" in changes:
-        await yjs.set_locked(doc.id, changes["locked"])  # 열려 있는 편집 방에 바로, refresh 왕복보다 먼저
+        await yjs.set_locked(
+            doc.id, changes["locked"]
+        )  # 열려 있는 편집 방에 바로, refresh 왕복보다 먼저
     await db.refresh(doc)
     editor = (
         await db.get(User, doc.updated_by) if doc.updated_by else None
