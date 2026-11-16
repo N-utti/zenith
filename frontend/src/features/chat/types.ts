@@ -19,8 +19,7 @@ export type ChatAttachment = Schema<'app__routers__channels__AttachmentOut'>
  * `author.is_bot` 은 `/ai` 커맨드에 답한 시스템 계정 「AI 어시스턴트」의 글에만 `true` 다(백엔드 #400·#411).
  * 이름이 아니라 이 칸으로 가른다. 과거 메시지 조회엔 늘 실리지만, 사람 글의 소켓 `msg`·`msg_edit` 에는
  * 칸이 없다(타입은 필수라 해도 실서버에선 `undefined`). 그래서 `=== true` 로만 가른다.
- */
-/**
+ *
  * 공감(`reactions`)은 이모지마다 누른 사람(누른 순)이고 아무도 안 누른 이모지는 빠진다(백엔드 README 79).
  * 과거 메시지 조회에는 늘 실리지만(없으면 `[]`), 소켓 `msg`·`msg_edit` 에는 칸이 없다(타입은 필수라 해도
  * 실서버에선 `undefined`). 그래서 읽는 쪽은 `??` 로 받는다. 바뀐 공감은 `reaction` 이벤트로 온다.
@@ -28,10 +27,7 @@ export type ChatAttachment = Schema<'app__routers__channels__AttachmentOut'>
 export type ChatMessage = Schema<'MessageOut'>
 
 /** 메시지 하나에 달린 이모지 하나의 공감. */
-export interface ChatReaction {
-  emoji: string
-  users: Person[]
-}
+export type ChatReaction = Schema<'ReactionOut'>
 
 /**
  * 백엔드 `MessagePage`. 메시지 한 쪽(오래된 순). `next_cursor` 는 더 과거가 있을 때만 오고, 다음

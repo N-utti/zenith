@@ -99,7 +99,7 @@ function makeMessage(channelId, authorId, body, createdAt, files, docRef = null)
     created_at: createdAt ?? new Date().toISOString(),
     // 고친 적이 없으면 null. 실서버 `MessageOut` 과 같은 칸이다(#284).
     edited_at: null,
-    // 공감. 실서버 명세엔 아직 없다(백엔드 이슈로 요청). 이모지마다 누른 사람.
+    // 공감. 실서버 `MessageOut.reactions` 와 같은 칸이다(백엔드 README 79). 이모지마다 누른 사람.
     reactions: [],
   }
 }
@@ -428,7 +428,7 @@ export function handleChatConnection(conn, userId) {
       return publish(channelId, { ev: 'msg_edit', channel_id: channelId, message })
     }
 
-    // 공감. 실서버엔 아직 없다(백엔드 이슈로 요청한 모양).
+    // 공감. 실서버와 같은 계약이다(백엔드 README 79).
     //   {op:'react', channel_id, message_id, emoji, on} → 멤버 전원에게 {ev:'reaction', channel_id, message_id, reactions}
     // 뒤집기가 아니라 켤지 끌지(`on`)를 받는다. 같은 것을 두 번 보내도 결과가 같다. 멤버면 누구 글에든 된다.
     if (op.op === 'react') {
