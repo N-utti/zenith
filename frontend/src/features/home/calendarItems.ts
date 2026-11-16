@@ -14,7 +14,9 @@ import type { CalendarEvent } from './types'
 export type CalendarGroup = 'personal' | 'colleague'
 
 /**
- * 캘린더 칸 하나에 그리는 항목. 일정(시각순, 같은 시각이면 내 것 먼저), 내 부재, 동료 부재 순.
+ * 캘린더 칸 하나에 그리는 항목. 개인 묶음이 먼저, 그다음 동료 묶음. 묶음 안에서는 종일(종일 일정 → 부재)
+ * → 시각 있는 일정 시각순. 칩이 세 개까지만 보여서, 동료 일정이 많은 날에도 내 연차가 접히지 않게 한다
+ * (2026-11-16 사용자 결정).
  * 휴가와 재택·외근·출장은 홈에서 한 범주(`absence`)다. 홈 캘린더는 "누가 왜 자리에 없나"를 보는
  * 곳이라 둘을 가를 이유가 없고, 무엇 때문인지는 라벨("김다인 연차"·"홍성완 출장")이 말한다(2026-09-08 결정).
  */
@@ -55,12 +57,8 @@ export function itemsByDay(
     else days.set(iso, [item])
   }
 
-  // 시각순. 종일 일정(time 없음)은 빈 문자열이라 맨 앞에 온다. 의도한 순서다.
-  const sortedEvents = [...events].sort(
-    (a, b) =>
-      (a.time ?? '').localeCompare(b.time ?? '') ||
-      Number(b.user.id === meId) - Number(a.user.id === meId),
-  )
+  // 시각순. 종일 일정(time 없음)은 빈 문자열이라 맨 앞에 온다. 묶음 순서는 맨 끝에서 다시 맞춘다.
+  const sortedEvents = [...events].sort((a, b) => (a.time ?? '').localeCompare(b.time ?? ''))
   for (const event of sortedEvents) {
     // 남의 일정은 누구 것인지가 먼저다. 부재 라벨(「김다인 연차」)과 같은 모양으로 이름을 앞에 둔다.
     const mine = event.user.id === meId
@@ -96,6 +94,12 @@ export function itemsByDay(
       push(iso, { kind: 'absence', group, id: `${absence.id}:${iso}`, label, short })
     }
   }
+
+  // 개인 먼저, 묶음 안에서는 시각 있는 일정이 뒤로. 정렬이 안정적이라 위에서 넣은 순서(일정 시각순,
+  // 부재 이름순)가 그 안에서 남는다.
+  const rank = (i: CalendarItem) =>
+    (i.group === 'personal' ? 0 : 2) + (i.kind === 'event' && i.event.time ? 1 : 0)
+  for (const list of days.values()) list.sort((a, b) => rank(a) - rank(b))
   return days
 }
 
