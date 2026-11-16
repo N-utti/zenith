@@ -24,6 +24,7 @@ function listFor(user: User): CalendarEvent[] {
       title,
       time,
       created_at: new Date().toISOString(),
+      user: { id: user.id, name: user.name },
     })
     // 앞뒤 달에도 몇 개. 폰 캘린더에서 옆으로 밀어 넘겨 본다.
     list = [
@@ -46,6 +47,12 @@ export function listEvents(user: User, from: string, to: string): CalendarEvent[
   return listFor(user).filter((e) => e.date >= from && e.date <= to)
 }
 
+/** 전 직원의 일정(백엔드 README 73). 목에서는 이 탭에서 한 번이라도 로그인한 사람들 것이 모인다. */
+export function listAllEvents(user: User, from: string, to: string): CalendarEvent[] {
+  listFor(user) // 첫 진입이면 내 것부터 채운다
+  return [...events.values()].flat().filter((e) => e.date >= from && e.date <= to)
+}
+
 const TIME = /^\d{2}:\d{2}$/
 
 export function createEvent(
@@ -63,6 +70,7 @@ export function createEvent(
     title,
     time,
     created_at: new Date().toISOString(),
+    user: { id: user.id, name: user.name },
   }
   listFor(user).push(event)
   return { event }

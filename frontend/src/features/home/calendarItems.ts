@@ -7,22 +7,23 @@ import { toISODate } from '@/lib/datetime'
 import type { CalendarEvent } from './types'
 
 /**
- * 색·범례 토글의 묶음. 개인은 내가 적은 일정과 내 휴가·예외 근무, 동료는 남의 휴가·예외 근무
- * (2026-10-16 사용자 결정. 그 전에는 「내 일정 / 휴가·예외 근무」로 종류를 갈랐다).
+ * 색·범례 토글의 묶음. 개인은 내가 적은 일정과 내 휴가·예외 근무, 동료는 남의 일정과 휴가·예외 근무
+ * (2026-10-16 사용자 결정. 그 전에는 「내 일정 / 휴가·예외 근무」로 종류를 갈랐다.
+ * 동료 일정은 2026-11-16 결정 「모든 일정을 전 직원에게 공개」로 들어왔다).
  */
 export type CalendarGroup = 'personal' | 'colleague'
 
 /**
- * 캘린더 칸 하나에 그리는 항목. 내 일정, 내 부재, 동료 부재 순.
+ * 캘린더 칸 하나에 그리는 항목. 일정(시각순, 같은 시각이면 내 것 먼저), 내 부재, 동료 부재 순.
  * 휴가와 재택·외근·출장은 홈에서 한 범주(`absence`)다. 홈 캘린더는 "누가 왜 자리에 없나"를 보는
  * 곳이라 둘을 가를 이유가 없고, 무엇 때문인지는 라벨("김다인 연차"·"홍성완 출장")이 말한다(2026-09-08 결정).
  */
 export type CalendarItem = (
-  | { kind: 'event'; group: 'personal'; id: string; label: string; event: CalendarEvent }
+  | { kind: 'event'; group: CalendarGroup; id: string; label: string; event: CalendarEvent }
   | { kind: 'absence'; group: CalendarGroup; id: string; label: string }
 ) & {
   /**
-   * 폰 칸처럼 좁은 자리의 짧은 이름. 일정은 시각 뺀 제목, 내 부재는 종류(「출장」, 내 이름은 군더더기),
+   * 폰 칸처럼 좁은 자리의 짧은 이름. 내 일정은 시각 뺀 제목, 동료 일정은 이름과 제목, 내 부재는 종류(「출장」, 내 이름은 군더더기),
    * 동료 부재는 이름과 종류(「김다인 연차」, 누가 왜 없는지가 요점이라 사용자 요청으로 종류까지).
    * 시각과 긴 종류(「오전 반차」)가 잘린 나머지는 날짜 창의 `label` 이 말한다.
    */
@@ -55,15 +56,21 @@ export function itemsByDay(
   }
 
   // 시각순. 종일 일정(time 없음)은 빈 문자열이라 맨 앞에 온다. 의도한 순서다.
-  const sortedEvents = [...events].sort((a, b) => (a.time ?? '').localeCompare(b.time ?? ''))
+  const sortedEvents = [...events].sort(
+    (a, b) =>
+      (a.time ?? '').localeCompare(b.time ?? '') ||
+      Number(b.user.id === meId) - Number(a.user.id === meId),
+  )
   for (const event of sortedEvents) {
-    const label = event.time ? `${event.time} ${event.title}` : event.title
+    // 남의 일정은 누구 것인지가 먼저다. 부재 라벨(「김다인 연차」)과 같은 모양으로 이름을 앞에 둔다.
+    const mine = event.user.id === meId
+    const title = mine ? event.title : `${event.user.name} ${event.title}`
     push(event.date, {
       kind: 'event',
-      group: 'personal',
+      group: mine ? 'personal' : 'colleague',
       id: event.id,
-      label,
-      short: event.title,
+      label: event.time ? `${event.time} ${title}` : title,
+      short: title,
       event,
     })
   }

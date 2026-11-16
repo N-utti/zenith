@@ -452,6 +452,60 @@
         }
       }
     },
+    "/api/events": {
+      "get": {
+        "tags": [
+          "me"
+        ],
+        "summary": "전 직원의 일정 ?from&to (날짜, 둘 다 필수, 최대 366일) — 날짜·시각 순. 캘린더가 동료 일정까지 보여 준다 (04 밖, README 72)",
+        "description": "로그인한 사람 누구나 전 직원의 일정을 본다(2026-11-16 사용자 결정 「모든 일정을 전 직원에게 공개」).\n비활성 계정(퇴사자·봇)의 일정은 뺀다. 고치기·지우기는 여전히 본인만(`/me/events`).",
+        "operationId": "list_all_events_api_events_get",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "title": "From"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "title": "To"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Items_EventOut_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/me/events/{id}": {
       "delete": {
         "tags": [
@@ -10516,6 +10570,9 @@
             "type": "string",
             "format": "date-time",
             "title": "Created At"
+          },
+          "user": {
+            "$ref": "#/components/schemas/app__routers__me__Person"
           }
         },
         "type": "object",
@@ -10524,7 +10581,8 @@
           "date",
           "title",
           "time",
-          "created_at"
+          "created_at",
+          "user"
         ],
         "title": "EventOut"
       },

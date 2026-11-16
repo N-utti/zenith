@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import type { LeaveOnCalendar } from '@/features/attendance/types'
 import { itemsByDay, onlyShown } from './calendarItems'
 
+const ME = { id: 'u-9', name: '하지민' }
+
 const leave = (over: Partial<LeaveOnCalendar>): LeaveOnCalendar => ({
   id: 'lv-1',
   user: { id: 'u-6', name: '김다인' },
@@ -31,6 +33,7 @@ describe('홈 캘린더 날짜별 항목', () => {
           title: '치과',
           time: '14:30',
           created_at: '',
+          user: ME,
         },
         {
           id: 'e-3',
@@ -38,6 +41,7 @@ describe('홈 캘린더 날짜별 항목', () => {
           title: '보고서 마감',
           time: null,
           created_at: '',
+          user: ME,
         },
         {
           id: 'e-2',
@@ -45,10 +49,13 @@ describe('홈 캘린더 날짜별 항목', () => {
           title: '주간 회의',
           time: '10:00',
           created_at: '',
+          user: ME,
         },
       ],
       () => '연차',
       { from: '2026-09-01', to: '2026-09-30' },
+      [],
+      ME.id,
     )
     expect(days.get('2026-09-08')?.map((i) => i.label)).toEqual([
       '보고서 마감',
@@ -106,20 +113,39 @@ describe('홈 캘린더 부재 묶음', () => {
           end_date: '2026-09-08',
         }),
       ],
-      [{ id: 'e-1', date: '2026-09-08', title: '치과', time: null, created_at: '' }],
+      [
+        { id: 'e-1', date: '2026-09-08', title: '치과', time: null, created_at: '', user: ME },
+        {
+          id: 'e-2',
+          date: '2026-09-08',
+          title: '고객사 미팅',
+          time: null,
+          created_at: '',
+          user: { id: 'u-6', name: '김다인' },
+        },
+      ],
       () => '연차',
       { from: '2026-09-08', to: '2026-09-08' },
       [],
       'u-9',
     )
     const items = days.get('2026-09-08') ?? []
-    expect(items.map((i) => i.label)).toEqual(['치과', '하지민 연차', '김다인 연차'])
-    expect(items.map((i) => i.group)).toEqual(['personal', 'personal', 'colleague'])
+    // 동료 일정은 이름을 앞에 달고 동료 묶음으로 온다. 같은 시각이면 내 것이 먼저다.
+    expect(items.map((i) => i.label)).toEqual([
+      '치과',
+      '김다인 고객사 미팅',
+      '하지민 연차',
+      '김다인 연차',
+    ])
+    expect(items.map((i) => i.group)).toEqual(['personal', 'colleague', 'personal', 'colleague'])
     // 좁은 칸의 짧은 이름: 일정은 제목, 내 부재는 종류, 동료 부재는 이름과 종류(내 이름은 군더더기).
-    expect(items.map((i) => i.short)).toEqual(['치과', '연차', '김다인 연차'])
+    expect(items.map((i) => i.short)).toEqual(['치과', '김다인 고객사 미팅', '연차', '김다인 연차'])
 
     // 개인을 끄면 내 휴가도 같이 꺼진다.
     const shown = onlyShown(days, { personal: false, colleague: true })
-    expect(shown.get('2026-09-08')?.map((i) => i.label)).toEqual(['김다인 연차'])
+    expect(shown.get('2026-09-08')?.map((i) => i.label)).toEqual([
+      '김다인 고객사 미팅',
+      '김다인 연차',
+    ])
   })
 })

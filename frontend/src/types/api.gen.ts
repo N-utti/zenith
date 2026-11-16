@@ -211,6 +211,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 전 직원의 일정 ?from&to (날짜, 둘 다 필수, 최대 366일) — 날짜·시각 순. 캘린더가 동료 일정까지 보여 준다 (04 밖, README 72)
+         * @description 로그인한 사람 누구나 전 직원의 일정을 본다(2026-11-16 사용자 결정 「모든 일정을 전 직원에게 공개」).
+         *     비활성 계정(퇴사자·봇)의 일정은 뺀다. 고치기·지우기는 여전히 본인만(`/me/events`).
+         */
+        get: operations["list_all_events_api_events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/events/{id}": {
         parameters: {
             query?: never;
@@ -3349,6 +3370,7 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            user: components["schemas"]["app__routers__me__Person"];
         };
         /**
          * Extra
@@ -5493,6 +5515,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EventOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_all_events_api_events_get: {
+        parameters: {
+            query: {
+                from: string;
+                to: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Items_EventOut_"];
                 };
             };
             /** @description Validation Error */
