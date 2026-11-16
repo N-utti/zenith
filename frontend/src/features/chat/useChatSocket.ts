@@ -11,6 +11,7 @@ import { homeKeys } from '@/features/home/keys'
 import { notificationKeys } from '@/features/notifications/api'
 import { noticeToast } from '@/features/notifications/view'
 import { AI_NAME, isAiCommand } from './aiCommand'
+import { readAppLock } from '@/features/settings/appLock'
 import { chatKeys } from './api'
 import {
   appendMessage,
@@ -77,7 +78,8 @@ function incomingAlert(
       ? `${channel.is_private ? '' : '#'}${channel.name} · ${message.author.name}`
       : message.author.name
 
-  return { title, body: message.body }
+  // 잠금 모드로 잠긴 동안은 본문을 가린다. 창 구석 알림으로 가림막 뒤 내용이 새지 않게.
+  return { title, body: readAppLock(currentUserId)?.locked ? '새 메시지' : message.body }
 }
 
 export interface ChatSocket {
