@@ -97,6 +97,7 @@ import {
 import {
   attendanceMonth,
   attendanceRange,
+  clearAbsence,
   companyAttendance,
   cancelException,
   createArrangement,
@@ -107,6 +108,7 @@ import {
   listCorrections,
   listOvertime,
   MONTH,
+  setAbsence,
   workdaysInYear,
   type ExceptionStore,
 } from './attendanceDb'
@@ -1531,7 +1533,7 @@ export const handlers = [
     return HttpResponse.json(getClosing(month))
   }),
   // 근태 담당자·대표, 결근 처리(백엔드 README 76).
-  // ponytail: 목은 지정만 기억한다. 담당자 권한·결재선·결근 반영은 실제 서버에서만 돈다.
+  // ponytail: 목은 지정과 결근만 기억한다. 담당자에게 가는 결재선은 실제 서버에서만 돈다.
   http.get(
     '/api/attendance/roles',
     authed(() => HttpResponse.json(attendanceRoles)),
@@ -1553,15 +1555,18 @@ export const handlers = [
     if (!user) return unauthorized()
     if (!canManage(user)) return forbidden()
     const body = (await request.json()) as { user_id: string; work_date: string; note?: string }
+    setAbsence(body.user_id, body.work_date, body.note ?? null)
     return HttpResponse.json(
       { user_id: body.user_id, work_date: body.work_date, note: body.note ?? null },
       { status: 201 },
     )
   }),
-  http.delete('/api/attendance/absences', () => {
+  http.delete('/api/attendance/absences', ({ request }) => {
     const user = authenticate()
     if (!user) return unauthorized()
     if (!canManage(user)) return forbidden()
+    const params = new URL(request.url).searchParams
+    clearAbsence(params.get('user_id') ?? '', params.get('work_date') ?? '')
     return new HttpResponse(null, { status: 204 })
   }),
   http.post('/api/attendance/close', async ({ request }) => {

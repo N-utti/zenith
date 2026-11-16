@@ -4,7 +4,9 @@ import {
   attendanceMonth,
   attendanceRange,
   cancelException,
+  clearAbsence,
   createOvertime,
+  setAbsence,
   workdaysInYear,
 } from './attendanceDb'
 import { MOCK_USERS } from './db'
@@ -119,5 +121,20 @@ describe('연장근로 신청', () => {
     expect(ask('2027-06-18', '18:00', '20:00')).toHaveProperty('item')
     cancelException(user, 'overtime', first.item.id)
     expect(ask('2027-06-17', '18:00', '20:00')).toHaveProperty('item')
+  })
+})
+
+// Regression: ISSUE-001. 목이 결근 처리를 성공으로만 답하고 칸은 정상 그대로였다(/qa 2026-11-16).
+describe('결근 처리', () => {
+  it('정상 근무 날을 결근으로 바꾸고, 취소하면 정상으로 돌린다', () => {
+    const day = attendanceMonth(user, month).days.find((d) => d.status === 'normal')!
+    setAbsence(user.id, day.work_date, 'QA')
+    expect(
+      attendanceMonth(user, month).days.find((d) => d.work_date === day.work_date),
+    ).toMatchObject({ status: 'absent', worked_days: 0, note: 'QA' })
+    clearAbsence(user.id, day.work_date)
+    expect(
+      attendanceMonth(user, month).days.find((d) => d.work_date === day.work_date),
+    ).toMatchObject({ status: 'normal', worked_days: 1 })
   })
 })

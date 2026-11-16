@@ -354,8 +354,19 @@ export function workdaysInYear(year: number): number {
   return count
 }
 
+/** 결근 처리(백엔드 README 76). `사람 id|날짜` → 메모. 정상 근무로 잡힌 날에만 얹는다. */
+const absences = new Map<string, string | null>()
+
+export function setAbsence(userId: string, workDate: string, note: string | null) {
+  absences.set(`${userId}|${workDate}`, note)
+}
+
+export function clearAbsence(userId: string, workDate: string) {
+  absences.delete(`${userId}|${workDate}`)
+}
+
 /**
- * 10 §5.2 상태 판정. 위 규칙이 먼저 이긴다: 휴가 > 반차 > 예외근무 > 정상.
+ * 10 §5.2 상태 판정. 위 규칙이 먼저 이긴다: 휴가 > 반차 > 예외근무 > 결근 > 정상.
  * ponytail: 승인된 정정은 반영하지 않는다. 목에서는 아무도 승인하지 않으니 생길 일이 없다.
  */
 export function attendanceMonth(user: User, month: string): AttendanceMonth {
@@ -384,6 +395,10 @@ export function attendanceMonth(user: User, month: string): AttendanceMonth {
       day.worked_days = 0.5
     } else if (arrangement) {
       day.status = arrangement.kind
+    } else if (absences.has(`${user.id}|${iso}`)) {
+      day.status = 'absent'
+      day.worked_days = 0
+      day.note = absences.get(`${user.id}|${iso}`) ?? null
     }
     for (const ot of approvedOvertime.filter((r) => r.work_date === iso)) {
       day.overtime_minutes += ot.minutes
