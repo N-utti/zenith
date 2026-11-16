@@ -70,8 +70,12 @@ npm run build    # = tauri build → src-tauri/target/release/bundle/msi/Zenith_
 `frontend/.env.production` (커밋되지 않는다. `frontend/.env.example` 참고):
 
 ```
-VITE_SERVER_ORIGIN=https://zenith.example.co.kr
+VITE_SERVER_ORIGIN=https://192.168.219.8
 ```
+
+직원용 본판은 사내망 HTTPS 입구(`https://192.168.219.8`, 2026-11-16)로 빌드한다. Tailscale 주소(`*.ts.net`)로 빌드하면
+Tailscale 을 깔지 않은 PC 에서는 서버에 닿지 못해 로그인 화면이 「서버에 연결할 수 없습니다.」를 띄운다.
+이 주소는 Caddy 자체 CA 인증서라 **PC 마다 루트 인증서를 한 번 넣어야 한다**(`infra/README.md` 의 TLS · 사이트 이름 절, 사내망 HTTPS).
 
 설치 후에 서버가 옮겨 갔다면 재빌드 없이도 바꿀 수 있다.
 개발자 도구 콘솔에서 `localStorage.setItem('zenith.serverOrigin', 'https://새주소')` 후 재시작(경로 없이 주소만).
@@ -108,11 +112,12 @@ VITE_SERVER_ORIGIN=https://zenith.example.co.kr
 ```powershell
 # 1) tauri.conf.json 의 version 을 올린다. 같은 버전이면 업데이트가 안 간다
 # 2) 서명해서 빌드
-$env:TAURI_SIGNING_PRIVATE_KEY_PATH = "$HOME\.tauri\zenith-updater.key"
+# tauri build 는 _PATH 가 붙은 변수를 읽지 않는다. 이 변수에 키 파일 경로나 키 내용을 넣는다
+$env:TAURI_SIGNING_PRIVATE_KEY = "$HOME\.tauri\zenith-updater.key"
 $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = ""
 npm run build
 # 3) 매니페스트
-npm run manifest -- https://zenith.example.co.kr
+npm run manifest -- https://192.168.219.8
 ```
 
 `src-tauri/target/release/bundle/msi/` 의 `.msi` 와 `latest.json` 을 서버의 `/desktop/` 에 올린다(Caddy 가 내주는 경로).
