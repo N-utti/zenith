@@ -3,8 +3,10 @@ import { BrowserRouter } from 'react-router'
 import { AppRoutes } from '@/app/routes'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { UpdateCard } from '@/components/layout/UpdateCard'
+import { DesktopTitleBar } from '@/components/layout/WindowControls'
 import { ToastProvider } from '@/components/ui/Toast'
 import { AuthProvider } from '@/features/auth/AuthProvider'
+import { isDesktopShell } from '@/lib/desktop'
 import { queryClient } from '@/lib/queryClient'
 
 export function App() {
@@ -24,6 +26,8 @@ export function App() {
         </BrowserRouter>
         {/* 데스크탑 앱의 새 버전 알림. 로그인 전 화면에서도, 본문이 터져도 떠야 해서 바깥에 둔다. */}
         <UpdateCard />
+        {/* 셸은 창 틀이 없다. 앱이 터져도 창을 옮기고 닫을 수 있게 바깥에 둔다. */}
+        {isDesktopShell() && <DesktopTitleBar />}
       </ToastProvider>
     </QueryClientProvider>
   )
