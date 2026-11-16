@@ -71,6 +71,7 @@ async def require_manager(
     await db.commit()
     raise ApiError(403, "FORBIDDEN", "근태 담당자나 임원만 할 수 있습니다.")
 
+
 RANGE_MAX_DAYS = 366  # 기간 조회·신청 상한(목과 같다)
 OVERTIME_MAX_MINUTES = 12 * 60  # 연장근로 한 건(하루) 상한
 # 신청 상태 = 결재 문서 상태. 강제 종결은 승인되지 않은 채 끝난 것이라 반려로 보인다(프론트 상태는 넷뿐)
@@ -430,6 +431,24 @@ async def _days(
         for row in await db.scalars(stmt.order_by(model.created_at)):
             by_user[(row.user_id, model)].append(row)
 
+    decided = dict(
+        (
+            await db.execute(
+                select(ApprovalDocument.id, ApprovalDocument.closed_at).where(
+                    ApprovalDocument.id.in_(
+                        [
+                            c.approval_id
+                            for (_, m), rows in by_user.items()
+                            if m is AttCorrection
+                            for c in rows
+                        ]
+                    )
+                )
+            )
+        )
+        .tuples()
+        .all()
+    )
     absent = {
         (a.user_id, a.work_date): a
         for a in await db.scalars(
@@ -487,10 +506,20 @@ async def _days(
                     day.status = arr.kind
                 elif (uid, d) in absent:
                     # 결근 확정(README 76)은 정상 근무로 잡힌 날에만 — 휴가·예외 근무가 승인된 날은 그쪽이 이긴다.
-                    # 아래의 승인된 정정이 마지막에 덮으므로, 본인이 정정 신청으로 바로잡을 수 있다
+                    # 아래의 승인된 정정과는 늦게 적힌 쪽이 이긴다 — 본인이 정정 신청으로 바로잡을 수 있고,
+                    # 정정 뒤에 확정한 결근도 조용히 묻히지 않는다(리뷰)
                     day.status, day.worked_days = "absent", WORKED["absent"]
                     day.note = absent[(uid, d)].note
             for c in corrections[d]:  # 승인된 정정이 마지막에 덮는다(늦게 낸 것이 이긴다)
+                gone = absent.get((uid, d))
+                approved_at = decided.get(c.approval_id)
+                if (
+                    day.status == "absent"
+                    and gone is not None
+                    and approved_at is not None
+                    and gone.created_at > approved_at
+                ):
+                    continue  # 이 정정이 승인된 뒤에 확정된 결근이다
                 if c.after.get("status"):
                     day.status = c.after["status"]
                     day.worked_days = WORKED[day.status]
@@ -1396,7 +1425,9 @@ async def set_roles(
 ) -> RolesOut:
     ws = (await db.execute(select(Workspace).limit(1).with_for_update())).scalar_one_or_none()
     if ws is None:
-        raise ApiError(409, "CONFLICT", "워크스페이스가 없습니다. scripts/seed.py 를 먼저 돌리세요.")
+        raise ApiError(
+            409, "CONFLICT", "워크스페이스가 없습니다. scripts/seed.py 를 먼저 돌리세요."
+        )
     for uid, need_exec, label in (
         (body.manager_id, False, "근태 담당자"),
         (body.ceo_id, True, "대표"),
@@ -1466,7 +1497,13 @@ async def set_absence(
         days = (await _days(db, [body.user_id], body.work_date, body.work_date))[body.user_id]
         if not days or days[0].status != "normal":
             raise ApiError(422, "VALIDATION", "정상 근무로 잡힌 날만 결근으로 처리할 수 있습니다.")
-        row = AttAbsence(user_id=body.user_id, work_date=body.work_date, set_by=user.id)
+        # 앱 시각으로 찍는다 — 정정이 승인된 시각(closed_at, 앱 시각)과 선후를 가른다(DB now() 는 트랜잭션 시작 시각)
+        row = AttAbsence(
+            user_id=body.user_id,
+            work_date=body.work_date,
+            set_by=user.id,
+            created_at=datetime.now(UTC),
+        )
         db.add(row)
     row.note = body.note
     audit.record(

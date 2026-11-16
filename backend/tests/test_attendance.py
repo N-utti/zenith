@@ -745,3 +745,10 @@ async def test_absence_yields_to_leave_and_correction(c, users: Users, app_db) -
     await _approve(c.member, c.lead, "[근태 정정]")
     month = (await c.member.get("/api/attendance/me?month=2025-04")).json()
     assert {d["work_date"]: d["status"] for d in month["days"]}["2025-04-02"] == "normal"
+    # 정정 뒤에 다시 확정한 결근은 묻히지 않는다 — 늦게 적힌 쪽이 이긴다(리뷰)
+    q = f"/api/attendance/absences?user_id={users.member.id}&work_date=2025-04-02"
+    assert (await c.exec.delete(q, headers=csrf(c.exec))).status_code == 204
+    r = await post(c.exec, "/api/attendance/absences", {**day, "work_date": "2025-04-02"})
+    assert r.status_code == 201
+    month = (await c.member.get("/api/attendance/me?month=2025-04")).json()
+    assert {d["work_date"]: d["status"] for d in month["days"]}["2025-04-02"] == "absent"

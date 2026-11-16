@@ -449,10 +449,23 @@ async def _approvers(db: AsyncSession, drafter: User, type_code: str) -> list[uu
         ).first()
         picked = [i for i in dict.fromkeys(roles or ()) if i is not None and i != drafter.id]
         if picked:
-            alive = set(
-                await db.scalars(select(User.id).where(User.id.in_(picked), User.active.is_(True)))
+            alive = dict(
+                (
+                    await db.execute(
+                        select(User.id, User.role).where(
+                            User.id.in_(picked), User.active.is_(True)
+                        )
+                    )
+                )
+                .tuples()
+                .all()
             )
-            line = [i for i in picked if i in alive]
+            # 대표는 지금도 임원이어야 한다 — 지정한 뒤 등급을 내린 사람이 최종 결재자로 남지 않게(리뷰)
+            line = [
+                i
+                for i in picked
+                if i in alive and (i != roles[1] or alive[i] == "exec" or i == roles[0])
+            ]
             if line:
                 return line
     ids: list[uuid.UUID] = []
