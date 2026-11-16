@@ -678,6 +678,9 @@ async def test_private_folder_boundaries_between_roots(c, users: Users, app_db) 
     r = await c.member.patch(f"/api/docs/{secret}", json={"folder_id": wide}, headers=hm)
     assert r.status_code == 200
     assert (await c.exec.get(f"/api/docs/{secret}")).status_code == 200
+    # 주인은 하위 폴더도 자기 개인 폴더 사이로 옮긴다
+    r = await c.member.patch(f"/api/folders/{sub}", json={"parent_id": wide}, headers=hm)
+    assert r.status_code == 200, r.text
     # 안에서 옮기는 것은 지정받은 사람도 된다
     inner = await folder(c.member, hm, title="넓게 하위", parent_id=wide)
     r = await c.lead.patch(f"/api/docs/{secret}", json={"folder_id": inner}, headers=hl)

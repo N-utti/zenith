@@ -843,10 +843,12 @@ async def update_doc(
         # 넣으면 숨는 일이라 그 개인 폴더의 주인이어야 한다(다른 개인 폴더로 옮기는 것도 양쪽 주인이어야 한다). 대신 남긴다 —
         # 넣으면 임원도 못 보게 되므로, 같이 쓰던 문서가 사라졌을 때 누가 가져갔는지 감사 기록으로 찾는다(제목은 넣을 때만)
         # 같은 주인의 다른 개인 폴더로 옮기는 것도 경계다 — 볼 사람이 다르다(리뷰)
-        was, now = await acl.require_same_private_root(
+        root_was, root_now = await acl.require_same_private_root(
             db, user, doc.folder_id, changes["folder_id"]
         )
-        hidden = now and not was
+        was, now = root_was is not None, root_now is not None
+        # 다른 개인 폴더로 들어가면 볼 사람이 바뀐다 — 열어 둔 사람들을 끊는다(볼 수 있는 사람은 다시 붙는다)
+        hidden = now and root_was != root_now
         if was != now:
             audit.record(
                 db,

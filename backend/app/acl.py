@@ -118,15 +118,15 @@ async def private_owner(db: AsyncSession, folder_id: uuid.UUID) -> uuid.UUID | N
 
 async def require_same_private_root(
     db: AsyncSession, user: User, from_folder: uuid.UUID, to_folder: uuid.UUID | None
-) -> tuple[bool, bool]:
+) -> tuple[uuid.UUID | None, uuid.UUID | None]:
     """문서·폴더가 개인 폴더의 경계를 넘으면(밖↔안, 다른 개인 폴더 사이) 걸린 개인 폴더들의 주인이어야 한다(403).
-    (옮기기 전이 개인 폴더 안인가, 옮긴 뒤가 개인 폴더 안인가)를 돌려준다."""
+    (옮기기 전의 개인 폴더 id, 옮긴 뒤의 개인 폴더 id)를 돌려준다 — 개인 폴더 밖이면 None."""
     was = await private_root(db, from_folder)
     now = await private_root(db, to_folder) if to_folder is not None else None
     if was != now:
         require_private_owner(user, was[1] if was else None)
         require_private_owner(user, now[1] if now else None)
-    return was is not None, now is not None
+    return (was[0] if was else None), (now[0] if now else None)
 
 
 def require_private_owner(user: User, owner: uuid.UUID | None) -> None:
