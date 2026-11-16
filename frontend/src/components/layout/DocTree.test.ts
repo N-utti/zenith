@@ -40,8 +40,8 @@ const newClient = () =>
   new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: false } } })
 
 /** `qc` 를 넘기면 그 캐시로 다시 그린다(편집기를 드나들 때 트리가 새로 마운트되는 것). */
-function render(qc = newClient()) {
-  qc.setQueryData(docKeys.tree, tree)
+function render(qc = newClient(), data: DocTreeData = tree) {
+  qc.setQueryData(docKeys.tree, data)
   const container = document.createElement('div')
   root = createRoot(container)
   act(() =>
@@ -265,4 +265,43 @@ test('코드 없는 503(프록시 등)은 변환기 장애로 보지 않고 남�
   )
   expect(imports()).toHaveLength(1)
   expect(toast.error.mock.calls[0]![0]).toContain('나머지 1개(보내지 않음)')
+})
+
+/** 줄을 우클릭해 메뉴를 열고, 메뉴에 초점이 있는 채로 Delete 를 누른다. */
+function deleteFromMenu(row: Element) {
+  // jsdom 에 없는 둘. 메뉴는 뜬 자리 밑의 줄을, 문서 메뉴는 화면 폭을 본다.
+  document.elementsFromPoint ??= () => []
+  window.matchMedia ??= (() => ({ matches: false })) as unknown as typeof window.matchMedia
+  act(() => {
+    row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))
+  })
+  act(() => {
+    document.activeElement!.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }),
+    )
+  })
+}
+
+test('폴더 우클릭 메뉴에서 Delete 를 누르면 폴더 지우기를 누른 것과 같다', async () => {
+  api.mockResolvedValue(undefined)
+  const container = render()
+  deleteFromMenu(container.querySelector('a[data-drag="folder"]')!)
+  // 뮤테이션은 한 박자 뒤에 요청을 보낸다.
+  await act(async () => {})
+  expect(api).toHaveBeenCalledWith('/folders/f-1', { method: 'DELETE' })
+})
+
+test('문서 우클릭 메뉴에서 Delete 를 누르면 휴지통 확인 창이 뜨고 초점이 휴지통으로 버튼에 간다(엔터가 그 버튼을 누른다)', () => {
+  const container = render(newClient(), {
+    ...tree,
+    docs: [{ id: 'd-1', folder_id: 'f-1', title: '회의록', updated_at: '2026-11-16T00:00:00Z' }],
+  } as unknown as DocTreeData)
+  // 펼침 상태는 모듈 전역이라 앞 테스트(파일 가져오기)가 펼쳐 뒀을 수 있다.
+  act(() => container.querySelector<HTMLButtonElement>('button[aria-expanded="false"]')?.click())
+
+  deleteFromMenu(container.querySelector('a[data-drag="doc"]')!)
+
+  expect(document.querySelector('[role="menu"]')).toBeNull()
+  expect(document.activeElement?.textContent).toBe('휴지통으로')
+  expect(api).not.toHaveBeenCalled()
 })

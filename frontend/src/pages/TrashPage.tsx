@@ -203,6 +203,7 @@ export function TrashPage() {
               variant="danger"
               size="sm"
               disabled={purge.isPending}
+              data-autofocus
               onClick={() => {
                 if (!confirmPurge) return
                 purge.mutate(confirmPurge.id, {
@@ -250,6 +251,7 @@ export function TrashPage() {
               variant="danger"
               size="sm"
               disabled={empty.isPending}
+              data-autofocus
               onClick={() => {
                 if (!confirmEmpty) return
                 empty.mutate(confirmEmpty, {
