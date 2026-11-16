@@ -176,7 +176,7 @@ import { isImage } from '@/features/chat/attachments'
 import { buildXlsx } from '@/lib/xlsx'
 import { closeMonth, getClosing, listClosings, reopenMonth } from './closingsDb'
 import { addHoliday, listHolidays, removeHoliday, renameHoliday } from './holidaysDb'
-import { createEvent, deleteEvent, listEvents } from './eventsDb'
+import { createEvent, deleteEvent, listAllEvents, listEvents } from './eventsDb'
 import {
   cancelLeave,
   createLeave,
@@ -1728,6 +1728,17 @@ export const handlers = [
       const params = new URL(request.url).searchParams
       return HttpResponse.json({
         items: listEvents(user, params.get('from') ?? '', params.get('to') ?? ''),
+      })
+    }),
+  ),
+
+  // 전 직원의 일정(백엔드 README 73). 캘린더가 이 경로를 부른다.
+  http.get(
+    '/api/events',
+    authed((user, request) => {
+      const params = new URL(request.url).searchParams
+      return HttpResponse.json({
+        items: listAllEvents(user, params.get('from') ?? '', params.get('to') ?? ''),
       })
     }),
   ),

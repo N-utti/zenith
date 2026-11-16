@@ -13,6 +13,7 @@ from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    CheckConstraint,
     Computed,
     Date,
     DateTime,
@@ -133,7 +134,11 @@ class Workspace(Base):
 
 class Folder(Base):
     __tablename__ = "folders"
-    __table_args__ = (Index("idx_folders_tree", "ws_id", "parent_id", "sort"),)
+    __table_args__ = (
+        Index("idx_folders_tree", "ws_id", "parent_id", "sort"),
+        # 개인 폴더는 최상위에만(README 72) — 라우터의 422 가 뚫려도 DB 가 막는다
+        CheckConstraint("owner_id IS NULL OR parent_id IS NULL", name="ck_folders_owner_root"),
+    )
 
     id: Mapped[uuid.UUID] = uuid_pk()
     ws_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("workspaces.id"), nullable=False)
@@ -142,6 +147,8 @@ class Folder(Base):
     sort: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     # 열람 최소 등급(README 57) — 게시판 min_role 과 같은 서열. 조상 폴더가 막히면 그 아래도 안 보인다(app/acl.py)
     min_role: Mapped[str] = mapped_column(Text, nullable=False, server_default="member")
+    # 개인 폴더(README 72) — 값이 있으면 이 사람만 본다(임원도 못 본다). 최상위 폴더에만 걸고 그 아래는 따라간다
+    owner_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
 
 
 class FolderMember(Base):

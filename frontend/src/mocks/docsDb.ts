@@ -28,9 +28,10 @@ export const FOLDERS: Folder[] = [
     sort: 0,
     min_role: 'member',
     allowed_users: [],
+    owner_id: null,
   },
-  { id: 'f-2', parent_id: null, title: '회의록', sort: 1, min_role: 'member', allowed_users: [] },
-  { id: 'f-3', parent_id: 'f-1', title: '제품', sort: 0, min_role: 'member', allowed_users: [] },
+  { id: 'f-2', parent_id: null, title: '회의록', sort: 1, min_role: 'member', allowed_users: [], owner_id: null },
+  { id: 'f-3', parent_id: 'f-1', title: '제품', sort: 0, min_role: 'member', allowed_users: [], owner_id: null },
   {
     id: 'f-4',
     parent_id: null,
@@ -38,6 +39,7 @@ export const FOLDERS: Folder[] = [
     sort: 2,
     min_role: 'member',
     allowed_users: [],
+    owner_id: null,
   },
 ]
 
@@ -404,6 +406,7 @@ export function createFolder(input: {
     // 백엔드 #421 열람 권한. 새 폴더는 누구나 보고 지정 열람자가 없다.
     min_role: 'member',
     allowed_users: [],
+    owner_id: null,
   }
   FOLDERS.push(folder)
   return folder

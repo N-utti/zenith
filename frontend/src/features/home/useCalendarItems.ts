@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useAllArrangements, useAllLeaves, useLeaveTypes } from '@/features/attendance/api'
 import { useCurrentUser } from '@/features/auth/AuthContext'
 import { monthMatrix, toISODate } from '@/lib/datetime'
-import { useMyEvents } from './api'
+import { useEvents } from './api'
 import { itemsByDay, onlyShown, type CalendarGroup } from './calendarItems'
 
 /**
@@ -32,11 +32,12 @@ export const WEEK_STARTS_ON = 0
 const SHOW_KEY = 'zenith.calendarShow'
 
 /**
- * 범례 토글 상태. 처음엔 개인만 켠다(사용자 결정). 사이드바 구획 접기처럼 브라우저에 남긴다. 홈 카드는
+ * 범례 토글 상태. 처음엔 둘 다 켠다(2026-11-16 사용자 결정: 동료 일정이 보여야 한다. 그 전에는 개인만 켰다).
+ * 한 번이라도 직접 누른 사람은 그 값이 남는다. 사이드바 구획 접기처럼 브라우저에 남긴다. 홈 카드는
  * 홈에 들어올 때마다 다시 그려져서, 컴포넌트 상태만으로는 켜 둔 동료가 매번 꺼진다.
  */
 function readShow(): Record<CalendarGroup, boolean> {
-  const show = { personal: true, colleague: false }
+  const show = { personal: true, colleague: true }
   try {
     const raw: unknown = JSON.parse(localStorage.getItem(SHOW_KEY) ?? 'null')
     if (raw && typeof raw === 'object') {
@@ -67,7 +68,7 @@ export function useCalendarShow() {
 }
 
 /**
- * 한 달 격자에 그릴 항목. 전 직원의 승인된 휴가·재택·외근·출장 + 내 개인 일정에서 `show` 로 켠 묶음만.
+ * 한 달 격자에 그릴 항목. 전 직원의 승인된 휴가·재택·외근·출장 + 전 직원의 일정에서 `show` 로 켠 묶음만.
  */
 export function useCalendarDays(month: string, show: Record<CalendarGroup, boolean>) {
   const me = useCurrentUser()
@@ -80,7 +81,7 @@ export function useCalendarDays(month: string, show: Record<CalendarGroup, boole
   }
   const leaves = useAllLeaves(range.from, range.to)
   const arrangements = useAllArrangements(range.from, range.to)
-  const events = useMyEvents(range.from, range.to)
+  const events = useEvents(range.from, range.to)
   const types = useLeaveTypes()
   // 남의 휴가는 종류를 가려 `leave` 로 온다(병가·경조사는 알릴 일이 아니다, 백엔드 #316). 목록에 없는
   // 종류는 그냥 휴가로 보인다.

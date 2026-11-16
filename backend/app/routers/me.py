@@ -4,6 +4,7 @@
 서버 마스킹, FR-HOM-04) · 오늘 할 일. 근태는 홈에 노출하지 않는다(10 §10). 전부 로그인한 본인 것만.
 """
 
+import contextlib
 import uuid
 from datetime import UTC, date, datetime, timedelta
 from typing import Annotated
@@ -115,13 +116,23 @@ EventTime = Annotated[str, StringConstraints(pattern=r"^([01][0-9]|2[0-3]):[0-5]
 
 
 class EventOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
     id: uuid.UUID
     date: date
     title: str
     time: str | None
     created_at: datetime
+    user: Person  # 누구의 일정인가 — `GET /events` 는 전 직원 것을 준다(README 73). 화면이 내 것만 지우게 한다
+
+
+def _event_out(event: Event, owner: User) -> EventOut:
+    return EventOut(
+        id=event.id,
+        date=event.date,
+        title=event.title,
+        time=event.time,
+        created_at=event.created_at,
+        user=Person.model_validate(owner),
+    )
 
 
 class EventCreateIn(BaseModel):
@@ -298,9 +309,11 @@ async def home(user: User = Depends(current_user), db: AsyncSession = Depends(ge
             .limit(10)
         )
     ).scalars()
+    mention_items = [NotificationOut.model_validate(n) for n in mentions]
+    await _mask_doc_notices(db, user, mention_items)
     return HomeOut(
         recent_docs=await _recent_docs(db, user, 8),
-        mentions=[NotificationOut.model_validate(n) for n in mentions],
+        mentions=mention_items,
         unread=await _unread_channels(db, user),
         posts=await _posts(db, user, 3),
         todos=[TodoOut.model_validate(t) for t in await _todos(db, user, 200)],  # 홈 1콜 상한
@@ -376,8 +389,7 @@ async def list_events(
     user: User = Depends(current_user),
     db: AsyncSession = Depends(get_db),
 ) -> Items[EventOut]:
-    if to < from_ or to - from_ > timedelta(days=365):  # 양끝 포함 366일(윤년 한 해)까지
-        raise ApiError(422, "VALIDATION", "기간은 from ≤ to, 366일 이내여야 합니다.")
+    _check_range(from_, to)
     # ponytail: 상한만 둔다 — 개인 일정이 한 해 2000개를 넘으면 그때 커서(할 일과 같은 천장)
     rows = await db.execute(
         select(Event)
@@ -385,7 +397,36 @@ async def list_events(
         .order_by(Event.date, Event.time.nulls_last(), Event.created_at, Event.id)
         .limit(2000)
     )
-    return Items(items=[EventOut.model_validate(e) for e in rows.scalars()])
+    return Items(items=[_event_out(e, user) for e in rows.scalars()])
+
+
+def _check_range(from_: date, to: date) -> None:
+    if to < from_ or to - from_ > timedelta(days=365):  # 양끝 포함 366일(윤년 한 해)까지
+        raise ApiError(422, "VALIDATION", "기간은 from ≤ to, 366일 이내여야 합니다.")
+
+
+@router.get(
+    "/events",
+    response_model=Items[EventOut],
+    summary="전 직원의 일정 ?from&to (날짜, 둘 다 필수, 최대 366일) — 날짜·시각 순. 캘린더가 동료 일정까지 보여 준다 (04 밖, README 73)",
+)
+async def list_all_events(
+    from_: Annotated[date, Query(alias="from")],
+    to: date,
+    db: AsyncSession = Depends(get_db),
+) -> Items[EventOut]:
+    """로그인한 사람 누구나 전 직원의 일정을 본다(2026-11-16 사용자 결정 「모든 일정을 전 직원에게 공개」).
+    비활성 계정(퇴사자·봇)의 일정은 뺀다. 고치기·지우기는 여전히 본인만(`/me/events`)."""
+    _check_range(from_, to)
+    # ponytail: 상한만 둔다 — 15명이 한 해에 5000개를 넘기면 그때 커서
+    rows = await db.execute(
+        select(Event, User)
+        .join(User, User.id == Event.user_id)
+        .where(User.active.is_(True), Event.date >= from_, Event.date <= to)
+        .order_by(Event.date, Event.time.nulls_last(), Event.created_at, Event.id)
+        .limit(5000)
+    )
+    return Items(items=[_event_out(e, u) for e, u in rows])
 
 
 @router.post(
@@ -393,12 +434,12 @@ async def list_events(
 )
 async def create_event(
     body: EventCreateIn, user: User = Depends(current_user), db: AsyncSession = Depends(get_db)
-) -> Event:
+) -> EventOut:
     event = Event(user_id=user.id, date=body.date, title=body.title, time=body.time)
     db.add(event)
     await db.commit()
     await db.refresh(event)
-    return event
+    return _event_out(event, user)
 
 
 @router.delete("/me/events/{id}", status_code=204, summary="일정 삭제 — 남의 것도 404")
@@ -435,7 +476,38 @@ async def list_notifications(
     rows = list((await db.execute(stmt)).scalars())
     items = [NotificationOut.model_validate(n) for n in rows]
     await _mask_post_notices(db, user, items)
+    await _mask_doc_notices(db, user, items)
     return Items(items=items)
+
+
+async def _mask_doc_notices(db: AsyncSession, user: User, rows: list[NotificationOut]) -> None:
+    """문서 댓글 멘션 알림의 제목·미리보기도 만든 시점 값이다 — 그 뒤 문서가 못 보는 폴더(개인 폴더 README 73, 등급 57)로
+    갔으면 가린다. 댓글을 고치면 미리보기가 새 글로 바뀌므로(docs.edit_comment) 옮긴 뒤 쓴 글이 여기로 샌다(리뷰).
+    `_mask_post_notices` 와 같이 응답 모델만 바꾼다."""
+    ids: set[uuid.UUID] = set()
+    for n in rows:
+        if n.payload and n.payload.get("doc_id"):
+            with contextlib.suppress(ValueError):
+                ids.add(uuid.UUID(n.payload["doc_id"]))
+    if not ids:
+        return
+    seen = {
+        str(i)
+        for i in await db.scalars(
+            select(Document.id).where(
+                Document.id.in_(ids), Document.folder_id.in_(acl.visible_folder_ids(user))
+            )
+        )
+    }
+    for n in rows:
+        if n.payload and n.payload.get("doc_id") and n.payload["doc_id"] not in seen:
+            n.payload = {
+                **n.payload,
+                "doc_title": MASKED_TITLE,
+                "preview": "",
+                "masked": True,
+                "from": None,
+            }
 
 
 async def _mask_post_notices(db: AsyncSession, user: User, rows: list[NotificationOut]) -> None:
