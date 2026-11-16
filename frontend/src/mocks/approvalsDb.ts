@@ -57,6 +57,24 @@ function referenceSteps(ids: string[], from: number): ApprovalStep[] {
     }))
 }
 
+/** 임시저장에 달아 두는 줄(백엔드 README 75). 고른 결재자가 먼저, 참조자가 뒤. 아직 결재 차례가 아니라 skipped 다. */
+function draftSteps(approvers: string[], references: string[]): ApprovalStep[] {
+  const picked = approvers
+    .map(userById)
+    .filter((u): u is User => !!u)
+    .map((u, i) => ({
+      step_no: i + 1,
+      approver: person(u),
+      acted_by: null,
+      role: 'approve' as const,
+      status: 'skipped' as const,
+      comment: null,
+      acted_at: null,
+      version: 1,
+    }))
+  return [...picked, ...referenceSteps(references, picked.length + 1)]
+}
+
 function buildSteps(drafter: User): ApprovalStep[] {
   // 임원 기안은 결재선이 없다(13 §5.2). 아랫사람에게 결재를 받지 않는다.
   if (drafter.role === 'exec') return []
@@ -140,7 +158,7 @@ function create(drafter: User, input: DraftInput, at = now()): Stored {
     related: input.subject.related,
     subject: input.subject,
     // 참조자는 기안 때 정해진다. 상신 전에도 문서에 남아 있어야 임시저장을 다시 열었을 때 보인다.
-    steps: referenceSteps(input.references ?? [], 1),
+    steps: draftSteps(input.approvers ?? [], input.references ?? []),
   }
   docs.push(doc)
   return doc
@@ -150,7 +168,13 @@ function submit(doc: Stored, at = now()) {
   const drafter = userById(doc.drafter_id)
   // 결재선은 상신할 때 서버가 만든다(13 §4.2.2). 기안 때 고른 참조자는 그 뒤에 붙는다.
   const references = doc.steps.filter((s) => s.role === 'reference').map((s) => s.approver.id)
-  const approvers = drafter ? buildSteps(drafter) : []
+  // 기안자가 고른 결재선이 있으면 그 사람들만, 고른 순서대로(백엔드 README 75). 없으면 서버가 만든다.
+  const picked = doc.steps.filter((s) => s.role === 'approve')
+  const approvers = picked.length
+    ? picked.map((s, i) => ({ ...s, step_no: i + 1, status: 'waiting' as const }))
+    : drafter
+      ? buildSteps(drafter)
+      : []
   // 결재자와 기안자는 참조에서 뺀다. 결재선은 상신할 때 정해져서 화면이 미리 거를 수 없다.
   // 그대로 두면 같은 사람이 결재선에 두 줄로 서고, 받은 결재함과 참조함에 같이 뜬다.
   const already = new Set([doc.drafter_id, ...approvers.map((s) => s.approver.id)])
@@ -380,6 +404,17 @@ function validate(input: DraftInput, docId?: string): Failure | null {
       return fail('없는 사람을 참조로 걸 수 없습니다.', 422, 'VALIDATION')
     }
   }
+  if (input.approvers !== undefined) {
+    if (!Array.isArray(input.approvers) || input.approvers.length > 10) {
+      return fail('결재선이 올바르지 않습니다.', 422, 'VALIDATION')
+    }
+    if (new Set(input.approvers).size !== input.approvers.length) {
+      return fail('결재자가 겹칩니다.', 422, 'VALIDATION')
+    }
+    if (input.approvers.some((id) => !userById(id))) {
+      return fail('없는 사람을 결재자로 고를 수 없습니다.', 422, 'VALIDATION')
+    }
+  }
   return null
 }
 
@@ -401,7 +436,11 @@ export function updateDraft(user: User, id: string, input: DraftInput): Approval
   doc.amount = input.subject.amount
   doc.related = input.subject.related
   // 안 보내면 그대로 둔다. 빈 배열은 "전부 해제" 라서 둘을 갈라야 한다.
-  if (input.references !== undefined) doc.steps = referenceSteps(input.references, 1)
+  if (input.references !== undefined || input.approvers !== undefined) {
+    const ids = (role: ApprovalStep['role']) =>
+      doc.steps.filter((s) => s.role === role).map((s) => s.approver.id)
+    doc.steps = draftSteps(input.approvers ?? ids('approve'), input.references ?? ids('reference'))
+  }
   return expose(doc, user)
 }
 
