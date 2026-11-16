@@ -229,7 +229,7 @@ export function useDeleteChannel() {
 }
 
 /**
- * 고를 수 있는 공감 이모지. 개발 릴레이(`scripts/chat.js`)가 같은 목록 밖을 거절하고, 백엔드에도 같은 목록을 요청했다.
+ * 고를 수 있는 공감 이모지. 백엔드 `REACTIONS`(routers/channels.py)와 개발 릴레이(`scripts/chat.js`)가 같은 목록 밖을 거절한다.
  * 앞의 둘이 「확인했다」 용이다.
  */
 export const REACTIONS = ['✅', '👍', '👀', '🙏', '❤️', '😂'] as const
