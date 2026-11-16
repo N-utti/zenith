@@ -21,6 +21,8 @@ interface TauriGlobal {
   core: { invoke: (cmd: string, args?: Record<string, unknown>) => Promise<unknown> }
   /** 테스트의 가짜 전역에는 없다. 창 단추(`WindowControls`)만 쓴다. */
   window?: { getCurrentWindow: () => TauriWindow }
+  /** 셸이 보내는 이벤트. 테스트의 가짜 전역에는 없다. */
+  event?: { listen: (event: string, handler: () => void) => Promise<() => void> }
 }
 
 declare global {
@@ -111,6 +113,23 @@ export function installExternalLinkHandler(): () => void {
     document.removeEventListener('click', onClick)
     document.removeEventListener('auxclick', onClick)
   }
+}
+
+/**
+ * 트레이 「종료」를 누르면 `beforeQuit`(로그아웃)을 마친 뒤 셸을 끈다. 실패해도 끈다. 셸은 답이 없으면
+ * 3초 뒤에 어차피 끈다(`request_quit`). 브라우저에서는 아무 일도 하지 않는다.
+ *
+ * @returns 해제 함수.
+ */
+export function onQuitRequested(beforeQuit: () => Promise<void>): () => void {
+  const tauri = typeof window !== 'undefined' ? window.__TAURI__ : undefined
+  if (!tauri?.event) return () => {}
+  const unlisten = tauri.event.listen('quit-requested', () => {
+    void beforeQuit()
+      .catch((error: unknown) => console.warn('종료 전 로그아웃 실패', error))
+      .finally(() => tauri.core.invoke('quit_app').catch(() => {}))
+  })
+  return () => void unlisten.then((off) => off())
 }
 
 /**

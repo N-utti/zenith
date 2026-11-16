@@ -1,8 +1,14 @@
-use std::{sync::Mutex, time::Duration};
+use std::{
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Mutex,
+    },
+    time::Duration,
+};
 use tauri::{
     menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Manager, WindowEvent,
+    AppHandle, Emitter, Manager, WindowEvent,
 };
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
 use tauri_plugin_updater::{Update, UpdaterExt};
@@ -70,7 +76,7 @@ fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
                     let _ = autostart_item.set_checked(!on);
                 }
             }
-            "quit" => app.exit(0),
+            "quit" => request_quit(app),
             _ => {}
         })
         .on_tray_icon_event(|tray, event| {
@@ -85,6 +91,56 @@ fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
         })
         .build(app)?;
     Ok(())
+}
+
+/// 트레이 「종료」를 눌렀는지. 누르기 전에는 `quit_app` 을 듣지 않는다(웹앱 스크립트가 아무 때나 앱을 끄지 못하게).
+static QUITTING: AtomicBool = AtomicBool::new(false);
+
+/// `logout_and_exit` 을 이미 시작했는지. 웹앱의 `quit_app` 과 3초 타이머가 겹쳐도 한 번만 끈다.
+static EXITING: AtomicBool = AtomicBool::new(false);
+
+/// 트레이 「종료」. 창을 닫는 것(트레이로 숨기기)과 달리 자리를 뜬다는 뜻이라 로그아웃하고 끈다.
+/// 창부터 숨기고 웹앱에 알리면 웹앱이 서버에 로그아웃한 뒤 `quit_app` 을 부른다. 웹앱이 아직 안 떴거나
+/// 서버가 답이 없어도 3초 뒤에는 끈다. 어느 쪽이든 `logout_and_exit` 을 거친다.
+fn request_quit(app: &AppHandle) {
+    QUITTING.store(true, Ordering::SeqCst);
+    // 꺼지는 3초 사이에 트레이에서 다시 여는 일이 없게 아이콘부터 치운다.
+    if let Some(tray) = app.tray_by_id("main") {
+        let _ = tray.set_visible(false);
+    }
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.hide();
+    }
+    let _ = app.emit("quit-requested", ());
+    let app = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_secs(3));
+        logout_and_exit(&app);
+    });
+}
+
+/// 서버 로그아웃이 실패해도(오프라인·서버 장애·3초 초과) 다음에 켰을 때 앞사람으로 들어가지 않게, 웹뷰의 쿠키를
+/// 전부 지우고 알림 센터를 비운 뒤 끈다. 세션 쿠키는 HttpOnly·14일 영속이라 웹앱이 못 지운다.
+/// Windows 에서 `cookies()` 는 동기 명령·이벤트 처리기 안에서 부르면 멈춘다. 별도 스레드나 async 명령에서만 부른다.
+fn logout_and_exit(app: &AppHandle) {
+    if EXITING.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    if let Some(window) = app.get_webview_window("main") {
+        for cookie in window.cookies().unwrap_or_default() {
+            let _ = window.delete_cookie(cookie);
+        }
+    }
+    let _ = clear_notifications(app.clone());
+    app.exit(0);
+}
+
+/// 웹앱이 종료 전 로그아웃을 끝냈을 때 부른다(`request_quit`). async 라 메인 스레드 밖에서 돈다(`logout_and_exit`).
+#[tauri::command]
+async fn quit_app(app: AppHandle) {
+    if QUITTING.load(Ordering::SeqCst) {
+        logout_and_exit(&app);
+    }
 }
 
 /// `check_update` 가 찾아 둔 새 버전. 사용자가 설치를 고르면 `install_update` 가 꺼내 쓴다.
@@ -165,7 +221,7 @@ fn clear_notifications(app: tauri::AppHandle) -> Result<(), String> {
 /// 셸에 넣은 기능은 셸마다 다시 만들어야 한다.
 ///
 /// 제니스는 필요할 때만 켜는 앱이 아니라 하루 내내 떠 있는 업무 공간이다. 그래서 창을 닫아도 꺼지지 않고
-/// 트레이에 남아 알림을 계속 받고, PC 를 켜면 트레이로 같이 켜진다. 완전히 끄는 길은 트레이 메뉴의 「종료」.
+/// 트레이에 남아 알림을 계속 받고, PC 를 켜면 트레이로 같이 켜진다. 완전히 끄는 길은 트레이 메뉴의 「종료」이고, 이때는 로그아웃한다.
 pub fn run() {
     tauri::Builder::default()
         // 두 번째 실행(바탕화면·시작 메뉴 아이콘 다시 누르기)은 새 창 대신 떠 있는 창을 꺼낸다.
@@ -209,7 +265,12 @@ pub fn run() {
                 let _ = window.hide();
             }
         })
-        .invoke_handler(tauri::generate_handler![check_update, install_update, clear_notifications])
+        .invoke_handler(tauri::generate_handler![
+            check_update,
+            install_update,
+            clear_notifications,
+            quit_app
+        ])
         .run(tauri::generate_context!())
         .expect("제니스 데스크탑 셸을 시작하지 못했습니다");
 }
