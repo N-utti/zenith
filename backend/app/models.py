@@ -181,6 +181,8 @@ class Document(Base):
     ai_source: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=sql_text("true")
     )
+    # 「잠금」(03 에 없던 칸, 2026-11-16 — README 70). 켜져 있으면 본문·제목·이동·휴지통이 전부 423 이다. 임원만 바꾼다
+    locked: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=sql_text("false"))
 
 
 # 문서 **목록**(트리·휴지통·홈·검색)에 붙이는 로더 옵션. 목록은 제목·시각만 쓰는데, 엔티티를 그냥 뽑으면

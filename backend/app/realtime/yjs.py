@@ -39,7 +39,7 @@ from pycrdt import (
     handle_sync_message,
     read_message,
 )
-from sqlalchemy import func, update
+from sqlalchemy import func, select, update
 
 from app import acl, audit
 from app.ai import embed
@@ -72,6 +72,9 @@ class Room:
         None  # 마지막으로 DB 에 투영한 meta.title — 트리에서 바꾼 제목을 되돌리지 않게
     )
     last_editor: uuid.UUID | None = None
+    # 문서 잠금(README 70) — 켜져 있으면 편집 프레임을 적용도 중계도 하지 않는다. PATCH /docs 가 바로 바꾸고,
+    # 방이 열리는 순간과 겹친 경합은 재검증 주기(REAUTH_INTERVAL)에 DB 값으로 다시 맞춘다
+    locked: bool = False
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
     @property
@@ -109,6 +112,16 @@ def _removal_message(awareness: Awareness, client_ids: set[int]) -> bytes:
     return create_awareness_message(encoder.to_bytes())
 
 
+def _would_change(doc: Doc, incoming: bytes) -> bool:
+    """이 업데이트를 적용하면 문서가 달라지는가 — 사본에 적용해 전후를 비교한다(원본은 건드리지 않는다).
+    ponytail: 프레임마다 문서를 통째로 복제한다 — 잠긴 방에 쓰기 프레임이 올 때만(접속당 한 번)이라 감수."""
+    before = doc.get_update()
+    probe = Doc(skip_gc=True)
+    probe.apply_update(before)
+    probe.apply_update(incoming)
+    return probe.get_update() != before
+
+
 ROOMS: dict[uuid.UUID, Room] = {}
 _rooms_lock = asyncio.Lock()
 pending_saves = (
@@ -131,6 +144,7 @@ async def _open_room(doc_id: uuid.UUID) -> Room | None:
                     None  # 휴지통 문서는 HTTP GET 으로만 읽는다 — 소켓으로 쓰면 색인에 되살아난다
                 )
             snapshot = row.ydoc_snapshot
+            locked = row.locked
         # ponytail: gc 를 끄면 지운 내용까지 영구히 남아 문서가 계속 커진다(15명 위키에선 감수). 문서 총량 상한·
         # 스냅샷 압축(주기적 gc 후 새 히스토리 시작)은 크기가 문제 될 때 — 그때 버전 복원 정책도 같이 정한다.
         doc = Doc(skip_gc=True)
@@ -138,7 +152,7 @@ async def _open_room(doc_id: uuid.UUID) -> Room | None:
             doc.apply_update(snapshot)
         awareness = Awareness(doc)
         awareness.set_local_state(None)  # 서버는 참여자가 아니다 — 커서를 만들지 않는다
-        room = Room(doc_id=doc_id, doc=doc, awareness=awareness)
+        room = Room(doc_id=doc_id, doc=doc, awareness=awareness, locked=locked)
         room.projected_title = room.title
 
         def on_awareness(_type: str, payload: tuple[dict, object]) -> None:
@@ -155,6 +169,15 @@ async def _open_room(doc_id: uuid.UUID) -> Room | None:
         awareness.observe(on_awareness)
         ROOMS[doc_id] = room
         return room
+
+
+async def set_locked(doc_id: uuid.UUID, locked: bool) -> None:
+    """잠금 PATCH 가 커밋 뒤에 부른다 — 열려 있는 방에 바로 반영. `_rooms_lock` 을 잡아, 방이 DB 를 읽고 등록하는
+    사이에 커밋된 잠금도 놓치지 않는다(열리는 중이면 등록을 기다렸다가 덮는다)."""
+    async with _rooms_lock:
+        room = ROOMS.get(doc_id)
+        if room is not None:
+            room.locked = locked
 
 
 def tsv_of(text: str):
@@ -380,6 +403,9 @@ async def yjs_endpoint(websocket: WebSocket, doc_id: uuid.UUID) -> None:
                         await authenticate(websocket.cookies, db, verify_exp=False)
                         # 등급·사람 지정을 바꿔 권한을 회수해도 열린 소켓이 1분 안에 닫히게(README 57, 보안 리뷰)
                         allowed = await acl.can_view_doc(db, user, doc_id)
+                        room.locked = bool(
+                            await db.scalar(select(Document.locked).where(Document.id == doc_id))
+                        )
                 except ApiError:
                     raise
                 except Exception as e:  # noqa: BLE001 — DB 가 잠깐 끊김. 핸드셰이크와 같은 1013 으로(#340)
@@ -398,6 +424,17 @@ async def yjs_endpoint(websocket: WebSocket, doc_id: uuid.UUID) -> None:
                 break
             kind = message[0]
             if kind == YMessageType.SYNC:
+                if room.locked and len(message) > 1 and message[1] != YSyncMessageType.SYNC_STEP1:
+                    # 잠긴 문서 — 읽기(step1)만 받는다. 쓰기는 Y.Doc 에 닿기 전에 막는다(README 70).
+                    # 내용을 바꾸는 프레임이면 버리지 않고 4423 으로 닫는다 — 버리기만 하면 그 편집이 보낸 쪽의
+                    # Y.Doc·브라우저 사본에 남았다가 잠금이 풀린 뒤 재접속 때 본문에 합쳐진다(리뷰). 화면은 4423 을
+                    # 받으면 사본을 지우고 읽기 전용으로 다시 연다. 접속 때 오는 step2 는 바꿀 게 없어도 비어 있지
+                    # 않을 수 있어(Yjs 는 삭제 목록을 통째로 싣는다) 길이가 아니라 「적용하면 달라지나」로 본다.
+                    if _would_change(room.doc, read_message(message[2:])):
+                        log.info("yjs 잠긴 문서 편집 거부 %s", doc_id)
+                        await websocket.close(code=4423)
+                        break
+                    continue
                 reply = handle_sync_message(message[1:], room.doc)  # step1 이면 step2 를 돌려준다
                 if reply is not None:
                     await websocket.send_bytes(reply)

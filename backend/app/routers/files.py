@@ -73,7 +73,8 @@ async def upload_file(
     if await audit.count_since(db, "files.uploaded", since, actor=str(user.id)) >= DAILY_UPLOADS:
         raise ApiError(429, "UPLOAD_THROTTLED", "오늘 올릴 수 있는 파일 수를 넘었습니다.")
     if doc_id is not None:
-        doc = await db.get(Document, doc_id)
+        # 행 잠금 — 잠금 PATCH(README 70)와 겹쳐 잠긴 문서에 파일이 붙지 않게
+        doc = await db.get(Document, doc_id, with_for_update=True)
         # 휴지통 문서·못 보는 문서도 없는 것으로(README 57) — 남의 폴더 문서에 파일을 붙이거나 존재를 알아내지 못하게
         if (
             doc is None
@@ -81,6 +82,7 @@ async def upload_file(
             or not await acl.can_view_folder(db, user, doc.folder_id)
         ):
             raise ApiError(422, "VALIDATION", "없는 문서입니다.")
+        acl.require_unlocked(doc)  # 잠긴 문서에는 파일도 못 붙인다(README 70)
     # 거대한 본문은 main.py 의 body_limit 가 Content-Length 로 먼저 끊는다. 여기서는 상한 + 1 바이트만 읽어 판정.
     data = await file.read(MAX_FILE_BYTES + 1)
     if len(data) > MAX_FILE_BYTES:
