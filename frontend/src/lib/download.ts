@@ -1,8 +1,13 @@
+import { toastApi } from '@/components/ui/ToastContext'
 import { apiBytes } from './api'
+import { isDesktopShell } from './desktop'
 
 /**
- * 바이트를 파일로 내려받게 한다(근태 리포트 xlsx).
- * ponytail: 데스크톱 셸(Tauri)에서 a[download] 가 안 먹으면 그때 셸의 저장 대화상자로 옮긴다.
+ * 바이트를 파일로 내려받게 한다. 앱의 모든 내려받기가 여기를 지난다.
+ *
+ * 데스크톱 앱(WebView2)은 다운로드 폴더에 조용히 저장하고 브라우저 같은 내려받기 표시를 띄우지
+ * 않는다. 화면이 그대로라 사람들이 「안 받아진다」며 거듭 눌러 같은 파일이 여러 벌 쌓였다(#623).
+ * ponytail: 저장 위치를 고르게 하려면 셸의 저장 대화상자가 필요하다(셸 권한을 여는 일이라 보류).
  */
 export function downloadBytes(name: string, bytes: Uint8Array, type: string) {
   const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type }))
@@ -12,6 +17,7 @@ export function downloadBytes(name: string, bytes: Uint8Array, type: string) {
   a.click()
   // 클릭이 다운로드를 시작하기 전에 URL 을 거두면 일부 브라우저가 중단한다. 한 틱 미룬다.
   setTimeout(() => URL.revokeObjectURL(url), 0)
+  if (isDesktopShell()) toastApi.success(`다운로드 폴더에 저장했습니다: ${name}`)
 }
 
 /**

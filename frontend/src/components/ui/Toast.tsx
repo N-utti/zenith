@@ -1,34 +1,8 @@
 import type { CSSProperties, ReactNode } from 'react'
 import { AlertTriangle, Check, Info } from 'lucide-react'
-import { Toaster, toast } from 'sonner'
+import { Toaster } from 'sonner'
 import { useTheme } from '@/lib/theme'
-import { ToastContext, type ToastApi, type ToastOptions } from './ToastContext'
-
-/** 성공은 잠깐, 실패는 오래. 읽고 대응할 시간이 필요하다. */
-const LIFETIME = { success: 3200, info: 3200, error: 6000 }
-
-/** 호출부는 이 셋만 안다. 라이브러리가 바뀌어도 여기만 바꾼다. */
-function opts(fallback: number, options?: ToastOptions) {
-  return {
-    duration: options?.durationMs ?? fallback,
-    action: options?.action && { label: options.action.label, onClick: options.action.onClick },
-    // 액션 버튼으로 닫힐 때는 둘 다 불리지 않는다.
-    onAutoClose: options?.onClose,
-    onDismiss: options?.onClose,
-  }
-}
-
-const api: ToastApi = {
-  success: (message, options) => {
-    toast.success(message, opts(LIFETIME.success, options))
-  },
-  error: (message, options) => {
-    toast.error(message, opts(LIFETIME.error, options))
-  },
-  info: (message, options) => {
-    toast.info(message, opts(LIFETIME.info, options))
-  },
-}
+import { ToastContext, toastApi } from './ToastContext'
 
 /** sonner 의 CSS 변수를 시맨틱 토큰으로 덮는다. 라이트·다크는 토큰이 알아서 바뀐다. */
 const TOASTER_STYLE = {
@@ -63,7 +37,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const { theme } = useTheme()
 
   return (
-    <ToastContext.Provider value={api}>
+    <ToastContext.Provider value={toastApi}>
       {children}
       <Toaster
         theme={theme}

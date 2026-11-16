@@ -11,6 +11,7 @@ import { Textarea } from '@/components/ui/Textarea'
 import { useToast } from '@/components/ui/ToastContext'
 import { ApiError } from '@/lib/api'
 import { currentMonth, formatDateTime, formatMonth } from '@/lib/datetime'
+import { isDesktopShell } from '@/lib/desktop'
 import { useCloseMonth, useDownloadReport, useReopenMonth, useYearClosings } from './api'
 
 /**
@@ -31,7 +32,9 @@ export function MonthClosingSection() {
   const download = (month: string) =>
     report.mutate(month, {
       // 완료를 소리로도 알린다. 버튼이 disabled 되며 포커스가 body 로 떨어져 완료를 알 길이 없다.
-      onSuccess: () => toast.success(`${formatMonth(month)} 리포트를 내려받았습니다.`),
+      // 데스크톱 앱은 `downloadBytes` 가 저장 위치를 이미 알린다. 토스트가 둘 뜨지 않게 한다.
+      onSuccess: () =>
+        isDesktopShell() || toast.success(`${formatMonth(month)} 리포트를 내려받았습니다.`),
       onError: (err) =>
         toast.error(err instanceof ApiError ? err.message : '리포트를 내려받지 못했습니다.'),
     })
