@@ -17,12 +17,13 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Form, Query, Request, Response, UploadFile
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, exists, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import defer
 
 from app import acl, audit, convert, storage, ydoc
 from app.ai import embed
+from app.ai.chat_command import AI_EMAIL
 from app.config import settings
 from app.db import get_db, session_scope
 from app.deps import current_user
@@ -296,6 +297,11 @@ async def _set_members(db: AsyncSession, folder: Folder, user_ids: list[uuid.UUI
         found = set(await db.scalars(select(User.id).where(User.id.in_(wanted))))
         if found != wanted:
             raise ApiError(422, "VALIDATION", "없는 사용자가 있습니다.")
+        # 개인 폴더에 AI 봇을 넣으면 채팅 `/ai` 의 답(방 전원이 본다)에 그 문서가 근거로 실린다 — 받지 않는다(리뷰)
+        if folder.owner_id is not None and await db.scalar(
+            select(exists().where(User.id.in_(wanted), User.email == AI_EMAIL))
+        ):
+            raise ApiError(422, "VALIDATION", "AI 어시스턴트는 볼 사람으로 고를 수 없습니다.")
     await db.execute(delete(FolderMember).where(FolderMember.folder_id == folder.id))
     db.add_all([FolderMember(folder_id=folder.id, user_id=uid) for uid in wanted])
 
@@ -469,6 +475,10 @@ async def update_folder(
             raise ApiError(
                 422, "VALIDATION", "폴더는 개인 폴더 안팎으로 옮길 수 없습니다. 문서를 옮겨 주세요."
             )
+        if changes["parent_id"] != folder.parent_id and private:
+            # 개인 폴더끼리도 경계다(README 74, 리뷰) — 볼 사람으로 지정받은 사람이 남의 하위 폴더를 자기 개인 폴더로
+            # 통째로 가져가거나, 볼 사람이 다른 폴더로 옮겨 주인이 고르지 않은 사람에게 보여 주지 못하게
+            await acl.require_same_private_root(db, user, folder.id, changes["parent_id"])
     for key, value in changes.items():
         if value is None and key != "parent_id":  # NOT NULL 컬럼 — DB 409 대신 422
             raise ApiError(422, "VALIDATION", f"{key} 는 null 일 수 없습니다.")
@@ -797,17 +807,27 @@ async def update_doc(
     if not changes:
         editor = await db.get(User, doc.updated_by) if doc.updated_by else None
         return _doc_out(doc, editor)  # 빈 본문으로 "이어서 작업" 순서를 흔들지 않는다
-    if "locked" in changes and user.role != "exec":
-        audit.record(
-            db,
-            "acl.denied",
-            request=request,
-            actor_id=user.id,
-            target_id=doc.id,
-            detail={"path": request.url.path, "min_role": "exec"},
-        )
-        await db.commit()
-        raise ApiError(403, "FORBIDDEN", "문서 잠금은 임원만 바꿀 수 있습니다.")
+    if "locked" in changes:
+        # 개인 폴더의 문서는 주인이 잠그고 푼다(README 74, 리뷰) — 볼 사람으로 지정받은 임원이 잠그고 명단에서 빠지면
+        # 아무도 못 푸는 문서가 된다. 그 밖의 문서는 임원만(README 70)
+        owner = await acl.private_owner(db, doc.folder_id)
+        if (owner != user.id) if owner is not None else (user.role != "exec"):
+            audit.record(
+                db,
+                "acl.denied",
+                request=request,
+                actor_id=user.id,
+                target_id=doc.id,
+                detail={"path": request.url.path, "min_role": "owner" if owner else "exec"},
+            )
+            await db.commit()
+            raise ApiError(
+                403,
+                "FORBIDDEN",
+                "개인 폴더의 문서 잠금은 주인만 바꿀 수 있습니다."
+                if owner
+                else "문서 잠금은 임원만 바꿀 수 있습니다.",
+            )
     if changes.keys() - {"locked"}:
         # 잠긴 채로는 잠금 말고 아무것도 못 바꾼다 — 풀고 고친다(README 70)
         acl.require_unlocked(doc)
@@ -822,12 +842,10 @@ async def update_doc(
         # 개인 폴더 안팎 이동(README 72)은 주인만 한다 — 주인이 고른 사람(README 74)도 양쪽을 보지만, 꺼내면 공개되고
         # 넣으면 숨는 일이라 그 개인 폴더의 주인이어야 한다(다른 개인 폴더로 옮기는 것도 양쪽 주인이어야 한다). 대신 남긴다 —
         # 넣으면 임원도 못 보게 되므로, 같이 쓰던 문서가 사라졌을 때 누가 가져갔는지 감사 기록으로 찾는다(제목은 넣을 때만)
-        owner_was = await acl.private_owner(db, doc.folder_id)
-        owner_now = await acl.private_owner(db, changes["folder_id"])
-        if owner_was != owner_now:
-            acl.require_private_owner(user, owner_was)
-            acl.require_private_owner(user, owner_now)
-        was, now = owner_was is not None, owner_now is not None
+        # 같은 주인의 다른 개인 폴더로 옮기는 것도 경계다 — 볼 사람이 다르다(리뷰)
+        was, now = await acl.require_same_private_root(
+            db, user, doc.folder_id, changes["folder_id"]
+        )
         hidden = now and not was
         if was != now:
             audit.record(

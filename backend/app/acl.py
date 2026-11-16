@@ -90,9 +90,11 @@ async def is_private(db: AsyncSession, folder_id: uuid.UUID) -> bool:
     return await _in(db, folder_id, private_folder_ids())
 
 
-async def private_owner(db: AsyncSession, folder_id: uuid.UUID) -> uuid.UUID | None:
-    """이 폴더가 든 개인 폴더의 주인 — 개인 폴더 밖이면 None. 볼 수 있는 것과 다르다: 주인이 고른 사람(README 74)은
-    안을 보고 고치지만, 폴더 자체와 경계를 넘는 일(문서 넣고 빼기·영구 삭제)은 주인만 한다."""
+async def private_root(
+    db: AsyncSession, folder_id: uuid.UUID
+) -> tuple[uuid.UUID, uuid.UUID] | None:
+    """이 폴더가 든 개인 폴더 — (그 최상위 폴더 id, 주인). 개인 폴더 밖이면 None.
+    경계 판정은 주인이 아니라 **어느 개인 폴더냐**로 한다: 같은 주인의 두 개인 폴더도 볼 사람이 다르다(리뷰)."""
     up = (
         select(Folder.id, Folder.parent_id, Folder.owner_id)
         .where(Folder.id == folder_id)
@@ -101,7 +103,30 @@ async def private_owner(db: AsyncSession, folder_id: uuid.UUID) -> uuid.UUID | N
     up = up.union(
         select(Folder.id, Folder.parent_id, Folder.owner_id).join(up, Folder.id == up.c.parent_id)
     )
-    return await db.scalar(select(up.c.owner_id).where(up.c.owner_id.is_not(None)).limit(1))
+    row = (
+        await db.execute(select(up.c.id, up.c.owner_id).where(up.c.owner_id.is_not(None)).limit(1))
+    ).first()
+    return (row[0], row[1]) if row else None
+
+
+async def private_owner(db: AsyncSession, folder_id: uuid.UUID) -> uuid.UUID | None:
+    """이 폴더가 든 개인 폴더의 주인 — 개인 폴더 밖이면 None. 볼 수 있는 것과 다르다: 주인이 고른 사람(README 74)은
+    안을 보고 고치지만, 폴더 자체와 경계를 넘는 일(문서·폴더 넣고 빼기·영구 삭제·잠금)은 주인만 한다."""
+    root = await private_root(db, folder_id)
+    return root[1] if root else None
+
+
+async def require_same_private_root(
+    db: AsyncSession, user: User, from_folder: uuid.UUID, to_folder: uuid.UUID | None
+) -> tuple[bool, bool]:
+    """문서·폴더가 개인 폴더의 경계를 넘으면(밖↔안, 다른 개인 폴더 사이) 걸린 개인 폴더들의 주인이어야 한다(403).
+    (옮기기 전이 개인 폴더 안인가, 옮긴 뒤가 개인 폴더 안인가)를 돌려준다."""
+    was = await private_root(db, from_folder)
+    now = await private_root(db, to_folder) if to_folder is not None else None
+    if was != now:
+        require_private_owner(user, was[1] if was else None)
+        require_private_owner(user, now[1] if now else None)
+    return was is not None, now is not None
 
 
 def require_private_owner(user: User, owner: uuid.UUID | None) -> None:

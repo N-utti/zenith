@@ -817,8 +817,15 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
   // 나타날 때 메뉴와 창이 옛 자리에 저절로 다시 뜬다.
   if (data && menu && !menuTarget) setMenu(null)
   if (data && moving && !movingTarget) setMoving(null)
+  // 메뉴를 연 폴더(문서면 그 문서의 폴더)가 든 개인 폴더. 개인 폴더에서는 주인이 볼 사람과 잠금을 맡는다.
+  const menuFolderId =
+    menu?.item.kind === 'folder'
+      ? menu.item.id
+      : menuTarget && 'folder_id' in menuTarget
+        ? menuTarget.folder_id
+        : null
   const menuPrivateRoot =
-    data && menu?.item.kind === 'folder' ? privateRootOf(data.folders, menu.item.id) : null
+    data && menuFolderId ? privateRootOf(data.folders, menuFolderId) : null
   const accessFolder = accessId ? data?.folders.find((f) => f.id === accessId) : undefined
   if (data && accessId && !accessFolder) setAccessId(null)
 
@@ -1000,7 +1007,9 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
                 onSelect={() => copyLink(menu.item.id)}
               />
               {/* 잠금은 임원만 바꾼다(아니면 서버가 403). 잠긴 문서는 이름·자리·휴지통이 423 이라 숨긴다. */}
-              {isExec && 'locked' in menuTarget && (
+              {/* 잠금은 임원만. 개인 폴더의 문서는 주인만 잠그고 푼다(백엔드 README 74). */}
+              {(menuPrivateRoot ? menuPrivateRoot.owner_id === meId : isExec) &&
+                'locked' in menuTarget && (
                 <ContextMenuItem
                   icon={menuTarget.locked ? LockOpen : Lock}
                   label={menuTarget.locked ? '잠금 풀기' : '잠그기'}

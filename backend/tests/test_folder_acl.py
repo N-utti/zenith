@@ -613,7 +613,7 @@ async def test_private_folder_shares_with_chosen_people(c, users: Users, app_db)
     r = await c.member.patch(
         f"/api/folders/{sub_id}", json={"allowed_users": [str(users.exec.id)]}, headers=hm
     )
-    assert r.status_code in (403, 422)
+    assert r.status_code == 403  # 사원은 사람 지정 자체를 못 한다(임원 검사가 먼저)
     # 주인이 볼 사람을 바꾼다 — 빼면 바로 못 보고, 넣으면 임원도 본다
     r = await c.member.patch(
         f"/api/folders/{mine['id']}", json={"allowed_users": [str(users.exec.id)]}, headers=hm
@@ -628,4 +628,77 @@ async def test_private_folder_shares_with_chosen_people(c, users: Users, app_db)
     assert r.status_code == 200 and not await sees(c.exec)
     # 등급은 여전히 못 건다
     r = await c.member.patch(f"/api/folders/{mine['id']}", json={"min_role": "lead"}, headers=hm)
-    assert r.status_code in (403, 422)
+    assert r.status_code == 403
+
+
+async def test_private_folder_boundaries_between_roots(c, users: Users, app_db) -> None:
+    """README 74 리뷰 — 개인 폴더끼리도 경계다. 볼 사람으로 지정받은 사람이 하위 폴더·문서를 다른 개인 폴더로 가져가거나
+    옮겨서 주인이 고르지 않은 사람에게 보여 주지 못한다. 개인 폴더의 문서 잠금은 주인만."""
+    await _seed(app_db, users)
+    hm, hl, he = csrf(c.member), csrf(c.lead), csrf(c.exec)
+
+    async def folder(client, headers, **body) -> str:
+        r = await client.post("/api/folders", json=body, headers=headers)
+        assert r.status_code == 201, r.text
+        return r.json()["id"]
+
+    async def doc(client, headers, folder_id, title) -> str:
+        r = await client.post(
+            "/api/docs", json={"folder_id": folder_id, "title": title}, headers=headers
+        )
+        assert r.status_code == 201, r.text
+        return r.json()["id"]
+
+    # 사원의 개인 폴더 둘 — 하나는 팀장·임원이, 하나는 팀장만 본다
+    wide = await folder(
+        c.member, hm, title="넓게", private=True,
+        allowed_users=[str(users.lead.id), str(users.exec.id)],
+    )
+    narrow = await folder(
+        c.member, hm, title="좁게", private=True, allowed_users=[str(users.lead.id)]
+    )
+    sub = await folder(c.member, hm, title="하위", parent_id=narrow)
+    secret = await doc(c.member, hm, sub, "비밀")
+    theirs = await folder(c.lead, hl, title="팀장 것", private=True)
+    theirs_sub = await folder(c.lead, hl, title="팀장 하위", parent_id=theirs)
+
+    # 지정받은 사람이 남의 하위 폴더를 자기 개인 폴더로 가져가지 못한다(반대 방향도)
+    r = await c.lead.patch(f"/api/folders/{sub}", json={"parent_id": theirs}, headers=hl)
+    assert r.status_code == 403, r.text
+    r = await c.lead.patch(f"/api/folders/{theirs_sub}", json={"parent_id": narrow}, headers=hl)
+    assert r.status_code == 403
+    assert (await c.member.get(f"/api/docs/{secret}")).status_code == 200  # 주인은 그대로 본다
+    # 같은 주인의 다른 개인 폴더로도 못 옮긴다 — 볼 사람이 다르다(임원은 「좁게」를 못 본다)
+    r = await c.lead.patch(f"/api/docs/{secret}", json={"folder_id": wide}, headers=hl)
+    assert r.status_code == 403
+    r = await c.lead.patch(f"/api/folders/{sub}", json={"parent_id": wide}, headers=hl)
+    assert r.status_code == 403
+    assert (await c.exec.get(f"/api/docs/{secret}")).status_code == 403
+    # 주인은 자기 개인 폴더 사이로 옮긴다 — 옮기면 그 폴더의 볼 사람이 본다
+    r = await c.member.patch(f"/api/docs/{secret}", json={"folder_id": wide}, headers=hm)
+    assert r.status_code == 200
+    assert (await c.exec.get(f"/api/docs/{secret}")).status_code == 200
+    # 안에서 옮기는 것은 지정받은 사람도 된다
+    inner = await folder(c.member, hm, title="넓게 하위", parent_id=wide)
+    r = await c.lead.patch(f"/api/docs/{secret}", json={"folder_id": inner}, headers=hl)
+    assert r.status_code == 200
+
+    # 잠금: 개인 폴더의 문서는 주인만 잠그고 푼다 — 지정받은 임원도 못 하고, 주인은 임원이 아니어도 된다
+    r = await c.exec.patch(f"/api/docs/{secret}", json={"locked": True}, headers=he)
+    assert r.status_code == 403
+    r = await c.member.patch(f"/api/docs/{secret}", json={"locked": True}, headers=hm)
+    assert r.status_code == 200 and r.json()["locked"] is True
+    r = await c.member.patch(f"/api/docs/{secret}", json={"locked": False}, headers=hm)
+    assert r.status_code == 200
+    # 지정받은 임원의 영구 삭제도 403
+    assert (await c.exec.delete(f"/api/docs/{secret}", headers=he)).status_code == 204
+    assert (await c.exec.delete(f"/api/docs/{secret}?hard=1", headers=he)).status_code == 403
+
+    # AI 봇은 볼 사람으로 못 고른다(채팅 /ai 의 답으로 새지 않게)
+    from app.ai import chat_command
+
+    bot = await chat_command.ai_user(app_db)
+    r = await c.member.patch(
+        f"/api/folders/{wide}", json={"allowed_users": [str(bot.id)]}, headers=hm
+    )
+    assert r.status_code == 422
