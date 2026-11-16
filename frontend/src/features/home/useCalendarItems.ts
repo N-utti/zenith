@@ -29,7 +29,8 @@ export const MAX_CHIPS = 3
  */
 export const WEEK_STARTS_ON = 0
 
-const SHOW_KEY = 'zenith.calendarShow'
+// 이름 끝 v2: 기본값을 「둘 다 켬」으로 바꾸면서(2026-11-16) 예전에 눌러 둔 「동료 끔」을 한 번 걷는다.
+const SHOW_KEY = 'zenith.calendarShow.v2'
 
 /**
  * 범례 토글 상태. 처음엔 둘 다 켠다(2026-11-16 사용자 결정: 동료 일정이 보여야 한다. 그 전에는 개인만 켰다).

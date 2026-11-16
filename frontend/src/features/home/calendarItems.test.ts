@@ -64,6 +64,41 @@ describe('홈 캘린더 날짜별 항목', () => {
       '김다인 연차',
     ])
   })
+
+  it('동료 일정이 많아도 내 부재가 동료 앞에 온다(종일 → 시각순)', () => {
+    const colleague = (id: string, time: string | null) => ({
+      id,
+      date: '2026-09-08',
+      title: '미팅',
+      time,
+      created_at: '',
+      user: { id: 'u-6', name: '김다인' },
+    })
+    const days = itemsByDay(
+      [
+        leave({ user: ME, start_date: '2026-09-08', end_date: '2026-09-08' }),
+        leave({ id: 'lv-2', start_date: '2026-09-08', end_date: '2026-09-08' }),
+      ],
+      [
+        colleague('c-1', null),
+        colleague('c-2', '09:00'),
+        { id: 'e-1', date: '2026-09-08', title: '회의', time: '10:00', created_at: '', user: ME },
+        colleague('c-3', '11:00'),
+      ],
+      () => '연차',
+      { from: '2026-09-08', to: '2026-09-08' },
+      [],
+      ME.id,
+    )
+    expect(days.get('2026-09-08')?.map((i) => i.label)).toEqual([
+      '하지민 연차',
+      '10:00 회의',
+      '김다인 미팅',
+      '김다인 연차',
+      '09:00 김다인 미팅',
+      '11:00 김다인 미팅',
+    ])
+  })
 })
 
 describe('홈 캘린더 부재 묶음', () => {
@@ -130,16 +165,16 @@ describe('홈 캘린더 부재 묶음', () => {
       'u-9',
     )
     const items = days.get('2026-09-08') ?? []
-    // 동료 일정은 이름을 앞에 달고 동료 묶음으로 온다. 같은 시각이면 내 것이 먼저다.
+    // 동료 일정은 이름을 앞에 달고 동료 묶음으로 온다. 개인 묶음(내 일정·내 부재)이 먼저다.
     expect(items.map((i) => i.label)).toEqual([
       '치과',
-      '김다인 고객사 미팅',
       '하지민 연차',
+      '김다인 고객사 미팅',
       '김다인 연차',
     ])
-    expect(items.map((i) => i.group)).toEqual(['personal', 'colleague', 'personal', 'colleague'])
+    expect(items.map((i) => i.group)).toEqual(['personal', 'personal', 'colleague', 'colleague'])
     // 좁은 칸의 짧은 이름: 일정은 제목, 내 부재는 종류, 동료 부재는 이름과 종류(내 이름은 군더더기).
-    expect(items.map((i) => i.short)).toEqual(['치과', '김다인 고객사 미팅', '연차', '김다인 연차'])
+    expect(items.map((i) => i.short)).toEqual(['치과', '연차', '김다인 고객사 미팅', '김다인 연차'])
 
     // 개인을 끄면 내 휴가도 같이 꺼진다.
     const shown = onlyShown(days, { personal: false, colleague: true })
