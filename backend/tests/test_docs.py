@@ -149,6 +149,7 @@ async def test_folders_and_tree(client: AsyncClient, users: Users, app_db) -> No
         "updated_by",
         "deleted_at",
         "ai_source",
+        "locked",
     }
 
 
@@ -742,3 +743,74 @@ async def test_lists_do_not_load_doc_bodies(client: AsyncClient, users: Users, a
         f"/api/docs/{doc['id']}/versions", json={"snapshot": SNAP}, headers=csrf(client)
     )
     assert (r.status_code, r.json()["snapshot"]) == (201, SNAP)
+
+
+async def test_doc_lock(client: AsyncClient, users: Users, app_db) -> None:
+    """문서 잠금(README 70) — 임원만 켜고 끈다(403 + 감사). 잠긴 문서는 임원도 내용을 못 바꾼다(423), 읽기·댓글은 된다."""
+    root = await _root(app_db)
+    other = Folder(ws_id=root.ws_id, parent_id=None, title="다른 폴더")
+    app_db.add(other)
+    await app_db.flush()
+    await login(client, "donghyun@zenith.co.kr")
+    doc = await _doc(client, root.id, "취업규칙")
+    url = f"/api/docs/{doc['id']}"
+    assert doc["locked"] is False
+
+    r = await client.patch(url, json={"locked": True}, headers=csrf(client))
+    assert r.status_code == 403 and r.json()["code"] == "FORBIDDEN"
+    denied = (
+        await app_db.execute(select(AuditEvent).where(AuditEvent.kind == "acl.denied"))
+    ).scalar_one()
+    assert denied.actor_id == users.lead.id and str(denied.target_id) == doc["id"]
+
+    await login(client, "jaeho@zenith.co.kr")
+    r = await client.patch(url, json={"locked": True}, headers=csrf(client))
+    assert r.status_code == 200 and r.json()["locked"] is True
+    # 잠금은 내용 변경이 아니다 — 「이어서 작업」 순서·마지막 편집자는 그대로, 감사에 남는다
+    assert r.json()["updated_at"] == doc["updated_at"]
+    assert r.json()["updated_by"]["id"] == str(users.lead.id)
+    logged = (
+        await app_db.execute(select(AuditEvent).where(AuditEvent.kind == "docs.locked"))
+    ).scalar_one()
+    assert logged.actor_id == users.exec.id and logged.detail == {"locked": True}
+
+    # 잠근 임원 본인도, 다른 사람도 못 고친다
+    for who in ("jaeho@zenith.co.kr", "donghyun@zenith.co.kr"):
+        await login(client, who)
+        attempts = [
+            await client.patch(url, json={"title": "바꾼 제목"}, headers=csrf(client)),
+            await client.patch(url, json={"folder_id": str(other.id)}, headers=csrf(client)),
+            await client.patch(url, json={"ai_source": False}, headers=csrf(client)),
+            await client.delete(url, headers=csrf(client)),
+            await client.post(f"{url}/versions", json={"snapshot": SNAP}, headers=csrf(client)),
+            await client.post(
+                "/api/files",
+                data={"doc_id": doc["id"]},
+                files={"file": ("a.txt", b"hello", "text/plain")},
+                headers=csrf(client),
+            ),
+        ]
+        assert [(a.status_code, a.json()["code"]) for a in attempts] == [(423, "DOC_LOCKED")] * 6
+    # 풀면서 같이 고치는 것도 안 된다 — 풀고 나서 고친다
+    await login(client, "jaeho@zenith.co.kr")
+    r = await client.patch(url, json={"locked": False, "title": "바꾼 제목"}, headers=csrf(client))
+    assert r.status_code == 423
+
+    r = await client.get(url)
+    assert r.status_code == 200 and r.json()["locked"] is True and r.json()["title"] == "취업규칙"
+    tree = (await client.get("/api/tree")).json()
+    assert [d["locked"] for d in tree["docs"] if d["id"] == doc["id"]] == [True]
+    r = await client.post(f"{url}/comments", json={"body": "3조 확인 부탁"}, headers=csrf(client))
+    assert r.status_code == 201
+    # 옛 판 보기(복원 스냅샷 받기)는 읽기라 막지 않는다 — 적용은 yjs 편집이라 거기서 막힌다
+    r = await client.post(
+        f"{url}/restore", json={"version_id": str(uuid.uuid4())}, headers=csrf(client)
+    )
+    assert r.status_code == 404
+
+    r = await client.patch(url, json={"locked": False}, headers=csrf(client))
+    assert r.status_code == 200 and r.json()["locked"] is False
+    r = await client.patch(url, json={"title": "바꾼 제목"}, headers=csrf(client))
+    assert r.status_code == 200 and r.json()["title"] == "바꾼 제목"
+    r = await client.patch(url, json={"locked": None}, headers=csrf(client))
+    assert r.status_code == 422

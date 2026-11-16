@@ -997,7 +997,7 @@
         "tags": [
           "docs"
         ],
-        "summary": "제목·폴더 이동·ai_source (목록용 투영 — 본문 원천은 Y.Doc)",
+        "summary": "제목·폴더 이동·ai_source·locked (목록용 투영 — 본문 원천은 Y.Doc)",
         "operationId": "update_doc_api_docs__id__patch",
         "parameters": [
           {
@@ -1031,6 +1031,9 @@
                 }
               }
             }
+          },
+          "423": {
+            "description": "DOC_LOCKED — 잠긴 문서(README 70). 휴지통·버전·복원·파일 첨부도 같다"
           },
           "422": {
             "description": "Validation Error",
@@ -10080,6 +10083,10 @@
             "type": "boolean",
             "title": "Ai Source"
           },
+          "locked": {
+            "type": "boolean",
+            "title": "Locked"
+          },
           "ydoc": {
             "anyOf": [
               {
@@ -10101,6 +10108,7 @@
           "updated_by",
           "deleted_at",
           "ai_source",
+          "locked",
           "ydoc"
         ],
         "title": "DocDetail"
@@ -10172,6 +10180,10 @@
           "ai_source": {
             "type": "boolean",
             "title": "Ai Source"
+          },
+          "locked": {
+            "type": "boolean",
+            "title": "Locked"
           }
         },
         "type": "object",
@@ -10182,7 +10194,8 @@
           "updated_at",
           "updated_by",
           "deleted_at",
-          "ai_source"
+          "ai_source",
+          "locked"
         ],
         "title": "DocOut"
       },
@@ -10223,6 +10236,17 @@
               }
             ],
             "title": "Ai Source"
+          },
+          "locked": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Locked"
           }
         },
         "type": "object",

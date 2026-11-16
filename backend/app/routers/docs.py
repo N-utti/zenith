@@ -115,6 +115,8 @@ class DocOut(BaseModel):
     updated_by: Person | None
     deleted_at: datetime | None
     ai_source: bool  # AI 어시스턴트가 이 문서를 근거로 써도 되는가 (README 43)
+    # 잠금(README 70) — true 면 내용·제목·이동·휴지통이 423 `DOC_LOCKED`. 화면은 읽기 전용으로 연다
+    locked: bool
 
 
 class DocDetail(DocOut):
@@ -135,6 +137,7 @@ class DocPatchIn(BaseModel):
     title: NonBlank | None = None
     folder_id: uuid.UUID | None = None
     ai_source: bool | None = None
+    locked: bool | None = None  # 임원만(403). 잠긴 문서는 이 칸 말고는 못 바꾼다(423)
 
 
 class TreeOut(BaseModel):
@@ -215,6 +218,7 @@ def _doc_out(doc: Document, editor: User | None) -> DocOut:
         updated_by=Person.model_validate(editor) if editor else None,
         deleted_at=doc.deleted_at,
         ai_source=doc.ai_source,
+        locked=doc.locked,
     )
 
 
@@ -733,7 +737,10 @@ async def get_doc(
 @router.patch(
     "/docs/{id}",
     response_model=DocOut,
-    summary="제목·폴더 이동·ai_source (목록용 투영 — 본문 원천은 Y.Doc)",
+    summary="제목·폴더 이동·ai_source·locked (목록용 투영 — 본문 원천은 Y.Doc)",
+    responses={
+        423: {"description": "DOC_LOCKED — 잠긴 문서(README 70). 휴지통·버전·복원·파일 첨부도 같다"}
+    },
 )
 async def update_doc(
     id: uuid.UUID,
@@ -742,11 +749,25 @@ async def update_doc(
     user: User = Depends(current_user),
     db: AsyncSession = Depends(get_db),
 ) -> DocOut:
-    doc = await _get_doc(db, id, user=user)
+    doc = await _get_doc(db, id, user=user, lock=True)
     changes = body.model_dump(exclude_unset=True)
     if not changes:
         editor = await db.get(User, doc.updated_by) if doc.updated_by else None
         return _doc_out(doc, editor)  # 빈 본문으로 "이어서 작업" 순서를 흔들지 않는다
+    if "locked" in changes and user.role != "exec":
+        audit.record(
+            db,
+            "acl.denied",
+            request=request,
+            actor_id=user.id,
+            target_id=doc.id,
+            detail={"path": request.url.path, "min_role": "exec"},
+        )
+        await db.commit()
+        raise ApiError(403, "FORBIDDEN", "문서 잠금은 임원만 바꿀 수 있습니다.")
+    if changes.keys() - {"locked"}:
+        # 잠긴 채로는 잠금 말고 아무것도 못 바꾼다 — 풀고 고친다(README 70)
+        acl.require_unlocked(doc)
     if changes.get("folder_id") is not None:
         await _require_folder(db, changes["folder_id"], user)
         # 이동은 등급을 바꾸는 것과 같다 — 원래 폴더나 대상 폴더가 「전원 열람」이 아니면 임원만(README 57)
@@ -758,7 +779,7 @@ async def update_doc(
         if value is None:
             raise ApiError(422, "VALIDATION", f"{key} 는 null 일 수 없습니다.")
         setattr(doc, key, value)
-    if changes.keys() - {"ai_source"}:
+    if changes.keys() - {"ai_source", "locked"}:
         doc.updated_by = user.id
         doc.updated_at = (
             _now()
@@ -773,7 +794,18 @@ async def update_doc(
             target_id=doc.id,
             detail={"ai_source": changes["ai_source"]},
         )
+    if "locked" in changes:
+        audit.record(
+            db,
+            "docs.locked",
+            request=request,
+            actor_id=user.id,
+            target_id=doc.id,
+            detail={"locked": changes["locked"]},
+        )
     await db.commit()
+    if "locked" in changes:
+        await yjs.set_locked(doc.id, changes["locked"])  # 열려 있는 편집 방에 바로, refresh 왕복보다 먼저
     await db.refresh(doc)
     editor = (
         await db.get(User, doc.updated_by) if doc.updated_by else None
@@ -794,9 +826,10 @@ async def delete_doc(
     user: User = Depends(current_user),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
-    doc = await _get_doc(db, id, user=user, trashed_ok=True, lock=hard)
+    doc = await _get_doc(db, id, user=user, trashed_ok=True, lock=True)
     if not hard:
         if doc.deleted_at is None:
+            acl.require_unlocked(doc)
             doc.deleted_at = _now()
             doc.updated_by = user.id  # 누가 휴지통에 넣었나. 30일 뒤 purge_trash 가 지운다
             await db.commit()
@@ -943,7 +976,9 @@ async def create_version(
     user: User = Depends(current_user),
     db: AsyncSession = Depends(get_db),
 ) -> VersionOut:
-    doc = await _get_doc(db, id, user=user)
+    doc = await _get_doc(db, id, user=user, lock=True)  # 잠금 PATCH 와 겹치지 않게(리뷰)
+    # 잠긴 동안 쌓인 버전은 풀린 뒤 「복원」으로 본문이 된다 — 같이 막는다(README 70)
+    acl.require_unlocked(doc)
     snapshot = _unb64(body.snapshot)
     latest = (
         await db.execute(

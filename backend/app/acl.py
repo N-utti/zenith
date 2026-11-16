@@ -100,3 +100,10 @@ def require_acl_editor(user: User) -> None:
     """폴더 등급·사람 지정은 임원만."""
     if user.role != "exec":
         raise ApiError(403, "FORBIDDEN", "폴더 열람 권한은 임원만 바꿀 수 있습니다.")
+
+
+def require_unlocked(doc: Document) -> None:
+    """잠긴 문서(README 70)는 내용을 바꾸는 요청이 전부 423 — 규정집처럼 고치면 안 되는 문서. 풀기는 임원만(PATCH locked).
+    실시간 편집(yjs)은 소켓이라 여기를 못 지난다 — `realtime/yjs.py` 가 `Room.locked` 로 따로 막는다."""
+    if doc.locked:
+        raise ApiError(423, "DOC_LOCKED", "잠긴 문서입니다. 임원이 잠금을 풀어야 고칠 수 있습니다.")

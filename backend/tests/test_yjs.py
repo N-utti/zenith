@@ -625,3 +625,74 @@ async def test_given_password_closes_with_4428(app: FastAPI, users: Users, app_d
         await login(client, "sujin@zenith.co.kr")
         async with aconnect_ws(f"https://test/api/yjs/{uuid.uuid4()}", client) as ws:
             await expect_close(ws, 4428)
+
+
+async def test_locked_doc_rejects_edits(app: FastAPI, users: Users, app_db, monkeypatch) -> None:
+    """문서 잠금(README 70): 잠근 뒤의 편집은 Y.Doc 에 닿지 않고 보낸 소켓이 4423 으로 닫힌다 — 중계도 저장도 안 된다.
+    읽기만 하는 접속은 그대로, 풀면 다시 편집된다."""
+    from app.realtime import yjs as mod
+
+    async def saved() -> str:
+        await rooms_empty()
+        row = (await app_db.execute(select(Document).where(Document.id == doc_id))).scalar_one()
+        await app_db.refresh(row)
+        return row.text_cache
+
+    async def set_locked(value: bool) -> None:
+        r = await client.patch(f"/api/docs/{doc_id}", json={"locked": value}, headers=csrf(client))
+        assert r.status_code == 200, r.text
+
+    async with ws_client(app) as client:
+        await login(client, "jaeho@zenith.co.kr")
+        doc_id = await _doc_id(client, app_db)
+        url = f"https://test/api/yjs/{doc_id}"
+
+        async with aconnect_ws(url, client) as a_ws, aconnect_ws(url, client) as b_ws:
+            a, b = Peer(a_ws), Peer(b_ws)
+            await a.connect()
+            await b.connect()
+            await a.edit(write_paragraph("잠그기 전"))
+            await a.edit(lambda d: d.get("default", type=XmlFragment).children.append(XmlElement("p")))
+            await a.edit(lambda d: d.get("default", type=XmlFragment).children.__delitem__(1))  # 삭제 목록을 만든다
+            await b.pump()
+            await set_locked(True)  # 열려 있던 방에 바로 먹는다
+            await a.edit(write_paragraph("잠근 뒤"))
+            await expect_close(a_ws, 4423)
+            await b.pump()
+            assert b.text == "잠그기 전"
+        assert await saved() == "잠그기 전"  # 잠그기 전 편집은 남고, 뒤의 것은 없다
+
+        # 새로 열린 방도 잠겨 있다. 읽기만 하는 사람은 안 닫힌다 — 접속 때의 step2 는 삭제 목록 때문에 비어 있지 않다
+        async with aconnect_ws(url, client) as c_ws:
+            c = Peer(c_ws)
+            await c.connect()
+            await c.pump()
+            assert c.text == "잠그기 전"
+        # 잠긴 동안 친 글을 들고(브라우저 사본) 다시 붙는 사람 — step2 로 밀어 넣지 못한다
+        async with aconnect_ws(url, client) as a_ws:
+            a.ws = a_ws
+            with pytest.raises(WebSocketDisconnect) as closed:
+                await a.connect()
+                await a.pump(2)
+            assert closed.value.code == 4423
+        assert await saved() == "잠그기 전"
+
+        # 방이 열리는 순간과 잠금이 겹쳐 방이 옛 값을 들고 있어도, 재검증 주기에 DB 값으로 맞춰진다
+        monkeypatch.setattr(mod, "REAUTH_INTERVAL", timedelta(seconds=0.2))
+        async with aconnect_ws(url, client) as d_ws:
+            d = Peer(d_ws)
+            await d.connect()
+            ROOMS[uuid.UUID(doc_id)].locked = False
+            await asyncio.sleep(0.4)
+            await d.edit(write_paragraph("경합 뒤"))
+            await expect_close(d_ws, 4423)
+        assert await saved() == "잠그기 전"
+
+        # 풀면 열려 있는 방이 다시 편집을 받는다
+        async with aconnect_ws(url, client) as e_ws:
+            e = Peer(e_ws)
+            await e.connect()
+            await set_locked(False)
+            await e.edit(write_paragraph(" 풀고 나서"))
+            await e.pump()
+        assert "풀고 나서" in await saved()
