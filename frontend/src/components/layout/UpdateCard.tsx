@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { X } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { findUpdate, installUpdate } from '@/lib/desktop'
@@ -19,10 +19,13 @@ export function UpdateCard() {
   const [dismissed, setDismissed] = useState<string | null>(null)
   const [installing, setInstalling] = useState(false)
   const [failed, setFailed] = useState(false)
+  // 받는 동안에는 주기 확인을 쉰다. 셸이 꺼내 쓰는 중인 것을 새로 찾은 것으로 덮지 않게.
+  const busy = useRef(false)
 
   useEffect(() => {
     let alive = true
     const check = () =>
+      busy.current ||
       void findUpdate().then((found) => {
         if (alive && found) setVersion(found)
       })
@@ -37,16 +40,20 @@ export function UpdateCard() {
   if (!version || version === dismissed) return null
 
   const install = async () => {
+    busy.current = true
     setInstalling(true)
     setFailed(false)
     try {
-      // 성공하면 여기서 앱이 닫힌다. 돌아왔다면 받지 못했거나 설치를 시작하지 못한 것이다.
       await installUpdate()
     } catch (error) {
       console.warn('업데이트 설치 실패', error)
-      setFailed(true)
     }
+    // 성공하면 위에서 앱이 닫힌다. 여기까지 왔다면 받지 못했거나 설치를 시작하지 못한 것이다.
+    // 셸은 찾아 둔 것을 꺼내 쓰고 비운다. 다시 찾아 두어야 다음에 누를 때 받을 것이 있다.
+    await findUpdate()
+    setFailed(true)
     setInstalling(false)
+    busy.current = false
   }
 
   return (
