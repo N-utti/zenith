@@ -304,7 +304,8 @@ async def test_events_crud(client: AsyncClient, users: Users, app_db) -> None:
     )
     assert r.status_code == 201, r.text
     meeting = r.json()
-    assert set(meeting) == {"id", "date", "title", "time", "created_at"}
+    assert set(meeting) == {"id", "date", "title", "time", "created_at", "user"}
+    assert meeting["user"] == {"id": str(users.member.id), "name": "김수진"}
     assert (meeting["date"], meeting["title"], meeting["time"]) == (
         "2026-10-05",
         "주간 회의",
@@ -504,3 +505,44 @@ async def test_unread_dm_peer_id_edges(client: AsyncClient, users: Users, app_db
     # 상대가 없는 DM: 채널 이름으로 되돌아가고 peer_id 는 없다(키는 있다)
     assert unread[str(empty.id)]["name"] == "빈 DM"
     assert unread[str(empty.id)]["peer_id"] is None
+
+
+async def test_events_are_shared_with_everyone(client: AsyncClient, users: Users, app_db) -> None:
+    """README 73: `GET /events` 는 전 직원의 일정을 주인과 함께 준다. 지우기는 여전히 본인만, 비활성 계정 것은 뺀다."""
+    await login(client, "sujin@zenith.co.kr")
+    mine = (
+        await client.post(
+            "/api/me/events",
+            json={"date": "2026-10-05", "title": "치과", "time": "09:30"},
+            headers=csrf(client),
+        )
+    ).json()
+    await login(client, "donghyun@zenith.co.kr")
+    theirs = (
+        await client.post(
+            "/api/me/events", json={"date": "2026-10-05", "title": "고객사 미팅"}, headers=csrf(client)
+        )
+    ).json()
+    period = {"from": "2026-10-01", "to": "2026-10-10"}
+    r = await client.get("/api/events", params=period)
+    assert r.status_code == 200
+    assert [(e["title"], e["user"]["name"]) for e in r.json()["items"]] == [
+        ("치과", "김수진"),  # 시각 있는 것이 종일보다 먼저
+        ("고객사 미팅", "박동현"),
+    ]
+    # 내 것만 주는 경로는 그대로
+    own = (await client.get("/api/me/events", params=period)).json()["items"]
+    assert [e["id"] for e in own] == [theirs["id"]]
+    # 보이기만 한다 — 남의 일정은 못 지운다
+    r = await client.delete(f"/api/me/events/{mine['id']}", headers=csrf(client))
+    assert r.status_code == 404
+    assert (
+        await client.get("/api/events", params={"from": "2026-10-10", "to": "2026-10-01"})
+    ).status_code == 422
+    # 비활성 계정의 일정은 빠진다
+    users.member.active = False
+    await app_db.flush()
+    r = await client.get("/api/events", params=period)
+    assert [e["user"]["name"] for e in r.json()["items"]] == ["박동현"]
+    await client.post("/api/auth/logout", headers=csrf(client))
+    assert (await client.get("/api/events", params=period)).status_code == 401

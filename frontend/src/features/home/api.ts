@@ -152,11 +152,14 @@ export function useDeleteTask() {
 
 const eventsKey = homeKeys.events
 
-/** 기간 안의 내 일정. `from`·`to` 는 ISO 날짜(양끝 포함). */
-export function useMyEvents(from: string, to: string) {
+/**
+ * 기간 안의 전 직원 일정. `from`·`to` 는 ISO 날짜(양끝 포함).
+ * 누구 것인지는 `user` 가 말한다. 만들고 지우는 것은 내 것만이다(백엔드 README 73).
+ */
+export function useEvents(from: string, to: string) {
   return useQuery({
     queryKey: [...eventsKey, { from, to }],
-    queryFn: () => api<{ items: CalendarEvent[] }>(`/me/events?from=${from}&to=${to}`),
+    queryFn: () => api<{ items: CalendarEvent[] }>(`/events?from=${from}&to=${to}`),
   })
 }
 
