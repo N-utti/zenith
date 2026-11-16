@@ -84,6 +84,7 @@ import {
   updateFolder,
   canViewFolder,
   isRestricted,
+  privateRoot,
   DOC_SEEDS,
   findDoc,
   listComments,
@@ -328,6 +329,10 @@ const forbidden = (detail = '권한이 부족합니다.') =>
 
 /** 폴더 열람 권한(백엔드 #421)을 바꾸거나 제한 폴더를 오가는 이동. 서버 문구 그대로. */
 const ACL_EXEC_ONLY = '폴더 열람 권한은 임원만 바꿀 수 있습니다.'
+const PRIVATE_NO_GRADE = '개인 폴더 안에는 등급·사람 지정을 걸 수 없습니다.'
+/** 개인 폴더(백엔드 README 74)는 폴더 자체·경계 넘기·영구 삭제·잠금을 주인만 한다(`acl.require_private_owner`). */
+const privateOwnerOnly = (user: { id: string }, owner: string | null | undefined) =>
+  owner && owner !== user.id ? forbidden('개인 폴더의 주인만 할 수 있습니다.') : null
 const MIN_ROLES = ['member', 'lead', 'exec'] as const
 
 /** 요청의 `min_role`·`allowed_users` 검사. 문제가 있으면 응답, 없으면 고친 값. */
@@ -2262,6 +2267,11 @@ export const handlers = [
     }
     // 개인 폴더(백엔드 README 72·74). 볼 사람은 임원이 아니어도 주인이 고른다.
     const isPrivate = (body as { private?: unknown }).private === true
+    // 최상위에만, 등급과 같이는 안 된다. 임원 검사보다 먼저다(백엔드 순서).
+    const hasParent = body.parent_id !== undefined && body.parent_id !== null
+    if (isPrivate && (hasParent || (body.min_role !== undefined && body.min_role !== 'member'))) {
+      return validationError('개인 폴더는 최상위에만 만들고 등급을 함께 걸 수 없습니다.')
+    }
     const restricting =
       (body.min_role !== undefined && body.min_role !== 'member') ||
       (!isPrivate && Array.isArray(body.allowed_users) && body.allowed_users.length > 0)
@@ -2276,11 +2286,8 @@ export const handlers = [
       return validationError('없는 폴더입니다.')
     }
 
-    // 최상위에만, 등급과 같이는 안 된다.
-    // ponytail: 목은 주인과 볼 사람을 적어 두기만 한다. 실제로 가리는 것은 서버다(목의 열람 판정은 등급만 본다).
-    if (isPrivate && (parentId !== null || acl.min_role)) {
-      return validationError('개인 폴더는 최상위에만 만들고 등급을 함께 걸 수 없습니다.')
-    }
+    // 개인 폴더 아래 폴더에는 등급·사람을 따로 못 건다.
+    if (restricting && privateRoot(parentId)) return validationError(PRIVATE_NO_GRADE)
     const created = createFolder({
       title: body.title.trim(),
       parent_id: parentId,
@@ -2306,12 +2313,18 @@ export const handlers = [
       allowed_users?: unknown
     }>(request)
     if (!body) return validationError('본문이 JSON 이 아닙니다.')
+    // 개인 폴더 자체(이름·정렬·볼 사람)는 주인만. 주인의 「볼 사람」은 임원이 아니어도 된다(백엔드 README 74).
+    const notOwner = privateOwnerOnly(user, folder.owner_id)
+    if (notOwner) return notOwner
+    const ownPrivate = !!folder.owner_id
     // 열람 권한 칸은 값이 지금과 같아도 보내기만 하면 임원만 된다(이름 바꾸기는 `title` 만 보낸다).
-    if ((body.min_role !== undefined || body.allowed_users !== undefined) && user.role !== 'exec') {
-      return forbidden(ACL_EXEC_ONLY)
-    }
+    const grading = body.min_role !== undefined || (body.allowed_users !== undefined && !ownPrivate)
+    if (grading && user.role !== 'exec') return forbidden(ACL_EXEC_ONLY)
     const acl = readAcl(body)
     if ('error' in acl) return acl.error
+    // 개인 폴더 안에는 등급을 못 건다. 볼 사람은 개인 폴더 자신에만(하위 폴더는 따라간다).
+    const inPrivate = privateRoot(folder.id)
+    if (inPrivate && grading) return validationError(PRIVATE_NO_GRADE)
     // null 은 "지움" 이 아니라 422 다. 문서·할 일 PATCH 와 같은 계약.
     for (const key of ['title', 'parent_id', 'sort'] as const) {
       if (body[key] === null && key !== 'parent_id') {
@@ -2338,6 +2351,18 @@ export const handlers = [
           return validationError('폴더를 자기 자신이나 하위 폴더로 옮길 수 없습니다.')
         }
       }
+      // 폴더는 개인 폴더 경계를 못 넘고 개인 폴더는 최상위를 못 떠난다(422). 개인 폴더끼리 옮기는 것은 주인만(403).
+      if (parentId !== folder.parent_id) {
+        const into = privateRoot(parentId)
+        if (folder.owner_id || !!inPrivate !== !!into) {
+          return validationError('폴더는 개인 폴더 안팎으로 옮길 수 없습니다. 문서를 옮겨 주세요.')
+        }
+        if (inPrivate && into !== inPrivate) {
+          const denied =
+            privateOwnerOnly(user, inPrivate.owner_id) ?? privateOwnerOnly(user, into?.owner_id)
+          if (denied) return denied
+        }
+      }
     }
 
     return HttpResponse.json(
@@ -2354,10 +2379,14 @@ export const handlers = [
   // 폴더 지우기(백엔드 #298). 빈 폴더만 지운다. 하위 폴더나 문서가 있으면 409, 휴지통에 그 폴더의
   // 문서가 남아 있어도 409(되살릴 자리가 없어진다). 없는 폴더는 404, 성공은 204.
   http.delete('/api/folders/:folderId', ({ params }) => {
-    if (!authenticate()) return unauthorized()
+    const user = authenticate()
+    if (!user) return unauthorized()
 
     const folder = findFolder(String(params.folderId))
-    if (!folder) return notFound()
+    if (!folder || !canViewFolder(user, folder.id)) return notFound()
+    // 개인 폴더 자체는 주인만 지운다(백엔드 README 74).
+    const notOwner = privateOwnerOnly(user, folder.owner_id)
+    if (notOwner) return notOwner
 
     const blocked = removeFolder(folder)
     if (blocked) {
@@ -2474,13 +2503,13 @@ export const handlers = [
   // 휴지통 목록(04 §3, 2026-09-17 백엔드 구현). 트리의 여집합이라 살아 있는 문서와 안 겹친다.
   http.get(
     '/api/trash',
-    authed((_user, request) => {
+    authed((user, request) => {
       const raw = new URL(request.url).searchParams.get('limit')
       const limit = raw === null ? 200 : Number(raw)
       if (!Number.isInteger(limit) || limit < 1 || limit > 500) {
         return validationError('limit 은 1 이상 500 이하의 정수여야 합니다.')
       }
-      return HttpResponse.json({ items: listTrash(limit) })
+      return HttpResponse.json({ items: listTrash(limit, user) })
     }),
   ),
 
@@ -2496,9 +2525,13 @@ export const handlers = [
     if (raw !== null && !['1', '0', 'true', 'false', 'yes', 'no', 'on', 'off'].includes(raw)) {
       return validationError('hard 는 불리언이어야 합니다.')
     }
-    // ?hard=1 은 영구 삭제. 임원만 할 수 있고 버전·댓글까지 같이 지운다.
+    // ?hard=1 은 영구 삭제. 임원만 할 수 있고 버전·댓글까지 같이 지운다. 개인 폴더 문서는 그 주인만(README 72·74).
     if (raw !== null && ['1', 'true', 'yes', 'on'].includes(raw)) {
-      if (user.role !== 'exec') {
+      if (!canViewFolder(user, doc.folder_id)) return forbidden('이 문서를 볼 권한이 없습니다.')
+      const owner = privateRoot(doc.folder_id)?.owner_id
+      const notOwner = privateOwnerOnly(user, owner)
+      if (notOwner) return notOwner
+      if (!owner && user.role !== 'exec') {
         return HttpResponse.json(
           { detail: '영구 삭제는 임원만 할 수 있습니다.', code: 'FORBIDDEN' },
           { status: 403 },
@@ -2515,6 +2548,8 @@ export const handlers = [
       return new HttpResponse(null, { status: 204 })
     }
 
+    // 못 보는 문서는 404 가 아니라 403(백엔드 `_get_doc`).
+    if (!canViewFolder(user, doc.folder_id)) return forbidden('이 문서를 볼 권한이 없습니다.')
     if (!doc.deleted_at && doc.locked) return docLocked()
     trashDoc(doc, user)
     return new HttpResponse(null, { status: 204 })
@@ -2526,6 +2561,7 @@ export const handlers = [
 
     const doc = findDoc(String(params.docId))
     if (!doc) return notFound()
+    if (!canViewFolder(user, doc.folder_id)) return forbidden('이 문서를 볼 권한이 없습니다.')
     return HttpResponse.json(untrashDoc(doc, user))
   }),
 
@@ -2550,9 +2586,17 @@ export const handlers = [
     const alive = aliveDoc(String(params.docId))
     if (!alive) return notFound()
     if (!canViewFolder(user, alive.folder_id)) return forbidden('이 문서를 볼 권한이 없습니다.')
-    // 판정 순서는 백엔드 `update_doc` 과 같다. 잠금은 임원만, 잠긴 채로는 잠금 말고 아무것도 못 바꾼다.
-    if (body.locked !== undefined && user.role !== 'exec') {
-      return forbidden('문서 잠금은 임원만 바꿀 수 있습니다.')
+    // 판정 순서는 백엔드 `update_doc` 과 같다. 잠금은 임원만(개인 폴더 문서는 그 주인만), 잠긴 채로는
+    // 잠금 말고 아무것도 못 바꾼다.
+    if (body.locked !== undefined) {
+      const owner = privateRoot(alive.folder_id)?.owner_id
+      if (owner ? owner !== user.id : user.role !== 'exec') {
+        return forbidden(
+          owner
+            ? '개인 폴더의 문서 잠금은 주인만 바꿀 수 있습니다.'
+            : '문서 잠금은 임원만 바꿀 수 있습니다.',
+        )
+      }
     }
     const others = (['title', 'folder_id', 'ai_source'] as const).some((k) => k in body)
     if (others && alive.locked) return docLocked()
@@ -2562,6 +2606,14 @@ export const handlers = [
       // 제한 폴더를 오가는 이동은 임원만(백엔드 #421). 같은 폴더로 보내도 서버는 똑같이 본다.
       const crossing = isRestricted(alive.folder_id) || isRestricted(to)
       if (crossing && user.role !== 'exec') return forbidden(ACL_EXEC_ONLY)
+      // 개인 폴더 경계(밖↔안, 개인 폴더끼리)를 넘으면 걸린 개인 폴더들의 주인만(README 74).
+      const was = privateRoot(alive.folder_id)
+      const now = privateRoot(to)
+      if (was !== now) {
+        const denied =
+          privateOwnerOnly(user, was?.owner_id) ?? privateOwnerOnly(user, now?.owner_id)
+        if (denied) return denied
+      }
     }
     const doc = touchDoc(String(params.docId), user, {
       title: typeof body.title === 'string' ? body.title : undefined,

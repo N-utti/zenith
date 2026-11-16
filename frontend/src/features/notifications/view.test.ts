@@ -155,3 +155,16 @@ it('결재 알림은 그 결재 문서로 간다. 요청과 결과 네 종류를
     '거치대 구매 품의 결재 차례입니다',
   )
 })
+
+it('지금은 못 보는 문서의 멘션은 누를 수 없고 보낸 사람도 지운다(백엔드 #629)', () => {
+  const masked = view('comment', {
+    doc_id: 'd-9',
+    comment_id: 'c-1',
+    doc_title: '＿＿＿＿＿ 보고',
+    preview: '',
+    masked: true,
+    from: null,
+  })
+  expect(masked).toMatchObject({ to: null, icon: 'locked', masked: true, actorId: '' })
+  expect(masked?.summary).toBe('＿＿＿＿＿ 보고')
+})

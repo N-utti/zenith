@@ -1,6 +1,7 @@
 import type { Notification } from '@/features/notifications/types'
 import type { User } from '@/types'
 import { BOARD_DEFS, canRead, findPost } from './boardDb'
+import { canViewFolder, findDoc } from './docsDb'
 
 // 목 데이터는 "오늘"에 붙어 있어야 화면이 자연스럽다. 고정 날짜를 쓰지 않는다.
 function minutesAgo(minutes: number): string {
@@ -108,6 +109,15 @@ const NOTIFICATIONS: Notification[] = [
  */
 function maskForViewer(user: User, notification: Notification): Notification {
   const p = notification.payload
+  // 문서 멘션도 지금 기준으로 다시 본다(백엔드 `_mask_doc_notices`, #629). 개인 폴더로 옮겨졌으면 못 본다.
+  if (p?.doc_id) {
+    const doc = findDoc(p.doc_id)
+    if (doc && canViewFolder(user, doc.folder_id)) return notification
+    return {
+      ...notification,
+      payload: { ...p, doc_title: MASKED_TITLE, preview: '', masked: true, from: null },
+    }
+  }
   if (notification.kind !== 'post' || !p?.post_id) return notification
 
   const post = findPost(p.post_id)

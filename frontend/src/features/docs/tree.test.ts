@@ -134,26 +134,31 @@ it('folderRows: 폴더만 트리 순서대로 펴고 깊이를 단다', () => {
 
 it('canDrop: 이미 있는 자리, 자기 자신과 자기 아래, 문서의 최상위는 놓을 자리가 아니다', () => {
   const d1 = { kind: 'doc', id: 'd-1' } as const
-  expect(canDrop(d1, 'f-0', data)).toBe(true)
-  expect(canDrop(d1, 'f-2', data)).toBe(false) // 이미 그 폴더
-  expect(canDrop(d1, null, data)).toBe(false) // 문서는 폴더 안에만
-  expect(canDrop({ kind: 'doc', id: 'd-없음' }, 'f-0', data)).toBe(false)
+  expect(canDrop(d1, 'f-0', data, 'u-9')).toBe(true)
+  expect(canDrop(d1, 'f-2', data, 'u-9')).toBe(false) // 이미 그 폴더
+  expect(canDrop(d1, null, data, 'u-9')).toBe(false) // 문서는 폴더 안에만
+  expect(canDrop({ kind: 'doc', id: 'd-없음' }, 'f-0', data, 'u-9')).toBe(false)
 
   const wiki = { kind: 'folder', id: 'f-1' } as const
-  expect(canDrop(wiki, 'f-0', data)).toBe(true)
-  expect(canDrop(wiki, 'f-1', data)).toBe(false) // 자기 자신
-  expect(canDrop(wiki, 'f-2', data)).toBe(false) // 자기 아래
-  expect(canDrop(wiki, null, data)).toBe(false) // 이미 최상위
-  expect(canDrop({ kind: 'folder', id: 'f-2' }, null, data)).toBe(true)
-  expect(canDrop({ kind: 'folder', id: 'f-2' }, 'f-1', data)).toBe(false) // 이미 그 부모
+  expect(canDrop(wiki, 'f-0', data, 'u-9')).toBe(true)
+  expect(canDrop(wiki, 'f-1', data, 'u-9')).toBe(false) // 자기 자신
+  expect(canDrop(wiki, 'f-2', data, 'u-9')).toBe(false) // 자기 아래
+  expect(canDrop(wiki, null, data, 'u-9')).toBe(false) // 이미 최상위
+  expect(canDrop({ kind: 'folder', id: 'f-2' }, null, data, 'u-9')).toBe(true)
+  expect(canDrop({ kind: 'folder', id: 'f-2' }, 'f-1', data, 'u-9')).toBe(false) // 이미 그 부모
 
   // 이미 고리가 있는 데이터에서도 멈춘다. 끄는 내내 불리므로 안 멈추면 탭이 멎는다.
   const loop: DocTreeData = { folders: [folder('a', 'b', 'A'), folder('b', 'a', 'B')], docs: [] }
   expect(
-    canDrop({ kind: 'folder', id: 'f-0' }, 'a', {
-      ...loop,
-      folders: [...loop.folders, folder('f-0', null, '팀')],
-    }),
+    canDrop(
+      { kind: 'folder', id: 'f-0' },
+      'a',
+      {
+        ...loop,
+        folders: [...loop.folders, folder('f-0', null, '팀')],
+      },
+      'u-9',
+    ),
   ).toBe(true)
 })
 
@@ -211,9 +216,52 @@ it('개인 폴더: 주인과 고른 사람으로 설명하고, 볼 사람만 바
 
 it('privateRootOf: 개인 폴더와 그 아래에서만 그 최상위를 준다', () => {
   const mine = { ...folder('p', null, '내 것'), owner_id: 'u-me' }
-  const folders = [mine, folder('p1', 'p', '하위'), folder('p2', 'p1', '더 아래'), folder('a', null, '공용')]
+  const folders = [
+    mine,
+    folder('p1', 'p', '하위'),
+    folder('p2', 'p1', '더 아래'),
+    folder('a', null, '공용'),
+  ]
   expect(privateRootOf(folders, 'p')).toBe(mine)
   expect(privateRootOf(folders, 'p2')).toBe(mine)
   expect(privateRootOf(folders, 'a')).toBeNull()
   expect(privateRootOf(folders, 'none')).toBeNull()
+})
+
+it('개인 폴더 경계: 폴더는 못 넘고, 문서는 걸린 개인 폴더들의 주인만 넘긴다', () => {
+  const mine = { ...folder('p-1', null, '내 메모'), owner_id: 'u-9' }
+  const shared = { ...folder('q-1', null, '남의 폴더'), owner_id: 'u-2', allowed_users: ['u-9'] }
+  const priv: DocTreeData = {
+    folders: [
+      mine,
+      folder('p-2', 'p-1', '아이디어'),
+      shared,
+      folder('q-2', 'q-1', '자료'),
+      folder('s-1', null, '공용'),
+      folder('s-2', 's-1', '회의록'),
+    ],
+    docs: [doc('d-p', 'p-2', '초안'), doc('d-q', 'q-2', '받은 것'), doc('d-s', 's-2', '회의')],
+  }
+  const me = 'u-9'
+  // 폴더: 개인 폴더 자체는 어디로도, 공용은 개인 안으로, 개인 안은 밖이나 다른 개인 폴더로 못 간다.
+  expect(canDrop({ kind: 'folder', id: 'p-1' }, 's-1', priv, me)).toBe(false)
+  expect(canDrop({ kind: 'folder', id: 's-2' }, 'p-1', priv, me)).toBe(false)
+  expect(canDrop({ kind: 'folder', id: 'p-2' }, null, priv, me)).toBe(false)
+  // 개인 폴더끼리는 양쪽 다 내 것일 때만. 받은 폴더(q-1)는 남의 것이라 안 된다.
+  expect(canDrop({ kind: 'folder', id: 'p-2' }, 'q-1', priv, me)).toBe(false)
+  const two = {
+    ...priv,
+    folders: [...priv.folders, { ...folder('p-9', null, '둘째'), owner_id: me }],
+  }
+  expect(canDrop({ kind: 'folder', id: 'p-2' }, 'p-9', two, me)).toBe(true)
+  expect(canDrop({ kind: 'folder', id: 's-2' }, null, priv, me)).toBe(true)
+
+  // 문서: 내 개인 폴더 안팎은 된다.
+  expect(canDrop({ kind: 'doc', id: 'd-s' }, 'p-1', priv, me)).toBe(true)
+  expect(canDrop({ kind: 'doc', id: 'd-p' }, 's-1', priv, me)).toBe(true)
+  // 볼 사람으로 받은 폴더는 그 안에서만 옮긴다. 꺼내거나 넣거나 내 폴더로 가져가지 못한다.
+  expect(canDrop({ kind: 'doc', id: 'd-q' }, 'q-1', priv, me)).toBe(true)
+  expect(canDrop({ kind: 'doc', id: 'd-q' }, 's-1', priv, me)).toBe(false)
+  expect(canDrop({ kind: 'doc', id: 'd-q' }, 'p-1', priv, me)).toBe(false)
+  expect(canDrop({ kind: 'doc', id: 'd-s' }, 'q-2', priv, me)).toBe(false)
 })
