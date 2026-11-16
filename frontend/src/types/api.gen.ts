@@ -421,7 +421,7 @@ export interface paths {
         delete: operations["delete_doc_api_docs__id__delete"];
         options?: never;
         head?: never;
-        /** 제목·폴더 이동·ai_source (목록용 투영 — 본문 원천은 Y.Doc) */
+        /** 제목·폴더 이동·ai_source·locked (목록용 투영 — 본문 원천은 Y.Doc) */
         patch: operations["update_doc_api_docs__id__patch"];
         trace?: never;
     };
@@ -3188,6 +3188,8 @@ export interface components {
             deleted_at: string | null;
             /** Ai Source */
             ai_source: boolean;
+            /** Locked */
+            locked: boolean;
             /** Ydoc */
             ydoc: string | null;
         };
@@ -3222,6 +3224,8 @@ export interface components {
             deleted_at: string | null;
             /** Ai Source */
             ai_source: boolean;
+            /** Locked */
+            locked: boolean;
         };
         /** DocPatchIn */
         DocPatchIn: {
@@ -3231,6 +3235,8 @@ export interface components {
             folder_id?: string | null;
             /** Ai Source */
             ai_source?: boolean | null;
+            /** Locked */
+            locked?: boolean | null;
         };
         /** DraftField */
         DraftField: {
@@ -5998,6 +6004,13 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+            /** @description DOC_LOCKED — 잠긴 문서(README 70). 휴지통·버전·복원·파일 첨부도 같다 */
+            423: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

@@ -34,6 +34,7 @@ const doc = (
   updated_by: null,
   deleted_at,
   ai_source: true,
+  locked: false,
 })
 
 const data: DocTreeData = {
