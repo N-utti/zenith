@@ -171,10 +171,27 @@ export const DOCS: DocSummary[] = [
     ai_source: true,
     locked: false,
   },
+  // 임원이 잠근 문서(백엔드 #619). 읽기·댓글만 되는 화면을 목에서 보려고 둔다.
+  {
+    id: 'd-12',
+    folder_id: 'f-1',
+    title: '취업규칙',
+    updated_at: minutesAgo(90 * 1440),
+    updated_by: { id: 'u-2', name: '정성운' },
+    deleted_at: null,
+    ai_source: true,
+    locked: true,
+  },
 ]
 
 /** Y.Doc이 비어 있을 때만 한 번 심는 초안. */
 export const DOC_SEEDS: Record<string, string> = {
+  'd-12': `
+    <h2>제1장 총칙</h2>
+    <p>이 규칙은 회사와 직원의 근로 조건과 복무에 관한 사항을 정한다.</p>
+    <h2>제2장 근무</h2>
+    <p>근무 시간은 09:00-18:00 으로 하고, 휴게 시간은 12:00-13:00 으로 한다.</p>
+  `,
   'd-1': `
     <h2>목표</h2>
     <p>흩어진 업무 대화와 문서를 사내 서버 하나로 모은다. 외부 SaaS 구독과 데이터 유출 경로를 함께 없앤다.</p>
@@ -500,10 +517,12 @@ export function createDoc(
 export function touchDoc(
   id: string,
   user: User,
-  input: { title?: string; folder_id?: string; ai_source?: boolean },
+  input: { title?: string; folder_id?: string; ai_source?: boolean; locked?: boolean },
 ): DocSummary | undefined {
   const doc = findDoc(id)
   if (!doc) return undefined
+  // 잠금도 내용 변경이 아니다(백엔드 #619, 수정 시각을 그대로 둔다).
+  if (input.locked !== undefined) doc.locked = input.locked
   // 「AI 근거로 쓰기」 스위치는 내용 변경이 아니다. 백엔드도 수정 시각과 수정한 사람을 그대로 둔다.
   if (input.ai_source !== undefined) doc.ai_source = input.ai_source
   // 빈 본문으로 "이어서 작업" 순서를 흔들지 않는다. 백엔드도 아무것도 안 바꾸고 그대로 준다.

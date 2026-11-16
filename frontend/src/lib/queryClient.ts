@@ -20,6 +20,12 @@ function dropSessionOn401(error: unknown) {
   if (error instanceof ApiError && error.code === 'PASSWORD_CHANGE_REQUIRED') {
     reloadMe(queryClient).catch(() => undefined)
   }
+  // 그사이 임원이 잠근 문서를 고치려 했다(백엔드 #619). 트리·문서를 다시 받아 메뉴를 숨기고 읽기 전용으로.
+  // 키는 `features/docs/api` 의 `docKeys` 와 같다(그쪽이 이 파일을 불러 거꾸로 부르지 않는다).
+  if (error instanceof ApiError && error.code === 'DOC_LOCKED') {
+    void queryClient.invalidateQueries({ queryKey: ['tree'] })
+    void queryClient.invalidateQueries({ queryKey: ['documents'] })
+  }
 }
 
 export const queryClient = new QueryClient({

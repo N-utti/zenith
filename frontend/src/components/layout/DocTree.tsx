@@ -9,6 +9,7 @@ import {
   ExternalLink,
   FilePlus2,
   FileUp,
+  FileLock,
   FileText,
   Folder,
   FolderInput,
@@ -17,6 +18,7 @@ import {
   Link2,
   Loader2,
   Lock,
+  LockOpen,
   Pencil,
   Plus,
   Trash2,
@@ -48,6 +50,7 @@ import {
   useMoveNode,
   useRenameDoc,
   useRenameFolder,
+  useSetDocLocked,
   useTree,
 } from '@/features/docs/api'
 import {
@@ -205,7 +208,14 @@ function DocRow({
       >
         {/* 아이콘은 글자보다 흐리게. 문서마다 같은 그림이라 글자만큼 진하면 줄마다 소음이 된다. */}
         <span className="text-subtle grid size-5 shrink-0 place-items-center">
-          <FileText className="size-4" strokeWidth={2} />
+          {/* 잠긴 문서(백엔드 #619)는 아이콘 자체를 바꾼다. 줄 끝 자물쇠는 폴더의 열람 제한 뜻으로만 쓴다. */}
+          {node.doc.locked ? (
+            <FileLock role="img" aria-label="잠긴 문서" className="size-4" strokeWidth={2}>
+              <title>잠긴 문서</title>
+            </FileLock>
+          ) : (
+            <FileText className="size-4" strokeWidth={2} />
+          )}
         </span>
         <span className="truncate">{node.doc.title}</span>
       </NavLink>
@@ -427,6 +437,7 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
   const renameDoc = useRenameDoc()
   const deleteFolder = useDeleteFolder()
   const moveNode = useMoveNode()
+  const setLocked = useSetDocLocked()
 
   // data 는 react-query 캐시 객체라 그대로가 안정적인 참조다. `?? …`를 memo 밖에 두면
   // 매 렌더 새 객체가 되어 아래 memo가 전부 무효화된다.
@@ -631,6 +642,11 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
       if (!row || !id) return
       // 앞 이동이 끝나기 전에는 끌기도 시작하지 않는다(`move` 의 가드와 같은 이유).
       if (moveNode.isPending) return e.preventDefault()
+      // 잠긴 문서는 옮길 수 없다(423). 오른쪽에 열기로 끄는 것만 남긴다.
+      if (row.dataset.drag === 'doc' && data?.docs.find((d) => d.id === id)?.locked) {
+        e.dataTransfer.setData(DOC_DRAG_TYPE, id)
+        return setDragCard(e, row)
+      }
       setDrag({ kind: row.dataset.drag === 'folder' ? 'folder' : 'doc', id })
       e.dataTransfer.setData(DRAG_TYPE, id)
       if (row.dataset.drag === 'doc') e.dataTransfer.setData(DOC_DRAG_TYPE, id)
@@ -958,31 +974,55 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
                 label="링크 복사"
                 onSelect={() => copyLink(menu.item.id)}
               />
-              {/* 제목 없는 문서는 빈 칸으로 연다. 기본 문구를 지우고 치게 하지 않는다. */}
-              <ContextMenuItem
-                icon={Pencil}
-                label="이름 변경"
-                onSelect={() => {
-                  setNameError(null)
-                  setNaming({
-                    mode: 'rename-doc',
-                    id: menu.item.id,
-                    title: menuTarget.title === UNTITLED_DOC ? '' : menuTarget.title,
-                  })
-                }}
-              />
-              <ContextMenuItem
-                icon={FolderInput}
-                label="다른 폴더로 옮기기"
-                onSelect={() => setMoving(menu.item)}
-              />
-              <hr className="border-line my-1" />
-              <ContextMenuItem
-                icon={Trash2}
-                label="휴지통으로"
-                danger
-                onSelect={() => setTrashing({ id: menu.item.id, title: menuTarget.title })}
-              />
+              {/* 잠금은 임원만 바꾼다(아니면 서버가 403). 잠긴 문서는 이름·자리·휴지통이 423 이라 숨긴다. */}
+              {isExec && 'locked' in menuTarget && (
+                <ContextMenuItem
+                  icon={menuTarget.locked ? LockOpen : Lock}
+                  label={menuTarget.locked ? '잠금 풀기' : '잠그기'}
+                  onSelect={() =>
+                    void setLocked
+                      .mutateAsync({ id: menu.item.id, locked: !menuTarget.locked })
+                      .then(
+                        (doc) =>
+                          toast.success(
+                            doc.locked
+                              ? `${menuTarget.title} 문서를 잠갔습니다.`
+                              : `${menuTarget.title} 문서 잠금을 풀었습니다.`,
+                          ),
+                        (err: unknown) => fail(err, '잠금을 바꾸지 못했습니다.'),
+                      )
+                  }
+                />
+              )}
+              {!('locked' in menuTarget && menuTarget.locked) && (
+                <>
+                  {/* 제목 없는 문서는 빈 칸으로 연다. 기본 문구를 지우고 치게 하지 않는다. */}
+                  <ContextMenuItem
+                    icon={Pencil}
+                    label="이름 변경"
+                    onSelect={() => {
+                      setNameError(null)
+                      setNaming({
+                        mode: 'rename-doc',
+                        id: menu.item.id,
+                        title: menuTarget.title === UNTITLED_DOC ? '' : menuTarget.title,
+                      })
+                    }}
+                  />
+                  <ContextMenuItem
+                    icon={FolderInput}
+                    label="다른 폴더로 옮기기"
+                    onSelect={() => setMoving(menu.item)}
+                  />
+                  <hr className="border-line my-1" />
+                  <ContextMenuItem
+                    icon={Trash2}
+                    label="휴지통으로"
+                    danger
+                    onSelect={() => setTrashing({ id: menu.item.id, title: menuTarget.title })}
+                  />
+                </>
+              )}
             </>
           )}
         </ContextMenu>

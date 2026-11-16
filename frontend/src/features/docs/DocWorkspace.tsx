@@ -15,6 +15,8 @@ import DragHandle, { type DragHandleProps } from '@tiptap/extension-drag-handle-
 import {
   ChevronDown,
   GripVertical,
+  Lock,
+  LockOpen,
   MessageSquarePlus,
   PanelRightClose,
   PanelRightOpen,
@@ -36,6 +38,7 @@ import {
   UNTITLED_DOC,
   useSaveVersion,
   useSetAiSource,
+  useSetDocLocked,
   useTouchDoc,
   useVersionSnapshot,
 } from './api'
@@ -53,7 +56,7 @@ import { tableBleedRef } from './tableBleed'
 import { EditorBubbleMenu } from './EditorBubbleMenu'
 import { ExportMenu } from './ExportMenu'
 import { InlineAiPopover } from './InlineAiPopover'
-import { buildDocExtensions } from './editorExtensions'
+import { buildDocExtensions, SEED_META } from './editorExtensions'
 import { EditorToolbar } from './EditorToolbar'
 import { TableRowMenu } from './TableRowMenu'
 import { TrashDocModal } from './TrashDocModal'
@@ -800,7 +803,7 @@ function BlockDragHandle({
 }
 
 /** AI 가 이 문서를 근거로 써도 되는지. 꺼져 있으면 아이콘에 사선을 긋는다. */
-function AiSourceToggle({ docId, on }: { docId: string; on: boolean }) {
+function AiSourceToggle({ docId, on, locked }: { docId: string; on: boolean; locked: boolean }) {
   const { mutate, isPending } = useSetAiSource(docId)
   const toast = useToast()
   const label = on ? 'AI 근거로 쓰는 중' : 'AI 근거에서 빠짐'
@@ -809,7 +812,13 @@ function AiSourceToggle({ docId, on }: { docId: string; on: boolean }) {
       type="button"
       aria-pressed={on}
       aria-label="AI 근거로 쓰기"
-      title={`${label}. 누르면 ${on ? '끕니다' : '켭니다'}`}
+      // 잠긴 문서는 바꿀 수 없다(423). 규정집처럼 근거로 자주 쓰이는 문서라 상태는 보여 준다.
+      disabled={locked}
+      title={
+        locked
+          ? `${label}. 잠긴 문서라 바꿀 수 없습니다`
+          : `${label}. 누르면 ${on ? '끕니다' : '켭니다'}`
+      }
       // 요청 중에 disabled 로 잠그면 키보드 초점이 버튼에서 빠진다. 두 번째 누름만 흘린다.
       onClick={() =>
         !isPending &&
@@ -825,12 +834,68 @@ function AiSourceToggle({ docId, on }: { docId: string; on: boolean }) {
         })
       }
       className={cn(
-        'relative grid size-7 cursor-pointer place-items-center rounded transition-colors',
-        on ? 'text-accent' : 'text-subtle hover:text-fg',
+        'relative grid size-7 cursor-pointer place-items-center rounded transition-colors disabled:cursor-default',
+        on ? 'text-accent' : 'text-subtle enabled:hover:text-fg',
       )}
     >
       <Sparkles className="size-4" />
       {!on && <span aria-hidden className="absolute h-px w-5 rotate-45 bg-current" />}
+    </button>
+  )
+}
+
+/**
+ * 문서 잠금(백엔드 #619). 임원은 눌러 잠그고 풀고, 나머지는 잠겼을 때 표시만 본다(바꾸면 서버가 403).
+ * 사이드바는 폴더마다 최근 문서 몇 개만 보여 줘서, 트리 메뉴만으로는 잠글 수 없는 문서가 생긴다.
+ */
+function LockControl({
+  docId,
+  title,
+  locked,
+  canChange,
+}: {
+  docId: string
+  title: string
+  locked: boolean
+  canChange: boolean
+}) {
+  const { mutate, isPending } = useSetDocLocked()
+  const toast = useToast()
+  if (!canChange) {
+    return locked ? (
+      <span className="text-muted flex items-center gap-1 px-1.5 text-xs">
+        <Lock className="size-3.5" />
+        잠긴 문서
+      </span>
+    ) : null
+  }
+  return (
+    <button
+      type="button"
+      aria-pressed={locked}
+      aria-label="문서 잠그기"
+      title={locked ? '잠긴 문서. 누르면 잠금을 풉니다' : '문서 잠그기'}
+      onClick={() =>
+        !isPending &&
+        mutate(
+          { id: docId, locked: !locked },
+          {
+            onSuccess: (doc) =>
+              toast.success(
+                doc.locked ? `${title} 문서를 잠갔습니다.` : `${title} 문서 잠금을 풀었습니다.`,
+              ),
+            onError: (err) =>
+              toast.error(err instanceof ApiError ? err.message : '잠금을 바꾸지 못했습니다.'),
+          },
+        )
+      }
+      className={cn(
+        'flex h-7 cursor-pointer items-center gap-1 rounded px-1.5 text-xs transition-colors',
+        locked ? 'text-muted hover:text-fg' : 'text-subtle hover:text-fg',
+      )}
+    >
+      {locked ? <Lock className="size-3.5" /> : <LockOpen className="size-4" />}
+      {locked && '잠긴 문서'}
     </button>
   )
 }
@@ -846,6 +911,12 @@ function DocSurface({
 }) {
   const user = useCurrentUser()
   const { doc, provider } = session
+  /**
+   * 임원이 잠근 문서(백엔드 #619). 읽기·댓글·버전 보기만 된다. 고치는 길은 숨기고, 편집기가 스스로
+   * 쓰는 것은 `ReadOnlyGuard` 가 거른다. 그래도 나가면 서버가 4423 으로 끊어 `useCollabSession` 이 사본을
+   * 지우고 다시 연다. 잠김이 바뀌면 `DocPane` 이 이 화면을 통째로 새로 그린다(세션·편집 가능 여부도 새로).
+   */
+  const locked = meta.locked
   const { title, setTitle } = useCollabTitle(doc, meta.title)
   const { width } = useCollabWidth(doc)
   const { mutate: touchDoc } = useTouchDoc(meta.id)
@@ -900,6 +971,7 @@ function DocSurface({
   const [previewError, setPreviewError] = useState<string | null>(null)
 
   const editor = useEditor({
+    editable: !locked,
     extensions: buildDocExtensions({
       doc,
       provider,
@@ -912,7 +984,7 @@ function DocSurface({
       // 서버가 Yjs 초기 상태를 주기 전까지의 임시 경로. 문서를 처음 여는
       // 탭에서만 초안을 심는다.
       if (session.isEmpty && meta.seedHtml) {
-        created.commands.setContent(meta.seedHtml)
+        created.chain().setMeta(SEED_META, true).setContent(meta.seedHtml).run()
       }
     },
   })
@@ -928,14 +1000,17 @@ function DocSurface({
   // 새 문서는 UNTITLED_DOC 로 만들어지는데, 그걸 글자로 채우면 치는 제목이 그 뒤에 붙는다.
   // 그 경우만 비워 둬서 입력칸의 안내 문구로 보이게 한다.
   useEffect(() => {
+    if (locked) return
     const metaMap = doc.getMap<string>('meta')
     if (metaMap.get('title') === undefined)
       metaMap.set('title', meta.title === UNTITLED_DOC ? '' : meta.title)
-  }, [doc, meta.title])
+  }, [doc, meta.title, locked])
 
   // 편집이 멎으면 목록·검색이 볼 사본(제목·수정시각)을 갱신하고 버전을 남긴다.
   // 버전은 서버가 합쳐 준다. 같은 사람이 이어서 편집하는 동안은 하나로 접힌다.
   useEffect(() => {
+    // 잠긴 문서는 제목·버전 저장이 423 이다. 브라우저 사본을 읽어 들이는 것도 변경으로 들어오므로 끈다.
+    if (locked) return
     let metaTimer: number | undefined
     let versionTimer: number | undefined
 
@@ -961,7 +1036,7 @@ function DocSurface({
       window.clearTimeout(versionTimer)
       doc.off('update', onUpdate)
     }
-  }, [doc, provider, touchDoc, saveVersion])
+  }, [doc, provider, touchDoc, saveVersion, locked])
 
   /**
    * 미리보기를 열 때 그 버전의 스냅샷을 받아 온다. 목록에는 스냅샷이 없다(`VersionMeta`).
@@ -1097,7 +1172,7 @@ function DocSurface({
   )
 
   const restore = () => {
-    if (!editor || !preview) return
+    if (!editor || !preview || locked) return
     // 되감기가 아니라 새 편집이다. 그래야 접속 중인 다른 사람과도 같은
     // 결과로 수렴하고, 되돌리기 자체를 Ctrl+Z로 취소할 수 있다.
     editor.commands.setContent(preview.content.json)
@@ -1115,21 +1190,33 @@ function DocSurface({
         <DocBreadcrumb docId={meta.id} title={title} />
         <div className="ml-auto flex shrink-0 items-center gap-1">
           <PresenceBar session={session} />
+          <LockControl
+            docId={meta.id}
+            title={title || UNTITLED_DOC}
+            locked={locked}
+            canChange={user.role === 'exec'}
+          />
           {/* 좁은 화면에서는 본문이 이미 화면 폭을 다 쓴다. 고를 것이 없어 숨긴다. */}
-          <div className="max-md:hidden">
-            <DocWidthMenu doc={doc} />
-          </div>
+          {!locked && (
+            <div className="max-md:hidden">
+              <DocWidthMenu doc={doc} />
+            </div>
+          )}
           {editor && <ExportMenu editor={editor} title={title || UNTITLED_DOC} />}
-          <AiSourceToggle docId={meta.id} on={meta.ai_source} />
-          <button
-            type="button"
-            aria-label="문서를 휴지통으로"
-            title="휴지통으로"
-            onClick={() => setConfirmTrash(true)}
-            className="text-subtle hover:text-danger grid size-7 cursor-pointer place-items-center rounded transition-colors"
-          >
-            <Trash2 className="size-4" />
-          </button>
+          <AiSourceToggle docId={meta.id} on={meta.ai_source} locked={locked} />
+          {!locked && (
+            <>
+              <button
+                type="button"
+                aria-label="문서를 휴지통으로"
+                title="휴지통으로"
+                onClick={() => setConfirmTrash(true)}
+                className="text-subtle hover:text-danger grid size-7 cursor-pointer place-items-center rounded transition-colors"
+              >
+                <Trash2 className="size-4" />
+              </button>
+            </>
+          )}
           {/* 넓은 화면에서만. 좁은 폭은 패널의 탭 줄이 여닫는다(같은 일을 하는 버튼을 둘 두지 않는다).
               오른쪽에 연 문서는 패널이 없다. 닫으면 본문을 넓게 보려는 것이라 버전 미리보기도 같이 닫는다. */}
           {!onCloseSplit && (
@@ -1177,7 +1264,7 @@ function DocSurface({
             content={preview.content}
             before={preview.before}
             widthClass={width.className}
-            onRestore={restore}
+            onRestore={locked ? undefined : restore}
             onClose={closePreview}
             restoring={savingVersion}
           />
@@ -1188,7 +1275,7 @@ function DocSurface({
           // 밖으로 삐져 패널 위에 그려지지 않게 자른다. 툴바 메뉴는 body 로 띄우고, 본문은 안쪽 스크롤 칸이
           // 이미 자르므로 여기서 더 잘리는 것은 없다.
           <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-            {editor && (
+            {editor && !locked && (
               <EditorToolbar
                 editor={editor}
                 uploading={uploading}
@@ -1234,6 +1321,7 @@ function DocSurface({
                     e.preventDefault()
                     editor?.commands.focus('start')
                   }}
+                  readOnly={locked}
                   placeholder={UNTITLED_DOC}
                   aria-label="문서 제목"
                   className="text-fg placeholder:text-subtle w-full bg-transparent py-2 text-3xl font-bold tracking-tight outline-none"
@@ -1243,7 +1331,7 @@ function DocSurface({
                   <>
                     <EditorBubbleMenu editor={editor} />
                     {/* 둘 다 포인터로 쓰는 것이다. 손가락 기기에서는 서식 툴바의 표 메뉴가 같은 일을 한다. */}
-                    {!coarsePointer && (
+                    {!coarsePointer && !locked && (
                       <>
                         <BlockDragHandle editor={editor} onComment={startBlockComment} />
                         <TableRowMenu editor={editor} />
@@ -1257,7 +1345,9 @@ function DocSurface({
                       rowMenu={!coarsePointer}
                     />
                     <EditorContent editor={editor} className="mt-4" />
-                    <InlineAiPopover editor={editor} docId={meta.id} onJump={jumpToText} />
+                    {!locked && (
+                      <InlineAiPopover editor={editor} docId={meta.id} onJump={jumpToText} />
+                    )}
                   </>
                 ) : (
                   <Spinner className="mt-6" />

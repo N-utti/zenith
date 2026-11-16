@@ -61,10 +61,11 @@ export function DocPane({
 
   if (!state && meta) {
     // 상단 경로 줄은 DocWorkspace가 그린다. 편집자 표시가 협업 세션을 필요로 해서다.
-    // docId가 바뀌면 협업 세션을 통째로 새로 연다.
+    // docId가 바뀌면 협업 세션을 통째로 새로 연다. 잠김이 바뀌어도 새로 연다(백엔드 #619). 잠긴 채 메모리에
+    // 남은 거절된 글(다른 탭에서 건너온 것 포함)을 버리고, 4423 뒤 다시 열기 한 번 제한도 잠김마다 새로 센다.
     return (
       <DocWorkspace
-        key={meta.id}
+        key={`${meta.id}:${meta.locked}`}
         meta={seed?.seedHtml ? { ...meta, ...seed } : meta}
         onCloseSplit={onClose}
       />
