@@ -397,6 +397,9 @@ export function createFolder(input: {
   title: string
   parent_id?: string | null
   sort?: number
+  /** 개인 폴더의 주인과 같이 볼 사람(백엔드 README 72·74). */
+  owner_id?: string | null
+  allowed_users?: string[]
 }): Folder {
   const folder: Folder = {
     id: `f-${uuid()}`,
@@ -405,8 +408,8 @@ export function createFolder(input: {
     sort: input.sort ?? 0,
     // 백엔드 #421 열람 권한. 새 폴더는 누구나 보고 지정 열람자가 없다.
     min_role: 'member',
-    allowed_users: [],
-    owner_id: null,
+    allowed_users: input.allowed_users ?? [],
+    owner_id: input.owner_id ?? null,
   }
   FOLDERS.push(folder)
   return folder

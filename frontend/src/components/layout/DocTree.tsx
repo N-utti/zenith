@@ -36,6 +36,10 @@ import { useLongPress } from '@/lib/useLongPress'
 import { useCurrentUser } from '@/features/auth/AuthContext'
 import { FolderAccessModal } from '@/features/docs/FolderAccessModal'
 import { FolderNameModal } from '@/features/docs/FolderNameModal'
+import {
+  PrivateFolderOption,
+  type PrivateFolderChoice,
+} from '@/features/docs/PrivateFolderOption'
 import { MoveNodeModal } from '@/features/docs/MoveNodeModal'
 import { TrashDocModal } from '@/features/docs/TrashDocModal'
 import { setSplitDoc } from '@/features/docs/splitDoc'
@@ -58,6 +62,7 @@ import {
   buildTree,
   canDrop,
   folderAccessLabel,
+  privateRootOf,
   previewDocs,
   type TreeItem,
   type TreeNode,
@@ -453,6 +458,8 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
     | null
   >(null)
   const [nameError, setNameError] = useState<string | null>(null)
+  /** 새 폴더 창의 「나만 보기」와 같이 볼 사람. 최상위 폴더를 만들 때만 쓴다. */
+  const [privateNew, setPrivateNew] = useState<PrivateFolderChoice>({ on: false, picked: [] })
 
   const fail = (err: unknown, fallback: string) =>
     toast.error(err instanceof ApiError ? err.message : fallback)
@@ -564,7 +571,8 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
   const [moving, setMoving] = useState<TreeItem | null>(null)
   // 열람 권한 창을 연 폴더 id(백엔드 #421). 임원만 메뉴가 보인다. 실제 차단은 서버 403.
   const [accessId, setAccessId] = useState<string | null>(null)
-  const isExec = useCurrentUser().role === 'exec'
+  const { role, id: meId } = useCurrentUser()
+  const isExec = role === 'exec'
   const [trashing, setTrashing] = useState<{ id: string; title: string } | null>(null)
 
   /** 지금 트리에서 그 문서·폴더. 그사이 지워졌거나 옮겨져 사라졌으면 없다. */
@@ -731,6 +739,7 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
       ),
     onAddFolder: (parentId) => {
       setNameError(null)
+      setPrivateNew({ on: false, picked: [] })
       setNaming({ mode: 'create', parentId })
     },
     onRename: (id, title) => {
@@ -743,7 +752,13 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
     if (!naming) return
     if (naming.mode === 'create') {
       createFolder.mutate(
-        { title: value, parent_id: naming.parentId },
+        {
+          title: value,
+          parent_id: naming.parentId,
+          // 개인 폴더는 최상위에만 만든다(서버도 422).
+          ...(naming.parentId === null &&
+            privateNew.on && { private: true, allowed_users: privateNew.picked }),
+        },
         {
           onSuccess: () => {
             setNaming(null)
@@ -802,6 +817,8 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
   // 나타날 때 메뉴와 창이 옛 자리에 저절로 다시 뜬다.
   if (data && menu && !menuTarget) setMenu(null)
   if (data && moving && !movingTarget) setMoving(null)
+  const menuPrivateRoot =
+    data && menu?.item.kind === 'folder' ? privateRootOf(data.folders, menu.item.id) : null
   const accessFolder = accessId ? data?.folders.find((f) => f.id === accessId) : undefined
   if (data && accessId && !accessFolder) setAccessId(null)
 
@@ -893,7 +910,11 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
           onDirty={() => setNameError(null)}
           onSubmit={submitName}
           onClose={() => setNaming(null)}
-        />
+        >
+          {naming.mode === 'create' && naming.parentId === null && (
+            <PrivateFolderOption value={privateNew} onChange={setPrivateNew} />
+          )}
+        </FolderNameModal>
       )}
 
       {menu && menuTarget && (
@@ -929,10 +950,14 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
                 label="다른 폴더로 옮기기"
                 onSelect={() => setMoving(menu.item)}
               />
-              {isExec && (
+              {/* 개인 폴더는 주인이 「볼 사람」을 고른다(백엔드 README 74). 그 아래 폴더는 따라가서 메뉴가 없다.
+                  그 밖의 폴더는 임원이 열람 권한을 건다. */}
+              {(menuPrivateRoot
+                ? menuPrivateRoot.id === menu.item.id && menuPrivateRoot.owner_id === meId
+                : isExec) && (
                 <ContextMenuItem
                   icon={Lock}
-                  label="열람 권한"
+                  label={menuPrivateRoot ? '볼 사람' : '열람 권한'}
                   onSelect={() => setAccessId(menu.item.id)}
                 />
               )}

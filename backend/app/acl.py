@@ -4,8 +4,10 @@
 폴더의 `folder_members` 에 내가 있다. 문서는 자기 폴더를 따른다. 임원(exec)은 등급이 가장 높아 전부 본다(게시판
 `min_role` 과 같은 서열, 03 §2.2). 등급·사람 지정은 임원만 바꾼다.
 
-개인 폴더(README 72, 사용자 결정 2026-11-16 「완전 only 개인만」): `folders.owner_id` 가 있는 폴더는 **그 사람만** 허용 —
-등급도 사람 지정도 보지 않으므로 임원도 못 본다. 최상위 폴더에만 걸리고, 그 아래는 위 「조상 각각」 규칙으로 따라간다.
+개인 폴더(README 72, 사용자 결정 2026-11-16 「완전 only 개인만」): `folders.owner_id` 가 있는 폴더는 **그 사람과 그 사람이
+고른 사람**(`folder_members`, README 74 — 사용자 결정 「나만보기라도 볼 수 있는 인원 추가」)만 허용 — 등급은 보지 않으므로
+임원도 지정받지 않으면 못 본다. 최상위 폴더에만 걸리고, 그 아래는 위 「조상 각각」 규칙으로 따라간다.
+폴더 자체(이름·열람자·삭제)와 경계를 넘는 문서 이동·영구 삭제는 주인만 한다(`private_owner`).
 
 판정은 전부 서버에서 — 트리·상세·수정·버전·댓글·검색·AI 근거·실시간 편집(yjs)·문서 파일·자료실·홈이 전부 이
 모듈의 `visible_folder_ids()`(SQL 부분식)와 `require_doc_view()` 를 쓴다. 거부는 `acl.denied` 감사(403), 목록에서는
@@ -30,19 +32,12 @@ def _allowed(user: User):
     roles = [
         r for r, k in ROLE_RANK.items() if k <= rank
     ]  # 모르는 등급은 아무것도 못 본다(게시판과 같다)
-    # 개인 폴더는 주인만, 등급·사람 지정은 주인 없는 폴더에만 통한다. `==` 가 아니라 IS NOT DISTINCT FROM —
-    # owner_id 가 NULL 이면 `NULL = id` 가 NULL 이라 visible_folder_ids 의 NOT(...) 도 NULL 이 돼 막힌 폴더가 풀린다
+    # 개인 폴더는 주인과 주인이 고른 사람(README 74), 등급은 주인 없는 폴더에만 통한다. `==` 가 아니라 IS NOT DISTINCT
+    # FROM — owner_id 가 NULL 이면 `NULL = id` 가 NULL 이라 visible_folder_ids 의 NOT(...) 도 NULL 이 돼 막힌 폴더가 풀린다
     return or_(
         Folder.owner_id.is_not_distinct_from(user.id),
-        and_(
-            Folder.owner_id.is_(None),
-            or_(
-                Folder.min_role.in_(roles),
-                exists().where(
-                    FolderMember.folder_id == Folder.id, FolderMember.user_id == user.id
-                ),
-            ),
-        ),
+        exists().where(FolderMember.folder_id == Folder.id, FolderMember.user_id == user.id),
+        and_(Folder.owner_id.is_(None), Folder.min_role.in_(roles)),
     )
 
 
@@ -67,9 +62,13 @@ def _with_descendants(marked, name: str) -> Select:
 def restricted_folder_ids() -> Select:
     """등급·사람 지정이 걸린 폴더와 그 아래 전부 — 이동 제한(README 57, 임원만)과 자료실 scope 에 쓴다.
     개인 폴더는 여기 없다(`private_folder_ids`) — 개인 폴더 안팎 이동은 임원이 아니라 주인의 일이다."""
-    marked = or_(
-        Folder.min_role != "member",
-        exists().where(FolderMember.folder_id == Folder.id),
+    marked = and_(
+        # 개인 폴더의 「볼 사람」(README 74)은 등급 폴더의 사람 지정이 아니다 — 주인의 일이라 여기서 뺀다
+        Folder.owner_id.is_(None),
+        or_(
+            Folder.min_role != "member",
+            exists().where(FolderMember.folder_id == Folder.id),
+        ),
     )
     return _with_descendants(marked, "restricted_folders")
 
@@ -89,6 +88,25 @@ async def is_restricted(db: AsyncSession, folder_id: uuid.UUID) -> bool:
 
 async def is_private(db: AsyncSession, folder_id: uuid.UUID) -> bool:
     return await _in(db, folder_id, private_folder_ids())
+
+
+async def private_owner(db: AsyncSession, folder_id: uuid.UUID) -> uuid.UUID | None:
+    """이 폴더가 든 개인 폴더의 주인 — 개인 폴더 밖이면 None. 볼 수 있는 것과 다르다: 주인이 고른 사람(README 74)은
+    안을 보고 고치지만, 폴더 자체와 경계를 넘는 일(문서 넣고 빼기·영구 삭제)은 주인만 한다."""
+    up = (
+        select(Folder.id, Folder.parent_id, Folder.owner_id)
+        .where(Folder.id == folder_id)
+        .cte("folder_up", recursive=True)
+    )
+    up = up.union(
+        select(Folder.id, Folder.parent_id, Folder.owner_id).join(up, Folder.id == up.c.parent_id)
+    )
+    return await db.scalar(select(up.c.owner_id).where(up.c.owner_id.is_not(None)).limit(1))
+
+
+def require_private_owner(user: User, owner: uuid.UUID | None) -> None:
+    if owner is not None and owner != user.id:
+        raise ApiError(403, "FORBIDDEN", "개인 폴더의 주인만 할 수 있습니다.")
 
 
 async def can_view_folder(db: AsyncSession, user: User, folder_id: uuid.UUID) -> bool:

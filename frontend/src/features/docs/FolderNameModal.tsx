@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Button } from '@/components/ui/Button'
 import { Field } from '@/components/ui/Field'
 import { Input } from '@/components/ui/Input'
@@ -27,6 +27,7 @@ export function FolderNameModal({
   label = '폴더 이름',
   placeholder = '예: 회의록',
   maxLength = FOLDER_TITLE_MAX,
+  children,
 }: {
   title: string
   initial?: string
@@ -40,6 +41,8 @@ export function FolderNameModal({
   label?: string
   placeholder?: string
   maxLength?: number
+  /** 이름 칸 아래에 더 받을 것(새 폴더의 「나만 보기」). 값은 부르는 쪽이 들고 있다. */
+  children?: ReactNode
 }) {
   const [value, setValue] = useState(initial)
   const trimmed = value.trim()
@@ -99,6 +102,7 @@ export function FolderNameModal({
           />
         )}
       </Field>
+      {children}
     </Modal>
   )
 }

@@ -391,12 +391,13 @@ async def create_folder(
             409, "CONFLICT", "워크스페이스가 없습니다. scripts/seed.py 를 먼저 돌리세요."
         )
     graded = body.min_role != "member" or bool(body.allowed_users)
-    if body.private and (body.parent_id is not None or graded):
-        # 개인 폴더는 최상위에만 — 남들과 쓰는 폴더 안에 안 보이는 폴더가 끼지 않게. 하위는 그냥 만들면 따라간다
+    if body.private and (body.parent_id is not None or body.min_role != "member"):
+        # 개인 폴더는 최상위에만 — 남들과 쓰는 폴더 안에 안 보이는 폴더가 끼지 않게. 하위는 그냥 만들면 따라간다.
+        # 등급은 못 건다(주인과 주인이 고른 사람만 본다). 볼 사람(allowed_users)은 주인이 고른다(README 74)
         raise ApiError(
-            422, "VALIDATION", "개인 폴더는 최상위에만 만들고 등급·사람 지정을 함께 걸 수 없습니다."
+            422, "VALIDATION", "개인 폴더는 최상위에만 만들고 등급을 함께 걸 수 없습니다."
         )
-    if graded:
+    if graded and not body.private:
         acl.require_acl_editor(user)  # 등급·사람 지정은 임원만(README 57) — 다른 검사보다 먼저
     if body.parent_id is not None:
         await _require_folder(db, body.parent_id, user)
@@ -432,7 +433,10 @@ async def update_folder(
         raise ApiError(404, "NOT_FOUND", "없는 폴더입니다.")
     changes = body.model_dump(exclude_unset=True)
     allowed = changes.pop("allowed_users", "unset")
-    if "min_role" in changes or allowed != "unset":
+    # 개인 폴더 자체(이름·정렬·볼 사람)는 주인만 고친다(README 74) — 주인이 고른 사람은 안을 보고 고칠 뿐이다
+    acl.require_private_owner(user, folder.owner_id)
+    own_private = folder.owner_id is not None  # 여기까지 왔으면 내 개인 폴더다
+    if "min_role" in changes or (allowed != "unset" and not own_private):
         acl.require_acl_editor(user)  # 등급·사람 지정은 임원만(README 57) — 다른 검사보다 먼저
     if allowed is None:
         raise ApiError(422, "VALIDATION", "allowed_users 는 null 일 수 없습니다.")
@@ -442,7 +446,8 @@ async def update_folder(
         # ponytail: 전역 잠금 — 폴더 이동은 드물다. 잦아지면 워크스페이스별 키로.
         await db.execute(select(func.pg_advisory_xact_lock(FOLDER_MOVE_LOCK)))
     private = await acl.is_private(db, folder.id)
-    if private and ("min_role" in changes or allowed != "unset"):
+    # 개인 폴더 안에는 등급을 못 건다. 볼 사람은 개인 폴더 자신에만(하위 폴더는 따라간다)
+    if private and ("min_role" in changes or (allowed != "unset" and not own_private)):
         raise ApiError(422, "VALIDATION", PRIVATE_NO_GRADE)
     if "parent_id" in changes:
         # 이동은 등급을 바꾸는 것과 같다(등급 폴더에서 꺼내면 공개, 넣으면 숨김) — 어느 쪽이든 「전원 열람」이 아니면 임원만
@@ -495,6 +500,7 @@ async def delete_folder(
     folder = await db.get(Folder, id, with_for_update=True, populate_existing=True)
     if folder is None:
         raise ApiError(404, "NOT_FOUND", "없는 폴더입니다.")
+    acl.require_private_owner(user, folder.owner_id)  # 개인 폴더 자체는 주인만 지운다(README 74)
     # 문서는 폴더 안에만 있을 수 있어(DocCreateIn.folder_id 필수) 휴지통 문서가 남은 폴더를 지우면 되살릴 자리가
     # 없다 — 휴지통 문서도 막는다. 트리에 안 보여 화면이 미리 못 막는 경우라 문구를 따로 둔다.
     if (await db.execute(select(Folder.id).where(Folder.parent_id == id).limit(1))).first():
@@ -813,10 +819,15 @@ async def update_doc(
             db, changes["folder_id"]
         ):
             acl.require_acl_editor(user)
-        # 개인 폴더 안팎 이동(README 72)은 주인이면 된다(양쪽을 볼 수 있어야 여기까지 온다). 대신 남긴다 — 넣으면 임원도
-        # 못 보게 되므로, 같이 쓰던 문서가 사라졌을 때 누가 가져갔는지 감사 기록으로 찾는다(제목은 넣을 때만: 그때까진 공개였다)
-        was = await acl.is_private(db, doc.folder_id)
-        now = await acl.is_private(db, changes["folder_id"])
+        # 개인 폴더 안팎 이동(README 72)은 주인만 한다 — 주인이 고른 사람(README 74)도 양쪽을 보지만, 꺼내면 공개되고
+        # 넣으면 숨는 일이라 그 개인 폴더의 주인이어야 한다(다른 개인 폴더로 옮기는 것도 양쪽 주인이어야 한다). 대신 남긴다 —
+        # 넣으면 임원도 못 보게 되므로, 같이 쓰던 문서가 사라졌을 때 누가 가져갔는지 감사 기록으로 찾는다(제목은 넣을 때만)
+        owner_was = await acl.private_owner(db, doc.folder_id)
+        owner_now = await acl.private_owner(db, changes["folder_id"])
+        if owner_was != owner_now:
+            acl.require_private_owner(user, owner_was)
+            acl.require_private_owner(user, owner_now)
+        was, now = owner_was is not None, owner_now is not None
         hidden = now and not was
         if was != now:
             audit.record(
@@ -894,8 +905,11 @@ async def delete_doc(
             # 스냅샷을 편집자 것으로 덮어쓴다. 휴지통 문서는 새로 열 수도 없으니(yjs 핸드셰이크) 방만 남는다.
             await yjs.close_room(doc.id)
         return Response(status_code=204)
-    # 개인 폴더의 문서는 주인이 영구 삭제한다(README 72) — 임원은 못 보니 못 지우고, 여기까지 온 사람이 곧 주인이다
-    private = await acl.is_private(db, doc.folder_id)
+    # 개인 폴더의 문서는 주인이 영구 삭제한다(README 72) — 임원은 못 보니 못 지우고, 주인이 고른 사람(README 74)은
+    # 보고 고치지만 영구 삭제는 못 한다
+    owner = await acl.private_owner(db, doc.folder_id)
+    acl.require_private_owner(user, owner)
+    private = owner is not None
     if ROLE_RANK.get(user.role, 0) < ROLE_RANK["exec"] and not private:
         audit.record(
             db,

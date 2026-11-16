@@ -39,8 +39,13 @@ export function useTree() {
 export function useCreateFolder() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (input: { title: string; parent_id?: string | null }) =>
-      api<Folder>('/folders', { method: 'POST', body: JSON.stringify(input) }),
+    mutationFn: (input: {
+      title: string
+      parent_id?: string | null
+      /** 나만 보기(개인 폴더). 최상위에만 된다. `allowed_users` 는 그래도 같이 볼 사람들. */
+      private?: boolean
+      allowed_users?: string[]
+    }) => api<Folder>('/folders', { method: 'POST', body: JSON.stringify(input) }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: docKeys.tree }),
   })
 }
