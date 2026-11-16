@@ -1,4 +1,4 @@
-import { useMemo, useState, type KeyboardEvent } from 'react'
+import { useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router'
 import { FileText, Folder, Plus, Search } from 'lucide-react'
 import { Avatar } from '@/components/ui/Avatar'
@@ -13,9 +13,8 @@ import { ApiError } from '@/lib/api'
 import { hueOf } from '@/lib/avatar'
 import { cn } from '@/lib/cn'
 import { formatRelative } from '@/lib/datetime'
-import { useCreateDoc, useDeleteFolder, useTree } from '@/features/docs/api'
+import { useCreateDoc, useTree } from '@/features/docs/api'
 import { NewDocModal } from '@/features/docs/NewDocModal'
-import { TrashDocModal } from '@/features/docs/TrashDocModal'
 import {
   buildTree,
   byRecent,
@@ -44,8 +43,6 @@ function DocsList({ folderId }: { folderId: string | null }) {
   const navigate = useNavigate()
   const toast = useToast()
   const [picking, setPicking] = useState(false)
-  const [trashing, setTrashing] = useState<{ id: string; title: string } | null>(null)
-  const deleteFolder = useDeleteFolder()
 
   const folder = folderId ? data?.folders.find((f) => f.id === folderId) : undefined
   /** 폴더를 열었는데 트리에 없다. 지워졌거나 낡은 링크다. */
@@ -88,28 +85,6 @@ function DocsList({ folderId }: { folderId: string | null }) {
           toast.error(err instanceof ApiError ? err.message : '문서를 만들지 못했습니다.'),
       },
     )
-  }
-
-  /**
-   * 줄에 초점을 두고 Delete. 사이드바 트리와 같게 문서는 휴지통 확인 창을, 폴더는 빈 것만 바로 지운다.
-   * 줄을 누르면 그 문서·폴더로 넘어가므로 여기서는 Tab 으로 초점을 옮겼을 때만 쓰인다.
-   */
-  const onKeyDown = (e: KeyboardEvent) => {
-    if (e.key !== 'Delete' || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return
-    if (!(e.target instanceof Element)) return
-    const id = e.target.closest<HTMLElement>('[data-id]')?.dataset.id
-    if (!id) return
-    e.preventDefault()
-    const doc = docs.find((d) => d.id === id)
-    if (doc) return setTrashing({ id, title: doc.title })
-    const sub = subfolders.find((n) => n.folder.id === id)
-    if (!sub || deleteFolder.isPending) return
-    if (sub.children.length) return void toast.error('안에 문서나 폴더가 있어 지울 수 없습니다.')
-    deleteFolder.mutate(id, {
-      onSuccess: () => toast.success(`${sub.folder.title} 폴더를 지웠습니다.`),
-      onError: (err) =>
-        toast.error(err instanceof ApiError ? err.message : '폴더를 지우지 못했습니다.'),
-    })
   }
 
   const createButton = (
@@ -179,7 +154,7 @@ function DocsList({ folderId }: { folderId: string | null }) {
                 : '아직 문서가 없습니다.'}
             </CardEmpty>
           ) : (
-            <ul className="p-2" onKeyDown={onKeyDown}>
+            <ul className="p-2">
               {/* 문서 없이 빈 폴더만 있는 첫 화면. 폰은 폴더 줄이 보이지만 PC 는 그릴 줄이 없다. */}
               {rootBrowse && items.length === 0 && (
                 <li className="max-md:hidden">
@@ -190,7 +165,6 @@ function DocsList({ folderId }: { folderId: string | null }) {
                 <li key={sub.folder.id} className={cn(rootBrowse && 'md:hidden')}>
                   <Link
                     to={`/docs?folder=${sub.folder.id}`}
-                    data-id={sub.folder.id}
                     className="hover:bg-surface-hover flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors"
                   >
                     <Folder className="text-subtle size-4 shrink-0" />
@@ -208,7 +182,6 @@ function DocsList({ folderId }: { folderId: string | null }) {
                 <li key={doc.id} className={cn(rootBrowse && 'max-md:hidden')}>
                   <Link
                     to={`/docs/${doc.id}`}
-                    data-id={doc.id}
                     className="hover:bg-surface-hover flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors"
                   >
                     <FileText className="text-subtle size-4 shrink-0" />
@@ -231,9 +204,6 @@ function DocsList({ folderId }: { folderId: string | null }) {
       </Card>
 
       {picking && <NewDocModal onClose={() => setPicking(false)} />}
-      {trashing && (
-        <TrashDocModal id={trashing.id} title={trashing.title} onClose={() => setTrashing(null)} />
-      )}
     </>
   )
 }

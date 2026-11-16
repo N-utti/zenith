@@ -10,7 +10,7 @@ const EDGE = 8
  * 포인터 자리에 뜨는 메뉴(우클릭). 부르는 쪽이 열 때 마운트한다.
  *
  * 항목을 고르거나, 바깥을 누르거나, Esc, 화면이 구르거나 창 크기가 바뀌면 닫힌다. 열리면 첫 항목으로
- * 초점을 옮기고 위아래 화살표로 오간다. 닫히면 초점을 열기 전 자리로 되돌린다. 키보드(Shift+F10,
+ * 초점을 옮기고 위아래 화살표로 오간다. Delete 는 붉은 항목을 누른다. 닫히면 초점을 열기 전 자리로 되돌린다. 키보드(Shift+F10,
  * 메뉴 키)로 열었을 때 이어서 쓸 수 있어야 한다.
  */
 export function ContextMenu({
@@ -76,6 +76,15 @@ export function ContextMenu({
         return onClose()
       }
       if (e.key === 'Tab') return onClose()
+      // Delete 는 붉은 항목(휴지통으로·지우기)을 누른 것과 같다. 메뉴마다 하나뿐이다. 할 수 없는
+      // 때면 그 항목에 초점만 옮겨 이유가 보이게 한다(누르기는 항목이 막는다).
+      if (e.key === 'Delete' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
+        const danger = menu.querySelector<HTMLElement>('[role="menuitem"][data-danger]')
+        if (!danger) return
+        e.preventDefault()
+        danger.focus()
+        return danger.click()
+      }
       if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return
       e.preventDefault()
       const items = [...menu.querySelectorAll<HTMLElement>('[role="menuitem"]')]
@@ -152,6 +161,7 @@ export function ContextMenuItem({
       // `disabled` 속성은 쓰지 않는다. 초점을 못 받게 되어 화살표로 지나갈 때 건너뛰고,
       // 낭독기는 이유를 읽지 못한다. 눌러도 아무 일이 없고 메뉴도 닫히지 않게만 한다.
       aria-disabled={disabled || undefined}
+      data-danger={danger || undefined}
       onClick={(e) => (disabled ? e.stopPropagation() : onSelect())}
       className={cn(
         'flex w-full items-start gap-2.5 rounded-lg px-2 py-1.5 text-left text-sm transition-colors',
