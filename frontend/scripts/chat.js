@@ -13,8 +13,8 @@
  *   POST /channels/:id/members        비공개 채널에 사람 더하기
  *   DELETE /channels/:id/members/:uid 비공개 채널에서 사람 빼기·나가기
  *   DELETE /channels/:id              채널 지우기 (아래 `canDelete`)
- *   WS   /ws                          보내는 op: sub · msg · read · typing
- *                                     받는 ev: msg · unread · typing · error · channels
+ *   WS   /ws                          보내는 op: sub · msg · read · typing · react
+ *                                     받는 ev: msg · unread · typing · error · channels · reaction
  *
  * 보내기·읽음은 REST 가 아니라 소켓 op 이다(04 §4.1). 실서버가 그렇게만 받으므로 릴레이도
  * 같게 맞춘다. 갈라 두면 목 모드에서 되는 것이 실서버에서 405 로 죽는다(이슈 #128).
@@ -99,8 +99,13 @@ function makeMessage(channelId, authorId, body, createdAt, files, docRef = null)
     created_at: createdAt ?? new Date().toISOString(),
     // 고친 적이 없으면 null. 실서버 `MessageOut` 과 같은 칸이다(#284).
     edited_at: null,
+    // 공감. 실서버 명세엔 아직 없다(백엔드 이슈로 요청). 이모지마다 누른 사람.
+    reactions: [],
   }
 }
+
+/** 고를 수 있는 공감 이모지. 화면의 `REACTIONS`(features/chat/api.ts)와 같아야 한다. */
+const REACTIONS = ['✅', '👍', '👀', '🙏', '❤️', '😂']
 
 /** @type {Map<string, ReturnType<typeof makeMessage>[]>} */
 const messages = new Map([
@@ -149,6 +154,8 @@ const messages = new Map([
     ],
   ],
 ])
+// 공감이 달린 모습을 처음부터 보이게 공지 하나에 시드로 단다.
+messages.get('c-notice')[0].reactions = [{ emoji: '✅', users: [USERS['u-2'], USERS['u-5']] }]
 
 /**
  * 올라온 첨부. 실제 서버는 MinIO 에 넣는다. 릴레이는 메모리라 다시 띄우면 사라진다.
@@ -293,6 +300,7 @@ function replyAsBot(channel) {
       attachments: null,
       created_at: new Date().toISOString(),
       edited_at: null,
+      reactions: [],
     }
     messages.get(channel.id)?.push(message) ?? messages.set(channel.id, [message])
     publish(channel.id, { ev: 'msg', channel_id: channel.id, message })
@@ -418,6 +426,34 @@ export function handleChatConnection(conn, userId) {
       const message = { ...target, body, edited_at: new Date().toISOString() }
       list[index] = message
       return publish(channelId, { ev: 'msg_edit', channel_id: channelId, message })
+    }
+
+    // 공감. 실서버엔 아직 없다(백엔드 이슈로 요청한 모양).
+    //   {op:'react', channel_id, message_id, emoji, on} → 멤버 전원에게 {ev:'reaction', channel_id, message_id, reactions}
+    // 뒤집기가 아니라 켤지 끌지(`on`)를 받는다. 같은 것을 두 번 보내도 결과가 같다. 멤버면 누구 글에든 된다.
+    if (op.op === 'react') {
+      const target = (messages.get(channelId) ?? []).find((m) => m.id === op.message_id)
+      if (!target) return sendError(conn, 'NOT_FOUND', '없는 메시지입니다.', channelId)
+      if (!REACTIONS.includes(op.emoji) || typeof op.on !== 'boolean') {
+        return sendError(conn, 'VALIDATION', '고를 수 없는 공감입니다.', channelId)
+      }
+      const list = target.reactions ?? []
+      const had = list.find((r) => r.emoji === op.emoji)
+      // 이미 그 상태면 아무것도 안 보낸다(누른 순서도 그대로).
+      if ((had?.users.some((u) => u.id === userId) ?? false) === op.on) return
+      const users = (had?.users ?? []).filter((u) => u.id !== userId)
+      if (op.on) users.push(USERS[userId])
+      const next = had
+        ? list.map((r) => (r.emoji === op.emoji ? { ...r, users } : r))
+        : [...list, { emoji: op.emoji, users }]
+      // 아무도 안 누른 이모지는 뺀다.
+      target.reactions = next.filter((r) => r.users.length > 0)
+      return publish(channelId, {
+        ev: 'reaction',
+        channel_id: channelId,
+        message_id: target.id,
+        reactions: target.reactions,
+      })
     }
 
     if (op.op === 'read') {

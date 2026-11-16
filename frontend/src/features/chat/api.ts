@@ -228,6 +228,12 @@ export function useDeleteChannel() {
   })
 }
 
+/**
+ * 고를 수 있는 공감 이모지. 개발 릴레이(`scripts/chat.js`)가 같은 목록 밖을 거절하고, 백엔드에도 같은 목록을 요청했다.
+ * 앞의 둘이 「확인했다」 용이다.
+ */
+export const REACTIONS = ['✅', '👍', '👀', '🙏', '❤️', '😂'] as const
+
 /** 사내망 파일 업로드 상한. 서버도 같은 값을 강제한다(`MAX_ATTACHMENT_BYTES`). */
 export const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024
 

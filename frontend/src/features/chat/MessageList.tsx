@@ -26,7 +26,7 @@ import { MentionText } from '@/features/people/MentionText'
 import { AiMarkdown } from '@/features/ai/AiMarkdown'
 import { isAiCommand, linkPaths } from './aiCommand'
 import { isImage } from './attachments'
-import { MAX_BODY_CHARS, useMessages, useOlderMessages } from './api'
+import { MAX_BODY_CHARS, REACTIONS, useMessages, useOlderMessages } from './api'
 import { useChatSocketContext } from './ChatSocketContext'
 import { countAfter } from './newMessages'
 import { ProfileAvatar } from './ProfileMenu'
@@ -289,7 +289,7 @@ export function MessageList({
   // 내 메시지 고치기·지우기. 소켓으로 보내고 화면은 돌아오는 이벤트로 바뀐다(`useChatSocket`).
   // 닫혀 있으면 보내지 못한다. 줄에는 고칠 입력 옆 자리가 없어 토스트로 알린다.
   // 두 함수는 줄마다 그대로 넘어가므로 그릴 때마다 같아야 한다(`MessageRow` 의 memo).
-  const { editMessage, deleteMessage } = useChatSocketContext()
+  const { editMessage, deleteMessage, reactMessage } = useChatSocketContext()
   const toast = useToast()
   const edit = useCallback(
     (messageId: string, body: string) => {
@@ -306,6 +306,14 @@ export function MessageList({
       return sent
     },
     [deleteMessage, channelId, toast],
+  )
+  const react = useCallback(
+    (messageId: string, emoji: string, on: boolean) => {
+      if (!reactMessage(channelId, messageId, emoji, on)) {
+        toast.error('연결이 끊겨 공감하지 못했습니다. 연결되면 다시 시도하세요.')
+      }
+    },
+    [reactMessage, channelId, toast],
   )
 
   // 찾아온 메시지로 내려 주고 잠깐 밝힌다. 아래 붙이기보다 뒤에 둬야 한다: 같은 로딩에
@@ -404,6 +412,8 @@ export function MessageList({
                 compact={grouped(message, previous)}
                 flash={message.id === focusId}
                 mentionNames={mentionNames}
+                me={me}
+                onReact={react}
                 // 쓴 사람만 고치고 지운다(백엔드 #284). 버튼을 감추는 것은 화면 편의이고 남의 메시지를
                 // 건드리는 요청의 차단은 서버의 `error` 이벤트(FORBIDDEN)다.
                 onEdit={message.author.id === me ? edit : undefined}
@@ -443,6 +453,8 @@ const MessageRow = memo(function MessageRow({
   compact,
   flash,
   mentionNames,
+  me,
+  onReact,
   onEdit,
   onDelete,
   children,
@@ -455,6 +467,10 @@ const MessageRow = memo(function MessageRow({
   /** ⌘K 로 찾아온 메시지라 잠깐 밝힌다. */
   flash: boolean
   mentionNames: ReadonlySet<string>
+  /** 내 id. 내가 누른 공감을 가린다. */
+  me: string
+  /** 공감을 켜거나 끈다. 누구 글에나 온다. 그릴 때마다 같은 함수여야 한다. */
+  onReact: (messageId: string, emoji: string, on: boolean) => void
   /**
    * 내 메시지일 때만 온다. 보냈으면 `true`, 소켓이 닫혀 못 보냈으면 `false`. 줄을 건너뛰게
    * 하려면 그릴 때마다 같은 함수여야 한다(`MessageList` 가 붙잡는다).
@@ -476,6 +492,10 @@ const MessageRow = memo(function MessageRow({
     setDraft(null)
     row.current?.focus({ preventScroll: true })
   }
+
+  /** 내가 이 이모지로 공감했는가. */
+  const reacted = (emoji: string) =>
+    message.reactions?.some((r) => r.emoji === emoji && r.users.some((u) => u.id === me)) ?? false
 
   // ponytail: 고치는 사이 다른 탭에서 이 메시지가 지워지면 쓰던 글은 줄과 함께 사라지고,
   // 고쳐졌으면 나중에 저장한 쪽이 남는다. 알리지 않는다.
@@ -501,12 +521,35 @@ const MessageRow = memo(function MessageRow({
 
       <div ref={row} id={`m-${message.id}`} tabIndex={-1} className={cnRow(compact, flash)}>
         {/*
-          고치기·지우기. 줄 오른쪽 위에 떠서 줄 높이를 바꾸지 않는다. 줄에 올리거나 줄 안에 초점이
+          공감·고치기·지우기. 줄 오른쪽 위에 떠서 줄 높이를 바꾸지 않는다. 줄에 올리거나 줄 안에 초점이
           있을 때만 보이고(줄은 누르면 초점을 받는다. 손가락 기기는 메시지를 한 번 누르면 뜬다),
-          숨어 있을 때는 눌리지도 않는다.
+          숨어 있을 때는 눌리지도 않는다. 공감은 고르기 창 없이 여섯 개를 바로 늘어놓는다(한 번에 누른다).
         */}
-        {(onEdit || onDelete) && draft === null && (
+        {draft === null && (
           <div className="border-line bg-surface pointer-events-none absolute -top-3 right-2 flex rounded-md border opacity-0 shadow-sm transition-opacity group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100">
+            {REACTIONS.map((emoji) => {
+              const on = reacted(emoji)
+              return (
+                <button
+                  key={emoji}
+                  type="button"
+                  aria-pressed={on}
+                  aria-label={`${emoji} 공감`}
+                  title={on ? '공감 취소' : '공감'}
+                  // ponytail: 줄마다 여섯 개라 Tab 순서에서 뺀다(300줄이면 1,800번 멈춘다). 키보드는 이미 달린
+                  // 공감만 아래 칩으로 켜고 끈다. 새 공감도 키보드로 달아야 하면 툴바 안 화살표 이동으로.
+                  tabIndex={-1}
+                  onClick={() => onReact(message.id, emoji, !on)}
+                  className={cn(
+                    'grid size-7 cursor-pointer place-items-center rounded text-sm',
+                    on ? 'bg-accent-soft' : 'hover:bg-surface-hover',
+                  )}
+                >
+                  {emoji}
+                </button>
+              )
+            })}
+            {(onEdit || onDelete) && <span aria-hidden className="bg-line mx-0.5 my-1.5 w-px" />}
             {onEdit && (
               <button
                 type="button"
@@ -635,6 +678,33 @@ const MessageRow = memo(function MessageRow({
             )
           )}
           {children}
+          {!!message.reactions?.length && (
+            <div className="mt-1.5 flex flex-wrap gap-1">
+              {message.reactions.map(({ emoji, users }) => {
+                const on = users.some((u) => u.id === me)
+                const names = users.map((u) => u.name).join(', ')
+                return (
+                  <button
+                    key={emoji}
+                    type="button"
+                    aria-pressed={on}
+                    aria-label={`${emoji} ${users.length}명: ${names}`}
+                    title={names}
+                    onClick={() => onReact(message.id, emoji, !on)}
+                    className={cn(
+                      'flex h-6 cursor-pointer items-center gap-1 rounded-full border px-2 text-xs transition-colors',
+                      on
+                        ? 'border-accent bg-accent-soft text-accent'
+                        : 'border-line bg-surface text-muted hover:border-line-strong',
+                    )}
+                  >
+                    <span>{emoji}</span>
+                    <span className="tabular-nums">{users.length}</span>
+                  </button>
+                )
+              })}
+            </div>
+          )}
         </div>
       </div>
     </div>

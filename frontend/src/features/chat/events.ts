@@ -1,4 +1,4 @@
-import type { ChatChannel, ChatMessage, MessagePage } from './types'
+import type { ChatChannel, ChatMessage, ChatReaction, MessagePage } from './types'
 import type { DesktopNotification } from '@/lib/desktop'
 
 /**
@@ -29,13 +29,36 @@ export function appendMessage<P extends { items: ChatMessage[] }>(
 /**
  * `msg_edit` 로 받은 메시지를 제자리에 갈아 끼운다. 목록에 없는 메시지면(아직 안 받은 과거)
  * 그대로 둔다. 그 쪽을 받을 때 서버가 고친 뒤의 것을 준다.
+ *
+ * 공감은 받은 메시지에 칸이 없으면 있던 것을 남긴다. 소켓 메시지는 조회보다 칸이 적을 수 있는데
+ * (`types.ts` 의 `is_bot`), 그대로 갈아 끼우면 고칠 때마다 공감이 사라진다.
  */
 export function replaceMessage<P extends { items: ChatMessage[] }>(
   page: P | undefined,
   message: ChatMessage,
 ): P | undefined {
   if (!page || !page.items.some((item) => item.id === message.id)) return page
-  return { ...page, items: page.items.map((item) => (item.id === message.id ? message : item)) }
+  return {
+    ...page,
+    items: page.items.map((item) =>
+      item.id === message.id
+        ? { ...message, reactions: message.reactions ?? item.reactions }
+        : item,
+    ),
+  }
+}
+
+/** `reaction` 으로 받은 공감 전체를 그 메시지에 덮어쓴다. 목록에 없는 메시지면 같은 객체를 돌려준다. */
+export function withReactions<P extends { items: ChatMessage[] }>(
+  page: P | undefined,
+  messageId: string,
+  reactions: ChatReaction[],
+): P | undefined {
+  if (!page || !page.items.some((item) => item.id === messageId)) return page
+  return {
+    ...page,
+    items: page.items.map((item) => (item.id === messageId ? { ...item, reactions } : item)),
+  }
 }
 
 /** `msg_del` 로 받은 id 를 목록에서 뺀다. 없는 id 면 같은 객체를 돌려준다(다시 그리지 않게). */

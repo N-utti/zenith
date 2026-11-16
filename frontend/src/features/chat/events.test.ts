@@ -8,6 +8,7 @@ import {
   replaceMessage,
   withEditedLast,
   withLastMessage,
+  withReactions,
   withUnread,
 } from './events'
 import type { ChatChannel, ChatMessage } from './types'
@@ -107,10 +108,33 @@ describe('replaceMessage', () => {
     expect(next?.next_cursor).toBe('c-1')
   })
 
+  it('받은 메시지에 공감 칸이 없으면 있던 공감을 남긴다', () => {
+    const reactions = [{ emoji: '✅', users: [{ id: 'u2', name: '진수연', is_bot: false }] }]
+    const page = { items: [{ ...message('m1'), reactions }] }
+    const next = replaceMessage(page, { ...message('m1'), body: '고친 글' })
+    expect(next?.items[0].reactions).toEqual(reactions)
+  })
+
   it('목록에 없는 메시지면 같은 객체를 돌려준다', () => {
     // 아직 안 받은 과거의 메시지다. 그 쪽을 받을 때 서버가 고친 뒤의 것을 준다.
     const page = { items: [message('m2')] }
     expect(replaceMessage(page, message('m1'))).toBe(page)
+  })
+})
+
+describe('withReactions', () => {
+  it('그 메시지의 공감만 갈아 끼우고 나머지 칸은 그대로 둔다', () => {
+    const page = { items: [message('m1'), message('m2')], next_cursor: 'c-1' }
+    const reactions = [{ emoji: '✅', users: [{ id: 'u2', name: '진수연', is_bot: false }] }]
+    const next = withReactions(page, 'm1', reactions)
+    expect(next?.items[0].reactions).toEqual(reactions)
+    expect(next?.items[1]).toBe(page.items[1])
+    expect(next?.next_cursor).toBe('c-1')
+  })
+
+  it('목록에 없는 메시지면 같은 객체를 돌려준다', () => {
+    const page = { items: [message('m2')] }
+    expect(withReactions(page, 'm1', [])).toBe(page)
   })
 })
 
