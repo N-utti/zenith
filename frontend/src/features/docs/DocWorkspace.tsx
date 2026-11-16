@@ -704,7 +704,8 @@ function PanelHeightHandle({ panel }: { panel: ReturnType<typeof usePanelHeight>
  * 05·SCR-08 은 모바일에도 손잡이를 두라고 하지만 그건 커서를 막지 않을 때의 이야기다.
  */
 function useCoarsePointer(): boolean {
-  const [coarse, setCoarse] = useState(false)
+  // 처음 그릴 때부터 맞는 값이어야 한다. 제목 칸 autoFocus 는 첫 렌더 값으로 한 번만 판정된다.
+  const [coarse, setCoarse] = useState(() => window.matchMedia('(pointer: coarse)').matches)
 
   useEffect(() => {
     const mq = window.matchMedia('(pointer: coarse)')
@@ -1322,8 +1323,12 @@ function DocSurface({
                     editor?.commands.focus('start')
                   }}
                   readOnly={locked}
-                  // 막 만든 문서는 바로 제목부터 친다. 폰은 키보드가 화면을 덮어 두지 않는다.
-                  autoFocus={!coarsePointer && !locked && meta.title === UNTITLED_DOC}
+                  // 막 만든 문서는 바로 제목부터 친다. 판정은 지금 보이는 제목(Y.Doc, 아직 없으면 서버
+                  // 제목)으로 한다. 서버 사본은 늦게 파생돼 이미 제목을 단 문서도 기본값일 수 있다.
+                  // 폰은 키보드가 화면을 덮어서, 나눠 보기 오른쪽은 왼쪽 화면의 초점을 빼앗아서 뺀다.
+                  autoFocus={
+                    !coarsePointer && !locked && !onCloseSplit && (!title || title === UNTITLED_DOC)
+                  }
                   placeholder={UNTITLED_DOC}
                   aria-label="문서 제목"
                   className="text-fg placeholder:text-subtle w-full bg-transparent py-2 text-3xl font-bold tracking-tight outline-none"
