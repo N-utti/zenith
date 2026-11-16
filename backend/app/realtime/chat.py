@@ -378,7 +378,7 @@ async def _handle(ws: WebSocket, user: User, op: AnyOp) -> None:
             # `/ai 질문`(README 52) — 내 글을 저장·방송한 뒤 백그라운드로 답을 만든다. 이 메시지와 그 첨부만 보낸다
             if (question := chat_command.parse(op.body)) is not None:
                 if chat_command.allowed(user.id):
-                    chat_command.spawn(op.channel_id, user.id, question, attachments)
+                    chat_command.spawn(op.channel_id, user.id, question, attachments, now)
                 else:  # 내 글은 이미 올라갔다 — 봇 답만 안 만든다
                     await _send(
                         ws,
