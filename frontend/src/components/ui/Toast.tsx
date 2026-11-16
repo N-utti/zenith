@@ -12,6 +12,9 @@ function opts(fallback: number, options?: ToastOptions) {
   return {
     duration: options?.durationMs ?? fallback,
     action: options?.action && { label: options.action.label, onClick: options.action.onClick },
+    // 액션 버튼으로 닫힐 때는 둘 다 불리지 않는다.
+    onAutoClose: options?.onClose,
+    onDismiss: options?.onClose,
   }
 }
 

@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
+import { useWithoutPending } from '@/lib/deferDelete'
 import { homeKeys } from '@/features/home/keys'
 import type { Board, BoardPost, BoardPostDetail, PostAttachment, PostComment } from './types'
 
@@ -13,10 +14,13 @@ export function useBoards() {
 }
 
 export function usePosts(boardId: string) {
+  // 글 지우기는 되돌리기 시간 동안 늦게 보낸다(`deferDelete`). 그동안 그 글은 빼고 그린다.
+  const select = useWithoutPending<BoardPost>()
   return useQuery({
     queryKey: ['boards', boardId, 'posts'],
     queryFn: () => api<{ items: BoardPost[] }>(`/boards/${boardId}/posts`),
     enabled: Boolean(boardId),
+    select,
   })
 }
 

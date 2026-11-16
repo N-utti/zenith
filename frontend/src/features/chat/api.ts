@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, ApiError } from '@/lib/api'
+import { useWithoutPending } from '@/lib/deferDelete'
 import { prependOlder } from './events'
 import type { ChatAttachment, ChatChannel, MessagePage } from './types'
 
@@ -18,9 +19,12 @@ export const chatKeys = {
 const PAGE_SIZE = 50
 
 export function useChannels() {
+  // 채널 지우기는 되돌리기 시간 동안 늦게 보낸다(`deferDelete`). 그동안 그 방은 빼고 그린다.
+  const select = useWithoutPending<ChatChannel>()
   return useQuery({
     queryKey: chatKeys.channels,
     queryFn: () => api<{ items: ChatChannel[] }>('/channels'),
+    select,
   })
 }
 

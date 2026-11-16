@@ -20,6 +20,7 @@ import {
 import { purgeAt, TRASH_KEEP_DAYS } from '@/features/docs/types'
 import { useCurrentUser } from '@/features/auth/AuthContext'
 import { ApiError } from '@/lib/api'
+import { deferDelete } from '@/lib/deferDelete'
 import { hueOf } from '@/lib/avatar'
 import { daysUntil, formatRelative } from '@/lib/datetime'
 import { ROLE_RANK } from '@/types'
@@ -206,15 +207,14 @@ export function TrashPage() {
               data-autofocus
               onClick={() => {
                 if (!confirmPurge) return
-                purge.mutate(confirmPurge.id, {
-                  onSuccess: () => {
-                    setConfirmPurge(null)
-                    toast.success('영구 삭제했습니다.')
-                  },
-                  onError: (err) => {
-                    setConfirmPurge(null)
-                    fail('영구 삭제하지 못했습니다.')(err)
-                  },
+                const { id, title } = confirmPurge
+                setConfirmPurge(null)
+                // 서버에 되살리는 길이 없어 되돌리기 시간 뒤에 보낸다. 그동안 줄은 목록에서 빠진다.
+                deferDelete(toast, {
+                  ids: [id],
+                  message: `${title} 문서를 영구 삭제했습니다.`,
+                  commit: () => purge.mutateAsync(id),
+                  failMessage: '영구 삭제하지 못했습니다.',
                 })
               }}
             >
@@ -254,26 +254,26 @@ export function TrashPage() {
               data-autofocus
               onClick={() => {
                 if (!confirmEmpty) return
-                empty.mutate(confirmEmpty, {
-                  onSuccess: ({ removed, failed, skipped }) => {
-                    setConfirmEmpty(null)
-                    // 그사이 누가 되돌린 문서는 지우지 않았다. 숫자가 창에서 본 것과 다른 이유를 적는다.
-                    const kept =
-                      skipped > 0 ? ` 그사이 휴지통에서 빠진 ${skipped}개는 두었습니다.` : ''
-                    // 전부 그사이에 빠졌으면 지운 것이 없다. "0개를 삭제했습니다" 로 읽히지 않게 한다.
-                    if (removed === 0 && failed === 0)
-                      toast.success('지울 문서가 없었습니다. 그사이 모두 휴지통에서 빠졌습니다.')
-                    else if (failed === 0)
-                      toast.success(`문서 ${removed}개를 영구 삭제했습니다.${kept}`)
-                    else
-                      toast.error(
-                        `문서 ${removed}개를 영구 삭제했고 ${failed}개는 지우지 못했습니다.${kept}`,
-                      )
-                  },
-                  onError: (err) => {
-                    setConfirmEmpty(null)
-                    fail('휴지통을 비우지 못했습니다.')(err)
-                  },
+                const ids = confirmEmpty
+                setConfirmEmpty(null)
+                // 영구 삭제 한 건과 같이 되돌리기 시간 뒤에 보낸다. 성공 토스트는 먼저 떴으니, 실제로
+                // 보낸 뒤에는 창에서 본 숫자와 달라진 경우만 알린다. 지우지 못한 문서는 목록에 다시 보인다.
+                deferDelete(toast, {
+                  ids,
+                  message: `문서 ${ids.length}개를 영구 삭제했습니다.`,
+                  commit: () =>
+                    empty.mutateAsync(ids).then(({ removed, failed, skipped, kept }) => {
+                      // 그사이 누가 되돌린 문서는 지우지 않았다. 숫자가 다른 이유를 적는다.
+                      const note =
+                        skipped > 0 ? `그사이 휴지통에서 빠진 ${skipped}개는 두었습니다.` : ''
+                      if (failed > 0)
+                        toast.error(
+                          `문서 ${removed}개를 영구 삭제했고 ${failed}개는 지우지 못했습니다. ${note}`.trim(),
+                        )
+                      else if (note) toast.info(note)
+                      return kept
+                    }),
+                  failMessage: '휴지통을 비우지 못했습니다.',
                 })
               }}
             >

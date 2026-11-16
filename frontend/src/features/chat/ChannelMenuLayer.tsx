@@ -9,6 +9,7 @@ import { useToast } from '@/components/ui/ToastContext'
 import { FolderNameModal } from '@/features/docs/FolderNameModal'
 import { useMarkNotificationsRead, useNotifications } from '@/features/notifications/api'
 import { ApiError } from '@/lib/api'
+import { deferDelete } from '@/lib/deferDelete'
 import {
   CHANNEL_NAME_MAX,
   channelNameFailure,
@@ -74,20 +75,18 @@ export function ChannelMenuLayer({
         toast.error(err instanceof ApiError ? err.message : '대화를 숨기지 못했습니다.'),
     )
 
-  const deleteChannel = () =>
-    // 숨기기와 같은 이유로 약속으로 받는다.
-    void remove.mutateAsync(channel.id).then(
-      () => {
-        // 줄이 사라지기를 기다리지 않고 닫는다. 목록을 다시 받는 사이 창이 남아 한 번 더 눌린다.
-        close()
-        toast.success(`${channel.name} 채널을 지웠습니다.`)
-        if (viewing) void navigate('/chat')
-      },
-      (err: unknown) => {
-        close()
-        toast.error(err instanceof ApiError ? err.message : '채널을 지우지 못했습니다.')
-      },
-    )
+  // 서버에 되살리는 길이 없어 되돌리기 시간 뒤에 보낸다(`deferDelete`). 사이드바에서는 바로 빠지고,
+  // 되돌리면 다시 나타난다. 다른 멤버에게는 실제로 보낸 뒤에 사라진다.
+  const deleteChannel = () => {
+    close()
+    deferDelete(toast, {
+      ids: [channel.id],
+      message: `${channel.name} 채널을 지웠습니다.`,
+      commit: () => remove.mutateAsync(channel.id),
+      failMessage: '채널을 지우지 못했습니다.',
+    })
+    if (viewing) void navigate('/chat')
+  }
 
   if (open.kind === 'menu')
     return (

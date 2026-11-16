@@ -3,7 +3,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router'
 import { afterEach, expect, test, vi } from 'vitest'
-import { ToastContext, type ToastApi } from '@/components/ui/ToastContext'
+import { ToastContext, type ToastApi, type ToastOptions } from '@/components/ui/ToastContext'
 import { AuthContext, type AuthValue } from '@/features/auth/AuthContext'
 import { chatKeys } from '@/features/chat/api'
 import { ChatSocketContext } from '@/features/chat/ChatSocketContext'
@@ -177,18 +177,24 @@ test('메뉴에서 이름 바꾸기를 고르면 메뉴만 닫히고 창이 뜬�
   expect(document.querySelector('[role="dialog"]')?.textContent).toContain('채널 이름 바꾸기')
 })
 
-test('채널을 지우면 목록을 다시 받기 전에 확인 창이 닫힌다', async () => {
-  // 지우기 뒤 목록 다시 받기는 끝나지 않는다. 줄이 남아 있어도 창은 닫혀야 한다.
+test('채널을 지우면 창이 닫히고 줄이 바로 빠지며, 되돌리기 토스트가 닫혀야 실제로 지운다', async () => {
+  // 지우기 뒤 목록 다시 받기는 끝나지 않는다. 줄은 서버 답이 아니라 기다리는 지우기로 빠져야 한다.
   api.mockImplementation((_path: string, init?: RequestInit) =>
     init?.method === 'DELETE' ? Promise.resolve() : new Promise(() => {}),
   )
-  const items = rightClick(render(), '/chat/c-3')
+  const container = render()
+  const items = rightClick(container, '/chat/c-3')
   act(() => items.find((item) => item.textContent === '채널 지우기')!.click())
   const confirm = [...document.querySelectorAll('[role="dialog"] button')].find(
     (b) => b.textContent === '지우기',
   ) as HTMLElement
   await act(async () => confirm.click())
-  expect(api).toHaveBeenCalledWith('/channels/c-3', { method: 'DELETE' })
   expect(document.querySelector('[role="dialog"]')).toBeNull()
-  expect(toast.success).toHaveBeenCalledWith('c-3 채널을 지웠습니다.')
+  expect(container.querySelector('a[href="/chat/c-3"]')).toBeNull()
+  expect(api).not.toHaveBeenCalledWith('/channels/c-3', { method: 'DELETE' })
+
+  const [message, options] = toast.success.mock.lastCall as [string, ToastOptions]
+  expect(message).toBe('c-3 채널을 지웠습니다.')
+  await act(async () => options.onClose!())
+  expect(api).toHaveBeenCalledWith('/channels/c-3', { method: 'DELETE' })
 })

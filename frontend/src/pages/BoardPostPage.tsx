@@ -10,6 +10,7 @@ import { Modal } from '@/components/ui/Modal'
 import { Spinner } from '@/components/ui/Spinner'
 import { useToast } from '@/components/ui/ToastContext'
 import { ApiError } from '@/lib/api'
+import { deferDelete } from '@/lib/deferDelete'
 import { formatRelative } from '@/lib/datetime'
 import { useBoards, useDeletePost, usePost, useUpdatePost } from '@/features/board/api'
 import { AttachmentList } from '@/features/approvals/AttachmentList'
@@ -35,18 +36,18 @@ export function BoardPostPage() {
   // 버튼을 띄울지의 판단일 뿐이다. 실제 차단은 서버가 한다(PATCH·DELETE 의 403).
   const canEdit = Boolean(post) && (post?.author?.id === me.id || me.role === 'exec')
 
-  const confirmDelete = () =>
-    remove.mutate(undefined, {
-      onSuccess: () => {
-        setConfirming(false)
-        toast.success('글을 지웠습니다.')
-        void navigate(`/board/${postBoardId}`, { replace: true })
-      },
-      onError: (err) => {
-        setConfirming(false)
-        toast.error(err instanceof ApiError ? err.message : '글을 지우지 못했습니다.')
-      },
+  // 서버에 되살리는 길이 없어 되돌리기 시간 뒤에 보낸다(`deferDelete`). 목록에서는 바로 빠지고,
+  // 되돌리면 다시 나타난다. 타이머는 화면을 떠나도 돈다.
+  const confirmDelete = () => {
+    setConfirming(false)
+    deferDelete(toast, {
+      ids: [postId],
+      message: '글을 지웠습니다.',
+      commit: () => remove.mutateAsync(),
+      failMessage: '글을 지우지 못했습니다.',
     })
+    void navigate(`/board/${postBoardId}`, { replace: true })
+  }
 
   const togglePin = () =>
     pin.mutate(
