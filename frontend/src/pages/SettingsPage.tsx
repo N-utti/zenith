@@ -1,10 +1,12 @@
-import { Moon, Sun } from 'lucide-react'
+import { useState, type FormEvent } from 'react'
+import { Lock, Moon, Sun } from 'lucide-react'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { Avatar } from '@/components/ui/Avatar'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Checkbox } from '@/components/ui/Checkbox'
 import { Field } from '@/components/ui/Field'
+import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { Spinner } from '@/components/ui/Spinner'
 import { useToast } from '@/components/ui/ToastContext'
@@ -12,6 +14,7 @@ import { DelegationSection } from '@/features/approvals/DelegationSection'
 import { useCurrentUser } from '@/features/auth/AuthContext'
 import { PasswordForm } from '@/features/auth/PasswordForm'
 import { markOnboarding } from '@/features/home/onboarding'
+import { IDLE_OPTIONS, isPin, lockNow, setAppLock, useAppLock } from '@/features/settings/appLock'
 import {
   START_PAGES,
   usePreferences,
@@ -42,6 +45,125 @@ function PasswordSection() {
         }
         onError={toast.error}
       />
+    </section>
+  )
+}
+
+/** 새 번호를 두 번 받는다. 켤 때와 바꿀 때 같이 쓴다. */
+function PinForm({ onSave, onCancel }: { onSave: (pin: string) => void; onCancel?: () => void }) {
+  const [pin, setPin] = useState('')
+  const [again, setAgain] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const digits = (v: string) => v.replace(/\D/g, '').slice(0, 4)
+
+  const submit = (e: FormEvent) => {
+    e.preventDefault()
+    if (!isPin(pin)) return setError('숫자 4자리로 정하세요.')
+    if (pin !== again) return setError('두 번 입력한 번호가 다릅니다.')
+    onSave(pin)
+  }
+
+  return (
+    <form onSubmit={submit} className="max-w-sm space-y-3">
+      <Field label="잠금 번호">
+        {(slot) => (
+          <Input
+            {...slot}
+            type="password"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            value={pin}
+            onChange={(e) => setPin(digits(e.target.value))}
+          />
+        )}
+      </Field>
+      <Field label="한 번 더" error={error}>
+        {(slot) => (
+          <Input
+            {...slot}
+            type="password"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            value={again}
+            onChange={(e) => setAgain(digits(e.target.value))}
+          />
+        )}
+      </Field>
+      <div className="flex gap-2">
+        <Button type="submit" size="sm">
+          저장
+        </Button>
+        {onCancel && (
+          <Button type="button" variant="secondary" size="sm" onClick={onCancel}>
+            취소
+          </Button>
+        )}
+      </div>
+    </form>
+  )
+}
+
+/** 카톡 PC 잠금모드처럼. 이 브라우저에만 남는다(`appLock.ts`). */
+function AppLockSection() {
+  const user = useCurrentUser()
+  const toast = useToast()
+  const lock = useAppLock(user.id)
+  const [editing, setEditing] = useState(false)
+
+  const savePin = (pin: string) => {
+    setAppLock(user.id, { pin, idleMinutes: lock?.idleMinutes ?? 10, locked: false })
+    setEditing(false)
+    toast.success(lock ? '잠금 번호를 바꿨습니다.' : '잠금 모드를 켰습니다.')
+  }
+
+  return (
+    <section className="border-line bg-surface mt-4 rounded-xl border p-6">
+      <h2 className="text-fg mb-1 text-sm font-semibold">잠금 모드</h2>
+      <p className="text-muted mb-4 text-sm">
+        자리를 비운 사이 화면을 가립니다. 번호는 이 브라우저에만 저장됩니다.
+      </p>
+      {editing ? (
+        <PinForm onSave={savePin} onCancel={() => setEditing(false)} />
+      ) : !lock ? (
+        <Button size="sm" onClick={() => setEditing(true)}>
+          <Lock className="size-4" />
+          잠금 번호 정하기
+        </Button>
+      ) : (
+        <div className="max-w-sm space-y-4">
+          <Field label="자리를 비우면 자동으로 잠그기">
+            {(slot) => (
+              <Select
+                {...slot}
+                options={IDLE_OPTIONS}
+                value={String(lock.idleMinutes)}
+                onChange={(e) =>
+                  setAppLock(user.id, { ...lock, idleMinutes: Number(e.target.value) })
+                }
+              />
+            )}
+          </Field>
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" onClick={() => lockNow(user.id)}>
+              <Lock className="size-4" />
+              지금 잠그기
+            </Button>
+            <Button variant="secondary" size="sm" onClick={() => setEditing(true)}>
+              번호 바꾸기
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                setAppLock(user.id, null)
+                toast.success('잠금 모드를 껐습니다.')
+              }}
+            >
+              잠금 모드 끄기
+            </Button>
+          </div>
+        </div>
+      )}
     </section>
   )
 }
@@ -140,6 +262,8 @@ export function SettingsPage() {
       </section>
 
       <PasswordSection />
+
+      <AppLockSection />
 
       <PreferencesSection />
 

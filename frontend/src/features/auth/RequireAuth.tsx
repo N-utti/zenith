@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { Spinner } from '@/components/ui/Spinner'
 import { useToast } from '@/components/ui/ToastContext'
 import { ZenithMark } from '@/components/ui/ZenithMark'
+import { AppLockGate } from '@/features/settings/AppLockGate'
 import { useAuth } from './AuthContext'
 import { PasswordForm } from './PasswordForm'
 import type { User } from '@/types'
@@ -30,7 +31,11 @@ export function RequireAuth() {
   // 주소는 그대로 두어 바꾸고 나면 원래 가려던 화면이 바로 뜬다.
   if (user?.must_change_password) return <ForcedPasswordChange />
 
-  return <Outlet />
+  return (
+    <AppLockGate>
+      <Outlet />
+    </AppLockGate>
+  )
 }
 
 function ForcedPasswordChange() {

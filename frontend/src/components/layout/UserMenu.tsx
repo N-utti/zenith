@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
-import { LogOut, Settings } from 'lucide-react'
+import { Lock, LogOut, Settings } from 'lucide-react'
 import { Avatar } from '@/components/ui/Avatar'
 import { Badge } from '@/components/ui/Badge'
 import { useToast } from '@/components/ui/ToastContext'
 import { useAuth, useCurrentUser } from '@/features/auth/AuthContext'
+import { lockNow, useAppLock } from '@/features/settings/appLock'
 import { hueOf } from '@/lib/avatar'
 import { ROLE_LABEL } from '@/types'
 
@@ -14,6 +15,7 @@ export function UserMenu() {
   const toast = useToast()
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
+  const lock = useAppLock(user.id)
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -76,6 +78,23 @@ export function UserMenu() {
             <Settings className="size-4" />
             설정
           </button>
+          {lock && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false)
+                lockNow(user.id)
+              }}
+              className="text-muted hover:bg-surface-hover hover:text-fg flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm"
+            >
+              <Lock className="size-4" />
+              지금 잠그기
+              <kbd className="text-subtle ml-auto font-sans text-xs">
+                {/Mac|iPhone|iPad/.test(navigator.userAgent) ? '⌘' : 'Ctrl'} L
+              </kbd>
+            </button>
+          )}
           <button
             type="button"
             role="menuitem"
