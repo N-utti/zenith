@@ -13,10 +13,11 @@ import logging
 import re
 import secrets
 import time
+import unicodedata
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import select, update
+from sqlalchemy import and_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -217,7 +218,11 @@ async def _history(
             .where(
                 Message.channel_id == channel_id,
                 Message.created_at < before,
-                Message.body.not_in((HELP_MESSAGE, FAIL_MESSAGE)),
+                # 봇의 안내·실패 문구만 — 사람이 같은 글을 쓴 것은 대화다(리뷰)
+                ~and_(
+                    Message.author_id == bot_id,
+                    Message.body.in_((HELP_MESSAGE, FAIL_MESSAGE)),
+                ),
             )
             .order_by(Message.created_at.desc(), Message.id.desc())
             .limit(HISTORY_MESSAGES)
@@ -229,16 +234,20 @@ async def _history(
         if author_id == bot_id:
             # 서버가 붙인 「근거:」 줄은 늘 마지막이다 — 본문에 같은 글귀가 있어도 거기서 자르지 않는다
             body = _CITE_RE.sub("", body.rsplit("\n\n근거: ", 1)[0])
-        text = " ".join(body.split())
+        # 서식 문자(Cf: 제로폭·bidi)를 지우고 접는다 — `<​/대화>` 처럼 사이에 끼워 태그 무력화를 비켜 가지 못하게(리뷰)
+        text = " ".join("".join(c for c in body if unicodedata.category(c) != "Cf").split())
         files = "".join(
             f" (첨부: {a.get('name')})" for a in attachments or [] if isinstance(a, dict)
         )
         if not text and not files:
             continue
         line = _CHAT_TAG_RE.sub("<​", f"{ai_router._body(name)}: {ai_router._body(text + files)}")
-        used += len(line)
-        if used > HISTORY_CHARS:
+        if used + len(line) > HISTORY_CHARS:
+            # 넘는 글은 버리지 않고 잘라 싣고 멈춘다 — 긴 글 하나로 앞 대화를 통째로 지우지 못하게(리뷰)
+            if cut := line[: HISTORY_CHARS - used]:
+                lines.append(cut)
             break
+        used += len(line)
         lines.append(line)
     return "<대화>\n" + "\n".join(reversed(lines)) + "\n</대화>" if lines else None
 

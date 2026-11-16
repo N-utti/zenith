@@ -511,6 +511,7 @@ async def test_history_keeps_newest_within_limits(app_db, users: Users, monkeypa
     assert block == "<대화>\n김수진: 글 2\n김수진: 글 3\n김수진: 글 4 (첨부: 표.xlsx)\n</대화>"
     monkeypatch.setattr(chat_command, "HISTORY_CHARS", 25)
     block = await chat_command._history(app_db, channel.id, bot.id, t0 + timedelta(seconds=10))
-    assert block == "<대화>\n김수진: 글 4 (첨부: 표.xlsx)\n</대화>"
+    # 넘는 글은 잘라 싣고 멈춘다 — 긴 글 하나로 앞 대화를 통째로 지우지 못한다
+    assert block == "<대화>\n김수진:\n김수진: 글 4 (첨부: 표.xlsx)\n</대화>"
     # 이 질문보다 뒤의 글은 안 들어간다
     assert await chat_command._history(app_db, channel.id, bot.id, t0) is None
