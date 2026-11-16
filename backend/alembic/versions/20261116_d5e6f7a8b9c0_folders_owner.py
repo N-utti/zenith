@@ -26,8 +26,12 @@ def upgrade() -> None:
         "folders",
         sa.Column("owner_id", sa.Uuid(), sa.ForeignKey("users.id"), nullable=True),
     )
+    op.create_check_constraint(
+        "ck_folders_owner_root", "folders", "owner_id IS NULL OR parent_id IS NULL"
+    )
 
 
 def downgrade() -> None:
     # 주의: 되돌리면 개인 폴더가 전원 열람이 된다 — 실행 전에 사람이 확인한다(루트 CLAUDE.md 안전 가드레일)
+    op.drop_constraint("ck_folders_owner_root", "folders", type_="check")
     op.drop_column("folders", "owner_id")

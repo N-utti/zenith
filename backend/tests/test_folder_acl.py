@@ -1,10 +1,11 @@
 """README 57 — 폴더 등급 + 사람 지정. 트리·상세·검색·AI·yjs·파일·자료실·홈이 전부 서버에서 걸러지고, 설정은 임원만."""
 
+import asyncio
 from types import SimpleNamespace
 
 import pytest
 from fastapi import FastAPI
-from httpx_ws import aconnect_ws
+from httpx_ws import WebSocketDisconnect, aconnect_ws
 from sqlalchemy import select
 
 from app.models import AuditEvent, Document, Folder, FolderMember, Workspace
@@ -417,3 +418,128 @@ async def test_private_folder_is_owner_only(c, users: Users, app_db) -> None:
         headers=csrf(c.member),
     )
     assert r.status_code == 200 and r.json()["owner_id"] == str(users.member.id)
+
+
+async def test_private_folder_hides_from_exec_everywhere(
+    app: FastAPI, c, users: Users, app_db, monkeypatch
+) -> None:
+    """README 72 — 임원에게도 검색·홈·버전·댓글·AI·휴지통·실시간 편집이 전부 막힌다. 넣는 순간 열려 있던 편집도 끊긴다."""
+    from sqlalchemy import func, update
+
+    from app.realtime import yjs as mod
+
+    from .test_yjs import expect_close, ws_client
+
+    share_session(app, app_db, monkeypatch, mod)
+    s = await _seed(app_db, users)
+    mine = Folder(ws_id=s.wiki.ws_id, parent_id=None, title="내 것", owner_id=users.member.id)
+    app_db.add(mine)
+    await app_db.flush()
+    secret = Document(
+        folder_id=mine.id,
+        title="연차 이월 비밀",
+        text_cache="연차 이월 비밀",
+        updated_by=users.member.id,
+    )
+    app_db.add(secret)
+    await app_db.flush()
+    await app_db.execute(
+        update(Document)
+        .where(Document.id == secret.id)
+        .values(tsv=func.to_tsvector("simple", secret.title))
+    )
+    sid = str(secret.id)
+    hits = (await c.exec.get("/api/search", params={"q": "이월", "types": "doc"})).json()
+    assert "연차 이월 비밀" not in {h["title"] for h in hits}
+    # 주인에게는 보통 문서다 — 검색(⌘K 와 AI 검색 도구가 같은 find_hits)·AI 참고 문서·질문 범위에 그대로 쓰인다
+    hits = (await c.member.get("/api/search", params={"q": "이월", "types": "doc"})).json()
+    assert "연차 이월 비밀" in {h["title"] for h in hits}
+    from app.routers import ai as ai_mod
+
+    assert (await ai_mod._scope_folder(app_db, users.member, str(mine.id))).id == mine.id
+    home = (await c.exec.get("/api/me/home")).json()
+    assert "연차 이월 비밀" not in {d["title"] for d in home["recent_docs"]}
+    for path in (f"/api/docs/{sid}", f"/api/docs/{sid}/versions", f"/api/docs/{sid}/comments"):
+        assert (await c.exec.get(path)).status_code == 403, path
+        assert (await c.member.get(path)).status_code == 200, path
+    r = await c.exec.post(
+        "/api/ai/chat", json={"message": "요약", "docs": [sid]}, headers=csrf(c.exec)
+    )
+    assert r.status_code == 422 and r.json()["detail"] == "없는 문서입니다."
+    r = await c.exec.post(
+        "/api/ai/chat", json={"message": "x", "scope": str(mine.id)}, headers=csrf(c.exec)
+    )
+    assert r.status_code == 422 and r.json()["detail"] == "없는 폴더입니다."
+    # 휴지통 — 주인만 보고 주인만 되돌린다
+    assert (await c.member.delete(f"/api/docs/{sid}", headers=csrf(c.member))).status_code == 204
+    assert sid not in {d["id"] for d in (await c.exec.get("/api/trash")).json()["items"]}
+    assert sid in {d["id"] for d in (await c.member.get("/api/trash")).json()["items"]}
+    # 실시간 — 임원이 공용 문서를 열어 둔 채 사원이 개인 폴더로 가져가면 바로 4403, 다시 붙어도 4403
+    wiki_doc = str(s.docs["wiki"].id)
+    # 공용일 때 임원을 멘션해 둔다 — 옮긴 뒤에는 알림의 제목·미리보기가 가려져야 한다
+    r = await c.member.post(
+        f"/api/docs/{wiki_doc}/comments", json={"body": "@최재호 봐 주세요"}, headers=csrf(c.member)
+    )
+    assert r.status_code == 201
+    comment_id = r.json()["id"]
+    async with ws_client(app) as client:
+        await login(client, "jaeho@zenith.co.kr")
+        async with aconnect_ws(f"https://test/api/yjs/{wiki_doc}", client) as ws:
+            await asyncio.wait_for(ws.receive_bytes(), 3.0)  # 열렸다 — 서버의 첫 동기화 프레임
+            r = await c.member.patch(
+                f"/api/docs/{wiki_doc}", json={"folder_id": str(mine.id)}, headers=csrf(c.member)
+            )
+            assert r.status_code == 200, r.text
+            with pytest.raises(
+                WebSocketDisconnect
+            ) as closed:  # 먼저 와 있던 동기화 프레임을 지나서
+                for _ in range(10):
+                    await asyncio.wait_for(ws.receive_bytes(), 3.0)
+            assert closed.value.code == 4403
+        async with aconnect_ws(f"https://test/api/yjs/{wiki_doc}", client) as ws:
+            await expect_close(ws, 4403)
+    # 옮긴 뒤 고친 댓글 — 임원의 알림함·홈에는 가려져 나오고, 감사에 원문이 안 남는다
+    r = await c.member.patch(
+        f"/api/docs/{wiki_doc}/comments/{comment_id}",
+        json={"body": "@최재호 옮긴 뒤에 쓴 비밀"},
+        headers=csrf(c.member),
+    )
+    assert r.status_code == 200, r.text
+    for items in (
+        (await c.exec.get("/api/me/notifications")).json()["items"],
+        (await c.exec.get("/api/me/home")).json()["mentions"],
+    ):
+        note = next(n for n in items if n["payload"].get("doc_id") == wiki_doc)
+        assert note["payload"]["masked"] is True and "비밀" not in str(note["payload"])
+        assert "연차 이월 안내" not in str(note["payload"])
+    edited = (
+        (await app_db.execute(select(AuditEvent).where(AuditEvent.kind == "docs.comment_edited")))
+        .scalars()
+        .all()
+    )
+    assert edited and all("before" not in e.detail for e in edited)
+    # 개인 문서는 주인이 영구 삭제한다(임원은 못 보니 못 지운다) — 감사에 제목이 없다
+    assert (await c.exec.delete(f"/api/docs/{sid}?hard=1", headers=csrf(c.exec))).status_code == 403
+    assert (
+        await c.member.delete(f"/api/docs/{sid}?hard=1", headers=csrf(c.member))
+    ).status_code == 204
+    gone = (
+        (await app_db.execute(select(AuditEvent).where(AuditEvent.kind == "docs.hard_deleted")))
+        .scalars()
+        .all()
+    )
+    assert [e.detail["title"] for e in gone] == [None]
+    # 꺼낼 때의 감사에는 제목이 없다(개인 폴더 안에서 붙인 제목일 수 있다)
+    r = await c.member.patch(
+        f"/api/docs/{wiki_doc}", json={"folder_id": str(s.wiki.id)}, headers=csrf(c.member)
+    )
+    assert r.status_code == 200
+    moves = (
+        (await app_db.execute(select(AuditEvent).where(AuditEvent.kind == "docs.private_move")))
+        .scalars()
+        .all()
+    )
+    assert sorted(("title" in m.detail, m.detail["into"]) for m in moves) == [
+        (False, False),
+        (True, True),
+    ]

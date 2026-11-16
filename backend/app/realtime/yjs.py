@@ -180,6 +180,16 @@ async def set_locked(doc_id: uuid.UUID, locked: bool) -> None:
             room.locked = locked
 
 
+async def kick_others(doc_id: uuid.UUID, keep: uuid.UUID) -> None:
+    """문서가 개인 폴더로 들어갈 때(README 72) — 주인 말고는 바로 끊는다(재검증 주기 60초 동안 남이 계속 받지 않게).
+    방은 그대로 둔다: 주인의 미저장 편집을 버리지 않는다(`close_room` 과 다른 점). 끊긴 소켓은 각자의 `_leave` 가 치운다."""
+    room = ROOMS.get(doc_id)
+    for conn in list(room.conns) if room else ():
+        if getattr(conn.state, "user_id", None) != keep:
+            with contextlib.suppress(Exception):
+                await conn.close(code=4403)
+
+
 def tsv_of(text: str):
     """검색 벡터 — tsvector 는 1MB(바이트) 상한, 한글은 3바이트라 글자 수가 아니라 바이트로 자른다(#340 리뷰).
     routers/docs.py 의 파일 가져오기도 같은 규칙으로 파생한다."""
@@ -379,6 +389,7 @@ async def yjs_endpoint(websocket: WebSocket, doc_id: uuid.UUID) -> None:
         return
 
     await websocket.accept()
+    websocket.state.user_id = user.id  # kick_others 가 본다
     room.conns[websocket] = set()
     checked_at = datetime.now(UTC)
     try:

@@ -13,6 +13,7 @@ from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    CheckConstraint,
     Computed,
     Date,
     DateTime,
@@ -133,7 +134,11 @@ class Workspace(Base):
 
 class Folder(Base):
     __tablename__ = "folders"
-    __table_args__ = (Index("idx_folders_tree", "ws_id", "parent_id", "sort"),)
+    __table_args__ = (
+        Index("idx_folders_tree", "ws_id", "parent_id", "sort"),
+        # 개인 폴더는 최상위에만(README 72) — 라우터의 422 가 뚫려도 DB 가 막는다
+        CheckConstraint("owner_id IS NULL OR parent_id IS NULL", name="ck_folders_owner_root"),
+    )
 
     id: Mapped[uuid.UUID] = uuid_pk()
     ws_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("workspaces.id"), nullable=False)

@@ -4,6 +4,7 @@
 서버 마스킹, FR-HOM-04) · 오늘 할 일. 근태는 홈에 노출하지 않는다(10 §10). 전부 로그인한 본인 것만.
 """
 
+import contextlib
 import uuid
 from datetime import UTC, date, datetime, timedelta
 from typing import Annotated
@@ -298,9 +299,11 @@ async def home(user: User = Depends(current_user), db: AsyncSession = Depends(ge
             .limit(10)
         )
     ).scalars()
+    mention_items = [NotificationOut.model_validate(n) for n in mentions]
+    await _mask_doc_notices(db, user, mention_items)
     return HomeOut(
         recent_docs=await _recent_docs(db, user, 8),
-        mentions=[NotificationOut.model_validate(n) for n in mentions],
+        mentions=mention_items,
         unread=await _unread_channels(db, user),
         posts=await _posts(db, user, 3),
         todos=[TodoOut.model_validate(t) for t in await _todos(db, user, 200)],  # 홈 1콜 상한
@@ -435,7 +438,38 @@ async def list_notifications(
     rows = list((await db.execute(stmt)).scalars())
     items = [NotificationOut.model_validate(n) for n in rows]
     await _mask_post_notices(db, user, items)
+    await _mask_doc_notices(db, user, items)
     return Items(items=items)
+
+
+async def _mask_doc_notices(db: AsyncSession, user: User, rows: list[NotificationOut]) -> None:
+    """문서 댓글 멘션 알림의 제목·미리보기도 만든 시점 값이다 — 그 뒤 문서가 못 보는 폴더(개인 폴더 README 72, 등급 57)로
+    갔으면 가린다. 댓글을 고치면 미리보기가 새 글로 바뀌므로(docs.edit_comment) 옮긴 뒤 쓴 글이 여기로 샌다(리뷰).
+    `_mask_post_notices` 와 같이 응답 모델만 바꾼다."""
+    ids: set[uuid.UUID] = set()
+    for n in rows:
+        if n.payload and n.payload.get("doc_id"):
+            with contextlib.suppress(ValueError):
+                ids.add(uuid.UUID(n.payload["doc_id"]))
+    if not ids:
+        return
+    seen = {
+        str(i)
+        for i in await db.scalars(
+            select(Document.id).where(
+                Document.id.in_(ids), Document.folder_id.in_(acl.visible_folder_ids(user))
+            )
+        )
+    }
+    for n in rows:
+        if n.payload and n.payload.get("doc_id") and n.payload["doc_id"] not in seen:
+            n.payload = {
+                **n.payload,
+                "doc_title": MASKED_TITLE,
+                "preview": "",
+                "masked": True,
+                "from": None,
+            }
 
 
 async def _mask_post_notices(db: AsyncSession, user: User, rows: list[NotificationOut]) -> None:
