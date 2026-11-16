@@ -47,7 +47,7 @@ export function useLeaveBalance() {
   })
 }
 
-/** 전 직원의 연차 잔여(연차 관리 탭). `/leaves/balances` 는 04 에 없는 프론트 확장(PR 본문). 임원 외 403. */
+/** 전 직원의 연차 잔여(연차 관리 탭). `/leaves/balances` 는 04 에 없는 프론트 확장(PR 본문). 임원·근태 담당자 외 403. */
 export function useAllLeaveBalances() {
   return useQuery({
     queryKey: ['leaves', 'balances'],
@@ -130,7 +130,7 @@ export function useMyAttendance(month: string) {
   })
 }
 
-/** 전 직원 × 일자 근태(전사 근태 탭). `team_id` 없는 호출은 전사로 가정한 프론트 확장, 임원 외 403. */
+/** 전 직원 × 일자 근태(전사 근태 탭). `team_id` 없는 호출은 전사로 가정한 프론트 확장, 임원·근태 담당자 외 403. */
 export function useCompanyAttendance(month: string) {
   return useQuery({
     queryKey: ['attendance', 'company', month],
