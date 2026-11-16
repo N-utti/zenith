@@ -93,10 +93,11 @@ Tailscale 을 깔지 않은 PC 에서는 서버에 닿지 못해 로그인 화�
 
 ## 자동 업데이트
 
-앱이 켜질 때 웹앱이 셸에 `check_update` 를 부르고, 셸은 `{서버}/desktop/latest.json` 을 본다.
-새 버전이면 웹앱이 "지금 설치할까요?" 를 묻는다. 고르면 `install_update` 가 `.msi` 를 받아 서명을 확인하고
-설치 프로그램(진행 막대만 보이는 passive 모드)을 띄운다. 앱은 닫혔다가 설치가 끝나면 다시 뜬다.
-거절하면 지금 버전으로 계속 쓰고, 다음에 켤 때 다시 묻는다. 서버 주소를 모르는 개발 모드에서는 건너뛴다.
+앱이 켜질 때와 그 뒤 30분마다 웹앱이 셸에 `check_update` 를 부르고, 셸은 `{서버}/desktop/latest.json` 을 본다.
+새 버전이면 웹앱이 오른쪽 아래에 「업데이트 가능」 카드를 띄운다(`UpdateCard`, 하던 일을 막지 않는다).
+「업데이트」를 누르면 `install_update` 가 `.msi` 를 받아 서명을 확인하고 설치 프로그램(진행 막대만 보이는 passive 모드)을 띄운다.
+앱은 닫혔다가 설치가 끝나면 다시 뜬다. 카드를 닫으면 지금 버전으로 계속 쓰고, 다음에 켤 때 다시 알린다.
+서버 주소를 모르는 개발 모드에서는 건너뛴다.
 
 - **서명키**: 업데이트 설치본은 Tauri 서명키(minisign)로 검증한다. 공개키는 `tauri.conf.json` 의
   `plugins.updater.pubkey`, 개인키는 빌드 PC 의 `~/.tauri/zenith-updater.key`(레포 밖, 비밀번호 없음).
@@ -120,7 +121,8 @@ npm run build
 npm run manifest -- https://192.168.219.8
 ```
 
-`src-tauri/target/release/bundle/msi/` 의 `.msi` 와 `latest.json` 을 서버의 `/desktop/` 에 올린다(Caddy 가 내주는 경로).
+`src-tauri/target/release/bundle/msi/` 의 `.msi` 와 `latest.json` 을 서버의 `infra/desktop/` 폴더에 놓는다
+(Caddy 가 `/desktop/` 으로 내준다, `infra/README.md` "데스크톱 앱 업데이트"). 재시작은 필요 없다.
 매니페스트의 `.msi` 주소는 만들 때 준 서버 주소로 박힌다. 서버를 옮기면 매니페스트를 다시 만든다.
 개인키 없이 `npm run build` 하면 서명 단계에서 실패한다. 배포본은 전부 서명돼야 하므로 의도한 것이다.
 
@@ -158,7 +160,7 @@ apps/desktop/
 | 파일 | 역할 |
 | --- | --- |
 | `frontend/src/lib/serverOrigin.ts` | REST·WebSocket·이미지 URL 앞에 서버 오리진을 붙인다 |
-| `frontend/src/lib/desktop.ts` | 바깥 링크를 기본 브라우저로 넘긴다 · OS 알림(`notify`) · 켤 때 업데이트 확인(`checkForUpdate`) · 그림 출처를 붙은 서버로 좁힌다(`restrictImageSources`) |
+| `frontend/src/lib/desktop.ts` | 바깥 링크를 기본 브라우저로 넘긴다 · OS 알림(`notify`) · 업데이트 확인·설치(`findUpdate`·`installUpdate`, 화면은 `components/layout/UpdateCard.tsx`) · 그림 출처를 붙은 서버로 좁힌다(`restrictImageSources`) |
 | `frontend/src/features/chat/ChatSocketProvider.tsx` | 채팅 소켓을 로그인 구역 전체에서 하나만 연결 |
 
 모두 브라우저에서는 아무 일도 하지 않는다. 웹앱은 Tauri npm 패키지에 의존하지 않고,

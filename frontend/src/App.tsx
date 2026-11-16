@@ -2,6 +2,7 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter } from 'react-router'
 import { AppRoutes } from '@/app/routes'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
+import { UpdateCard } from '@/components/layout/UpdateCard'
 import { ToastProvider } from '@/components/ui/Toast'
 import { AuthProvider } from '@/features/auth/AuthProvider'
 import { queryClient } from '@/lib/queryClient'
@@ -21,6 +22,8 @@ export function App() {
             </AuthProvider>
           </ErrorBoundary>
         </BrowserRouter>
+        {/* 데스크탑 앱의 새 버전 알림. 로그인 전 화면에서도, 본문이 터져도 떠야 해서 바깥에 둔다. */}
+        <UpdateCard />
       </ToastProvider>
     </QueryClientProvider>
   )
