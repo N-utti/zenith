@@ -17,6 +17,7 @@ import {
   useDesktopTabs,
   type DesktopTab,
 } from './desktopTabs'
+import { WINDOW_CONTROLS_WIDTH } from './WindowControls'
 
 /** 탭 이름과 아이콘. 문서는 트리의 제목, 채팅은 채널 이름, 나머지는 메뉴 이름. */
 function useTabLabel(path: string): { label: string; icon: LucideIcon } {
@@ -128,7 +129,10 @@ function showTab(tab: DesktopTab | null, navigate: NavigateFunction) {
 /** 복원은 앱이 켜질 때 한 번. AppLayout 은 두 벌이라 이 막대도 화면을 옮길 때 다시 마운트된다. */
 let restored = false
 
-/** 데스크톱 앱 맨 위 탭 줄. 상단바 위에 둔다(사용자가 고른 자리). */
+/**
+ * 데스크톱 앱 맨 위 탭 줄. 창 틀을 끈 셸에서 창 제목 줄을 겸한다(노션처럼). 빈 자리를 끌면 창이 옮겨지고
+ * 두 번 누르면 최대화된다(`data-tauri-drag-region` 은 붙인 요소 자신에만 걸려 탭·단추는 그대로 눌린다).
+ */
 export function DesktopTabBar() {
   const { tabs, active } = useDesktopTabs()
   const location = useLocation()
@@ -204,8 +208,18 @@ export function DesktopTabBar() {
   return (
     // 아랫선은 테두리가 아니라 안쪽 그림자로 긋는다. 그래야 지금 탭이 그 위를 덮어 아래 화면과 이어진다.
     // 회색 줄 위에서 기본 선(line)은 진해 보여 회색 쪽으로 30% 섞어 연하게 쓴다.
-    <div className="bg-sunken flex h-9 shrink-0 items-end gap-1 px-2 shadow-[inset_0_-1px_0_var(--tab-line)] [--tab-line:color-mix(in_oklch,var(--color-line)_70%,var(--color-sunken))]">
+    // 로그인 전 화면용 투명 끌기 띠(DesktopTitleBar)가 같은 자리에 떠 있어 그 위로 올린다(relative z-1).
+    // 오른쪽은 앱 바깥에 떠 있는 창 단추 자리로 비운다.
+    <div
+      data-tauri-drag-region
+      className={cn(
+        WINDOW_CONTROLS_WIDTH,
+        'bg-sunken relative z-1 flex h-9 shrink-0 items-end gap-1 pl-2 shadow-[inset_0_-1px_0_var(--tab-line)] [--tab-line:color-mix(in_oklch,var(--color-line)_70%,var(--color-sunken))]',
+      )}
+    >
       <div
+        // 탭 위 빈 띠와 탭 사이 틈으로도 끌린다. 탭은 단추라 그대로 눌린다.
+        data-tauri-drag-region
         role="navigation"
         aria-label="탭"
         onKeyDown={moveFocus}
@@ -234,6 +248,7 @@ export function DesktopTabBar() {
       >
         <Plus className="size-4" />
       </button>
+      <div data-tauri-drag-region className="min-w-12 flex-1 self-stretch" />
     </div>
   )
 }

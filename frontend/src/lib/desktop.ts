@@ -8,8 +8,19 @@
 
 import { serverOrigin } from './serverOrigin'
 
+/** 셸 창 하나. 창 틀을 끈 셸(`decorations: false`)에서 웹앱이 최소화·최대화·닫기 단추를 직접 그린다. */
+export interface TauriWindow {
+  minimize: () => Promise<void>
+  toggleMaximize: () => Promise<void>
+  close: () => Promise<void>
+  isMaximized: () => Promise<boolean>
+  onResized: (handler: () => void) => Promise<() => void>
+}
+
 interface TauriGlobal {
   core: { invoke: (cmd: string, args?: Record<string, unknown>) => Promise<unknown> }
+  /** 테스트의 가짜 전역에는 없다. 창 단추(`WindowControls`)만 쓴다. */
+  window?: { getCurrentWindow: () => TauriWindow }
 }
 
 declare global {
