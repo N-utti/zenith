@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/Input'
 import { Spinner } from '@/components/ui/Spinner'
 import { ZenithMark } from '@/components/ui/ZenithMark'
 import { ApiError } from '@/lib/api'
+import { serverOrigin } from '@/lib/serverOrigin'
 import { DEMO_ACCOUNTS, MSW_ENABLED } from '@/mocks/accounts'
 import { fetchPreferences } from '@/features/settings/preferences'
 import { useAuth } from './AuthContext'
@@ -38,7 +39,17 @@ export function LoginPage() {
       const to = from ?? (await fetchPreferences().catch(() => null))?.start_page ?? '/'
       await navigate(to, { replace: true })
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : '로그인 중 오류가 발생했습니다.')
+      // 연결 실패 문구는 코드 버그(같은 TypeError)도 덮는다. 진짜 원인은 콘솔에 남긴다.
+      if (!(err instanceof ApiError)) console.error(err)
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : // fetch 가 응답 없이 실패한 것(서버가 꺼졌거나 주소·인증서가 틀림). 데스크톱 앱은 빌드에 박힌
+            // 주소로 가니, 어디로 갔는지 보여야 직원 PC 에서 바로 알아챈다.
+            err instanceof TypeError
+            ? `서버에 연결할 수 없습니다. (${serverOrigin() || window.location.origin})`
+            : '로그인 중 오류가 발생했습니다.',
+      )
       // 성공했을 때는 풀지 않는다. 라우터는 주소 이동을 transition 으로 늦게 그리는데, 그 사이에
       // 이게 먼저 풀리면 위의 `<Navigate to="/">` 가 이동을 덮어써서 늘 홈으로 간다.
       setPending(false)

@@ -7,8 +7,9 @@ import { AuthContext, type AuthValue } from './AuthContext'
 import { LoginPage } from './LoginPage'
 
 const startPage = vi.hoisted(() => ({ value: '/chat' }))
-/** 켜 두면 로그인이 401 로 실패한다. */
-let loginFails = false
+/** 채워 두면 로그인이 그 오류로 실패한다. */
+let loginError: Error | null = null
+vi.mock('@/lib/serverOrigin', () => ({ serverOrigin: () => 'https://192.168.219.8' }))
 vi.mock('@/features/settings/preferences', () => ({
   fetchPreferences: () => Promise.resolve({ start_page: startPage.value }),
 }))
@@ -26,7 +27,7 @@ function Auth({ children }: { children: React.ReactNode }) {
     user: null,
     status,
     login: async () => {
-      if (loginFails) throw new ApiError(401, '이메일 또는 비밀번호가 올바르지 않습니다.')
+      if (loginError) throw loginError
       setStatus('authenticated')
     },
     logout: async () => {},
@@ -40,7 +41,7 @@ let root: Root
 afterEach(() => {
   act(() => root.unmount())
   container.remove()
-  loginFails = false
+  loginError = null
 })
 
 async function loginFrom(from?: string) {
@@ -88,8 +89,14 @@ test('보호된 주소에서 튕겼으면 시작 화면보다 그 자리가 먼�
 })
 
 test('실패하면 폼이 다시 살아나고 그 자리에 남는다', async () => {
-  loginFails = true
+  loginError = new ApiError(401, '이메일 또는 비밀번호가 올바르지 않습니다.')
   expect(await loginFrom()).toBeUndefined()
   expect(container.textContent).toContain('이메일 또는 비밀번호가 올바르지 않습니다.')
   expect(container.querySelector<HTMLButtonElement>('button[type=submit]')!.disabled).toBe(false)
+})
+
+test('서버에 닿지 못하면 어느 주소로 갔는지 보여 준다', async () => {
+  loginError = new TypeError('Failed to fetch')
+  expect(await loginFrom()).toBeUndefined()
+  expect(container.textContent).toContain('서버에 연결할 수 없습니다. (https://192.168.219.8)')
 })
