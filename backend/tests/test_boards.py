@@ -332,12 +332,15 @@ async def test_post_comments(client: AsyncClient, users: Users, app_db) -> None:
     # 지우기: 남의 것은 403(감사에 comment_id), 없는 것 404, 쓴 사람은 자기 것을 지운다
     r = await client.delete(f"/api/posts/{notice}/comments/{second['id']}", headers=h)
     assert r.status_code == 403
-    last = (
+    # 감사 기록은 종류로 골라낸다 — at 은 트랜잭션 시각이라 한 트랜잭션 안에서 다 같고 id 는 랜덤이라,
+    # 정렬·[-1] 로는 순서를 못 가린다(전체 묶음에서 다른 acl.denied 와 섞여 비결정적으로 깨졌다)
+    denied = (
         (await app_db.execute(select(AuditEvent).where(AuditEvent.kind == "acl.denied")))
         .scalars()
         .all()
-    )[-1]
-    assert (last.detail["reason"], last.detail["comment_id"]) == ("comment_delete", second["id"])
+    )
+    last = next(e for e in denied if e.detail.get("reason") == "comment_delete")
+    assert last.detail["comment_id"] == second["id"]
     assert (
         await client.delete(f"/api/posts/{notice}/comments/{uuid.uuid4()}", headers=h)
     ).status_code == 404
