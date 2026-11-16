@@ -114,24 +114,39 @@ export interface TreeItem {
 }
 
 /**
- * 이것을 이 폴더로 옮길 수 있는지. `targetId` 가 null 이면 최상위다.
+ * 이것을 이 폴더로 옮길 수 있는지. `targetId` 가 null 이면 최상위다. `meId` 는 지금 사람.
  *
  * 문서는 폴더 안에만 산다. 폴더는 자기 자신이나 자기 아래로 못 간다(서버도 422 로 막는다).
  * 이미 있는 자리는 옮길 것이 없으니 놓을 자리로 치지 않는다.
+ *
+ * 개인 폴더(백엔드 README 72·74)의 경계는 「어느 개인 폴더냐」로 본다. 폴더는 공용과 개인 사이를 못
+ * 넘고 개인 폴더 자체는 최상위를 못 떠난다(422). 개인 폴더끼리, 그리고 문서가 경계를 넘을 때는 걸린
+ * 개인 폴더들의 주인만 옮긴다(403). 같이 볼 사람은 같은 개인 폴더 안에서만 옮긴다.
  */
 export function canDrop(
   item: TreeItem,
   targetId: string | null,
   { folders, docs }: DocTreeData,
+  meId: string,
 ): boolean {
+  const rootOf = (id: string | null) => (id ? privateRootOf(folders, id) : null)
+  // 경계를 넘으면(밖↔안, 개인 폴더끼리) 걸린 개인 폴더들이 전부 내 것이어야 한다(`require_same_private_root`).
+  const mayCross = (from: string, to: string) => {
+    const was = rootOf(from)
+    const now = rootOf(to)
+    return was?.id === now?.id || [was, now].every((root) => !root || root.owner_id === meId)
+  }
   if (item.kind === 'doc') {
     const doc = docs.find((d) => d.id === item.id)
-    return !!doc && targetId !== null && doc.folder_id !== targetId
+    if (!doc || targetId === null || doc.folder_id === targetId) return false
+    return mayCross(doc.folder_id, targetId)
   }
 
   const byId = new Map(folders.map((folder) => [folder.id, folder]))
   const folder = byId.get(item.id)
-  if (!folder || folder.parent_id === targetId) return false
+  if (!folder || folder.parent_id === targetId || folder.owner_id) return false
+  if (!!rootOf(folder.id) !== !!rootOf(targetId)) return false
+  if (targetId && !mayCross(folder.id, targetId)) return false
 
   // 놓을 폴더에서 위로 올라가다 끌고 있는 폴더를 만나면 자기 아래다.
   const seen = new Set<string>()

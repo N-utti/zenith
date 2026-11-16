@@ -12,6 +12,7 @@ import {
   findVersion,
   isRestricted,
   listComments,
+  privateRoot,
   listDocs,
   listTrash,
   listVersions,
@@ -257,5 +258,27 @@ it('잠금을 바꿔도 수정 시각·수정한 사람은 그대로다(백엔�
     expect({ at: doc.updated_at, by: doc.updated_by }).toEqual(before)
   } finally {
     touchDoc('d-12', user, { locked: true })
+  }
+})
+
+it('개인 폴더(백엔드 README 72·74): 주인과 고른 사람만 보고 임원도 못 본다. 아래 폴더도 따라간다', () => {
+  const owner = { id: 'm-7', role: 'member' as const }
+  const friend = { id: 'm-8', role: 'member' as const }
+  const exec = { id: 'e-1', role: 'exec' as const }
+  const top = createFolder({ title: '내 메모', owner_id: owner.id, allowed_users: [friend.id] })
+  const child = createFolder({ title: '아이디어', parent_id: top.id })
+  const doc = createDoc(MOCK_USERS[0], child.id, '초안')
+  try {
+    expect(canViewFolder(owner, child.id)).toBe(true)
+    expect(canViewFolder(friend, child.id)).toBe(true)
+    expect(canViewFolder(exec, child.id)).toBe(false)
+    expect(privateRoot(child.id)).toBe(top)
+    // 볼 사람이 있어도 등급 제한 폴더가 아니다. 안의 이동은 임원이 아니라 주인의 일이다.
+    expect(isRestricted(child.id)).toBe(false)
+    expect(docTree(exec).docs.some((d) => d.id === doc.id)).toBe(false)
+  } finally {
+    purgeDoc(doc.id)
+    removeFolder(child)
+    removeFolder(top)
   }
 })

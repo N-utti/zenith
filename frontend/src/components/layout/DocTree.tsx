@@ -24,7 +24,9 @@ import {
   Trash2,
 } from 'lucide-react'
 import { cn } from '@/lib/cn'
+import { Button } from '@/components/ui/Button'
 import { RetryButton } from '@/components/ui/Card'
+import { Modal } from '@/components/ui/Modal'
 import { ContextMenu, ContextMenuItem } from '@/components/ui/ContextMenu'
 import { useToast } from '@/components/ui/ToastContext'
 import { ApiError } from '@/lib/api'
@@ -36,10 +38,7 @@ import { useLongPress } from '@/lib/useLongPress'
 import { useCurrentUser } from '@/features/auth/AuthContext'
 import { FolderAccessModal } from '@/features/docs/FolderAccessModal'
 import { FolderNameModal } from '@/features/docs/FolderNameModal'
-import {
-  PrivateFolderOption,
-  type PrivateFolderChoice,
-} from '@/features/docs/PrivateFolderOption'
+import { PrivateFolderOption, type PrivateFolderChoice } from '@/features/docs/PrivateFolderOption'
 import { MoveNodeModal } from '@/features/docs/MoveNodeModal'
 import { TrashDocModal } from '@/features/docs/TrashDocModal'
 import { setSplitDoc } from '@/features/docs/splitDoc'
@@ -435,6 +434,7 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
   const { docId } = useParams()
   const navigate = useNavigate()
   const toast = useToast()
+  const { role, id: meId } = useCurrentUser()
   const { data, isPending, isError, refetch } = useTree()
   const createDoc = useCreateDoc()
   const createFolder = useCreateFolder()
@@ -470,7 +470,7 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
   /** 끌고 있는 것과, 그것이 올라가 있는 놓을 자리(`data-drop` 값). */
   const [drag, setDrag] = useState<TreeItem | null>(null)
   const [over, setOver] = useState<string | null>(null)
-  const toRoot = !!drag && !!data && canDrop(drag, null, data)
+  const toRoot = !!drag && !!data && canDrop(drag, null, data, meId)
 
   /*
    * 파일 가져오기(백엔드 README 60·61). 서버가 본문까지 심은 문서를 만든다. 여러 파일이면 하나씩
@@ -571,8 +571,12 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
   const [moving, setMoving] = useState<TreeItem | null>(null)
   // 열람 권한 창을 연 폴더 id(백엔드 #421). 임원만 메뉴가 보인다. 실제 차단은 서버 403.
   const [accessId, setAccessId] = useState<string | null>(null)
-  const { role, id: meId } = useCurrentUser()
   const isExec = role === 'exec'
+  /**
+   * 문서를 다른 개인 폴더로(공용에서 넣거나 개인 폴더끼리) 옮기기 전 확인(사용자 결정). 넣으면 그 개인 폴더의
+   * 주인과 볼 사람만 보고, 열어 둔 다른 사람의 편집은 끊긴다. 개인 폴더에서 꺼낼 때는 묻지 않는다.
+   */
+  const [hiding, setHiding] = useState<{ item: TreeItem; to: string } | null>(null)
   const [trashing, setTrashing] = useState<{ id: string; title: string } | null>(null)
 
   /** 지금 트리에서 그 문서·폴더. 그사이 지워졌거나 옮겨져 사라졌으면 없다. */
@@ -587,11 +591,18 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
    * 결과는 `mutate` 의 콜백이 아니라 약속으로 받는다. 트리는 문서를 열고 닫을 때 다시 마운트되는데
    * (위 `expandedIds`) 콜백은 그 뒤로 불리지 않아, 되돌리기가 실패해도 조용해진다.
    */
-  const move = (item: TreeItem, to: string | null) => {
+  const move = (item: TreeItem, to: string | null, confirmed = false) => {
     const moved = find(item)
     // 앞 이동의 응답이 오기 전에는 트리가 아직 옛 모습이다. 그때 또 옮기면 되돌릴 자리를 틀리게 읽는다.
     if (!moved || moveNode.isPending) return
     const from = 'folder_id' in moved ? moved.folder_id : moved.parent_id
+    // 되돌리기는 방금 한 일을 거꾸로 하는 것이라 이 확인을 거치지 않는다(아래 토스트는 `moveNode` 를 바로 부른다).
+    const folders = data?.folders ?? []
+    const into = to ? privateRootOf(folders, to) : null
+    const was = from ? privateRootOf(folders, from) : null
+    if (!confirmed && to && into && into.id !== was?.id) {
+      return setHiding({ item, to })
+    }
     const dest = data?.folders.find((f) => f.id === to)?.title
     // 제목 뒤에 「문서」「폴더」를 붙여 쓴다. 제목에 바로 조사를 붙이면 받침에 따라 을·를이 갈린다.
     const what = `${moved.title} ${item.kind === 'doc' ? '문서' : '폴더'}`
@@ -629,7 +640,7 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
     if (!drag || !data || !(e.target instanceof Element)) return null
     if (!e.dataTransfer.types.includes(DRAG_TYPE)) return null
     const zone = e.target.closest<HTMLElement>('[data-drop]')?.dataset.drop
-    return zone !== undefined && canDrop(drag, zone || null, data) ? zone : null
+    return zone !== undefined && canDrop(drag, zone || null, data, meId) ? zone : null
   }
 
   const endDrag = () => {
@@ -817,6 +828,8 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
   // 나타날 때 메뉴와 창이 옛 자리에 저절로 다시 뜬다.
   if (data && menu && !menuTarget) setMenu(null)
   if (data && moving && !movingTarget) setMoving(null)
+  const hidingTarget = hiding && find(hiding.item)
+  if (data && hiding && !hidingTarget) setHiding(null)
   // 메뉴를 연 폴더(문서면 그 문서의 폴더)가 든 개인 폴더. 개인 폴더에서는 주인이 볼 사람과 잠금을 맡는다.
   const menuFolderId =
     menu?.item.kind === 'folder'
@@ -824,8 +837,7 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
       : menuTarget && 'folder_id' in menuTarget
         ? menuTarget.folder_id
         : null
-  const menuPrivateRoot =
-    data && menuFolderId ? privateRootOf(data.folders, menuFolderId) : null
+  const menuPrivateRoot = data && menuFolderId ? privateRootOf(data.folders, menuFolderId) : null
   const accessFolder = accessId ? data?.folders.find((f) => f.id === accessId) : undefined
   if (data && accessId && !accessFolder) setAccessId(null)
 
@@ -1010,24 +1022,24 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
               {/* 잠금은 임원만. 개인 폴더의 문서는 주인만 잠그고 푼다(백엔드 README 74). */}
               {(menuPrivateRoot ? menuPrivateRoot.owner_id === meId : isExec) &&
                 'locked' in menuTarget && (
-                <ContextMenuItem
-                  icon={menuTarget.locked ? LockOpen : Lock}
-                  label={menuTarget.locked ? '잠금 풀기' : '잠그기'}
-                  onSelect={() =>
-                    void setLocked
-                      .mutateAsync({ id: menu.item.id, locked: !menuTarget.locked })
-                      .then(
-                        (doc) =>
-                          toast.success(
-                            doc.locked
-                              ? `${menuTarget.title} 문서를 잠갔습니다.`
-                              : `${menuTarget.title} 문서 잠금을 풀었습니다.`,
-                          ),
-                        (err: unknown) => fail(err, '잠금을 바꾸지 못했습니다.'),
-                      )
-                  }
-                />
-              )}
+                  <ContextMenuItem
+                    icon={menuTarget.locked ? LockOpen : Lock}
+                    label={menuTarget.locked ? '잠금 풀기' : '잠그기'}
+                    onSelect={() =>
+                      void setLocked
+                        .mutateAsync({ id: menu.item.id, locked: !menuTarget.locked })
+                        .then(
+                          (doc) =>
+                            toast.success(
+                              doc.locked
+                                ? `${menuTarget.title} 문서를 잠갔습니다.`
+                                : `${menuTarget.title} 문서 잠금을 풀었습니다.`,
+                            ),
+                          (err: unknown) => fail(err, '잠금을 바꾸지 못했습니다.'),
+                        )
+                    }
+                  />
+                )}
               {!('locked' in menuTarget && menuTarget.locked) && (
                 <>
                   {/* 제목 없는 문서는 빈 칸으로 연다. 기본 문구를 지우고 치게 하지 않는다. */}
@@ -1074,6 +1086,38 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
           onClose={() => setMoving(null)}
         />
       )}
+
+      <Modal
+        open={hiding !== null}
+        onClose={() => setHiding(null)}
+        title="개인 폴더로 옮길까요?"
+        size="sm"
+        footer={
+          <>
+            <Button variant="secondary" size="sm" onClick={() => setHiding(null)}>
+              취소
+            </Button>
+            <Button
+              size="sm"
+              data-autofocus
+              disabled={moveNode.isPending}
+              onClick={() => {
+                if (!hiding) return
+                setHiding(null)
+                move(hiding.item, hiding.to, true)
+              }}
+            >
+              옮기기
+            </Button>
+          </>
+        }
+      >
+        <p className="text-muted text-sm leading-relaxed">
+          <span className="text-fg font-medium">{hidingTarget?.title || UNTITLED_DOC}</span>{' '}
+          {hiding?.item.kind === 'folder' ? '폴더' : '문서'}는 개인 폴더의 주인과 볼 사람만 보게
+          됩니다. 지금 열어 둔 다른 사람의 편집도 끊깁니다.
+        </p>
+      </Modal>
 
       {accessFolder && (
         <FolderAccessModal folder={accessFolder} onClose={() => setAccessId(null)} />

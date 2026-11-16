@@ -30,8 +30,24 @@ export const FOLDERS: Folder[] = [
     allowed_users: [],
     owner_id: null,
   },
-  { id: 'f-2', parent_id: null, title: '회의록', sort: 1, min_role: 'member', allowed_users: [], owner_id: null },
-  { id: 'f-3', parent_id: 'f-1', title: '제품', sort: 0, min_role: 'member', allowed_users: [], owner_id: null },
+  {
+    id: 'f-2',
+    parent_id: null,
+    title: '회의록',
+    sort: 1,
+    min_role: 'member',
+    allowed_users: [],
+    owner_id: null,
+  },
+  {
+    id: 'f-3',
+    parent_id: 'f-1',
+    title: '제품',
+    sort: 0,
+    min_role: 'member',
+    allowed_users: [],
+    owner_id: null,
+  },
   {
     id: 'f-4',
     parent_id: null,
@@ -311,8 +327,9 @@ export function listDocs(query: string): DocSummary[] {
  * 휴지통(`GET /trash`). 지운 지 최근 순, 같은 시각이면 id 순. 서버와 같은 정렬이다.
  * 살아 있는 문서 목록(`/tree`·`/docs`)의 여집합이라 겹치지 않는다.
  */
-export function listTrash(limit: number): DocSummary[] {
-  return DOCS.filter((doc) => doc.deleted_at)
+/** 휴지통. 사람을 주면 그 사람이 볼 수 있는 폴더의 문서만(백엔드 `list_trash` 도 `visible_folder_ids` 로 거른다). */
+export function listTrash(limit: number, user?: Pick<User, 'id' | 'role'>): DocSummary[] {
+  return DOCS.filter((doc) => doc.deleted_at && (!user || canViewFolder(user, doc.folder_id)))
     .sort(
       (a, b) => (b.deleted_at ?? '').localeCompare(a.deleted_at ?? '') || a.id.localeCompare(b.id),
     )
@@ -366,6 +383,11 @@ function* withAncestors(folderId: string): Generator<Folder> {
  */
 export function canViewFolder(user: Pick<User, 'id' | 'role'>, folderId: string): boolean {
   for (const folder of withAncestors(folderId)) {
+    // 개인 폴더(백엔드 README 72·74)는 주인과 주인이 고른 사람만. 등급은 보지 않는다(임원도 못 본다).
+    if (folder.owner_id) {
+      if (folder.owner_id !== user.id && !folder.allowed_users.includes(user.id)) return false
+      continue
+    }
     const byRole = (ROLE_RANK[user.role] ?? 0) >= (ROLE_RANK[folder.min_role] ?? 99)
     if (!byRole && !folder.allowed_users.includes(user.id)) return false
   }
@@ -375,9 +397,18 @@ export function canViewFolder(user: Pick<User, 'id' | 'role'>, folderId: string)
 /** 「전원 열람」이 아닌 폴더(자기나 조상에 등급·사람 지정). 이런 폴더를 오가는 이동은 임원만. */
 export function isRestricted(folderId: string): boolean {
   for (const folder of withAncestors(folderId)) {
+    // 개인 폴더는 볼 사람이 있어도 세지 않는다. 그 안의 이동은 임원이 아니라 주인의 일이다(README 74).
+    if (folder.owner_id) return false
     if (folder.min_role !== 'member' || folder.allowed_users.length) return true
   }
   return false
+}
+
+/** 이 폴더가 든 개인 폴더(백엔드 `acl.private_root`). 개인 폴더 밖이면 `undefined`. */
+export function privateRoot(folderId: string | null): Folder | undefined {
+  if (!folderId) return undefined
+  for (const folder of withAncestors(folderId)) if (folder.owner_id) return folder
+  return undefined
 }
 
 /** 사이드바 트리 한 벌. 휴지통에 든 문서는 빼고, 사람을 주면 그 사람이 볼 수 있는 것만 준다. */

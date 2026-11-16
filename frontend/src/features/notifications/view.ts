@@ -49,6 +49,19 @@ function mentionView(p: NotificationPayload): NotificationView | null {
   const actorId = p.from?.id ?? ''
   const actorName = p.from?.name ?? UNKNOWN
 
+  // 지금은 못 보는 문서(개인 폴더로 옮겨졌거나 권한이 바뀜, 백엔드 #629). 눌러도 403 이라 링크를 막고
+  // 보낸 사람도 지운다(게시글 가림과 같은 모양). 제목은 서버가 가림 문자열로 바꿔 보낸다.
+  if (p.doc_id && p.masked) {
+    return {
+      actorId: '',
+      actorName: UNKNOWN,
+      summary: p.doc_title ?? UNKNOWN,
+      detail: null,
+      to: null,
+      icon: 'locked',
+      masked: true,
+    }
+  }
   if (p.doc_id) {
     return {
       actorId,

@@ -15,8 +15,10 @@ import {
   useEmptyTrash,
   usePurgeDoc,
   useTrash,
+  useTree,
   useUntrashDoc,
 } from '@/features/docs/api'
+import { privateRootOf } from '@/features/docs/tree'
 import { purgeAt, TRASH_KEEP_DAYS } from '@/features/docs/types'
 import { useCurrentUser } from '@/features/auth/AuthContext'
 import { ApiError } from '@/lib/api'
@@ -28,7 +30,7 @@ import { ROLE_RANK } from '@/types'
 const COLUMNS = 5
 
 /**
- * 휴지통. 지운 문서를 되돌리거나(누구나) 지금 영구 삭제한다(임원만).
+ * 휴지통. 지운 문서를 되돌리거나(누구나) 지금 영구 삭제한다(임원만, 개인 폴더 문서는 그 주인만).
  *
  * 지우기 직후의 토스트를 놓친 뒤 되돌리는 상시 경로다.
  */
@@ -41,6 +43,15 @@ export function TrashPage() {
   const toast = useToast()
   // 영구 삭제는 임원만. 화면은 버튼을 감출 뿐이고 실제 차단은 서버의 403 이다.
   const isExec = ROLE_RANK[me.role] >= ROLE_RANK.exec
+  // 개인 폴더(백엔드 README 72·74)의 문서는 임원이 아니라 그 폴더 주인이 영구 삭제한다. 같이 볼 사람은 못 한다.
+  // 휴지통 비우기는 임원에게만 둔다(사용자 결정). 남의 개인 문서가 섞이면 403 이라 줄마다 지우게 한다.
+  const folders = useTree().data?.folders
+  const canPurge = (folderId: string) => {
+    // 트리를 받기 전에는 개인 폴더인지 모른다. 그동안은 버튼을 감춘다(눌러서 403 을 받지 않게).
+    if (!folders) return false
+    const root = privateRootOf(folders, folderId)
+    return root ? root.owner_id === me.id : isExec
+  }
   // 한 줄이 도는 동안 모든 줄을 잠근다. 15명이 쓰는 휴지통이라 여러 줄을 동시에 누를 일이
   // 없고, 줄마다 따로 잠그면 어느 요청이 어느 줄 것인지 세는 장치가 하나 더 필요하다.
   const busy = untrash.isPending || purge.isPending || empty.isPending
@@ -158,7 +169,7 @@ export function TrashPage() {
                       )}
                       되돌리기
                     </Button>
-                    {isExec && (
+                    {canPurge(doc.folder_id) && (
                       <Button
                         variant="ghost"
                         size="sm"

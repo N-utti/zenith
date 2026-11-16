@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { CornerLeftUp, Folder } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
+import { useCurrentUser } from '@/features/auth/AuthContext'
 import { cn } from '@/lib/cn'
 import { buildTree, canDrop, folderRows, type TreeItem } from './tree'
 import type { DocTreeData } from './types'
@@ -30,6 +31,7 @@ export function MoveNodeModal({
   onPick: (to: string | null) => void
   onClose: () => void
 }) {
+  const meId = useCurrentUser().id
   const rows = useMemo(() => folderRows(buildTree(data)), [data])
   const here =
     item.kind === 'doc'
@@ -37,7 +39,7 @@ export function MoveNodeModal({
       : data.folders.find((f) => f.id === item.id)?.parent_id
 
   const row = (to: string | null, label: string, depth: number) => {
-    const ok = canDrop(item, to, data)
+    const ok = canDrop(item, to, data, meId)
     const Icon = to === null ? CornerLeftUp : Folder
     return (
       <li key={to ?? 'root'}>
