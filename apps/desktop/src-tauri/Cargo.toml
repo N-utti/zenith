@@ -31,6 +31,8 @@ serde_json = "1"
 # 플러그인이 이미 끌어오는 버전과 같게 둔다.
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.61", features = ["UI_Notifications"] }
+# 토스트 클릭으로 창 꺼내기(notify). 알림 플러그인이 이미 끌어오는 크레이트다.
+tauri-winrt-notification = "0.7"
 
 [profile.release]
 codegen-units = 1

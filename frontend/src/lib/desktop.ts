@@ -196,7 +196,8 @@ export async function notify(options: DesktopNotification): Promise<void> {
 
   try {
     if (!(await ensurePermission(tauri))) return
-    await tauri.core.invoke('plugin:notification|notify', { options })
+    // 플러그인의 notify 는 데스크톱에서 클릭을 못 받는다. 셸의 명령이 띄우고 누르면 창을 꺼낸다.
+    await tauri.core.invoke('notify', { title: options.title, body: options.body })
   } catch {
     // 무시한다. 알림은 부가 기능이다.
   }

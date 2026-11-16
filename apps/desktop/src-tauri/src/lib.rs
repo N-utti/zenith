@@ -194,6 +194,55 @@ async fn install_update(
         .map_err(|e| e.to_string())
 }
 
+/// OS 알림(Windows 토스트)을 띄우고, 누르면 숨어 있던 창을 꺼낸다.
+///
+/// 알림 플러그인의 `notify` 는 데스크톱에서 클릭을 받지 않는다(안에서 만든 클릭 핸들을 그대로 버린다).
+/// 그래서 트레이에 숨긴 채 알림을 누르면 아무 일도 없었다. 토스트를 여기서 직접 띄워 클릭을 붙든다.
+/// 권한 묻기는 그대로 플러그인이 한다.
+///
+/// ponytail: 클릭은 앱이 떠 있는 동안 이 프로세스가 받는다. 앱을 종료한 뒤 알림 센터에서 누르는 경우까지
+/// 받으려면 COM 활성화기(ToastActivatorCLSID)를 바로가기에 등록해야 한다. 트레이 상주라 지금은 두지 않는다.
+#[tauri::command]
+async fn notify(app: AppHandle, title: String, body: Option<String>) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        use tauri_winrt_notification::Toast;
+        // 설치본만 앱 id 로 띄운다. target/ 에서 실행하면 그 id 의 바로가기가 없어 토스트가 안 뜨므로
+        // 플러그인처럼 PowerShell 이름을 빌린다(README 알림 절).
+        let exe = tauri::utils::platform::current_exe().map_err(|e| e.to_string())?;
+        let unbundled = exe
+            .parent()
+            .is_some_and(|dir| dir.ends_with("target/debug") || dir.ends_with("target/release"));
+        let app_id = if unbundled {
+            Toast::POWERSHELL_APP_ID.to_string()
+        } else {
+            app.config().identifier.clone()
+        };
+        let handle = app.clone();
+        Toast::new(&app_id)
+            .title(&title)
+            .text2(body.as_deref().unwrap_or(""))
+            // 플러그인 때처럼 무음. 비워 두면 채팅이 몰릴 때 기본 알림음이 줄줄이 난다.
+            .sound(None)
+            .on_activated(move |_| {
+                show_main(&handle);
+                Ok(())
+            })
+            .show()
+            .map_err(|e| e.to_string())?;
+    }
+    #[cfg(not(windows))]
+    {
+        use tauri_plugin_notification::NotificationExt;
+        let mut builder = app.notification().builder().title(title);
+        if let Some(body) = body {
+            builder = builder.body(body);
+        }
+        builder.show().map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 /// Windows 알림 센터에 쌓인 이 앱의 알림을 지운다. 채팅 알림에는 메시지 본문이 들어 있어, 공용 PC 에서
 /// 로그아웃한 뒤에도 다음 사람이 알림 센터로 앞사람의 DM 을 읽을 수 있었다. 웹앱이 로그인·로그아웃 때 부른다.
 ///
@@ -234,7 +283,7 @@ pub fn run() {
         // 바깥 링크를 기본 브라우저로 넘기기 위한 플러그인.
         // 프론트엔드 쪽 짝은 frontend/src/lib/desktop.ts 다.
         .plugin(tauri_plugin_opener::init())
-        // 창을 보고 있지 않을 때 새 채팅을 Windows 토스트로 띄운다.
+        // 알림 권한. 토스트 자체는 클릭을 받으려고 `notify` 명령이 직접 띄운다.
         .plugin(tauri_plugin_notification::init())
         // 자동 업데이트. 웹앱이 켜질 때 check_update 를 부르고, 사용자가 고르면 install_update.
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -269,7 +318,8 @@ pub fn run() {
             check_update,
             install_update,
             clear_notifications,
-            quit_app
+            quit_app,
+            notify
         ])
         .run(tauri::generate_context!())
         .expect("제니스 데스크탑 셸을 시작하지 못했습니다");
