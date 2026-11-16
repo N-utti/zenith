@@ -36,6 +36,7 @@ from app.models import (
     Team,
     User,
     WorkArrangement,
+    Workspace,
 )
 from app.prefs import wants
 from app.realtime import chat
@@ -440,6 +441,20 @@ async def _approvers(db: AsyncSession, drafter: User, type_code: str) -> list[uu
     """
     if drafter.role == "exec":
         return []  # 임원 기안은 결재선이 없다 — 아랫사람에게 결재받지 않는다
+    if type_code != "general":
+        # 근태 4종은 근태 담당자 → 대표(README 76). 지정돼 있고 활성인 사람만, 신청한 본인은 뺀다(담당자 본인의 신청은
+        # 대표에게 바로 간다). 둘 다 없거나 못 쓰면 아래의 예전 규칙(팀장, 없으면 첫 임원)으로 떨어진다
+        roles = (
+            await db.execute(select(Workspace.attendance_manager_id, Workspace.ceo_id).limit(1))
+        ).first()
+        picked = [i for i in dict.fromkeys(roles or ()) if i is not None and i != drafter.id]
+        if picked:
+            alive = set(
+                await db.scalars(select(User.id).where(User.id.in_(picked), User.active.is_(True)))
+            )
+            line = [i for i in picked if i in alive]
+            if line:
+                return line
     ids: list[uuid.UUID] = []
     if drafter.team_id is not None:
         lead = await db.scalar(

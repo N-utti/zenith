@@ -267,6 +267,12 @@ data: ${JSON.stringify(data)}
 
 const unauthorized = () =>
   HttpResponse.json({ detail: '로그인이 필요합니다.', code: 'AUTH_REQUIRED' }, { status: 401 })
+/** 근태 담당자와 대표(백엔드 README 76). 새로고침하면 비워진다. */
+let attendanceRoles: {
+  manager: { id: string; name: string } | null
+  ceo: { id: string; name: string } | null
+} = { manager: null, ceo: null }
+
 const notFound = (detail = '문서를 찾을 수 없습니다.') =>
   HttpResponse.json({ detail, code: 'NOT_FOUND' }, { status: 404 })
 
@@ -1508,6 +1514,40 @@ export const handlers = [
       )
     }
     return HttpResponse.json(getClosing(month))
+  }),
+  // 근태 담당자·대표, 결근 처리(백엔드 README 76).
+  // ponytail: 목은 지정만 기억한다. 담당자 권한·결재선·결근 반영은 실제 서버에서만 돈다.
+  http.get(
+    '/api/attendance/roles',
+    authed(() => HttpResponse.json(attendanceRoles)),
+  ),
+  http.put('/api/attendance/roles', async ({ request }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    if (user.role !== 'exec') return forbidden()
+    const body = (await request.json()) as { manager_id?: string | null; ceo_id?: string | null }
+    const person = (id?: string | null) => {
+      const found = id ? MOCK_USERS.find((u) => u.id === id) : undefined
+      return found ? { id: found.id, name: found.name } : null
+    }
+    attendanceRoles = { manager: person(body.manager_id), ceo: person(body.ceo_id) }
+    return HttpResponse.json(attendanceRoles)
+  }),
+  http.post('/api/attendance/absences', async ({ request }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    if (user.role !== 'exec' && attendanceRoles.manager?.id !== user.id) return forbidden()
+    const body = (await request.json()) as { user_id: string; work_date: string; note?: string }
+    return HttpResponse.json(
+      { user_id: body.user_id, work_date: body.work_date, note: body.note ?? null },
+      { status: 201 },
+    )
+  }),
+  http.delete('/api/attendance/absences', () => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    if (user.role !== 'exec' && attendanceRoles.manager?.id !== user.id) return forbidden()
+    return new HttpResponse(null, { status: 204 })
   }),
   http.post('/api/attendance/close', async ({ request }) => {
     const user = authenticate()

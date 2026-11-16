@@ -1321,7 +1321,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 전 직원의 올해 연차 잔여(연차 관리) — exec, 그 밖 403 */
+        /** 전 직원의 올해 연차 잔여(연차 관리) — exec·근태 담당자, 그 밖 403 */
         get: operations["all_balances_api_leaves_balances_get"];
         put?: never;
         post?: never;
@@ -1373,7 +1373,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** ?month=&team_id= 팀원 × 일자 그리드 — 팀장(teams.lead_id)·exec 만, team_id 없으면 전사(exec). 그 밖 403 */
+        /** ?month=&team_id= 팀원 × 일자 그리드 — 팀장(teams.lead_id)·exec 만, team_id 없으면 전사(exec·근태 담당자). 그 밖 403 */
         get: operations["team_grid_api_attendance_team_get"];
         put?: never;
         post?: never;
@@ -1390,7 +1390,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** ?month=&format=csv 월 리포트 (exec) — 사람마다 근무일·휴가일·연장·야간(분). UTF-8 BOM */
+        /** ?month=&format=csv 월 리포트 (exec·근태 담당자) — 사람마다 근무일·휴가일·연장·야간(분). UTF-8 BOM */
         get: operations["report_api_attendance_report_get"];
         put?: never;
         post?: never;
@@ -1443,7 +1443,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** {month} 월 마감 (exec) — 오지 않은 달 422, 이미 마감 409 ALREADY_CLOSED. 감사 attendance.closed */
+        /** {month} 월 마감 (exec·근태 담당자) — 오지 않은 달 422, 이미 마감 409 ALREADY_CLOSED. 감사 attendance.closed */
         post: operations["close_month_api_attendance_close_post"];
         delete?: never;
         options?: never;
@@ -1460,9 +1460,45 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** {month, reason} 월 마감 해제 (exec) — 마감 안 된 달 409 NOT_CLOSED, 사유 필수 422. 감사 attendance.reopened */
+        /** {month, reason} 월 마감 해제 (exec·근태 담당자) — 마감 안 된 달 409 NOT_CLOSED, 사유 필수 422. 감사 attendance.reopened */
         post: operations["reopen_month_api_attendance_reopen_post"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/attendance/roles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 근태 담당자와 대표 — 로그인하면 누구나(신청이 누구에게 가는지 보인다). 지정 전이면 null (04 밖, README 76) */
+        get: operations["get_roles_api_attendance_roles_get"];
+        /** {manager_id, ceo_id} 근태 담당자·대표 지정 (exec) — null 은 해제. 담당자는 활성 계정, 대표는 활성 임원(422). 감사 attendance.roles_set */
+        put: operations["set_roles_api_attendance_roles_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/attendance/absences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** {user_id, work_date, note?} 결근 확정 (exec·근태 담당자) — 정상 근무로 잡힌 지난·오늘 근무일만(422), 마감된 달 409 MONTH_CLOSED. 다시 보내면 메모만 바꾼다. 감사 attendance.absent_set */
+        post: operations["set_absence_api_attendance_absences_post"];
+        /** ?user_id=&work_date= 결근 확정 취소 (exec·근태 담당자) — 없으면 404, 마감된 달 409 MONTH_CLOSED. 감사 attendance.absent_cleared */
+        delete: operations["clear_absence_api_attendance_absences_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -2194,6 +2230,36 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AbsenceIn */
+        AbsenceIn: {
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+            /**
+             * Work Date
+             * Format: date
+             */
+            work_date: string;
+            /** Note */
+            note?: string | null;
+        };
+        /** AbsenceOut */
+        AbsenceOut: {
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+            /**
+             * Work Date
+             * Format: date
+             */
+            work_date: string;
+            /** Note */
+            note: string | null;
+        };
         /** ActivityIn */
         ActivityIn: {
             /**
@@ -4547,6 +4613,18 @@ export interface components {
              * Format: uuid
              */
             version_id: string;
+        };
+        /** RolesIn */
+        RolesIn: {
+            /** Manager Id */
+            manager_id: string | null;
+            /** Ceo Id */
+            ceo_id: string | null;
+        };
+        /** RolesOut */
+        RolesOut: {
+            manager: components["schemas"]["app__routers__approvals__Person"] | null;
+            ceo: components["schemas"]["app__routers__approvals__Person"] | null;
         };
         /** SessionDetailOut */
         SessionDetailOut: {
@@ -8579,6 +8657,122 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ClosingOut"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_roles_api_attendance_roles_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RolesOut"];
+                };
+            };
+        };
+    };
+    set_roles_api_attendance_roles_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RolesIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RolesOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_absence_api_attendance_absences_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AbsenceIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AbsenceOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    clear_absence_api_attendance_absences_delete: {
+        parameters: {
+            query: {
+                user_id: string;
+                work_date: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
