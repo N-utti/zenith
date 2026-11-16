@@ -20,6 +20,7 @@ const folder = (id: string, parent_id: string | null, title: string, sort = 0): 
   sort,
   min_role: 'member',
   allowed_users: [],
+  owner_id: null,
 })
 const doc = (
   id: string,
@@ -175,20 +176,21 @@ it('folderAccessLabel: 직접 건 제한만 설명하고, 전원 열람이면 �
   const f = folder('a', null, '인사')
   expect(folderAccessLabel(f)).toBeNull()
   expect(folderAccessLabel({ ...f, min_role: 'exec' })).toBe('열람: 임원')
-  expect(folderAccessLabel({ ...f, min_role: 'lead', allowed_users: ['u1', 'u2'] })).toBe(
+  expect(folderAccessLabel({ ...f, min_role: 'lead', allowed_users: ['u1', 'u2'], owner_id: null })).toBe(
     '열람: 팀장 이상 + 지정한 2명',
   )
   // 전원 열람에 사람만 지정해도 서버는 제한 폴더로 본다(이동은 임원만).
-  expect(folderAccessLabel({ ...f, allowed_users: ['u1'] })).toBe('열람: 전원 + 지정한 1명')
+  expect(folderAccessLabel({ ...f, allowed_users: ['u1'], owner_id: null })).toBe('열람: 전원 + 지정한 1명')
 })
 
 it('folderAccessChange: 바뀐 칸만, 전원이면 사람 지정을 비운다', () => {
-  const f = { ...folder('a', null, '인사'), min_role: 'exec' as const, allowed_users: ['u2', 'u1'] }
+  const f = { ...folder('a', null, '인사'), min_role: 'exec' as const, allowed_users: ['u2', 'u1'], owner_id: null }
   expect(folderAccessChange(f, 'exec', ['u1', 'u2'])).toBeNull() // 순서만 다름
   expect(folderAccessChange(f, 'lead', ['u1', 'u2'])).toEqual({ min_role: 'lead' })
-  expect(folderAccessChange(f, 'exec', ['u1'])).toEqual({ allowed_users: ['u1'] })
+  expect(folderAccessChange(f, 'exec', ['u1'])).toEqual({ allowed_users: ['u1'], owner_id: null })
   expect(folderAccessChange(f, 'member', ['u1', 'u2'])).toEqual({
     min_role: 'member',
     allowed_users: [],
+    owner_id: null,
   })
 })
