@@ -56,6 +56,7 @@ export const DOCS: DocSummary[] = [
     updated_by: { id: 'u-2', name: '정성운' },
     deleted_at: null,
     ai_source: true,
+    locked: false,
   },
   {
     id: 'd-1',
@@ -65,6 +66,7 @@ export const DOCS: DocSummary[] = [
     updated_by: { id: 'u-2', name: '정성운' },
     deleted_at: null,
     ai_source: true,
+    locked: false,
   },
   {
     id: 'd-2',
@@ -74,6 +76,7 @@ export const DOCS: DocSummary[] = [
     updated_by: { id: 'u-1', name: '진수연' },
     deleted_at: null,
     ai_source: true,
+    locked: false,
   },
   {
     id: 'd-3',
@@ -83,6 +86,7 @@ export const DOCS: DocSummary[] = [
     updated_by: { id: 'u-4', name: '장지윤' },
     deleted_at: null,
     ai_source: true,
+    locked: false,
   },
   {
     id: 'd-4',
@@ -92,6 +96,7 @@ export const DOCS: DocSummary[] = [
     updated_by: { id: 'u-7', name: '김혜리' },
     deleted_at: null,
     ai_source: true,
+    locked: false,
   },
   {
     id: 'd-5',
@@ -101,6 +106,7 @@ export const DOCS: DocSummary[] = [
     updated_by: { id: 'u-1', name: '진수연' },
     deleted_at: null,
     ai_source: true,
+    locked: false,
   },
   {
     id: 'd-6',
@@ -110,6 +116,7 @@ export const DOCS: DocSummary[] = [
     updated_by: { id: 'u-8', name: '성예림' },
     deleted_at: null,
     ai_source: true,
+    locked: false,
   },
   // 지난주들. 사이드바는 폴더마다 최근 5개만 펼친다(DocTree `PREVIEW_DOCS`). 넘치는 모양을 보려고 둔다.
   {
@@ -120,6 +127,7 @@ export const DOCS: DocSummary[] = [
     updated_by: { id: 'u-8', name: '성예림' },
     deleted_at: null,
     ai_source: true,
+    locked: false,
   },
   {
     id: 'd-8',
@@ -129,6 +137,7 @@ export const DOCS: DocSummary[] = [
     updated_by: { id: 'u-8', name: '성예림' },
     deleted_at: null,
     ai_source: true,
+    locked: false,
   },
   {
     id: 'd-9',
@@ -138,6 +147,7 @@ export const DOCS: DocSummary[] = [
     updated_by: { id: 'u-8', name: '성예림' },
     deleted_at: null,
     ai_source: true,
+    locked: false,
   },
   {
     id: 'd-10',
@@ -147,6 +157,7 @@ export const DOCS: DocSummary[] = [
     updated_by: { id: 'u-8', name: '성예림' },
     deleted_at: null,
     ai_source: true,
+    locked: false,
   },
   {
     id: 'd-11',
@@ -156,6 +167,7 @@ export const DOCS: DocSummary[] = [
     updated_by: { id: 'u-8', name: '성예림' },
     deleted_at: null,
     ai_source: true,
+    locked: false,
   },
 ]
 
@@ -475,6 +487,7 @@ export function createDoc(
     updated_by: { id: user.id, name: user.name },
     deleted_at: null,
     ai_source: aiSource,
+    locked: false,
   }
   DOCS.unshift(doc)
   return doc
