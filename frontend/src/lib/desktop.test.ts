@@ -4,6 +4,7 @@ import {
   findUpdate,
   installExternalLinkHandler,
   installUpdate,
+  notify,
   onQuitRequested,
   openExternal,
   restrictImageSources,
@@ -28,6 +29,17 @@ test('데스크톱 앱이면 셸에 알림 센터 비우기를 부탁하고, 실
   expect(() => clearNotifications()).not.toThrow()
   expect(invoke).toHaveBeenCalledWith('clear_notifications')
   await vi.waitFor(() => expect(warn).toHaveBeenCalled())
+})
+
+test('알림은 플러그인이 아니라 셸 명령으로 띄운다(플러그인은 클릭을 못 받아 눌러도 창이 안 열린다)', async () => {
+  const invoke = vi.fn((cmd: string) =>
+    Promise.resolve(cmd === 'plugin:notification|is_permission_granted'),
+  )
+  window.__TAURI__ = { core: { invoke } }
+
+  await notify({ title: '이영희', body: '안녕' })
+  expect(invoke).toHaveBeenCalledWith('notify', { title: '이영희', body: '안녕' })
+  expect(invoke).not.toHaveBeenCalledWith('plugin:notification|notify', expect.anything())
 })
 
 test('브라우저에서는 아무 일도 하지 않는다', () => {
