@@ -34,6 +34,7 @@ services:
     volumes:
       - ./caddy:/etc/caddy:ro  # Caddyfile + zenith.caddy(스니펫). 파일 하나만 마운트하면 import 가 깨진다
       - ./certs:/certs:ro  # 비어 있어도 된다 — ZENITH_TLS 가 파일을 가리킬 때만 읽는다(미커밋, .gitignore)
+      - ./desktop:/srv/desktop:ro  # 데스크톱 앱 업데이트(.msi + latest.json) - caddy/zenith.caddy 의 /desktop/*. 비어 있어도 된다(미커밋)
       - caddy_data:/data
       - caddy_config:/config
     depends_on:

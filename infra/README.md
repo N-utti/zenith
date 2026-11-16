@@ -42,6 +42,7 @@ docker compose cp caddy:/data/caddy/pki/authorities/local/root.crt ./zenith-root
 ```
 
 - **자체 CA 의 대가**: 루트를 넣은 PC 는 이 서버를 CA 로 신뢰한다 — 서버(`caddy_data` 볼륨의 CA 키)가 침해되면 그 PC 의 모든 HTTPS 가 위조 가능하다(이름 제약 없음, 폐기 수단 없음). 사내 CA 가 있으면 그것을 쓰고, 없으면 배포 대상을 제니스를 쓰는 PC 로만 한정한다.
+- **데스크톱 앱 업데이트(2026-11-16)**: caddy 가 `/desktop/*` 를 호스트의 `infra/desktop/`(미커밋) 에서 내준다. 릴리스 때 `apps/desktop` 에서 만든 `.msi` 와 `latest.json`(`npm run manifest -- https://<앱이 붙는 주소>`)을 이 폴더에 놓으면 끝이다 - 이미지 재빌드·재시작이 없다. 앱은 자기가 붙은 서버 주소의 `/desktop/latest.json` 을 보므로 매니페스트의 주소는 그 앱의 `VITE_SERVER_ORIGIN` 과 같아야 한다(사내 설치본은 `https://<서버 LAN IP>`). 폴더가 비어 있으면 404 - 앱은 조용히 넘어간다. 인증 없이 열려 있다: 설치본은 서명(minisign)으로 검증되고 주소는 사내망·Tailscale 안에서만 닿는다.
 - caddy 가 `X-Content-Type-Options`·`X-Frame-Options`·`Referrer-Policy` 를 붙인다. HSTS 는 사내 CA 결정 뒤. CSP 는 아래 "CSP".
 - **사내 CA 확인(IT 에 물어볼 것, 결정 전까지 `tls internal`)** — 답에 따라 갈린다:
   1. 사내 CA(AD CS 등)가 있고 서버 인증서를 발급해 주는가? → 있으면 인증서·키를 `/certs` 로 마운트하고 `Caddyfile` 의 `tls` 줄을 `tls /certs/cert.pem /certs/key.pem` 으로. 갱신 주기(보통 1년)와 갱신 절차를 같이 받는다.

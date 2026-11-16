@@ -41,6 +41,16 @@
 		}
 	}
 
+	# 데스크톱 앱 자동 업데이트(apps/desktop/README "자동 업데이트") - 앱이 켜질 때 /desktop/latest.json 을 보고 새 .msi 를 받는다.
+	# 파일은 compose 가 호스트의 ./desktop 을 /srv/desktop 으로 마운트한다(이미지에 넣지 않는다 - 릴리스마다 이미지를 다시 굽지 않게).
+	# 아래 SPA 폴백보다 앞에 둔다 - 없으면 매니페스트가 없을 때 index.html 이 200 으로 나가 앱이 HTML 을 매니페스트로 읽는다.
+	# 인증 없음: 설치본은 서명(minisign)으로 검증되고 사내망·Tailscale 안에서만 닿는다.
+	handle /desktop/* {
+		root * /srv
+		header Cache-Control "no-cache"
+		file_server
+	}
+
 	# Vite 산출물. /assets/* 는 해시 파일명이라 영구 캐시, 그 외(index.html 과 SPA 폴백)는 매번 확인 — 새 빌드가 바로 보이게.
 	handle /assets/* {
 		root * /srv
