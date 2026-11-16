@@ -5091,7 +5091,7 @@
         "tags": [
           "approvals"
         ],
-        "summary": "결재함 ?box=inbox|sent|reference|draft · ?type=&status=&from=&to=&drafter= 필터",
+        "summary": "결재함 ?box=inbox|sent|reference|draft|done · ?type=&status=&from=&to=&drafter= 필터. done 은 끝난 문서 전부(exec 만, 그 밖 403)",
         "operationId": "list_approvals_api_approvals_get",
         "parameters": [
           {
@@ -5103,7 +5103,8 @@
                 "inbox",
                 "sent",
                 "reference",
-                "draft"
+                "draft",
+                "done"
               ],
               "type": "string",
               "default": "inbox",

@@ -1014,7 +1014,10 @@ export const handlers = [
     '/api/approvals',
     authed((user, request) => {
       const box = new URL(request.url).searchParams.get('box') ?? 'inbox'
-      if (!['inbox', 'sent', 'reference', 'draft'].includes(box)) {
+      if (box === 'done' && user.role !== 'exec') {
+        return forbidden('완료 문서함은 임원만 볼 수 있습니다.')
+      }
+      if (!['inbox', 'sent', 'reference', 'draft', 'done'].includes(box)) {
         return HttpResponse.json(
           { detail: 'box 가 올바르지 않습니다.', code: 'VALIDATION' },
           { status: 422 },

@@ -907,10 +907,11 @@ async def delete_draft(
 @router.get(
     "/approvals",
     response_model=ApprovalPage,
-    summary="결재함 ?box=inbox|sent|reference|draft · ?type=&status=&from=&to=&drafter= 필터",
+    summary="결재함 ?box=inbox|sent|reference|draft|done · ?type=&status=&from=&to=&drafter= 필터. done 은 끝난 문서 전부(exec 만, 그 밖 403)",
 )
 async def list_approvals(
-    box: Literal["inbox", "sent", "reference", "draft"] = "inbox",
+    request: Request,
+    box: Literal["inbox", "sent", "reference", "draft", "done"] = "inbox",
     type: TypeCode | None = None,
     status: DocStatus | None = None,
     from_: Annotated[date | None, Query(alias="from")] = None,
@@ -923,7 +924,20 @@ async def list_approvals(
     at = func.coalesce(D.submitted_at, D.created_at)
     stmt = select(D).order_by(at.desc(), D.id.desc()).limit(LIST_MAX)
     owners: dict[uuid.UUID, list[str | None]] = {}
-    if box == "draft":
+    if box == "done":
+        # 끝난 문서 전부(README 77) — 임원은 원래 모든 문서를 연다(_can_view). 목록으로 모아 보는 길만 연다
+        if user.role != "exec":
+            audit.record(
+                db,
+                "acl.denied",
+                request=request,
+                actor_id=user.id,
+                detail={"path": request.url.path, "min_role": "exec", "box": "done"},
+            )
+            await db.commit()
+            raise ApiError(403, "FORBIDDEN", "완료 문서함은 임원만 볼 수 있습니다.")
+        stmt = stmt.where(D.status.in_(("approved", "rejected", "closed")))
+    elif box == "draft":
         stmt = stmt.where(D.drafter_id == user.id, D.status == "draft")
     elif box == "sent":
         stmt = stmt.where(D.drafter_id == user.id, D.status != "draft")
