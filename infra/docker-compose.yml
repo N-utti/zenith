@@ -24,6 +24,8 @@ services:
       ZENITH_TLS: ${ZENITH_TLS:-internal}
       # 사내망 평문 HTTP 사이트 주소(caddy/Caddyfile). 안 주면 localhost 만 받아 사실상 꺼진 것과 같다
       ZENITH_LAN_SITE: ${ZENITH_LAN_SITE:-http://localhost:5180}
+      # 사내망 HTTPS 사이트의 호스트(서버 LAN IP). 데스크톱 앱이 붙는 주소 - caddy/Caddyfile 맨 아래
+      ZENITH_LAN_HTTPS: ${ZENITH_LAN_HTTPS:-zenith-lan.localhost}
     ports:
       - "${ZENITH_HTTP_PORT:-80}:80"
       - "${ZENITH_HTTPS_PORT:-443}:443"

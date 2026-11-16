@@ -1,6 +1,12 @@
 # 제니스 리버스 프록시 · TLS · 정적 파일 (ARCHITECTURE §7). compose 가 이 파일을 /etc/caddy/Caddyfile 로 마운트한다(디렉터리째).
 # 사이트 주소는 ZENITH_SITE (기본 localhost). 바꾸면 `docker compose restart caddy`.
 # 라우팅은 스니펫 (zenith) 하나(./zenith.caddy) — HTTPS 사이트(밖·Tailscale)와 사내망 평문 HTTP 사이트(아래)가 같이 쓴다.
+{
+	# IP 주소로 들어온 TLS 연결에는 이름(SNI)이 없다 - 그때 고를 인증서를 사내망 HTTPS 사이트(맨 아래)로 못박는다.
+	# 없으면 caddy 는 컨테이너 자신의 IP(172.x)로 인증서를 찾다가 못 찾아 연결을 끊는다.
+	default_sni {$ZENITH_LAN_HTTPS:zenith-lan.localhost}
+}
+
 import zenith.caddy
 
 {$ZENITH_SITE:localhost} {
@@ -15,5 +21,14 @@ import zenith.caddy
 # ZENITH_LAN_SITE 를 안 주면 localhost 만 받아 사실상 꺼진 것과 같다(호스트 포트는 compose 가 늘 연다).
 # 평문이라 api 쿠키의 Secure 를 꺼야 로그인이 된다 — compose 의 ZENITH_COOKIE_SECURE=false. 사내망·Tailscale 안에서만 쓴다.
 {$ZENITH_LAN_SITE:http://localhost:5180} {
+	import zenith api:8000
+}
+
+# 사내망 HTTPS (2026-11-16): 데스크톱 앱(.msi)은 서버와 오리진이 달라 쿠키가 `SameSite=None; Secure` 여야 하고,
+# api 는 앱에서 온 평문 로그인을 400 `SHELL_NEEDS_HTTPS` 로 거절한다 - 위 평문 사이트로는 앱이 로그인하지 못한다.
+# ZENITH_LAN_HTTPS 에 서버 LAN IP(예: 192.168.219.8)를 주면 `https://<그 IP>` 를 Caddy 자체 CA 인증서로 받는다(443 은 위
+# HTTPS 사이트와 같이 쓴다). 각 PC 가 루트 인증서를 신뢰해야 한다 - infra/README "사내망 HTTPS". 안 주면 꺼진 것과 같다.
+{$ZENITH_LAN_HTTPS:zenith-lan.localhost} {
+	tls internal
 	import zenith api:8000
 }
