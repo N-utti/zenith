@@ -10654,6 +10654,11 @@
             "type": "array",
             "maxItems": 200,
             "title": "Allowed Users"
+          },
+          "private": {
+            "type": "boolean",
+            "title": "Private",
+            "default": false
           }
         },
         "type": "object",
@@ -10705,6 +10710,18 @@
             },
             "type": "array",
             "title": "Allowed Users"
+          },
+          "owner_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Id"
           }
         },
         "type": "object",
@@ -10714,7 +10731,8 @@
           "title",
           "sort",
           "min_role",
-          "allowed_users"
+          "allowed_users",
+          "owner_id"
         ],
         "title": "FolderOut"
       },
