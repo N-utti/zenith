@@ -40,6 +40,7 @@ from app.models import (
     ChannelMember,
     ChannelUpload,
     Message,
+    MessageReaction,
     Notification,
     User,
     Workspace,
@@ -151,6 +152,38 @@ class Person(BaseModel):
     is_bot: bool = False  # 「AI 어시스턴트」 봇 글(README 52) — 프론트는 이름이 아니라 이걸로 가린다(이슈 #403)
 
 
+# 화면이 고르는 이모지 여섯(프론트 `REACTIONS`) — 아무 문자열이나 받으면 긴 글·제어 문자가 공감으로 쌓인다
+REACTIONS = ("✅", "👍", "👀", "🙏", "❤️", "😂")
+
+
+class ReactionOut(BaseModel):
+    emoji: str
+    users: list[Person]  # 누른 순
+
+
+async def reactions_of(
+    db: AsyncSession, message_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, list[ReactionOut]]:
+    """메시지마다 공감 전체(README 79) — 이모지는 처음 눌린 순, 사람은 누른 순. 아무도 안 누른 이모지는 없다."""
+    out: dict[uuid.UUID, list[ReactionOut]] = {}
+    if not message_ids:
+        return out
+    rows = await db.execute(
+        select(MessageReaction.message_id, MessageReaction.emoji, User)
+        .join(User, User.id == MessageReaction.user_id)
+        .where(MessageReaction.message_id.in_(message_ids))
+        .order_by(MessageReaction.created_at, MessageReaction.user_id)
+    )
+    seen: dict[tuple[uuid.UUID, str], ReactionOut] = {}
+    for mid, emoji, u in rows:
+        item = seen.get((mid, emoji))
+        if item is None:
+            item = seen[(mid, emoji)] = ReactionOut(emoji=emoji, users=[])
+            out.setdefault(mid, []).append(item)
+        item.users.append(Person(id=u.id, name=u.name))
+    return out
+
+
 class MessageOut(BaseModel):
     """§4.1 `msg` 이벤트의 message 와 같은 모양."""
 
@@ -162,6 +195,8 @@ class MessageOut(BaseModel):
     attachments: list[AttachmentOut] | None
     created_at: datetime
     edited_at: datetime | None  # 고친 적 없으면 null (#264)
+    # 공감(README 79). 과거 메시지 조회에만 채운다 — 소켓 `msg`·`msg_edit` 와 채널 목록의 last_message 에는 싣지 않는다
+    reactions: list[ReactionOut] = []
 
 
 class ChannelOut(BaseModel):
@@ -806,8 +841,12 @@ async def list_messages(
     rows = (await db.execute(stmt)).all()
     more = len(rows) > limit
     rows = rows[:limit]
+    reactions = await reactions_of(db, [m.id for m, _ in rows])
     return MessagePage(
-        items=[_message_out(m, a) for m, a in reversed(rows)],
+        items=[
+            _message_out(m, a).model_copy(update={"reactions": reactions.get(m.id, [])})
+            for m, a in reversed(rows)
+        ],
         next_cursor=encode_cursor(rows[-1][0].created_at, rows[-1][0].id) if more else None,
     )
 

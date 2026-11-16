@@ -20,15 +20,12 @@ export type ChatAttachment = Schema<'app__routers__channels__AttachmentOut'>
  * 이름이 아니라 이 칸으로 가른다. 과거 메시지 조회엔 늘 실리지만, 사람 글의 소켓 `msg`·`msg_edit` 에는
  * 칸이 없다(타입은 필수라 해도 실서버에선 `undefined`). 그래서 `=== true` 로만 가른다.
  */
-export type ChatMessage = Schema<'MessageOut'> & {
-  /**
-   * 공감. 이모지마다 누른 사람(누른 순). 아무도 안 누른 이모지는 빠진다.
-   *
-   * ponytail: 아직 명세에 없는 칸이라 손수 붙였다(개발 릴레이만 준다). 백엔드가 넣으면 생성 타입으로
-   * 옮기고 이 교차 타입을 걷는다. 그 전 실서버에선 칸이 없어 공감이 안 보인다.
-   */
-  reactions?: ChatReaction[]
-}
+/**
+ * 공감(`reactions`)은 이모지마다 누른 사람(누른 순)이고 아무도 안 누른 이모지는 빠진다(백엔드 README 79).
+ * 과거 메시지 조회에는 늘 실리지만(없으면 `[]`), 소켓 `msg`·`msg_edit` 에는 칸이 없다(타입은 필수라 해도
+ * 실서버에선 `undefined`). 그래서 읽는 쪽은 `??` 로 받는다. 바뀐 공감은 `reaction` 이벤트로 온다.
+ */
+export type ChatMessage = Schema<'MessageOut'>
 
 /** 메시지 하나에 달린 이모지 하나의 공감. */
 export interface ChatReaction {

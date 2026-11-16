@@ -322,6 +322,19 @@ class Message(Base):
     )
 
 
+class MessageReaction(Base):
+    """메시지 공감(README 79) — 한 사람이 한 메시지에 같은 이모지를 한 번만. 메시지가 지워지면 같이 지워진다."""
+
+    __tablename__ = "message_reactions"
+
+    message_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("messages.id", ondelete="CASCADE"), primary_key=True
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    emoji: Mapped[str] = mapped_column(Text, primary_key=True)
+    created_at: Mapped[datetime] = created_at_col()
+
+
 class Board(Base):
     __tablename__ = "boards"
 

@@ -16,6 +16,7 @@ import type { ChatChannel, ChatMessage } from './types'
 function message(id: string): ChatMessage {
   return {
     id,
+    reactions: [],
     channel_id: 'c1',
     author: { id: 'u1', name: '정성운', is_bot: false },
     body: '안녕하세요',
@@ -111,7 +112,10 @@ describe('replaceMessage', () => {
   it('받은 메시지에 공감 칸이 없으면 있던 공감을 남긴다', () => {
     const reactions = [{ emoji: '✅', users: [{ id: 'u2', name: '진수연', is_bot: false }] }]
     const page = { items: [{ ...message('m1'), reactions }] }
-    const next = replaceMessage(page, { ...message('m1'), body: '고친 글' })
+    // 소켓 `msg_edit` 에는 공감 칸이 없다(타입은 필수라도 실서버에선 undefined).
+    const edited = { ...message('m1'), body: '고친 글' } as Partial<ChatMessage>
+    delete edited.reactions
+    const next = replaceMessage(page, edited as ChatMessage)
     expect(next?.items[0].reactions).toEqual(reactions)
   })
 
