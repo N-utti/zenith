@@ -127,6 +127,7 @@ import {
   listApprovals,
   submitApproval,
   updateDraft,
+  deleteDone,
   deleteDraft,
 } from './approvalsDb'
 import {
@@ -1084,6 +1085,15 @@ export const handlers = [
     if (!user) return unauthorized()
     await delay(300)
     const failure = deleteDraft(user, String(params.id))
+    if (failure) return approvalResponse(failure)
+    return new HttpResponse(null, { status: 204 })
+  }),
+  // 끝난 문서 지우기(백엔드 README 78). `drafts/:id` 와 세그먼트 수가 달라 순서는 상관없다.
+  http.delete('/api/approvals/:id', async ({ params }) => {
+    const user = authenticate()
+    if (!user) return unauthorized()
+    await delay(300)
+    const failure = deleteDone(user, String(params.id))
     if (failure) return approvalResponse(failure)
     return new HttpResponse(null, { status: 204 })
   }),

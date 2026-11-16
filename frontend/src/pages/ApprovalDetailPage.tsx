@@ -16,6 +16,7 @@ import {
   useApproveStep,
   useCancelApproval,
   useDeleteDraft,
+  useDeleteApproval,
   useForceCloseApproval,
   useRejectStep,
   useSubmitApproval,
@@ -67,6 +68,7 @@ export function ApprovalDetailPage() {
   const approve = useApproveStep()
   const reject = useRejectStep()
   const forceClose = useForceCloseApproval()
+  const removeDone = useDeleteApproval()
   /** 열려 있는 사유 입력창. 반려와 강제 종결이 같은 폼을 쓴다. */
   const [asking, setAsking] = useState<'reject' | 'force' | null>(null)
   const [reason, setReason] = useState('')
@@ -99,6 +101,11 @@ export function ApprovalDetailPage() {
   // 임원은 남의 문서도 끝낼 수 있다. 결재자가 자리를 비워 영영 대기로 남는 문서를 끊는 길이다.
   // 내 차례일 때는 안 보인다. 그건 부재가 아니라 내 판단이고, 승인·반려로 남겨야 이력이 정확하다.
   const canForceClose = d.status === 'pending' && !myTurn && ROLE_RANK[user.role] >= ROLE_RANK.exec
+  // 임원은 끝난 일반 결재를 지울 수 있다(백엔드 README 78). 근태 신청 문서는 근태 기록이 가리켜 서버가 막는다.
+  const canDelete =
+    ROLE_RANK[user.role] >= ROLE_RANK.exec &&
+    d.type_code === 'general' &&
+    ['approved', 'rejected', 'closed'].includes(d.status)
   // 반려·회수·강제 종결로 끝난 문서는 고칠 수 없다. 기안자가 같은 내용으로 새 문서를 시작한다.
   const canRewrite = isDrafter && ['rejected', 'canceled', 'closed'].includes(d.status)
   const busy =
@@ -107,7 +114,8 @@ export function ApprovalDetailPage() {
     removeDraft.isPending ||
     approve.isPending ||
     reject.isPending ||
-    forceClose.isPending
+    forceClose.isPending ||
+    removeDone.isPending
   const onError = (err: unknown) =>
     toast.error(err instanceof ApiError ? err.message : '처리하지 못했습니다.')
 
@@ -250,6 +258,37 @@ export function ApprovalDetailPage() {
                   {approve.isPending ? <Spinner className="border-t-on-accent" /> : '승인'}
                 </Button>
               </>
+            )}
+            {canDelete && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="hover:text-danger"
+                disabled={busy}
+                onClick={() => {
+                  if (
+                    !confirm(
+                      '이 문서를 지울까요? 결재선과 첨부도 같이 지워지고 되돌릴 수 없습니다.',
+                    )
+                  )
+                    return
+                  removeDone.mutate(d.id, {
+                    onSuccess: () => {
+                      toast.success('문서를 지웠습니다.')
+                      void navigate('/approvals?box=done')
+                    },
+                    onError: (err) => {
+                      onError(err)
+                      // 다른 임원이 먼저 지웠다. 없는 문서 화면에 머물지 않게 목록으로 보낸다.
+                      if (err instanceof ApiError && err.status === 404) {
+                        void navigate('/approvals?box=done')
+                      }
+                    },
+                  })
+                }}
+              >
+                삭제
+              </Button>
             )}
             {canForceClose && (
               <Button variant="ghost" size="sm" disabled={busy} onClick={() => setAsking('force')}>

@@ -462,6 +462,21 @@ export function deleteDraft(user: User, id: string): Failure | null {
   return null
 }
 
+/** 끝난 문서 지우기(백엔드 README 78). 임원만, 승인·반려·강제 종결된 일반 결재만. */
+export function deleteDone(user: User, id: string): Failure | null {
+  seed()
+  const index = docs.findIndex((d) => d.id === id)
+  const doc = docs[index]
+  if (user.role !== 'exec') return fail('권한이 부족합니다.', 403, 'FORBIDDEN')
+  if (!doc) return fail('문서를 찾을 수 없습니다.', 404, 'NOT_FOUND')
+  if (!['approved', 'rejected', 'closed'].includes(doc.status))
+    return fail('끝난 문서만 지울 수 있습니다.', 409, 'NOT_DONE')
+  if (doc.type_code !== 'general')
+    return fail('근태 신청 문서는 지울 수 없습니다.', 409, 'ATTENDANCE_LINKED')
+  docs.splice(index, 1)
+  return null
+}
+
 /** 첨부를 올릴 수 있는 문서인가. 내 임시저장만이다. 상신한 문서는 내용과 같이 첨부도 굳는다. */
 export function checkAttachTarget(user: User, id: string): Failure | null {
   const doc = docs.find((d) => d.id === id)

@@ -732,3 +732,94 @@ async def test_done_box_is_exec_only(c, users: Users, app_db) -> None:
         r = await client.get("/api/approvals?box=done")
         assert (r.status_code, r.json()["code"]) == (403, "FORBIDDEN")
         assert [d.detail.get("box") for d in await _denied(app_db, who.id)] == ["done"]
+
+
+async def test_exec_deletes_a_done_document(c, users: Users, app_db) -> None:
+    """README 78: 임원이 끝난 문서 하나를 지운다 — 결재선·알림도 같이, 감사에 남는다. 대기 중·근태 문서는 못 지운다."""
+    pending = await _submitted(c, title="대기 중")
+    url = f"/api/approvals/{pending['id']}"
+    r = await c.exec.delete(url, headers=csrf(c.exec))
+    assert (r.status_code, r.json()["code"]) == (409, "NOT_DONE")
+    r = await post(
+        c.lead, f"{url}/reject", {"version": pending["steps"][0]["version"], "reason": "근거 부족"}
+    )
+    assert r.json()["status"] == "rejected"
+    # 임원이 아니면 403 + 감사 — 기안자 본인도 못 지운다
+    r = await c.member.delete(url, headers=csrf(c.member))
+    assert r.status_code == 403
+    assert len(await _denied(app_db, users.member.id)) == 1
+
+    noted = select(Notification).where(Notification.payload["approval_id"].astext == pending["id"])
+    assert list(await app_db.scalars(noted))
+    # 대조군 — 다른 문서의 알림은 건드리지 않는다(리뷰)
+    other = await _submitted(c, title="남는 문서")
+    kept = select(Notification).where(Notification.payload["approval_id"].astext == other["id"])
+    before = len(list(await app_db.scalars(kept)))
+    assert before
+    r = await c.exec.delete(url, headers=csrf(c.exec))
+    assert r.status_code == 204, r.text
+    assert (await c.exec.get(url)).status_code == 404
+    assert (await c.exec.delete(url, headers=csrf(c.exec))).status_code == 404  # 두 번은 없다
+    assert (await c.exec.get("/api/approvals?box=done")).json()["items"] == []
+    assert list(await app_db.scalars(noted)) == []
+    assert len(list(await app_db.scalars(kept))) == before
+    assert (await c.exec.get(f"/api/approvals/{other['id']}")).status_code == 200
+    event = await app_db.scalar(select(AuditEvent).where(AuditEvent.kind == "approvals.deleted"))
+    assert event.actor_id == users.exec.id and event.detail["title"] == "대기 중"
+    assert event.detail["status"] == "rejected" and event.detail["amount"] == 450_000
+    assert event.detail["closed_at"]
+
+    # 회수한 문서와 임시저장은 「끝난 문서」가 아니다
+    canceled = await _submitted(c, title="회수")
+    await post(c.member, f"/api/approvals/{canceled['id']}/cancel")
+    saved = (await post(c.member, "/api/approvals/drafts", draft(title="초안"))).json()
+    for doc_id in (canceled["id"], saved["id"]):
+        r = await c.exec.delete(f"/api/approvals/{doc_id}", headers=csrf(c.exec))
+        assert (r.status_code, r.json()["code"]) == (409, "NOT_DONE")
+
+    # 근태 신청 문서는 근태 기록이 가리킨다 — 끝났어도 못 지운다
+    await post(c.member, "/api/leaves", {"type_code": "annual", "start_date": "2030-03-04"})
+    leave = (await c.lead.get("/api/approvals?box=inbox")).json()["items"][0]
+    r = await post(c.lead, f"/api/approvals/{leave['id']}/approve", {"version": 1})
+    assert r.json()["status"] == "approved"
+    r = await c.exec.delete(f"/api/approvals/{leave['id']}", headers=csrf(c.exec))
+    assert (r.status_code, r.json()["code"]) == (409, "ATTENDANCE_LINKED")
+    assert (await c.member.get("/api/leaves?scope=me")).json()["items"][0]["status"] == "approved"
+
+
+async def test_deleting_a_done_document_removes_its_files_only(
+    c, users: Users, app_db, minio_bucket
+) -> None:
+    """README 78: 승인된 문서를 지우면 그 문서의 첨부만 저장소에서 사라진다. 다른 문서의 첨부는 남는다(리뷰)."""
+    from app import storage
+
+    async def approved_with_file(title: str) -> tuple[dict, dict]:
+        doc = (await post(c.member, "/api/approvals/drafts", draft(title=title))).json()
+        att = (await _upload(c.member, doc["id"])).json()
+        body = draft(title=title, approvers=[str(users.lead.id)])
+        body["subject"]["attachments"] = [att]
+        r = await c.member.patch(
+            f"/api/approvals/drafts/{doc['id']}", json=body, headers=csrf(c.member)
+        )
+        assert r.status_code == 200, r.text
+        sent = (await post(c.member, f"/api/approvals/{doc['id']}/submit")).json()
+        r = await post(
+            c.lead, f"/api/approvals/{doc['id']}/approve", {"version": sent["steps"][0]["version"]}
+        )
+        assert r.json()["status"] == "approved", r.text
+        return doc, att
+
+    gone, gone_att = await approved_with_file("지울 것")
+    kept, kept_att = await approved_with_file("남길 것")
+    assert (await c.member.get(gone_att["url"])).status_code == 200
+
+    r = await c.exec.delete(f"/api/approvals/{gone['id']}", headers=csrf(c.exec))
+    assert r.status_code == 204, r.text
+    client = storage._client()
+
+    def left(doc_id: str) -> list:
+        return list(client.list_objects(minio_bucket, prefix=f"approvals/{doc_id}/", recursive=True))
+
+    assert left(gone["id"]) == [] and len(left(kept["id"])) == 1
+    assert (await c.member.get(gone_att["url"])).status_code == 404
+    assert (await c.member.get(kept_att["url"])).status_code == 200

@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { notificationKeys } from '@/features/notifications/api'
 import { api } from '@/lib/api'
 import { draftForms, type AiDraft } from './templates'
 import type {
@@ -77,6 +78,25 @@ export function useDeleteDraft() {
     // 결재함만 다시 읽고, 다 읽을 때까지 기다린다(약속을 돌려준다). 안 기다리면 줄이 사라지기
     // 전에 버튼이 되살아나 한 번 더 눌리고 404 가 뜬다. 문서 상세까지 다시 읽으면 상세에서 지울
     // 때 방금 지운 문서를 한 번 더 청해 화면이 오류로 바뀐다.
+    onSettled: () => qc.invalidateQueries({ queryKey: [...approvalsKey, 'box'] }),
+  })
+}
+
+/**
+ * 끝난 문서 지우기(백엔드 README 78). 임원만, 승인·반려·강제 종결된 일반 결재만 지운다.
+ * 근태 신청 문서는 서버가 409 로 막는다. 되돌릴 수 없다.
+ */
+export function useDeleteApproval() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => api<void>(`/approvals/${id}`, { method: 'DELETE' }),
+    onSuccess: (_, id) => {
+      // 상세 캐시는 다시 읽지 않고 버린다. 다시 읽으면 방금 지운 문서를 청해 화면이 오류로 바뀌고,
+      // 남겨 두면 뒤로 가기에서 지운 문서가 잠깐 보인다.
+      qc.removeQueries({ queryKey: [...approvalsKey, 'doc', id] })
+      // 서버가 이 문서를 가리키던 알림도 지웠다. 벨에 남으면 눌렀을 때 없는 문서로 간다.
+      void qc.invalidateQueries({ queryKey: notificationKeys.list })
+    },
     onSettled: () => qc.invalidateQueries({ queryKey: [...approvalsKey, 'box'] }),
   })
 }

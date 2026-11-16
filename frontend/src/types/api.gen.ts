@@ -1619,7 +1619,11 @@ export interface paths {
         get: operations["get_approval_api_approvals__id__get"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * 끝난 문서 지우기 — exec 만. 승인·반려·종결만(409 NOT_DONE), 근태 신청 문서는 409 ATTENDANCE_LINKED. 결재선·알림·첨부도 같이, 감사 approvals.deleted
+         * @description 완료 문서함(README 77)에서 문서 하나를 지운다(README 78). 되돌릴 수 없다 — 남는 것은 감사 기록뿐이다.
+         */
+        delete: operations["delete_done_api_approvals__id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -9039,6 +9043,35 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ApprovalOut"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_done_api_approvals__id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
