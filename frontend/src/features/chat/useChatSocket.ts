@@ -20,6 +20,7 @@ import {
   replaceMessage,
   withEditedLast,
   withLastMessage,
+  withReactions,
   withUnread,
 } from './events'
 import type { ChatAttachment, ChatChannel, ChatEvent, ChatMessage } from './types'
@@ -112,6 +113,11 @@ export interface ChatSocket {
   editMessage: (channelId: string, messageId: string, body: string) => boolean
   /** 내가 보낸 메시지를 지운다. 화면은 돌아오는 `msg_del` 로 바뀐다. 닫혀 있으면 `false`. */
   deleteMessage: (channelId: string, messageId: string) => boolean
+  /**
+   * 공감을 켜거나 끈다(`on`). 뒤집기가 아니라 켤지 끌지를 실어 보내서, 두 탭에서 같이 눌러도 한쪽 뜻대로
+   * 남는다. 화면은 돌아오는 `reaction` 으로 바뀐다. 닫혀 있으면 `false`.
+   */
+  reactMessage: (channelId: string, messageId: string, emoji: string, on: boolean) => boolean
 }
 
 /**
@@ -341,6 +347,14 @@ export function useChatSocket(): ChatSocket {
           return
         }
 
+        if (event.ev === 'reaction') {
+          const { channel_id, message_id, reactions } = event
+          qc.setQueryData<{ items: ChatMessage[] }>(chatKeys.messages(channel_id), (old) =>
+            withReactions(old, message_id, reactions),
+          )
+          return
+        }
+
         if (event.ev === 'unread') {
           const { channel_id, count } = event
           qc.setQueryData<{ items: ChatChannel[] }>(chatKeys.channels, (old) =>
@@ -476,6 +490,12 @@ export function useChatSocket(): ChatSocket {
     [sendOp],
   )
 
+  const reactMessage = useCallback<ChatSocket['reactMessage']>(
+    (channelId, messageId, emoji, on) =>
+      sendOp({ op: 'react', channel_id: channelId, message_id: messageId, emoji, on }),
+    [sendOp],
+  )
+
   const notifyTyping = useCallback(
     (channelId: string) => {
       const now = Date.now()
@@ -495,5 +515,6 @@ export function useChatSocket(): ChatSocket {
     sendRead,
     editMessage,
     deleteMessage,
+    reactMessage,
   }
 }

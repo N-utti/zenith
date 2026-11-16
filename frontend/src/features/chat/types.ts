@@ -20,7 +20,21 @@ export type ChatAttachment = Schema<'app__routers__channels__AttachmentOut'>
  * 이름이 아니라 이 칸으로 가른다. 과거 메시지 조회엔 늘 실리지만, 사람 글의 소켓 `msg`·`msg_edit` 에는
  * 칸이 없다(타입은 필수라 해도 실서버에선 `undefined`). 그래서 `=== true` 로만 가른다.
  */
-export type ChatMessage = Schema<'MessageOut'>
+export type ChatMessage = Schema<'MessageOut'> & {
+  /**
+   * 공감. 이모지마다 누른 사람(누른 순). 아무도 안 누른 이모지는 빠진다.
+   *
+   * ponytail: 아직 명세에 없는 칸이라 손수 붙였다(개발 릴레이만 준다). 백엔드가 넣으면 생성 타입으로
+   * 옮기고 이 교차 타입을 걷는다. 그 전 실서버에선 칸이 없어 공감이 안 보인다.
+   */
+  reactions?: ChatReaction[]
+}
+
+/** 메시지 하나에 달린 이모지 하나의 공감. */
+export interface ChatReaction {
+  emoji: string
+  users: Person[]
+}
 
 /**
  * 백엔드 `MessagePage`. 메시지 한 쪽(오래된 순). `next_cursor` 는 더 과거가 있을 때만 오고, 다음
@@ -51,6 +65,11 @@ export type ChatEvent =
    */
   | { ev: 'msg_edit'; channel_id: string; message: ChatMessage }
   | { ev: 'msg_del'; channel_id: string; message_id: string }
+  /**
+   * 메시지의 공감이 바뀌었다. 채널 멤버 전원에게 그 메시지의 공감 전체가 온다(누른 사람 포함).
+   * 고치기(`msg_edit`)와 따로 둔 것은 알림·홈을 다시 받지 않게 하려는 것이다.
+   */
+  | { ev: 'reaction'; channel_id: string; message_id: string; reactions: ChatReaction[] }
   /** 알림 행 하나(`realtime/chat.py` 의 `push_notice`). 멘션·댓글·새 글·결재 알림이 생긴 순간에 온다. */
   | ({ ev: 'notice' } & Pick<Notification, 'id' | 'kind' | 'payload' | 'created_at'>)
   /** 내 안읽음 숫자. 새 메시지 때는 사람마다 자기 숫자, `read` 뒤에는 본인에게 0. */

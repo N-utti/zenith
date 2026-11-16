@@ -55,6 +55,7 @@ const socket = {
   sendRead: () => {},
   editMessage: () => true,
   deleteMessage: () => true,
+  reactMessage: () => true,
 } as unknown as ChatSocket
 const toast: ToastApi = { success: vi.fn(), error: vi.fn(), info: vi.fn() }
 
