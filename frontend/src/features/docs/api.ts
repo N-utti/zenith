@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, ApiError } from '@/lib/api'
+import { useWithoutPending } from '@/lib/deferDelete'
 import { queryClient } from '@/lib/queryClient'
 import { homeKeys } from '@/features/home/keys'
 import { meQueryKey } from '@/features/auth/queries'
@@ -426,9 +427,12 @@ export function useDeleteComment(docId: string) {
 
 /** 휴지통 목록. 지운 지 최근 순으로 서버가 정렬해 준다. */
 export function useTrash() {
+  // 영구 삭제·비우기는 되돌리기 시간 동안 늦게 보낸다. 그동안 그 줄은 빼고 그린다.
+  const select = useWithoutPending<DocSummary>()
   return useQuery({
     queryKey: docKeys.trash,
     queryFn: () => api<{ items: DocSummary[] }>('/trash'),
+    select,
   })
 }
 
@@ -479,6 +483,8 @@ export function useEmptyTrash() {
     mutationFn: async (docIds: string[]) => {
       let failed = 0
       let skipped = 0
+      /** 지우지 않은 문서. 늦게 지우기(`deferDelete`)가 이것만 목록에 다시 보이게 한다. */
+      const kept: string[] = []
       for (const docId of docIds) {
         try {
           await api<void>(`/docs/${docId}?hard=1`, { method: 'DELETE' })
@@ -490,6 +496,7 @@ export function useEmptyTrash() {
           if (status === 403 || status === 401) throw err
           if (status === 409 || status === 404) skipped += 1
           else failed += 1
+          kept.push(docId)
         }
       }
       return {
@@ -497,6 +504,7 @@ export function useEmptyTrash() {
         failed,
         /** 그사이 누가 되돌렸거나 이미 지워져 건드리지 않은 문서 수. */
         skipped,
+        kept,
       }
     },
     // 일부만 지워졌어도, 중간에 던졌어도 목록은 다시 받는다.
