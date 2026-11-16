@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   appendMessage,
+  batchAlert,
   errorText,
   prependOlder,
   removeMessage,
@@ -223,5 +224,17 @@ describe('errorText', () => {
     expect(errorText({ code: 'VALIDATION', detail: '   ' })).toBe(
       '채팅 서버가 요청을 거절했습니다.',
     )
+  })
+})
+
+describe('batchAlert', () => {
+  it('하나면 그대로, 여럿이면 개수와 마지막 메시지', () => {
+    const a = { title: '김철수', body: '안녕' }
+    const b = { title: '#일반 · 이영희', body: '회의 몇 시?' }
+    expect(batchAlert([a])).toBe(a)
+    expect(batchAlert([a, a, b])).toEqual({
+      title: '새 메시지 3개',
+      body: '#일반 · 이영희: 회의 몇 시?',
+    })
   })
 })

@@ -6,6 +6,7 @@ import { ToastContext, type ToastApi } from '@/components/ui/ToastContext'
 import { AuthContext, type AuthValue } from '@/features/auth/AuthContext'
 import { meQueryKey } from '@/features/auth/queries'
 import { api, ApiError } from '@/lib/api'
+import { notify as desktopNotify } from '@/lib/desktop'
 import { useChatSocket, type ChatSocket } from './useChatSocket'
 
 vi.mock('@/lib/api', async (original) => ({
@@ -13,6 +14,12 @@ vi.mock('@/lib/api', async (original) => ({
   api: vi.fn(),
 }))
 const fetchMe = vi.mocked(api)
+
+vi.mock('@/lib/desktop', async (original) => ({
+  ...(await original<typeof import('@/lib/desktop')>()),
+  notify: vi.fn(),
+}))
+const notify = vi.mocked(desktopNotify)
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -75,11 +82,14 @@ beforeEach(() => {
   vi.useFakeTimers()
   FakeSocket.opened = []
   fetchMe.mockReset()
+  notify.mockReset()
   vi.stubGlobal('WebSocket', FakeSocket)
 })
 
 afterEach(() => {
   vi.useRealTimers()
+  // `document.hasFocus` 가짜를 되돌린다. vi.fn 으로 만든 목(`api`·`notify`)은 건드리지 않는다.
+  vi.restoreAllMocks()
   vi.unstubAllGlobals()
 })
 
@@ -324,4 +334,35 @@ test('접속·나감을 받아 접속한 사람을 들고 있다가 끊기면 �
   // 끊긴 사이 나간 사람은 알 수 없다. 다시 붙으면 서버가 처음부터 보낸다.
   await close(1006)
   expect(hook.online.size).toBe(0)
+})
+
+const other = { id: 'u2', name: '이영희' }
+
+test('창을 안 볼 때 2초 안에 몰려온 메시지는 OS 알림 하나로 묶고, 그 사이 지운 것은 뺀다', async () => {
+  vi.spyOn(document, 'hasFocus').mockReturnValue(false)
+  await mount()
+  const deleted = message('셋', other)
+  await receive(message('하나', other))
+  await receive(message('둘', other))
+  await receive(deleted)
+  await receive({ ev: 'msg_del', channel_id: 'c-1', message_id: deleted.message.id })
+  await act(() => vi.advanceTimersByTimeAsync(2000))
+
+  expect(notify).toHaveBeenCalledTimes(1)
+  expect(notify).toHaveBeenCalledWith({ title: '새 메시지 2개', body: '이영희: 둘' })
+})
+
+test('모으는 사이 창으로 돌아왔거나 화면이 내려가면 띄우지 않는다', async () => {
+  const focus = vi.spyOn(document, 'hasFocus').mockReturnValue(false)
+  const { root } = await mount()
+  await receive(message('하나', other))
+  focus.mockReturnValue(true)
+  await act(() => vi.advanceTimersByTimeAsync(2000))
+  expect(notify).not.toHaveBeenCalled()
+
+  focus.mockReturnValue(false)
+  await receive(message('둘', other))
+  act(() => root.unmount())
+  await vi.advanceTimersByTimeAsync(2000)
+  expect(notify).not.toHaveBeenCalled()
 })
