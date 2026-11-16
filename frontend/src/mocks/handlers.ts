@@ -272,6 +272,8 @@ let attendanceRoles: {
   manager: { id: string; name: string } | null
   ceo: { id: string; name: string } | null
 } = { manager: null, ceo: null }
+/** 전사 근태 관리(조회·결근·연차 현황·마감)는 임원이나 근태 담당자(백엔드 `can_manage`). */
+const canManage = (user: User) => user.role === 'exec' || attendanceRoles.manager?.id === user.id
 
 const notFound = (detail = '문서를 찾을 수 없습니다.') =>
   HttpResponse.json({ detail, code: 'NOT_FOUND' }, { status: 404 })
@@ -1206,13 +1208,13 @@ export const handlers = [
     }),
   ),
 
-  // 04 §10.5 의 팀 그리드를 `team_id` 없이 부르면 전사. 팀장이 없는 조직이라 팀 단위는 안 쓴다. 임원 외 403(10 §3).
+  // 04 §10.5 의 팀 그리드를 `team_id` 없이 부르면 전사. 팀장이 없는 조직이라 팀 단위는 안 쓴다. 임원·근태 담당자 외 403.
   http.get(
     '/api/attendance/team',
     authed((user, request) => {
-      if (user.role !== 'exec') {
+      if (!canManage(user)) {
         return HttpResponse.json(
-          { detail: '전사 근태는 임원만 볼 수 있습니다.', code: 'FORBIDDEN' },
+          { detail: '전사 근태는 근태 담당자나 임원만 볼 수 있습니다.', code: 'FORBIDDEN' },
           { status: 403 },
         )
       }
@@ -1539,7 +1541,7 @@ export const handlers = [
   http.post('/api/attendance/absences', async ({ request }) => {
     const user = authenticate()
     if (!user) return unauthorized()
-    if (user.role !== 'exec' && attendanceRoles.manager?.id !== user.id) return forbidden()
+    if (!canManage(user)) return forbidden()
     const body = (await request.json()) as { user_id: string; work_date: string; note?: string }
     return HttpResponse.json(
       { user_id: body.user_id, work_date: body.work_date, note: body.note ?? null },
@@ -1549,15 +1551,15 @@ export const handlers = [
   http.delete('/api/attendance/absences', () => {
     const user = authenticate()
     if (!user) return unauthorized()
-    if (user.role !== 'exec' && attendanceRoles.manager?.id !== user.id) return forbidden()
+    if (!canManage(user)) return forbidden()
     return new HttpResponse(null, { status: 204 })
   }),
   http.post('/api/attendance/close', async ({ request }) => {
     const user = authenticate()
     if (!user) return unauthorized()
-    if (user.role !== 'exec') {
+    if (!canManage(user)) {
       return HttpResponse.json(
-        { detail: '월 마감은 임원만 할 수 있습니다.', code: 'FORBIDDEN' },
+        { detail: '근태 담당자나 임원만 할 수 있습니다.', code: 'FORBIDDEN' },
         { status: 403 },
       )
     }
@@ -1581,9 +1583,9 @@ export const handlers = [
   http.post('/api/attendance/reopen', async ({ request }) => {
     const user = authenticate()
     if (!user) return unauthorized()
-    if (user.role !== 'exec') {
+    if (!canManage(user)) {
       return HttpResponse.json(
-        { detail: '마감 해제는 임원만 할 수 있습니다.', code: 'FORBIDDEN' },
+        { detail: '근태 담당자나 임원만 할 수 있습니다.', code: 'FORBIDDEN' },
         { status: 403 },
       )
     }
@@ -1707,13 +1709,13 @@ export const handlers = [
     '/api/leaves/balance',
     authed((user) => HttpResponse.json(leaveBalance(user))),
   ),
-  // 04 에 없는 확장(연차 관리 탭). 전사 잔여는 임원만(10 §3), 그 외 403.
+  // 04 에 없는 확장(연차 관리 탭). 전사 잔여는 임원·근태 담당자만, 그 외 403.
   http.get(
     '/api/leaves/balances',
     authed((user) => {
-      if (user.role !== 'exec') {
+      if (!canManage(user)) {
         return HttpResponse.json(
-          { detail: '전사 연차 현황은 임원만 볼 수 있습니다.', code: 'FORBIDDEN' },
+          { detail: '근태 담당자나 임원만 할 수 있습니다.', code: 'FORBIDDEN' },
           { status: 403 },
         )
       }
