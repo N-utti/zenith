@@ -10,6 +10,7 @@ it('topFolders 는 부모가 없는 폴더만 남긴다. 트리가 아직 없으
     sort: 0,
     min_role: 'member' as const,
     allowed_users: [],
+    owner_id: null,
   })
   const tree = { folders: [folder('a', null), folder('b', 'a'), folder('c', null)], docs: [] }
   expect(topFolders(tree).map((f) => f.id)).toEqual(['a', 'c'])

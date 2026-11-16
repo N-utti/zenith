@@ -1,6 +1,7 @@
 import { Extension, getStyleProperty, type Extensions } from '@tiptap/core'
 import { Plugin } from '@tiptap/pm/state'
 import StarterKit from '@tiptap/starter-kit'
+import { ySyncPluginKey } from '@tiptap/y-tiptap'
 import Placeholder from '@tiptap/extension-placeholder'
 import Collaboration from '@tiptap/extension-collaboration'
 import CollaborationCaret from '@tiptap/extension-collaboration-caret'
@@ -151,10 +152,40 @@ export function docContentExtensions(): Extensions {
  * 문서 에디터가 쓰는 확장 묶음.
  * 협업(Yjs)이 문서의 원천이므로 되돌리기는 StarterKit이 아니라 Yjs UndoManager가 맡는다.
  */
+/** 초안 심기 트랜잭션의 표시. 읽기 전용이어도 걸러지지 않는다(`ReadOnlyGuard`). */
+export const SEED_META = 'zenithSeed'
+
+/**
+ * 편집할 수 없는 동안(잠긴 문서, 백엔드 #619) 문서를 바꾸는 트랜잭션을 걸러 낸다.
+ *
+ * `editable: false` 는 사람 입력만 막는다. 플러그인이 스스로 덧붙이는 변경(문서 끝 빈 문단, 표 바로잡기,
+ * 블록 id)과 명령(늦게 끝난 업로드 삽입, 사진 크기 손잡이)은 그대로 Y.Doc 에 써지고, 서버가 그걸 받으면
+ * 4423 으로 끊는다. 열기만 해도 끊기고 다시 열어도 또 끊긴다. 다른 사람에게서 온 변경(y-tiptap 이
+ * `isChangeOrigin` 을 단다)과 초안 심기만 통과시킨다. 그러면 편집기 문서가 Y.Doc 과 같게 남아
+ * y-tiptap 이 견줘도 쓸 것이 없다.
+ */
+export const ReadOnlyGuard = Extension.create({
+  name: 'readOnlyGuard',
+  addProseMirrorPlugins() {
+    const editor = this.editor
+    return [
+      new Plugin({
+        filterTransaction: (tr) =>
+          editor.isEditable ||
+          !tr.docChanged ||
+          !!(tr.getMeta(ySyncPluginKey) as { isChangeOrigin?: boolean } | undefined)
+            ?.isChangeOrigin ||
+          !!tr.getMeta(SEED_META),
+      }),
+    ]
+  },
+})
+
 export function buildDocExtensions({ doc, provider, user }: BuildOptions): Extensions {
   return [
     ...docContentExtensions(),
     Collaboration.configure({ document: doc }),
     CollaborationCaret.configure({ provider, user }),
+    ReadOnlyGuard,
   ]
 }

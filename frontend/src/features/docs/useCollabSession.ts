@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import * as Y from 'yjs'
 import { IndexeddbPersistence } from 'y-indexeddb'
 import { WebsocketProvider } from 'y-websocket'
+import { toastApi } from '@/components/ui/ToastContext'
 import { api } from '@/lib/api'
 import { reloadMe } from '@/features/auth/queries'
 import { queryClient } from '@/lib/queryClient'
@@ -30,6 +31,12 @@ function relayUrl(): string {
   return wsUrl('/api/yjs')
 }
 
+/**
+ * 4423 뒤 브라우저 사본을 못 지운 문서. 남은 사본에는 거절된 글이 있어, 열면 서버에 다시 보내 또 끊기고
+ * 잠금을 푼 뒤에는 본문에 합쳐진다. 이 탭이 살아 있는 동안 그 문서는 사본 없이 연다(`localCache` 와 같은 원칙).
+ */
+const uncachedDocs = new Set<string>()
+
 /** 릴레이가 죽어 있어도 편집은 계속돼야 하므로, 서버 동기화를 무한정 기다리지 않는다. */
 const RELAY_WAIT_MS = 1200
 
@@ -53,7 +60,10 @@ export function useCollabSession(docId: string): CollabSession | null {
     // 커지므로, 릴레이(scripts/collab.js · backend realtime/yjs.py)도 같은 설정이어야 한다.
     const doc = new Y.Doc({ gc: false })
     const provider = new WebsocketProvider(relayUrl(), docId, doc)
-    const persistence = docCacheUsable() ? new IndexeddbPersistence(docCacheName(docId), doc) : null
+    const persistence =
+      docCacheUsable() && !uncachedDocs.has(docId)
+        ? new IndexeddbPersistence(docCacheName(docId), doc)
+        : null
     // StrictMode의 두 번째 마운트에서 이미 정리된 세션을 넘기지 않도록 막는다.
     let cancelled = false
     // 백엔드는 붙을 때 access 가 만료돼 있거나, 60초마다 하는 재검증에서 세션이 회수돼 있으면
@@ -61,7 +71,10 @@ export function useCollabSession(docId: string): CollabSession | null {
     // 44xx 를 영구 종료로 보고 다시 붙지 않으므로, HTTP 와 같은 refresh 경로(lib/api.ts)로 세션을
     // 살린 뒤 한 번 다시 붙인다. 살아나지 않으면 진짜 로그아웃. 화면은 오프라인 편집으로 남는다.
     provider.on('closed', (event) => {
-      if (event.code === 4403) {
+      // 4423: 임원이 잠근 문서에 편집을 보냈다(백엔드 #619). 다시 붙어도 같다. 거절된 글이 사본에 남으면
+      // 잠금을 푼 뒤 다시 열 때 본문에 합쳐지므로(서버는 못 막는다) 4403 과 같이 사본을 지우고 다시 받는다.
+      // 다시 받은 문서는 잠김 표시가 있어 읽기 전용으로 열린다(`DocWorkspace`).
+      if (event.code === 4403 || event.code === 4423) {
         // 열람 권한이 회수됐다(백엔드 #421, 붙을 때나 60초 재검증). 다시 붙어도 같다. 볼 수 없게 된
         // 내용을 이 브라우저에 남기지 않고(사용자 결정) 문서·트리를 다시 받는다. 문서 화면은 그 403 으로
         // 권한 없음 화면이 된다(`DocPane`). 그사이 친 글은 남지 않는다. 같은 브라우저의 다른 탭과
@@ -69,9 +82,24 @@ export function useCollabSession(docId: string): CollabSession | null {
         // ponytail: 같은 문서를 연 다른 탭은 사본이 지워진 뒤 자기 4403(60초 안)까지 편집마다 닫힌 DB 에
         // 쓰다 예외를 낸다(사본 자체는 안 남는다). 사람이 바뀔 때 사본을 지우는 `localCache` 도 같다.
         provider.disconnect()
-        void persistence?.clearData()
+        if (event.code === 4423) {
+          toastApi.error('문서가 잠겨 있어 이 기기에서 고친 내용은 저장되지 않았습니다.')
+        }
+        // 사본을 다 지운 뒤에 다시 연다. 지우기 전에 새 세션이 같은 사본을 열면 거절된 글을 도로 읽는다.
+        // 잠김이 바뀌어 화면이 새로 만들어지는 경로(`DocPane` key)는 이걸 기다리지 않으므로, 지우는 동안은
+        // 사본 없이 열게 먼저 표시하고 지우기에 성공해야 뺀다.
+        if (persistence) uncachedDocs.add(docId)
+        const cleared = persistence?.clearData().then(
+          () => {
+            uncachedDocs.delete(docId)
+          },
+          () => undefined,
+        )
         void queryClient.invalidateQueries({ queryKey: docKeys.tree })
-        void queryClient.invalidateQueries({ queryKey: docKeys.detail(docId) }).then(() => {
+        void Promise.all([
+          cleared,
+          queryClient.invalidateQueries({ queryKey: docKeys.detail(docId) }),
+        ]).then(() => {
           // 다시 받은 문서가 열리면(그사이 권한이 돌아왔거나 판정이 잠깐 엇갈렸다) 이 세션은 릴레이도
           // 사본도 끊긴 채라 친 글이 어디에도 안 남는다. 세션을 새로 연다. 되풀이하지 않게 한 번만.
           if (cancelled || reopened) return
@@ -170,12 +198,15 @@ export function setCollabTitle(docId: string, title: string): Promise<void> {
     }
     const unreachable = new Error('문서 서버에 연결하지 못해 이름을 바꾸지 못했습니다.')
     const timeout = window.setTimeout(() => finish(unreachable), TITLE_SYNC_WAIT_MS)
-    // 서버가 거절한 연결(로그인이 풀렸다 4401, 볼 권한이 없다 4403, 문서가 없거나 휴지통에 있다 4404)은 다시 붙어도
-    // 같다(y-websocket 은 44xx 를 영구 종료로 보고 `closed` 를 낸다). 5초를 기다리게 하지 않는다.
-    provider.on('closed', () =>
+    // 서버가 거절한 연결(로그인이 풀렸다 4401, 볼 권한이 없다 4403, 문서가 없거나 휴지통에 있다 4404,
+    // 잠긴 문서다 4423)은 다시 붙어도 같다(y-websocket 은 44xx 를 영구 종료로 보고 `closed` 를 낸다).
+    // 5초를 기다리게 하지 않는다.
+    provider.on('closed', (event) =>
       finish(
         new Error(
-          '이 문서의 이름을 바꿀 수 없습니다. 지워졌거나, 볼 권한이 없거나, 로그인이 풀렸습니다.',
+          event.code === 4423
+            ? '잠긴 문서입니다. 임원이 잠금을 풀어야 고칠 수 있습니다.'
+            : '이 문서의 이름을 바꿀 수 없습니다. 지워졌거나, 볼 권한이 없거나, 로그인이 풀렸습니다.',
         ),
       ),
     )

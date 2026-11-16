@@ -1,10 +1,11 @@
 """README 57 — 폴더 등급 + 사람 지정. 트리·상세·검색·AI·yjs·파일·자료실·홈이 전부 서버에서 걸러지고, 설정은 임원만."""
 
+import asyncio
 from types import SimpleNamespace
 
 import pytest
 from fastapi import FastAPI
-from httpx_ws import aconnect_ws
+from httpx_ws import WebSocketDisconnect, aconnect_ws
 from sqlalchemy import select
 
 from app.models import AuditEvent, Document, Folder, FolderMember, Workspace
@@ -302,3 +303,243 @@ async def test_only_exec_sets_folder_acl(c, users: Users, app_db) -> None:
     assert "경영" not in {f["title"] for f in (await c.member.get("/api/tree")).json()["folders"]}
     r = await c.exec.patch(f"/api/folders/{new_id}", json={"min_role": "x"}, headers=csrf(c.exec))
     assert r.status_code == 422
+
+
+async def test_private_folder_is_owner_only(c, users: Users, app_db) -> None:
+    """README 72 — 개인 폴더는 주인만 본다(임원도 못 본다). 누구나 만들고, 문서만 경계를 넘나든다(감사 기록)."""
+    s = await _seed(app_db, users)
+    r = await c.member.post(
+        "/api/folders", json={"title": "내 것", "private": True}, headers=csrf(c.member)
+    )
+    assert r.status_code == 201, r.text
+    mine = r.json()
+    assert mine["owner_id"] == str(users.member.id) and mine["parent_id"] is None
+    # 최상위에만, 등급·사람 지정과 같이는 안 된다(임원이어도 422)
+    for body in (
+        {"title": "x", "private": True, "parent_id": str(s.wiki.id)},
+        {"title": "x", "private": True, "min_role": "exec"},
+        {"title": "x", "private": True, "allowed_users": [str(users.lead.id)]},
+    ):
+        assert (
+            await c.exec.post("/api/folders", json=body, headers=csrf(c.exec))
+        ).status_code == 422, body
+    # 하위 폴더·문서는 그냥 만들면 따라간다
+    r = await c.member.post(
+        "/api/folders", json={"title": "내 하위", "parent_id": mine["id"]}, headers=csrf(c.member)
+    )
+    assert r.status_code == 201 and r.json()["owner_id"] is None
+    sub_id = r.json()["id"]
+    r = await c.member.post(
+        "/api/docs", json={"folder_id": sub_id, "title": "내 메모"}, headers=csrf(c.member)
+    )
+    assert r.status_code == 201, r.text
+    memo = r.json()["id"]
+
+    async def titles(client):
+        t = (await client.get("/api/tree")).json()
+        return {f["title"] for f in t["folders"]}, {d["title"] for d in t["docs"]}
+
+    folders, docs = await titles(c.member)
+    assert {"내 것", "내 하위"} <= folders and "내 메모" in docs
+    # 임원·팀장 — 트리에 없고, 문서 403, 폴더는 「없는 폴더」, 그 안에 만들기도 못 한다
+    for other in (c.exec, c.lead):
+        folders, docs = await titles(other)
+        assert not {"내 것", "내 하위"} & folders and "내 메모" not in docs
+        assert (await other.get(f"/api/docs/{memo}")).status_code == 403
+        for fid in (mine["id"], sub_id):
+            r = await other.patch(
+                f"/api/folders/{fid}", json={"title": "뺏기"}, headers=csrf(other)
+            )
+            assert r.status_code == 404
+            assert (
+                await other.delete(f"/api/folders/{fid}", headers=csrf(other))
+            ).status_code == 404
+            r = await other.post(
+                "/api/docs", json={"folder_id": fid, "title": "끼어들기"}, headers=csrf(other)
+            )
+            assert r.status_code == 422
+    # 임원이 사람 지정으로 뚫을 수도 없다 — 폴더가 안 보여 404, 주인도 등급·사람 지정은 못 건다
+    r = await c.member.patch(
+        f"/api/folders/{mine['id']}", json={"min_role": "member"}, headers=csrf(c.member)
+    )
+    assert r.status_code == 403  # 임원 검사가 먼저
+    r = await c.exec.post(
+        "/api/folders", json={"title": "임원 것", "private": True}, headers=csrf(c.exec)
+    )
+    exec_own = r.json()["id"]
+    r = await c.exec.patch(
+        f"/api/folders/{exec_own}",
+        json={"allowed_users": [str(users.lead.id)]},
+        headers=csrf(c.exec),
+    )
+    assert r.status_code == 422
+    assert "임원 것" not in (await titles(c.lead))[0]
+    # 문서는 주인이 넣고 뺀다 — 넣으면 임원도 못 보고 감사에 제목이 남는다
+    wiki_doc = str(s.docs["wiki"].id)
+    r = await c.member.patch(
+        f"/api/docs/{wiki_doc}", json={"folder_id": mine["id"]}, headers=csrf(c.member)
+    )
+    assert r.status_code == 200, r.text
+    assert (await c.exec.get(f"/api/docs/{wiki_doc}")).status_code == 403
+    moved = (
+        (await app_db.execute(select(AuditEvent).where(AuditEvent.kind == "docs.private_move")))
+        .scalars()
+        .all()
+    )
+    assert len(moved) == 1 and moved[0].detail["into"] is True
+    assert moved[0].detail["title"] == "연차 이월 안내" and moved[0].actor_id == users.member.id
+    r = await c.member.patch(
+        f"/api/docs/{wiki_doc}", json={"folder_id": str(s.wiki.id)}, headers=csrf(c.member)
+    )
+    assert r.status_code == 200
+    assert (await c.exec.get(f"/api/docs/{wiki_doc}")).status_code == 200
+    # 남의 개인 폴더로는 못 넣는다(대상이 안 보여 「없는 폴더」)
+    r = await c.lead.patch(
+        f"/api/docs/{wiki_doc}", json={"folder_id": mine["id"]}, headers=csrf(c.lead)
+    )
+    assert r.status_code == 422
+    # 폴더는 경계를 못 넘는다 — 하위를 밖으로, 공용 폴더를 안으로, 개인 폴더를 다른 폴더 아래로
+    for fid, parent in ((sub_id, None), (str(s.wiki.id), mine["id"]), (mine["id"], str(s.wiki.id))):
+        r = await c.member.patch(
+            f"/api/folders/{fid}", json={"parent_id": parent}, headers=csrf(c.member)
+        )
+        assert r.status_code == 422, (fid, parent)
+    # 안에서의 이동·이름 바꾸기는 된다
+    r = await c.member.post(
+        "/api/folders", json={"title": "내 하위 2", "parent_id": mine["id"]}, headers=csrf(c.member)
+    )
+    r = await c.member.patch(
+        f"/api/folders/{r.json()['id']}", json={"parent_id": sub_id}, headers=csrf(c.member)
+    )
+    assert r.status_code == 200
+    r = await c.member.patch(
+        f"/api/folders/{mine['id']}",
+        json={"title": "내 서랍", "parent_id": None},
+        headers=csrf(c.member),
+    )
+    assert r.status_code == 200 and r.json()["owner_id"] == str(users.member.id)
+
+
+async def test_private_folder_hides_from_exec_everywhere(
+    app: FastAPI, c, users: Users, app_db, monkeypatch
+) -> None:
+    """README 72 — 임원에게도 검색·홈·버전·댓글·AI·휴지통·실시간 편집이 전부 막힌다. 넣는 순간 열려 있던 편집도 끊긴다."""
+    from sqlalchemy import func, update
+
+    from app.realtime import yjs as mod
+
+    from .test_yjs import expect_close, ws_client
+
+    share_session(app, app_db, monkeypatch, mod)
+    s = await _seed(app_db, users)
+    mine = Folder(ws_id=s.wiki.ws_id, parent_id=None, title="내 것", owner_id=users.member.id)
+    app_db.add(mine)
+    await app_db.flush()
+    secret = Document(
+        folder_id=mine.id,
+        title="연차 이월 비밀",
+        text_cache="연차 이월 비밀",
+        updated_by=users.member.id,
+    )
+    app_db.add(secret)
+    await app_db.flush()
+    await app_db.execute(
+        update(Document)
+        .where(Document.id == secret.id)
+        .values(tsv=func.to_tsvector("simple", secret.title))
+    )
+    sid = str(secret.id)
+    hits = (await c.exec.get("/api/search", params={"q": "이월", "types": "doc"})).json()
+    assert "연차 이월 비밀" not in {h["title"] for h in hits}
+    # 주인에게는 보통 문서다 — 검색(⌘K 와 AI 검색 도구가 같은 find_hits)·AI 참고 문서·질문 범위에 그대로 쓰인다
+    hits = (await c.member.get("/api/search", params={"q": "이월", "types": "doc"})).json()
+    assert "연차 이월 비밀" in {h["title"] for h in hits}
+    from app.routers import ai as ai_mod
+
+    assert (await ai_mod._scope_folder(app_db, users.member, str(mine.id))).id == mine.id
+    home = (await c.exec.get("/api/me/home")).json()
+    assert "연차 이월 비밀" not in {d["title"] for d in home["recent_docs"]}
+    for path in (f"/api/docs/{sid}", f"/api/docs/{sid}/versions", f"/api/docs/{sid}/comments"):
+        assert (await c.exec.get(path)).status_code == 403, path
+        assert (await c.member.get(path)).status_code == 200, path
+    r = await c.exec.post(
+        "/api/ai/chat", json={"message": "요약", "docs": [sid]}, headers=csrf(c.exec)
+    )
+    assert r.status_code == 422 and r.json()["detail"] == "없는 문서입니다."
+    r = await c.exec.post(
+        "/api/ai/chat", json={"message": "x", "scope": str(mine.id)}, headers=csrf(c.exec)
+    )
+    assert r.status_code == 422 and r.json()["detail"] == "없는 폴더입니다."
+    # 휴지통 — 주인만 보고 주인만 되돌린다
+    assert (await c.member.delete(f"/api/docs/{sid}", headers=csrf(c.member))).status_code == 204
+    assert sid not in {d["id"] for d in (await c.exec.get("/api/trash")).json()["items"]}
+    assert sid in {d["id"] for d in (await c.member.get("/api/trash")).json()["items"]}
+    # 실시간 — 임원이 공용 문서를 열어 둔 채 사원이 개인 폴더로 가져가면 바로 4403, 다시 붙어도 4403
+    wiki_doc = str(s.docs["wiki"].id)
+    # 공용일 때 임원을 멘션해 둔다 — 옮긴 뒤에는 알림의 제목·미리보기가 가려져야 한다
+    r = await c.member.post(
+        f"/api/docs/{wiki_doc}/comments", json={"body": "@최재호 봐 주세요"}, headers=csrf(c.member)
+    )
+    assert r.status_code == 201
+    comment_id = r.json()["id"]
+    async with ws_client(app) as client:
+        await login(client, "jaeho@zenith.co.kr")
+        async with aconnect_ws(f"https://test/api/yjs/{wiki_doc}", client) as ws:
+            await asyncio.wait_for(ws.receive_bytes(), 3.0)  # 열렸다 — 서버의 첫 동기화 프레임
+            r = await c.member.patch(
+                f"/api/docs/{wiki_doc}", json={"folder_id": str(mine.id)}, headers=csrf(c.member)
+            )
+            assert r.status_code == 200, r.text
+            with pytest.raises(
+                WebSocketDisconnect
+            ) as closed:  # 먼저 와 있던 동기화 프레임을 지나서
+                for _ in range(10):
+                    await asyncio.wait_for(ws.receive_bytes(), 3.0)
+            assert closed.value.code == 4403
+        async with aconnect_ws(f"https://test/api/yjs/{wiki_doc}", client) as ws:
+            await expect_close(ws, 4403)
+    # 옮긴 뒤 고친 댓글 — 임원의 알림함·홈에는 가려져 나오고, 감사에 원문이 안 남는다
+    r = await c.member.patch(
+        f"/api/docs/{wiki_doc}/comments/{comment_id}",
+        json={"body": "@최재호 옮긴 뒤에 쓴 비밀"},
+        headers=csrf(c.member),
+    )
+    assert r.status_code == 200, r.text
+    for items in (
+        (await c.exec.get("/api/me/notifications")).json()["items"],
+        (await c.exec.get("/api/me/home")).json()["mentions"],
+    ):
+        note = next(n for n in items if n["payload"].get("doc_id") == wiki_doc)
+        assert note["payload"]["masked"] is True and "비밀" not in str(note["payload"])
+        assert "연차 이월 안내" not in str(note["payload"])
+    edited = (
+        (await app_db.execute(select(AuditEvent).where(AuditEvent.kind == "docs.comment_edited")))
+        .scalars()
+        .all()
+    )
+    assert edited and all("before" not in e.detail for e in edited)
+    # 개인 문서는 주인이 영구 삭제한다(임원은 못 보니 못 지운다) — 감사에 제목이 없다
+    assert (await c.exec.delete(f"/api/docs/{sid}?hard=1", headers=csrf(c.exec))).status_code == 403
+    assert (
+        await c.member.delete(f"/api/docs/{sid}?hard=1", headers=csrf(c.member))
+    ).status_code == 204
+    gone = (
+        (await app_db.execute(select(AuditEvent).where(AuditEvent.kind == "docs.hard_deleted")))
+        .scalars()
+        .all()
+    )
+    assert [e.detail["title"] for e in gone] == [None]
+    # 꺼낼 때의 감사에는 제목이 없다(개인 폴더 안에서 붙인 제목일 수 있다)
+    r = await c.member.patch(
+        f"/api/docs/{wiki_doc}", json={"folder_id": str(s.wiki.id)}, headers=csrf(c.member)
+    )
+    assert r.status_code == 200
+    moves = (
+        (await app_db.execute(select(AuditEvent).where(AuditEvent.kind == "docs.private_move")))
+        .scalars()
+        .all()
+    )
+    assert sorted(("title" in m.detail, m.detail["into"]) for m in moves) == [
+        (False, False),
+        (True, True),
+    ]

@@ -176,7 +176,7 @@ import { isImage } from '@/features/chat/attachments'
 import { buildXlsx } from '@/lib/xlsx'
 import { closeMonth, getClosing, listClosings, reopenMonth } from './closingsDb'
 import { addHoliday, listHolidays, removeHoliday, renameHoliday } from './holidaysDb'
-import { createEvent, deleteEvent, listEvents } from './eventsDb'
+import { createEvent, deleteEvent, listAllEvents, listEvents } from './eventsDb'
 import {
   cancelLeave,
   createLeave,
@@ -310,6 +310,13 @@ function aliveDoc(id: string) {
   const doc = findDoc(id)
   return doc && !doc.deleted_at ? doc : undefined
 }
+
+/** 임원이 잠근 문서를 고치려 했다(백엔드 `acl.require_unlocked`). */
+const docLocked = () =>
+  HttpResponse.json(
+    { detail: '잠긴 문서입니다. 임원이 잠금을 풀어야 고칠 수 있습니다.', code: 'DOC_LOCKED' },
+    { status: 423 },
+  )
 
 /**
  * 권한 거부는 한 가지 문구뿐이다. 백엔드 `_deny` 도 열람 거부와 수정 거부를 구분해 주지
@@ -1725,6 +1732,17 @@ export const handlers = [
     }),
   ),
 
+  // 전 직원의 일정(백엔드 README 73). 캘린더가 이 경로를 부른다.
+  http.get(
+    '/api/events',
+    authed((user, request) => {
+      const params = new URL(request.url).searchParams
+      return HttpResponse.json({
+        items: listAllEvents(user, params.get('from') ?? '', params.get('to') ?? ''),
+      })
+    }),
+  ),
+
   http.post('/api/me/events', async ({ request }) => {
     const user = authenticate()
     if (!user) return unauthorized()
@@ -2489,6 +2507,7 @@ export const handlers = [
       return new HttpResponse(null, { status: 204 })
     }
 
+    if (!doc.deleted_at && doc.locked) return docLocked()
     trashDoc(doc, user)
     return new HttpResponse(null, { status: 204 })
   }),
@@ -2505,19 +2524,30 @@ export const handlers = [
   http.patch('/api/docs/:docId', async ({ request, params }) => {
     const user = authenticate()
     if (!user) return unauthorized()
-    const body = await readJson<{ title?: unknown; folder_id?: unknown; ai_source?: unknown }>(
-      request,
-    )
+    const body = await readJson<{
+      title?: unknown
+      folder_id?: unknown
+      ai_source?: unknown
+      locked?: unknown
+    }>(request)
     if (!body) return validationError('본문이 JSON 이 아닙니다.')
-    for (const key of ['title', 'folder_id', 'ai_source'] as const) {
+    for (const key of ['title', 'folder_id', 'ai_source', 'locked'] as const) {
       if (body[key] === null) return validationError(`${key} 는 null 일 수 없습니다.`)
     }
-    if (body.ai_source !== undefined && typeof body.ai_source !== 'boolean') {
-      return validationError('ai_source 는 불리언이어야 합니다.')
+    for (const key of ['ai_source', 'locked'] as const) {
+      if (body[key] !== undefined && typeof body[key] !== 'boolean') {
+        return validationError(`${key} 는 불리언이어야 합니다.`)
+      }
     }
     const alive = aliveDoc(String(params.docId))
     if (!alive) return notFound()
     if (!canViewFolder(user, alive.folder_id)) return forbidden('이 문서를 볼 권한이 없습니다.')
+    // 판정 순서는 백엔드 `update_doc` 과 같다. 잠금은 임원만, 잠긴 채로는 잠금 말고 아무것도 못 바꾼다.
+    if (body.locked !== undefined && user.role !== 'exec') {
+      return forbidden('문서 잠금은 임원만 바꿀 수 있습니다.')
+    }
+    const others = (['title', 'folder_id', 'ai_source'] as const).some((k) => k in body)
+    if (others && alive.locked) return docLocked()
     if (body.folder_id !== undefined) {
       const to = String(body.folder_id)
       if (!findFolder(to) || !canViewFolder(user, to)) return validationError('없는 폴더입니다.')
@@ -2529,6 +2559,7 @@ export const handlers = [
       title: typeof body.title === 'string' ? body.title : undefined,
       folder_id: typeof body.folder_id === 'string' ? body.folder_id : undefined,
       ai_source: typeof body.ai_source === 'boolean' ? body.ai_source : undefined,
+      locked: typeof body.locked === 'boolean' ? body.locked : undefined,
     })
     return doc ? HttpResponse.json(doc) : notFound()
   }),
@@ -2580,7 +2611,9 @@ export const handlers = [
         return validationError('라벨은 1자 이상 200자 이하여야 합니다.')
       }
     }
-    if (!aliveDoc(String(params.docId))) return notFound()
+    const alive = aliveDoc(String(params.docId))
+    if (!alive) return notFound()
+    if (alive.locked) return docLocked()
     return HttpResponse.json(
       addVersion(
         String(params.docId),
@@ -2619,6 +2652,7 @@ export const handlers = [
     const docId = form.get('doc_id')
     if (!(file instanceof File)) return validationError('파일이 없습니다.')
     if (typeof docId === 'string' && !aliveDoc(docId)) return validationError('없는 문서입니다.')
+    if (typeof docId === 'string' && aliveDoc(docId)?.locked) return docLocked()
     // 형식은 가리지 않는다. 문서 파일 칩이 아무 파일이나 올린다.
     if (file.size > MAX_UPLOAD_BYTES) return validationError('10MB 이하 파일만 올릴 수 있습니다.')
     if (file.size === 0) return validationError('빈 파일입니다.')

@@ -180,7 +180,8 @@ export function DayAgenda({
             <li key={item.id} className="flex items-center gap-2 text-sm">
               <span className={cn('size-2.5 shrink-0 rounded-sm', DOT[item.group])} />
               <span className="text-fg min-w-0 flex-1 truncate">{item.label}</span>
-              {item.kind === 'event' && (
+              {/* 지우기는 내 일정만. 남의 일정은 서버가 404 로 막는다(백엔드 README 73). */}
+              {item.kind === 'event' && item.group === 'personal' && (
                 <button
                   type="button"
                   aria-label={`${item.label} 삭제`}

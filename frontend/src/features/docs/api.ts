@@ -113,6 +113,8 @@ export function useDoc(docId: string, enabled = true) {
     queryKey: docKeys.detail(docId),
     queryFn: () => api<DocDetail>(`/docs/${docId}`),
     enabled,
+    // 서버는 잠금이 풀려도 열린 화면에 알리지 않는다(백엔드 #619). 잠긴 동안만 가끔 다시 받아 읽기 전용을 푼다.
+    refetchInterval: (query) => (query.state.data?.locked ? 60_000 : false),
   })
 }
 
@@ -180,6 +182,24 @@ export function useSetAiSource(docId: string) {
       api<DocSummary>(`/docs/${docId}`, { method: 'PATCH', body: JSON.stringify({ ai_source }) }),
     onSuccess: (doc) => {
       qc.setQueryData(docKeys.detail(docId), (prev: DocDetail | undefined) =>
+        prev ? { ...prev, ...doc } : undefined,
+      )
+      void qc.invalidateQueries({ queryKey: docKeys.tree })
+    },
+  })
+}
+
+/**
+ * 문서를 잠그거나 푼다(백엔드 #619). 임원만 되고(아니면 403), 잠긴 문서는 누구도 고치지 못한다(423).
+ * 트리 메뉴가 어느 문서에나 쓰도록 id 를 호출 때 받는다. 열어 둔 화면은 상세 캐시를 보고 읽기 전용이 된다.
+ */
+export function useSetDocLocked() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, locked }: { id: string; locked: boolean }) =>
+      api<DocSummary>(`/docs/${id}`, { method: 'PATCH', body: JSON.stringify({ locked }) }),
+    onSuccess: (doc) => {
+      qc.setQueryData(docKeys.detail(doc.id), (prev: DocDetail | undefined) =>
         prev ? { ...prev, ...doc } : undefined,
       )
       void qc.invalidateQueries({ queryKey: docKeys.tree })
