@@ -15,17 +15,23 @@ import {
   statusTone,
   type ApprovalBox,
 } from '@/features/approvals/types'
+import { useCurrentUser } from '@/features/auth/AuthContext'
 import { ApiError } from '@/lib/api'
 import { formatDateTime, formatRelative } from '@/lib/datetime'
 
 const BOXES: ApprovalBox[] = ['inbox', 'sent', 'reference', 'draft']
+/** 임원에게는 끝난 문서를 전부 모아 보는 탭이 하나 더 있다. 숨김은 편의이고 차단은 서버 403. */
+const EXEC_BOXES: ApprovalBox[] = [...BOXES, 'done']
 
 /** 결재함(13 SCR-APV-02). 받은 결재 · 보낸 결재 · 참조 · 임시저장. */
 export function ApprovalsPage() {
   const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
+  const boxes = useCurrentUser().role === 'exec' ? EXEC_BOXES : BOXES
   const requested = params.get('box') as ApprovalBox | null
-  const box: ApprovalBox = requested && BOXES.includes(requested) ? requested : 'inbox'
+  const box: ApprovalBox = requested && boxes.includes(requested) ? requested : 'inbox'
+  // 받은 결재와 완료 문서는 남이 올린 문서라 누가 올렸는지를 보인다. 나머지는 지금 누구 차례인지.
+  const showDrafter = box === 'inbox' || box === 'done'
   const inbox = useApprovals('inbox')
   const list = useApprovals(box)
   const items = list.data?.items ?? []
@@ -47,7 +53,7 @@ export function ApprovalsPage() {
         }
       />
       <Tabs
-        items={BOXES.map((key) => ({
+        items={boxes.map((key) => ({
           key,
           label: BOX_LABEL[key],
           count: key === 'inbox' ? (inbox.data?.items.length ?? 0) : undefined,
@@ -78,7 +84,7 @@ export function ApprovalsPage() {
                 <tr>
                   <TH>유형</TH>
                   <TH>제목</TH>
-                  <TH>{box === 'inbox' ? '기안자' : '처리 중'}</TH>
+                  <TH>{showDrafter ? '기안자' : '처리 중'}</TH>
                   <TH>상태</TH>
                   <TH>{box === 'draft' ? '작성' : '상신'}</TH>
                   {deletable && <TH className="w-12 text-right">작업</TH>}
@@ -112,7 +118,7 @@ export function ApprovalsPage() {
                         </Link>
                       </TD>
                       <TD className="text-muted whitespace-nowrap">
-                        {box === 'inbox' ? item.drafter.name : (item.waiting_on?.name ?? '-')}
+                        {showDrafter ? item.drafter.name : (item.waiting_on?.name ?? '-')}
                       </TD>
                       <TD>
                         <Badge tone={statusTone(item.status)}>{statusLabel(item.status)}</Badge>

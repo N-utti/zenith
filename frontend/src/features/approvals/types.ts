@@ -156,13 +156,15 @@ export interface ApprovalDocument extends ApprovalListItem {
   can_decide: boolean
 }
 
-export type ApprovalBox = 'inbox' | 'sent' | 'reference' | 'draft'
+/** `done` 은 끝난 문서 전부다(승인·반려·종결). 임원만 본다(백엔드 README 77, 그 밖 403). */
+export type ApprovalBox = 'inbox' | 'sent' | 'reference' | 'draft' | 'done'
 
 export const BOX_LABEL: Record<ApprovalBox, string> = {
   inbox: '받은 결재',
   sent: '보낸 결재',
   reference: '참조',
   draft: '임시저장',
+  done: '완료 문서',
 }
 
 export interface DraftInput {

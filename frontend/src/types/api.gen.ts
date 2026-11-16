@@ -1598,7 +1598,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 결재함 ?box=inbox|sent|reference|draft · ?type=&status=&from=&to=&drafter= 필터 */
+        /** 결재함 ?box=inbox|sent|reference|draft|done · ?type=&status=&from=&to=&drafter= 필터. done 은 끝난 문서 전부(exec 만, 그 밖 403) */
         get: operations["list_approvals_api_approvals_get"];
         put?: never;
         post?: never;
@@ -8987,7 +8987,7 @@ export interface operations {
     list_approvals_api_approvals_get: {
         parameters: {
             query?: {
-                box?: "inbox" | "sent" | "reference" | "draft";
+                box?: "inbox" | "sent" | "reference" | "draft" | "done";
                 type?: ("leave" | "arrangement" | "overtime" | "correction" | "general") | null;
                 status?: ("draft" | "pending" | "approved" | "rejected" | "canceled" | "closed") | null;
                 from?: string | null;

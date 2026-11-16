@@ -243,6 +243,8 @@ function seed() {
 export function listApprovals(user: User, box: ApprovalBox): ApprovalListItem[] {
   seed()
   const mine = docs.filter((d) => {
+    // 끝난 문서 전부(백엔드 README 77). 임원인지는 핸들러가 먼저 본다.
+    if (box === 'done') return ['approved', 'rejected', 'closed'].includes(d.status)
     if (box === 'draft') return d.drafter_id === user.id && d.status === 'draft'
     if (box === 'sent') return d.drafter_id === user.id && d.status !== 'draft'
     // 위임받은 사람도 여기서 본다. 안 그러면 대신 결재할 문서에 닿을 길이 없다.

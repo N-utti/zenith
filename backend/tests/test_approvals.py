@@ -694,3 +694,41 @@ async def test_exec_can_ask_for_approval_by_picking(c, users: Users) -> None:
     r = await post(c.exec, f"/api/approvals/{r.json()['id']}/submit")
     assert r.status_code == 200 and r.json()["status"] == "pending"
     assert r.json()["waiting_on"]["name"] == "박동현"
+
+
+async def test_done_box_is_exec_only(c, users: Users, app_db) -> None:
+    """README 77: 완료 문서함(box=done)은 끝난 문서 전부를 임원에게만 준다. 결재선에 없던 문서도 나온다."""
+    # 임원이 결재선에 없는 문서 — 사원이 팀장 한 사람만 골라 승인받는다
+    r = await post(c.member, "/api/approvals/drafts", draft(title="비품", approvers=[str(users.lead.id)]))
+    r = await post(c.member, f"/api/approvals/{r.json()['id']}/submit")
+    approved = r.json()
+    r = await post(
+        c.lead, f"/api/approvals/{approved['id']}/approve", {"version": approved["steps"][0]["version"]}
+    )
+    assert r.json()["status"] == "approved"
+    # 반려된 문서와 아직 대기 중인 문서, 임시저장
+    rejected = await _submitted(c, title="반려될 것")
+    r = await post(
+        c.lead,
+        f"/api/approvals/{rejected['id']}/reject",
+        {"version": rejected["steps"][0]["version"], "reason": "근거 부족"},
+    )
+    assert r.status_code == 200, r.text
+    pending = await _submitted(c, title="대기 중")
+    await post(c.member, "/api/approvals/drafts", draft(title="초안"))
+
+    r = await c.exec.get("/api/approvals?box=done")
+    assert r.status_code == 200, r.text
+    assert {i["title"]: i["status"] for i in r.json()["items"]} == {
+        "비품": "approved",
+        "반려될 것": "rejected",
+    }
+    assert pending["id"] not in [i["id"] for i in r.json()["items"]]
+    # 기존 필터가 그대로 통한다
+    only = (await c.exec.get("/api/approvals?box=done&status=approved")).json()["items"]
+    assert [i["title"] for i in only] == ["비품"]
+    # 임원이 아니면 403 + 감사
+    for client, who in ((c.lead, users.lead), (c.member, users.member)):
+        r = await client.get("/api/approvals?box=done")
+        assert (r.status_code, r.json()["code"]) == (403, "FORBIDDEN")
+        assert [d.detail.get("box") for d in await _denied(app_db, who.id)] == ["done"]
