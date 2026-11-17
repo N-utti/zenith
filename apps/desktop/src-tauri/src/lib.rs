@@ -63,7 +63,7 @@ fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
     let autostart_item = autostart.clone();
     TrayIconBuilder::with_id("main")
         .icon(app.default_window_icon().cloned().expect("앱 아이콘이 없습니다"))
-        .tooltip("제니스")
+        .tooltip(if cfg!(debug_assertions) { "제니스 dev" } else { "제니스" })
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(move |app, event| match event.id.as_ref() {
@@ -262,6 +262,39 @@ fn clear_notifications(app: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// 개발 빌드의 작업 표시줄 우클릭 메뉴 맨 위 이름. 시작 메뉴 바로 가기가 없는 실행 파일은 파일 이름(zenith-desktop)으로
+/// 나오므로 창에 앱 id·다시 실행 명령·표시 이름을 직접 붙인다.
+#[cfg(all(windows, debug_assertions))]
+fn label_dev_taskbar(window: &tauri::WebviewWindow) -> Result<(), Box<dyn std::error::Error>> {
+    use windows::Win32::{
+        Foundation::HWND,
+        Storage::EnhancedStorage::{
+            PKEY_AppUserModel_ID, PKEY_AppUserModel_RelaunchCommand,
+            PKEY_AppUserModel_RelaunchDisplayNameResource,
+        },
+        System::{
+            Com::StructuredStorage::{PropVariantChangeType, PROPVARIANT, PVCHF_DEFAULT},
+            Variant::VT_LPWSTR,
+        },
+        UI::Shell::PropertiesSystem::{IPropertyStore, SHGetPropertyStoreForWindow},
+    };
+    // 이 속성들은 VT_LPWSTR 만 받는다. From<&str> 은 BSTR 이라 바꿔 넣는다.
+    let text = |s: &str| -> windows::core::Result<PROPVARIANT> {
+        let mut out = PROPVARIANT::default();
+        unsafe { PropVariantChangeType(&mut out, &PROPVARIANT::from(s), PVCHF_DEFAULT, VT_LPWSTR)? };
+        Ok(out)
+    };
+    let exe = std::env::current_exe()?;
+    let store: IPropertyStore = unsafe { SHGetPropertyStoreForWindow(HWND(window.hwnd()?.0))? };
+    unsafe {
+        store.SetValue(&PKEY_AppUserModel_ID, &text("kr.zenith.desktop.dev")?)?;
+        store.SetValue(&PKEY_AppUserModel_RelaunchCommand, &text(&format!("\"{}\"", exe.display()))?)?;
+        store.SetValue(&PKEY_AppUserModel_RelaunchDisplayNameResource, &text("제니스 dev")?)?;
+        store.Commit()?;
+    }
+    Ok(())
+}
+
 /// 데스크탑 셸의 진입점.
 ///
 /// 셸은 화면을 띄우는 일만 한다. 업무 로직은 전부 웹앱(`frontend/`)에 있고,
@@ -289,6 +322,16 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             app.manage(Pending(Mutex::new(None)));
+            // 개발 빌드(npm run dev)는 지금 떠 있는 창이 개발판인지 작업 표시줄·트레이에서 한눈에 알게 이름에 dev 를 붙인다.
+            if cfg!(debug_assertions) {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.set_title("제니스 · Zenith dev");
+                    #[cfg(all(windows, debug_assertions))]
+                    if let Err(e) = label_dev_taskbar(&window) {
+                        eprintln!("작업 표시줄 이름 붙이기 실패: {e}");
+                    }
+                }
+            }
             // 트레이는 덤이다. 못 만들어도 앱은 뜨되, 숨은 창을 꺼낼 길이 줄었으니 창을 보여 준다.
             let tray_ok = setup_tray(app.handle())
                 .map_err(|e| eprintln!("트레이 생성 실패: {e}"))
