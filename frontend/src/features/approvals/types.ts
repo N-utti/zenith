@@ -164,7 +164,7 @@ export const BOX_LABEL: Record<ApprovalBox, string> = {
   sent: '보낸 결재',
   reference: '참조',
   draft: '임시저장',
-  done: '완료 문서',
+  done: '전체 문서',
 }
 
 export interface DraftInput {
