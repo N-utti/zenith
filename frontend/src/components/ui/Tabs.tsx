@@ -1,4 +1,4 @@
-import { useId, useRef, useState, type ReactNode } from 'react'
+import { Fragment, useId, useRef, useState, type ReactNode } from 'react'
 import { cn } from '@/lib/cn'
 
 export interface TabItem {
@@ -6,6 +6,12 @@ export interface TabItem {
   label: string
   /** 대기 건수 같은 숫자. 0이면 배지를 그리지 않는다. "0건"은 알릴 내용이 아니다. */
   count?: number
+  /**
+   * 묶음 이름(예: `관리`). 앞 탭과 묶음이 달라지는 자리에 세로선과 이 이름을 그린다. 근태·결재가 내 일 탭 뒤에
+   * 임원·담당자용 탭을 붙이는데, 경계가 안 보이면 어디부터 관리인지 모호하다.
+   * 선은 묶음이 시작하는 자리에만 그린다. 묶음은 목록 끝에 둔다.
+   */
+  group?: string
 }
 
 /**
@@ -74,41 +80,51 @@ export function Tabs({
         <div role="tablist" className="-mb-px flex gap-1 overflow-x-auto">
           {items.map((item, index) => {
             const selected = item.key === active
+            const groupStart = item.group && item.group !== items[index - 1]?.group
             return (
-              <button
-                key={item.key}
-                ref={(node) => {
-                  refs.current[item.key] = node
-                }}
-                role="tab"
-                id={`${baseId}-tab-${item.key}`}
-                aria-selected={selected}
-                aria-controls={`${baseId}-panel-${item.key}`}
-                // 선택된 탭 하나만 탭 순서에 남긴다(roving tabindex). 그러지 않으면
-                // Tab 키가 탭 개수만큼 멈춰 서서 패널까지 가는 길이 길어진다.
-                tabIndex={selected ? 0 : -1}
-                onClick={() => select(item.key)}
-                onKeyDown={(event) => move(event, index)}
-                className={cn(
-                  'relative shrink-0 px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors',
-                  'border-b-2',
-                  selected
-                    ? 'border-accent text-fg'
-                    : 'text-muted hover:text-fg border-transparent',
-                )}
-              >
-                {item.label}
-                {item.count ? (
-                  <span
-                    className={cn(
-                      'ml-1.5 rounded-md px-1.5 py-0.5 text-[11px] font-semibold',
-                      selected ? 'bg-accent-soft text-accent' : 'bg-sunken text-muted',
-                    )}
-                  >
-                    {item.count}
+              <Fragment key={item.key}>
+                {groupStart && (
+                  // 탭 목록 안에는 탭만 있어야 해서 화면 읽기에서 숨긴다. 묶음 이름은 탭 이름 앞에 붙여 읽힌다.
+                  <span aria-hidden className="flex shrink-0 items-center gap-2 pr-1 pl-2">
+                    <span className="bg-line h-4 w-px" />
+                    <span className="text-subtle text-xs font-medium">{item.group}</span>
                   </span>
-                ) : null}
-              </button>
+                )}
+                <button
+                  ref={(node) => {
+                    refs.current[item.key] = node
+                  }}
+                  role="tab"
+                  id={`${baseId}-tab-${item.key}`}
+                  aria-selected={selected}
+                  aria-controls={`${baseId}-panel-${item.key}`}
+                  // 선택된 탭 하나만 탭 순서에 남긴다(roving tabindex). 그러지 않으면
+                  // Tab 키가 탭 개수만큼 멈춰 서서 패널까지 가는 길이 길어진다.
+                  tabIndex={selected ? 0 : -1}
+                  onClick={() => select(item.key)}
+                  onKeyDown={(event) => move(event, index)}
+                  className={cn(
+                    'relative shrink-0 px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors',
+                    'border-b-2',
+                    selected
+                      ? 'border-accent text-fg'
+                      : 'text-muted hover:text-fg border-transparent',
+                  )}
+                >
+                  {item.group && <span className="sr-only">{item.group}: </span>}
+                  {item.label}
+                  {item.count ? (
+                    <span
+                      className={cn(
+                        'ml-1.5 rounded-md px-1.5 py-0.5 text-[11px] font-semibold',
+                        selected ? 'bg-accent-soft text-accent' : 'bg-sunken text-muted',
+                      )}
+                    >
+                      {item.count}
+                    </span>
+                  ) : null}
+                </button>
+              </Fragment>
             )
           })}
         </div>
