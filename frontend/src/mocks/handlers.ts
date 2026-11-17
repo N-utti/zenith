@@ -1226,7 +1226,7 @@ export const handlers = [
     authed((user, request) => {
       if (!canManage(user)) {
         return HttpResponse.json(
-          { detail: '전사 근태는 근태 담당자나 임원만 볼 수 있습니다.', code: 'FORBIDDEN' },
+          { detail: '근태 현황은 근태 담당자나 임원만 볼 수 있습니다.', code: 'FORBIDDEN' },
           { status: 403 },
         )
       }

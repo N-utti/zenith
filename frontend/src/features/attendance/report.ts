@@ -6,7 +6,7 @@ import { ATTENDANCE_STATUS_LABEL, type AttendanceGrid } from './types'
 export const REPORT_FIXED_COLS = 6
 
 /**
- * 월 근태 리포트 표(FR-ATT-15). 앞은 사람별 집계, 뒤는 그달 모든 날의 상태(전사 근태 그리드와 같은 열).
+ * 월 근태 리포트 표(FR-ATT-15). 앞은 사람별 집계, 뒤는 그달 모든 날의 상태(근태 현황 그리드와 같은 열).
  * 근무일이 아닌 날은 빈 칸이다. 행이 없는 사람도 빈 칸.
  * 연장·야간은 승인 신고분(분)이라 열 이름에 그렇게 적는다(10 §5.3). 사유는 싣지 않는다(10 §8: 리포트에는 종류만).
  * 10 §9.5 의 `GET /attendance/report?format=csv` 대신 전사 그리드로 브라우저가 만든다. 열 고정·너비 같은

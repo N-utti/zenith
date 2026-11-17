@@ -117,7 +117,7 @@ export function useAttendanceRange(from: string, to: string) {
         `/attendance/me/summary?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
       ),
     enabled: from !== '' && to !== '' && from <= to,
-    // 날짜를 고칠 때마다 키가 바뀐다. 이전 값을 두지 않으면 숫자가 사라졌다 나타난다(전사 근태와 같다).
+    // 날짜를 고칠 때마다 키가 바뀐다. 이전 값을 두지 않으면 숫자가 사라졌다 나타난다(근태 현황과 같다).
     placeholderData: keepPreviousData,
   })
 }
@@ -130,7 +130,7 @@ export function useMyAttendance(month: string) {
   })
 }
 
-/** 전 직원 × 일자 근태(전사 근태 탭). `team_id` 없는 호출은 전사로 가정한 프론트 확장, 임원·근태 담당자 외 403. */
+/** 전 직원 × 일자 근태(근태 현황 탭). `team_id` 없는 호출은 전사로 가정한 프론트 확장, 임원·근태 담당자 외 403. */
 export function useCompanyAttendance(month: string) {
   return useQuery({
     queryKey: ['attendance', 'company', month],
@@ -281,7 +281,7 @@ export function useMonthClosing(month: string) {
   })
 }
 
-/** 한 해 열두 달의 마감 상태(근태 관리 탭). `GET /attendance/closings?year=` 도 프론트 확장. */
+/** 한 해 열두 달의 마감 상태(근태 마감 탭). `GET /attendance/closings?year=` 도 프론트 확장. */
 export function useYearClosings(year: number) {
   return useQuery({
     queryKey: yearClosingsKey(year),

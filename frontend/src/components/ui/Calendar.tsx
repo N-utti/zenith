@@ -138,7 +138,7 @@ export function Calendar({
   )
 }
 
-/** 월 이동 + 월 제목 줄. 캘린더와 전사 근태 그리드처럼 "한 달"을 보는 화면이 같이 쓴다. */
+/** 월 이동 + 월 제목 줄. 캘린더와 근태 현황 그리드처럼 "한 달"을 보는 화면이 같이 쓴다. */
 export function MonthHeader({
   month,
   onMonthChange,

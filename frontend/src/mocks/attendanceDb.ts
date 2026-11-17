@@ -454,7 +454,7 @@ export function attendanceRange(user: User, from: string, to: string): Attendanc
   return { from, to, summary }
 }
 
-/** 전 직원의 한 달(전사 근태 탭). 권한 판정은 핸들러가 한다. */
+/** 전 직원의 한 달(근태 현황 탭). 권한 판정은 핸들러가 한다. */
 export function companyAttendance(month: string): AttendanceGrid {
   return {
     month,

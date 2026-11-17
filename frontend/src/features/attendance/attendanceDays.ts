@@ -38,7 +38,7 @@ export function isDayOff(iso: string, days: AttendanceDay[] | undefined): boolea
 /**
  * 05 상태 색상 규약: 휴가·반차 파랑(accent) / 재택·외근·출장 청록(info) / 휴일 연회색 / 결근 빨강.
  * 정상은 칠하지 않는다. 평일의 기본값이 정상이라(10 §1.2) 색을 주면 달력 전체가 회색이 된다.
- * 내 근태 캘린더와 전사 근태 그리드가 같이 쓴다. 칩 색은 `Badge` 의 accent·danger, 홈 캘린더의 휴가 칩과 같다.
+ * 내 근태 캘린더와 근태 현황 그리드가 같이 쓴다. 칩 색은 `Badge` 의 accent·danger, 홈 캘린더의 휴가 칩과 같다.
  */
 export const STATUS_TONE: Partial<Record<CellStatus, string>> = {
   leave: 'bg-accent-soft text-accent',
@@ -69,7 +69,7 @@ export interface GridDay {
   weekday: number
 }
 
-/** `2026-09` 의 날짜 전부. 전사 근태 그리드와 리포트가 같은 열을 쓴다. */
+/** `2026-09` 의 날짜 전부. 근태 현황 그리드와 리포트가 같은 열을 쓴다. */
 export function daysOf(month: string): GridDay[] {
   const [year, m] = month.split('-').map(Number)
   const last = new Date(year, m, 0).getDate()

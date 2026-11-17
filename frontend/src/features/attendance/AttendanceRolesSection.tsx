@@ -15,8 +15,8 @@ const NONE = ''
 /**
  * 근태 담당자와 대표 지정(백엔드 README 76). 임원만 바꾼다(서버도 403).
  *
- * 근태 신청(휴가·예외 근무·연장·정정)의 결재가 담당자, 그다음 대표 순으로 올라간다. 담당자는 전사 근태,
- * 연차 관리, 근태 관리(마감·리포트·결근 처리)를 임원처럼 한다. 둘 다 비우면 예전처럼 팀장이나 첫 임원에게 간다.
+ * 근태 신청(휴가·예외 근무·연장·정정)의 결재가 담당자, 그다음 대표 순으로 올라간다. 담당자는 근태 현황,
+ * 연차 관리, 근태 마감(마감·리포트·결근 처리)을 임원처럼 한다. 둘 다 비우면 예전처럼 팀장이나 첫 임원에게 간다.
  */
 export function AttendanceRolesSection() {
   const roles = useAttendanceRoles()
@@ -58,7 +58,7 @@ export function AttendanceRolesSection() {
       <h2 className="text-fg text-sm font-semibold">근태 담당자와 대표</h2>
       <p className="text-muted mt-1 text-sm break-keep">
         근태 신청(휴가, 예외 근무, 연장, 정정)의 결재가 담당자, 그다음 대표 순으로 올라갑니다. 담당자는
-        전사 근태와 연차 관리, 마감, 결근 처리를 맡습니다. 둘 다 비우면 팀장이나 임원에게 올라갑니다.
+        근태 현황과 연차 관리, 마감, 결근 처리를 맡습니다. 둘 다 비우면 팀장이나 임원에게 올라갑니다.
       </p>
       {roles.isPending || people.isPending ? (
         <Spinner className="mt-4" />

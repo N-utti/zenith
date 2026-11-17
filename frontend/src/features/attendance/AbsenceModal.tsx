@@ -10,7 +10,7 @@ import { formatISODate } from '@/lib/datetime'
 import { useClearAbsence, useSetAbsence } from './api'
 
 /**
- * 결근 처리(백엔드 README 76). 근태 담당자와 임원이 전사 근태 표의 칸을 눌러 연다.
+ * 결근 처리(백엔드 README 76). 근태 담당자와 임원이 근태 현황 표의 칸을 눌러 연다.
  *
  * 정상 근무로 잡힌 지난 근무일만 결근으로 바꿀 수 있다(서버가 판정한다). 이미 결근인 날은 메모를 고치거나
  * 취소한다. 본인이 정정 신청으로 바로잡아 승인되면 그쪽이 이긴다.
