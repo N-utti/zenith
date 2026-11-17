@@ -33,7 +33,7 @@ export function ApprovalsPage() {
   const boxes = useCurrentUser().role === 'exec' ? EXEC_BOXES : BOXES
   const requested = params.get('box') as ApprovalBox | null
   const box: ApprovalBox = requested && boxes.includes(requested) ? requested : 'inbox'
-  // 받은 결재와 완료 문서는 남이 올린 문서라 누가 올렸는지를 보인다. 나머지는 지금 누구 차례인지.
+  // 받은 결재와 전체 문서는 남이 올린 문서라 누가 올렸는지를 보인다. 나머지는 지금 누구 차례인지.
   const showDrafter = box === 'inbox' || box === 'done'
   const inbox = useApprovals('inbox')
   const list = useApprovals(box)
@@ -100,7 +100,11 @@ export function ApprovalsPage() {
                 )}
                 {list.data && items.length === 0 && (
                   <TableEmpty colSpan={columns}>
-                    {box === 'inbox' ? '처리할 결재가 없습니다.' : '문서가 없습니다.'}
+                    {box === 'inbox'
+                      ? '처리할 결재가 없습니다.'
+                      : box === 'done'
+                        ? '끝난 문서가 없습니다.'
+                        : '문서가 없습니다.'}
                   </TableEmpty>
                 )}
                 {items.map((item) => {

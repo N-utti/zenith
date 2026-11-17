@@ -1020,7 +1020,7 @@ export const handlers = [
     authed((user, request) => {
       const box = new URL(request.url).searchParams.get('box') ?? 'inbox'
       if (box === 'done' && user.role !== 'exec') {
-        return forbidden('완료 문서함은 임원만 볼 수 있습니다.')
+        return forbidden('전체 문서는 임원만 볼 수 있습니다.')
       }
       if (!['inbox', 'sent', 'reference', 'draft', 'done'].includes(box)) {
         return HttpResponse.json(
