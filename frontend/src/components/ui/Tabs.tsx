@@ -7,8 +7,9 @@ export interface TabItem {
   /** 대기 건수 같은 숫자. 0이면 배지를 그리지 않는다. "0건"은 알릴 내용이 아니다. */
   count?: number
   /**
-   * 묶음 이름(예: `관리`). 앞 탭과 묶음이 달라지는 자리에 세로선과 이 이름을 그린다. 근태·결재가 내 일 탭 뒤에
-   * 임원·담당자용 탭을 붙이는데, 경계가 안 보이면 어디부터 관리인지 모호하다.
+   * 묶음 이름(예: `관리`). 앞 탭과 묶음이 달라지는 자리에 세로선을 그린다. 근태·결재가 내 일 탭 뒤에
+   * 임원·담당자용 탭을 붙이는데, 경계가 안 보이면 어디부터 관리인지 모호하다. 이름은 화면에 쓰지 않고
+   * 화면 읽기에만 탭 이름 앞에 붙인다. 탭 이름(근태 현황·전체 문서)만으로 관리용인 게 읽혀서 뺐다(2026-11-17).
    * 선은 묶음이 시작하는 자리에만 그린다. 묶음은 목록 끝에 둔다.
    */
   group?: string
@@ -85,9 +86,8 @@ export function Tabs({
               <Fragment key={item.key}>
                 {groupStart && (
                   // 탭 목록 안에는 탭만 있어야 해서 화면 읽기에서 숨긴다. 묶음 이름은 탭 이름 앞에 붙여 읽힌다.
-                  <span aria-hidden className="flex shrink-0 items-center gap-2 pr-1 pl-2">
+                  <span aria-hidden className="flex shrink-0 items-center px-2">
                     <span className="bg-line h-4 w-px" />
-                    <span className="text-subtle text-xs font-medium">{item.group}</span>
                   </span>
                 )}
                 <button
