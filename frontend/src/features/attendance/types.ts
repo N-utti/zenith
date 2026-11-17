@@ -140,7 +140,7 @@ export interface AttendanceRange {
 }
 
 /**
- * 전사 근태 그리드 한 행(임원·근태 담당자). 사람마다 `GET /attendance/me` 와 같은 달력·집계에 누구인지가 붙는다.
+ * 근태 현황 그리드 한 행(임원·근태 담당자). 사람마다 `GET /attendance/me` 와 같은 달력·집계에 누구인지가 붙는다.
  * 04 §10.5 `GET /attendance/team?month=&team_id=` 를 `team_id` 없이 부르면 전사(임원·근태 담당자)로 가정한 프론트 확장(PR 본문).
  * 이 회사에는 팀장이 없어(조직도) 팀 단위 조회는 쓰지 않는다.
  */

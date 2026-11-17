@@ -35,7 +35,7 @@ const SHORT: Partial<Record<CellStatus, string>> = {
 }
 
 /**
- * 전사 근태(임원): 직원 × 일자 상태 그리드 + 범례 + 사람별 연장근로 누계(05 의 팀 근태 현황을 전사로).
+ * 근태 현황(임원): 직원 × 일자 상태 그리드 + 범례 + 사람별 연장근로 누계(05 의 팀 근태 현황을 전사로).
  * 사유는 싣지 않는다. 병가 사유 같은 민감정보는 본인과 결재선만 본다(10 §8), 그리드에는 종류만.
  *
  * 공용 `Table` 을 안 쓴 이유: 그 래퍼는 포커스를 못 받아 키보드로 가로 스크롤이 안 되고,
@@ -67,14 +67,14 @@ export function CompanyAttendanceSection() {
       <div
         tabIndex={0}
         role="region"
-        aria-label={`${formatMonth(month)} 전사 근태 표`}
+        aria-label={`${formatMonth(month)} 근태 현황 표`}
         className={cn(
           'border-line focus-visible:ring-accent overflow-x-auto rounded-lg border focus-visible:ring-2 focus-visible:outline-none',
           grid.isPending && 'animate-pulse opacity-60',
         )}
       >
         <table className="w-full border-collapse text-xs">
-          <caption className="sr-only">{formatMonth(month)} 전사 근태</caption>
+          <caption className="sr-only">{formatMonth(month)} 근태 현황</caption>
           <thead className="bg-sunken">
             <tr>
               {/* 이름 열은 가로로 굴러도 고정. 31칸을 넘기다 보면 누구 줄인지 잊는다.
@@ -117,7 +117,7 @@ export function CompanyAttendanceSection() {
               <TableEmpty colSpan={span}>
                 {grid.error instanceof ApiError
                   ? grid.error.message
-                  : '전사 근태를 불러오지 못했습니다.'}
+                  : '근태 현황을 불러오지 못했습니다.'}
               </TableEmpty>
             )}
             {grid.data && rows.length === 0 && (
