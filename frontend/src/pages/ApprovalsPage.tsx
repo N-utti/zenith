@@ -20,7 +20,10 @@ import { ApiError } from '@/lib/api'
 import { formatDateTime, formatRelative } from '@/lib/datetime'
 
 const BOXES: ApprovalBox[] = ['inbox', 'sent', 'reference', 'draft']
-/** 임원에게는 끝난 문서를 전부 모아 보는 탭이 하나 더 있다. 숨김은 편의이고 차단은 서버 403. */
+/**
+ * 임원에게는 끝난 문서를 전부 모아 보는 탭이 하나 더 있다. 남의 문서까지 보는 관리용이라 `관리` 묶음으로 떼어 보인다.
+ * 숨김은 편의이고 차단은 서버 403.
+ */
 const EXEC_BOXES: ApprovalBox[] = [...BOXES, 'done']
 
 /** 결재함(13 SCR-APV-02). 받은 결재 · 보낸 결재 · 참조 · 임시저장. */
@@ -57,6 +60,7 @@ export function ApprovalsPage() {
           key,
           label: BOX_LABEL[key],
           count: key === 'inbox' ? (inbox.data?.items.length ?? 0) : undefined,
+          group: key === 'done' ? '관리' : undefined,
         }))}
         value={box}
         onChange={(key) =>

@@ -1,4 +1,6 @@
-import { useSearchParams } from 'react-router'
+import { Settings } from 'lucide-react'
+import { Link, useSearchParams } from 'react-router'
+import { BackLink } from '@/components/ui/BackLink'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { Tabs } from '@/components/ui/Tabs'
 import { useAttendanceRoles } from '@/features/attendance/api'
@@ -21,24 +23,17 @@ const TABS = [
   { key: 'exception', label: '예외 근무' },
 ]
 /**
- * 전사 근태(직원 × 일자 그리드)와 연차 관리(전사 잔여·사용촉진 대상)는 임원만(10 §3). 숨김은 편의이고 차단은 서버 403.
+ * 전사 근태(직원 × 일자 그리드)와 연차 관리(전사 잔여·사용촉진 대상)는 임원과 근태 담당자만(10 §3). 숨김은 편의이고 차단은 서버 403.
  * 05 의 "팀 근태 현황"은 팀장 대상이지만 이 회사에는 팀장이 없어(조직도) 전사 단위로 두었다(2026-09-15 결정).
+ * 근태 담당자(백엔드 README 76)도 임원처럼 이 셋을 한다. 내 근태 탭 뒤에 `관리` 묶음으로 붙인다. 경계가 안 보이면 어디부터 관리인지 모호하다.
  */
-const EXEC_TABS = [
+const MANAGE_TABS = [
   ...TABS,
-  { key: 'company', label: '전사 근태' },
-  { key: 'leave-admin', label: '연차 관리' },
+  { key: 'company', label: '전사 근태', group: '관리' },
+  { key: 'leave-admin', label: '연차 관리', group: '관리' },
   // 근태 관리(05 SCR-ATT-06 상당): 월 마감과 리포트 내보내기. 결근 확정·정합성 검증은 아직 없다.
-  { key: 'admin', label: '근태 관리' },
-  // 근태 설정(05 SCR-ATT-07 상당): 회사 휴일만. 법정 공휴일(2026-09-16)·휴가 종류·연차 부여 기준(2026-09-15)은 사용자가 뺐다.
-  { key: 'settings', label: '근태 설정' },
+  { key: 'admin', label: '근태 관리', group: '관리' },
 ]
-
-/**
- * 근태 담당자(백엔드 README 76)는 전사 근태·연차 관리·근태 관리를 임원처럼 한다. 근태 설정(회사 휴일, 담당자 지정)은
- * 임원만이라 뺀다. 숨김은 편의이고 차단은 서버 403.
- */
-const MANAGER_TABS = EXEC_TABS.filter((tab) => tab.key !== 'settings')
 
 export function AttendancePage() {
   const user = useCurrentUser()
@@ -49,11 +44,41 @@ export function AttendancePage() {
   const [params, setParams] = useSearchParams()
   const tab = params.get('tab') ?? 'me'
 
+  // 근태 설정(05 SCR-ATT-07 상당): 회사 휴일과 근태 담당자·대표 지정, 임원만. 1년에 몇 번 안 만져서 탭이 아니라
+  // 제목 줄의 톱니바퀴로 연다. 주소는 예전 탭 그대로(`?tab=settings`). 법정 공휴일(2026-09-16)·휴가 종류·연차 부여
+  // 기준(2026-09-15)은 사용자가 뺐다. 근태 담당자는 이 화면을 못 본다(서버도 403).
+  if (isExec && tab === 'settings') {
+    return (
+      <>
+        <BackLink to="/attendance">근태</BackLink>
+        <PageHeader title="근태 설정" />
+        <div className="space-y-6">
+          <AttendanceRolesSection />
+          <HolidaySection />
+        </div>
+      </>
+    )
+  }
+
   return (
     <>
-      <PageHeader title="근태" />
+      <PageHeader
+        title="근태"
+        actions={
+          isExec && (
+            <Link
+              to="/attendance?tab=settings"
+              aria-label="근태 설정"
+              title="근태 설정"
+              className="text-muted hover:bg-surface-hover hover:text-fg inline-flex size-8 items-center justify-center rounded-lg transition-colors"
+            >
+              <Settings className="size-4" />
+            </Link>
+          )
+        }
+      />
       <Tabs
-        items={isExec ? EXEC_TABS : isManager ? MANAGER_TABS : TABS}
+        items={isExec || isManager ? MANAGE_TABS : TABS}
         value={tab}
         // 다른 파라미터는 남기고 `tab` 만 바꾼다. 화살표로 탭을 옮길 때마다 히스토리가 쌓이지 않게 replace.
         onChange={(key) =>
@@ -76,11 +101,6 @@ export function AttendancePage() {
             <LeaveAdminSection />
           ) : key === 'admin' ? (
             <MonthClosingSection />
-          ) : key === 'settings' ? (
-            <div className="space-y-6">
-              <AttendanceRolesSection />
-              <HolidaySection />
-            </div>
           ) : key === 'exception' ? (
             <ExceptionSection />
           ) : (
