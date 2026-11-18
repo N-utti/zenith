@@ -91,7 +91,7 @@ export function AbsenceModal({
             {pending ? (
               <Spinner className="border-t-on-accent" />
             ) : absent ? (
-              '사유 저장'
+              '저장'
             ) : (
               '결근으로 처리'
             )}
