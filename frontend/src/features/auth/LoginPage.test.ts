@@ -42,9 +42,11 @@ afterEach(() => {
   act(() => root.unmount())
   container.remove()
   loginError = null
+  localStorage.clear()
 })
 
-async function loginFrom(from?: string) {
+/** `beforeSubmit` 은 그려진 뒤, 제출하기 전에 화면을 만진다. */
+async function loginFrom(from?: string, beforeSubmit?: () => void) {
   container = document.createElement('div')
   document.body.append(container)
   root = createRoot(container)
@@ -66,8 +68,9 @@ async function loginFrom(from?: string) {
       ),
     ),
   )
+  if (beforeSubmit) act(beforeSubmit)
   await act(async () => {
-    // 빈 필수 칸 검증을 건너뛰려고 submit 이벤트를 바로 쏜다. 로그인 자체는 가짜라 칸 값은 상관없다.
+    // 빈 필수 칸 검증을 건너뛰려고 submit 이벤트를 바로 쏜다. 로그인 자체는 가짜라 비밀번호는 상관없다.
     container
       .querySelector('form')!
       .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
@@ -99,4 +102,49 @@ test('서버에 닿지 못하면 어느 주소로 갔는지 보여 준다', asyn
   loginError = new TypeError('Failed to fetch')
   expect(await loginFrom()).toBeUndefined()
   expect(container.textContent).toContain('서버에 연결할 수 없습니다. (https://192.168.219.8)')
+})
+
+const emailInput = () => container.querySelector<HTMLInputElement>('input[type=email]')!
+const rememberBox = () => container.querySelector<HTMLInputElement>('input[type=checkbox]')!
+
+/** 제어 칸이라 value 를 바로 넣으면 React 가 모른다. 네이티브 setter 로 넣고 input 을 쏜다. */
+function typeEmail(value: string) {
+  const input = emailInput()
+  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, value)
+  input.dispatchEvent(new Event('input', { bubbles: true }))
+}
+
+test('체크를 켜고 로그인에 성공하면 입력한 이메일을 저장한다', async () => {
+  await loginFrom(undefined, () => {
+    typeEmail('b@zenith.kr')
+    rememberBox().click()
+  })
+  expect(localStorage.getItem('zenith.savedEmail')).toBe('b@zenith.kr')
+})
+
+test('저장해 둔 이메일을 채워 띄우고, 다른 이메일로 로그인하면 덮어쓴다', async () => {
+  localStorage.setItem('zenith.savedEmail', 'a@zenith.kr')
+  await loginFrom(undefined, () => {
+    expect(emailInput().value).toBe('a@zenith.kr')
+    expect(rememberBox().checked).toBe(true)
+    typeEmail('b@zenith.kr')
+  })
+  expect(localStorage.getItem('zenith.savedEmail')).toBe('b@zenith.kr')
+})
+
+test('체크를 끄면 로그인하기 전에 바로 지운다', async () => {
+  localStorage.setItem('zenith.savedEmail', 'a@zenith.kr')
+  loginError = new ApiError(401, '이메일 또는 비밀번호가 올바르지 않습니다.')
+  await loginFrom(undefined, () => rememberBox().click())
+  expect(localStorage.getItem('zenith.savedEmail')).toBeNull()
+})
+
+test('로그인에 실패하면 체크를 켰어도 저장하지 않는다', async () => {
+  loginError = new ApiError(401, '이메일 또는 비밀번호가 올바르지 않습니다.')
+  await loginFrom(undefined, () => {
+    typeEmail('b@zenith.kr')
+    rememberBox().click()
+  })
+  expect(rememberBox().checked).toBe(true)
+  expect(localStorage.getItem('zenith.savedEmail')).toBeNull()
 })
