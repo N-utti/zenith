@@ -128,7 +128,7 @@ function Board({ kind }: { kind: DealKind }) {
     const last = stages.at(-1)?.key
     if (
       stage === last &&
-      !confirm(`"${deal.name}" 을(를) ${stages.at(-1)?.label}(으)로 이동하면 성사로 끝납니다.`)
+      !confirm(`"${deal.name}" 을(를) ${stages.at(-1)?.label}(으)로 옮기면 성사로 끝납니다.`)
     )
       return
     move.mutate(

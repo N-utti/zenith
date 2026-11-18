@@ -145,7 +145,7 @@ function DocsList({ folderId }: { folderId: string | null }) {
                 </Link>
               }
             >
-              폴더를 찾을 수 없습니다. 삭제되었거나 이동되었을 수 있습니다.
+              폴더를 찾을 수 없습니다. 삭제되었거나 옮겨졌을 수 있습니다.
             </CardEmpty>
           ) : items.length === 0 && folderItems.length === 0 ? (
             <CardEmpty action={!query && createButton}>

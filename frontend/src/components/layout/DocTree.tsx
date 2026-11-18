@@ -609,17 +609,17 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
 
     void moveNode.mutateAsync({ item, to }).then(
       () =>
-        toast.success(`${what}를 ${dest ? `${dest} 폴더로` : '최상위로'} 이동했습니다.`, {
+        toast.success(`${what}를 ${dest ? `${dest} 폴더로` : '최상위로'} 옮겼습니다.`, {
           durationMs: 10_000,
           action: {
             label: '실행 취소',
             onClick: () =>
               void moveNode
                 .mutateAsync({ item, to: from })
-                .catch((err: unknown) => fail(err, '원래 자리로 이동하지 못했습니다.')),
+                .catch((err: unknown) => fail(err, '원래 자리로 옮기지 못했습니다.')),
           },
         }),
-      (err: unknown) => fail(err, '이동하지 못했습니다.'),
+      (err: unknown) => fail(err, '옮기지 못했습니다.'),
     )
   }
 
@@ -1090,7 +1090,7 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
       <Modal
         open={hiding !== null}
         onClose={() => setHiding(null)}
-        title="개인 폴더로 이동할까요?"
+        title="개인 폴더로 옮길까요?"
         size="sm"
         footer={
           <>

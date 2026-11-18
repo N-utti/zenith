@@ -34,7 +34,7 @@ export function TrashDocModal({
         onTrashed?.()
         // 제목을 싣는다. 짧은 사이에 둘을 지우면 똑같은 토스트가 겹쳐 어느 것을 되돌리는지
         // 가릴 근거가 없어진다.
-        toast.success(`${title} 문서를 휴지통으로 이동했습니다.`, {
+        toast.success(`${title} 문서를 휴지통으로 옮겼습니다.`, {
           durationMs: 10_000,
           action: {
             label: '실행 취소',
@@ -52,7 +52,7 @@ export function TrashDocModal({
       },
       onError: (err) => {
         onClose()
-        toast.error(err instanceof ApiError ? err.message : '휴지통으로 이동하지 못했습니다.')
+        toast.error(err instanceof ApiError ? err.message : '휴지통으로 옮기지 못했습니다.')
       },
     })
 
@@ -62,7 +62,7 @@ export function TrashDocModal({
       onClose={() => {
         if (!trash.isPending) onClose()
       }}
-      title="휴지통으로 이동할까요?"
+      title="휴지통으로 옮길까요?"
       description="30일 동안 복원할 수 있고, 그 뒤에는 영구 삭제됩니다. 다른 사람에게도 사라집니다."
       size="sm"
       footer={
