@@ -53,6 +53,7 @@ export function PostComposer({
   const [fileError, setFileError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const picker = useRef<HTMLInputElement>(null)
+  const bodyRef = useRef<HTMLTextAreaElement>(null)
 
   const close = () => {
     if (saving) return
@@ -146,6 +147,14 @@ export function PostComposer({
               disabled={saving}
               maxLength={TITLE_MAX}
               placeholder="제목을 입력하세요"
+              // 제목에서 엔터는 올리기가 아니라 본문으로 넘어가기다. 올리면 본문 없이 날아간다.
+              // 한글 조합 확정 엔터는 거른다(FolderNameModal 과 같은 규약).
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+                  e.preventDefault()
+                  bodyRef.current?.focus()
+                }
+              }}
             />
           )}
         </Field>
@@ -155,6 +164,7 @@ export function PostComposer({
           {(slot) => (
             <Textarea
               {...slot}
+              ref={bodyRef}
               value={body}
               onChange={(e) => setBody(e.target.value)}
               disabled={saving}
