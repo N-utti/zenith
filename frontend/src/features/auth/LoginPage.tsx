@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router'
 import { Button } from '@/components/ui/Button'
+import { Checkbox } from '@/components/ui/Checkbox'
 import { Field } from '@/components/ui/Field'
 import { Input } from '@/components/ui/Input'
 import { Spinner } from '@/components/ui/Spinner'
@@ -11,11 +12,33 @@ import { DEMO_ACCOUNTS, MSW_ENABLED } from '@/mocks/accounts'
 import { fetchPreferences } from '@/features/settings/preferences'
 import { useAuth } from './AuthContext'
 
+/** 「이메일 저장」을 켜고 로그인에 성공한 이메일. 비밀번호는 두지 않는다(로그인 유지는 서버 세션 쿠키 몫). */
+const SAVED_EMAIL_KEY = 'zenith.savedEmail'
+
+function readSavedEmail() {
+  try {
+    return localStorage.getItem(SAVED_EMAIL_KEY) ?? ''
+  } catch {
+    return ''
+  }
+}
+
+function writeSavedEmail(email: string | null) {
+  try {
+    if (email) localStorage.setItem(SAVED_EMAIL_KEY, email)
+    else localStorage.removeItem(SAVED_EMAIL_KEY)
+  } catch {
+    // 저장소를 못 쓰면 기억하지 않을 뿐이다.
+  }
+}
+
 export function LoginPage() {
   const { status, login } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
-  const [email, setEmail] = useState('')
+  const [savedEmail] = useState(readSavedEmail)
+  const [email, setEmail] = useState(savedEmail)
+  const [remember, setRemember] = useState(!!savedEmail)
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
@@ -35,6 +58,8 @@ export function LoginPage() {
     setPending(true)
     try {
       await login(email, password)
+      // 틀린 이메일을 기억하지 않게 성공한 뒤에만 쓴다. 끄고 로그인하면 지운다.
+      writeSavedEmail(remember ? email : null)
       // 설정을 못 읽어도 로그인은 된 것이다. 홈으로 보낸다.
       const to = from ?? (await fetchPreferences().catch(() => null))?.start_page ?? '/'
       await navigate(to, { replace: true })
@@ -91,11 +116,23 @@ export function LoginPage() {
                 type="password"
                 required
                 autoComplete="current-password"
+                // 이메일이 채워져 있으면 바로 비밀번호부터 친다.
+                autoFocus={!!savedEmail}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />
             )}
           </Field>
+
+          <Checkbox
+            label="이메일 저장"
+            checked={remember}
+            onChange={(e) => {
+              setRemember(e.target.checked)
+              // 끄면 로그인하지 않고 떠나도 지워져 있어야 한다. 켜는 쪽은 로그인에 성공해야 쓴다.
+              if (!e.target.checked) writeSavedEmail(null)
+            }}
+          />
 
           <Button type="submit" disabled={pending} className="w-full">
             {pending ? <Spinner className="border-t-on-accent" /> : '로그인'}
