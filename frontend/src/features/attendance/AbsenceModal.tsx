@@ -12,7 +12,7 @@ import { useClearAbsence, useSetAbsence } from './api'
 /**
  * 결근 처리(백엔드 README 76). 근태 담당자와 임원이 근태 현황 표의 칸을 눌러 연다.
  *
- * 정상 근무로 잡힌 지난 근무일만 결근으로 바꿀 수 있다(서버가 판정한다). 이미 결근인 날은 메모를 고치거나
+ * 정상 근무로 잡힌 지난 근무일만 결근으로 바꿀 수 있다(서버가 판정한다). 이미 결근인 날은 사유를 고치거나
  * 취소한다. 본인이 정정 신청으로 바로잡아 승인되면 그쪽이 이긴다.
  * 부르는 쪽이 열 때 마운트한다(`FolderNameModal` 과 같은 이유).
  */
@@ -80,16 +80,22 @@ export function AbsenceModal({
             onClick={() =>
               set.mutate(
                 { user_id: user.id, work_date: date, note: note.trim() || null },
-                { onSuccess: done(absent ? '메모를 수정했습니다.' : '결근으로 처리했습니다.') },
+                { onSuccess: done(absent ? '사유를 수정했습니다.' : '결근으로 처리했습니다.') },
               )
             }
           >
-            {pending ? <Spinner className="border-t-on-accent" /> : absent ? '메모 저장' : '결근으로 처리'}
+            {pending ? (
+              <Spinner className="border-t-on-accent" />
+            ) : absent ? (
+              '사유 저장'
+            ) : (
+              '결근으로 처리'
+            )}
           </Button>
         </>
       }
     >
-      <Field label="메모" hint="본인의 근태 달력에도 보입니다.">
+      <Field label="사유" hint="본인의 근태 달력에도 보입니다.">
         {(slot) => (
           <Input
             {...slot}
