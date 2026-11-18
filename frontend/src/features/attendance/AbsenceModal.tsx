@@ -55,12 +55,14 @@ export function AbsenceModal({
       size="sm"
       footer={
         <>
-          {/* 기록을 되돌리는 반대 방향의 일이라 창을 마무리하는 두 버튼과 떼어 왼쪽 끝에 둔다. */}
+          {/* 기록을 되돌리는 반대 방향의 일이라 창을 마무리하는 두 버튼과 떼어 왼쪽 끝에 둔다.
+              글자가 빨간 건 닫기(아무것도 안 바꿈)와 같아 보이지 않게 하려는 것이다. 빨강은 이 창에서
+              결근 여부를 바꾸는 버튼의 색이다(결근으로 처리도 빨강). 채우지 않아 주 버튼보다 가볍다. */}
           {absent && (
             <Button
               variant="secondary"
               size="sm"
-              className="mr-auto"
+              className="text-danger hover:bg-danger/10 mr-auto"
               disabled={pending}
               onClick={() =>
                 clear.mutate(
