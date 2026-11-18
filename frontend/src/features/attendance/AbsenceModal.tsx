@@ -95,7 +95,7 @@ export function AbsenceModal({
         </>
       }
     >
-      <Field label="사유" hint="본인의 근태 달력에도 보입니다.">
+      <Field label="사유" hint={`${user.name} 님의 근태 달력에도 표시됩니다.`}>
         {(slot) => (
           <Input
             {...slot}
