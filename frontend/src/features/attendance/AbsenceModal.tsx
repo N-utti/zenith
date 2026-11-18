@@ -55,10 +55,12 @@ export function AbsenceModal({
       size="sm"
       footer={
         <>
+          {/* 기록을 되돌리는 반대 방향의 일이라 창을 마무리하는 두 버튼과 떼어 왼쪽 끝에 둔다. */}
           {absent && (
             <Button
               variant="secondary"
               size="sm"
+              className="mr-auto"
               disabled={pending}
               onClick={() =>
                 clear.mutate(
