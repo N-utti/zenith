@@ -89,7 +89,7 @@ export function CommentRow({
         closeEdit,
         // 고치던 글 바로 아래에 낸다. 토스트로 내면 무엇이 안 됐는지와 고칠 곳이 떨어진다.
         (err: unknown) =>
-          setEditError(err instanceof ApiError ? err.message : '댓글을 고치지 못했습니다.'),
+          setEditError(err instanceof ApiError ? err.message : '댓글을 수정하지 못했습니다.'),
       )
       .finally(() => setSaving(false))
   }
@@ -119,8 +119,8 @@ export function CommentRow({
           {canEdit && draft === null && (
             <button
               type="button"
-              aria-label={`${formatRelative(comment.created_at)} 댓글 고치기`}
-              title="댓글 고치기"
+              aria-label={`${formatRelative(comment.created_at)} 댓글 수정`}
+              title="댓글 수정"
               onClick={() => {
                 setEditError(null)
                 setDraft(comment.body)
@@ -137,12 +137,14 @@ export function CommentRow({
               title="댓글 삭제"
               disabled={removing}
               onClick={() => {
-                if (!confirm('이 댓글을 지울까요? 되돌릴 수 없습니다.')) return
+                if (!confirm('이 댓글을 삭제할까요? 되돌릴 수 없습니다.')) return
                 setRemoving(true)
                 // 이 줄이 사라져도(창 닫기, 탭 바꾸기) 약속에 붙인 처리는 돈다.
                 onRemove()
                   .catch((err: unknown) => {
-                    toast.error(err instanceof ApiError ? err.message : '댓글을 지우지 못했습니다.')
+                    toast.error(
+                      err instanceof ApiError ? err.message : '댓글을 삭제하지 못했습니다.',
+                    )
                   })
                   .finally(() => setRemoving(false))
                 onDelete?.()
@@ -177,7 +179,7 @@ export function CommentRow({
               }}
               rows={Math.min(6, Math.max(draft.split('\n').length, Math.ceil(draft.length / 30)))}
               maxLength={maxLength}
-              aria-label="댓글 고치기"
+              aria-label="댓글 수정"
               aria-invalid={editError ? true : undefined}
               className="w-full resize-none"
             />

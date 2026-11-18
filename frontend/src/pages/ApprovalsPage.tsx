@@ -140,18 +140,18 @@ export function ApprovalsPage() {
                         <TD className="text-right">
                           <button
                             type="button"
-                            aria-label={`${item.title} 임시저장 지우기`}
-                            title="임시저장 지우기"
+                            aria-label={`${item.title} 임시저장 삭제`}
+                            title="임시저장 삭제"
                             disabled={removeDraft.isPending}
                             onClick={() => {
-                              if (!confirm('이 임시저장을 지울까요? 되돌릴 수 없습니다.')) return
+                              if (!confirm('이 임시저장을 삭제할까요? 되돌릴 수 없습니다.')) return
                               removeDraft.mutate(item.id, {
-                                onSuccess: () => toast.success('임시저장을 지웠습니다.'),
+                                onSuccess: () => toast.success('임시저장을 삭제했습니다.'),
                                 onError: (err) =>
                                   toast.error(
                                     err instanceof ApiError
                                       ? err.message
-                                      : '임시저장을 지우지 못했습니다.',
+                                      : '임시저장을 삭제하지 못했습니다.',
                                   ),
                               })
                             }}

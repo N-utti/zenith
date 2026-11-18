@@ -291,7 +291,7 @@ export function ContactFormModal({
         onSuccess: () => {
           toast.success(
             to !== orgId
-              ? `${made?.name ?? orgOptions.find((o) => o.value === to)?.label ?? '다른 기관'}(으)로 옮겼습니다.`
+              ? `${made?.name ?? orgOptions.find((o) => o.value === to)?.label ?? '다른 기관'}(으)로 이동했습니다.`
               : '저장했습니다.',
           )
           onClose()
@@ -365,7 +365,7 @@ export function ContactFormModal({
           label="소속 기관"
           hint={
             creatingOrg
-              ? '저장하면 기관을 등록하고 그 기관으로 옮깁니다. 창구·메모는 기관 상세에서 채워 주세요.'
+              ? '저장하면 기관을 등록하고 그 기관으로 이동합니다. 창구·메모는 기관 상세에서 채워 주세요.'
               : moving
                 ? '이 기관 담당자 목록에서 빠지고 이전 소속은 이력으로 남습니다. 지난 활동 기록은 이 기관에 그대로 있습니다.'
                 : '이직했으면 새 기관으로 바꿔 주세요.'
@@ -674,7 +674,7 @@ export function DealFormModal({
     const onError = (err: unknown) =>
       setError(
         err instanceof ApiError && err.status === 409
-          ? '그사이 다른 사람이 이 안건을 고쳤습니다. 창을 닫고 다시 열어 새 내용에서 고쳐 주세요.'
+          ? '그사이 다른 사람이 이 안건을 수정했습니다. 창을 닫고 다시 열어 새 내용에서 수정해 주세요.'
           : errorText(err, '저장하지 못했습니다.'),
       )
     if (deal) {

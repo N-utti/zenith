@@ -59,8 +59,8 @@ export function ImageViewer({
         <DownloadLink
           path={path}
           name={name}
-          aria-label={`${name} 내려받기`}
-          title="내려받기"
+          aria-label={`${name} 다운로드`}
+          title="다운로드"
           className={BAR_BUTTON}
         >
           <Download className="size-4" />

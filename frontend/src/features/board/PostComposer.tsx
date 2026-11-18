@@ -100,12 +100,12 @@ export function PostComposer({
       })
       // 모달이 닫히면 목록이 한 줄 늘거나 본문이 바뀔 뿐이라, 알리지 않으면 반영됐는지 알 수 없다.
       onClose()
-      toast.success(post ? '글을 수정했습니다.' : '글을 올렸습니다.')
+      toast.success(post ? '글을 수정했습니다.' : '글을 등록했습니다.')
     } catch (err) {
       // 실패는 토스트가 아니라 입력 옆에 낸다. 고칠 곳이 이 폼 안에 있다.
       const reason = err instanceof ApiError ? err.message : null
-      if (current) setFileError(`${current.name}: ${reason ?? '파일을 올리지 못했습니다.'}`)
-      else setError(reason ?? (post ? '글을 수정하지 못했습니다.' : '글을 올리지 못했습니다.'))
+      if (current) setFileError(`${current.name}: ${reason ?? '파일을 업로드하지 못했습니다.'}`)
+      else setError(reason ?? (post ? '글을 수정하지 못했습니다.' : '글을 등록하지 못했습니다.'))
     } finally {
       setSaving(false)
     }
@@ -131,7 +131,7 @@ export function PostComposer({
             onClick={() => void submit()}
             disabled={!title.trim() || !body.trim() || saving}
           >
-            {saving ? <Spinner className="border-t-on-accent" /> : post ? '저장' : '올리기'}
+            {saving ? <Spinner className="border-t-on-accent" /> : post ? '저장' : '등록'}
           </Button>
         </>
       }

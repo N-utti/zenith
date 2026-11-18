@@ -34,17 +34,17 @@ export function TrashDocModal({
         onTrashed?.()
         // 제목을 싣는다. 짧은 사이에 둘을 지우면 똑같은 토스트가 겹쳐 어느 것을 되돌리는지
         // 가릴 근거가 없어진다.
-        toast.success(`${title} 문서를 휴지통으로 옮겼습니다.`, {
+        toast.success(`${title} 문서를 휴지통으로 이동했습니다.`, {
           durationMs: 10_000,
           action: {
-            label: '되돌리기',
+            label: '실행 취소',
             // 여기는 이미 이 대화상자가 닫힌 뒤다. 되돌린 문서로 다시 들어가지 않고 목록에 다시
             // 나타나게만 한다.
             onClick: () => {
               void untrashDoc(id)
-                .then(() => toast.success(`${title} 문서를 되돌렸습니다.`))
+                .then(() => toast.success(`${title} 문서를 복원했습니다.`))
                 .catch((err: unknown) =>
-                  toast.error(err instanceof ApiError ? err.message : '되돌리지 못했습니다.'),
+                  toast.error(err instanceof ApiError ? err.message : '복원하지 못했습니다.'),
                 )
             },
           },
@@ -52,7 +52,7 @@ export function TrashDocModal({
       },
       onError: (err) => {
         onClose()
-        toast.error(err instanceof ApiError ? err.message : '휴지통으로 옮기지 못했습니다.')
+        toast.error(err instanceof ApiError ? err.message : '휴지통으로 이동하지 못했습니다.')
       },
     })
 
@@ -62,8 +62,8 @@ export function TrashDocModal({
       onClose={() => {
         if (!trash.isPending) onClose()
       }}
-      title="휴지통으로 옮길까요?"
-      description="30일 동안 되돌릴 수 있고, 그 뒤에는 영구 삭제됩니다. 다른 사람에게도 사라집니다."
+      title="휴지통으로 이동할까요?"
+      description="30일 동안 복원할 수 있고, 그 뒤에는 영구 삭제됩니다. 다른 사람에게도 사라집니다."
       size="sm"
       footer={
         <>

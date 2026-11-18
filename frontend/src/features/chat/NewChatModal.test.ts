@@ -111,7 +111,7 @@ test('비공개로 만들면 두 칸이 같이 나가고, 서버가 공개로 �
   expect(sent()).toEqual({ name: '인사', is_private: true, member_ids: ['u1'] })
   expect(toast.success).not.toHaveBeenCalled()
   expect(toast.error).toHaveBeenCalledWith(
-    expect.stringContaining('고른 대로 만들어지지 않았습니다'),
+    expect.stringContaining('선택한 대로 만들어지지 않았습니다'),
     expect.anything(),
   )
 })

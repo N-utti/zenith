@@ -33,7 +33,7 @@ export function AttachmentEditor({ file, onClose }: { file: AiAttachment; onClos
   const download = () => {
     if (!done) return
     downloadFromApi(`/api/ai/attachments/${done.result.id}`, done.result.name).catch(() =>
-      toast.error('내려받지 못했습니다.'),
+      toast.error('다운로드하지 못했습니다.'),
     )
   }
 
@@ -45,16 +45,16 @@ export function AttachmentEditor({ file, onClose }: { file: AiAttachment; onClos
         open
         onClose={onClose}
         size="lg"
-        title="AI가 고친 내용"
-        description={`내려받기 전에 바뀐 곳을 확인하세요. 원본은 그대로 남고 「${done.result.name}」 파일이 새로 생겼습니다.`}
+        title="AI가 수정한 내용"
+        description={`다운로드하기 전에 바뀐 곳을 확인하세요. 원본은 그대로 남고 「${done.result.name}」 파일이 새로 생겼습니다.`}
         footer={
           <>
             <Button variant="secondary" size="sm" onClick={() => edit.reset()}>
-              다시 고치기
+              다시 수정
             </Button>
             <Button size="sm" onClick={download}>
               <Download className="size-4" />
-              내려받기
+              다운로드
             </Button>
           </>
         }
@@ -63,8 +63,8 @@ export function AttachmentEditor({ file, onClose }: { file: AiAttachment; onClos
           <THead>
             <TR>
               <TH className="w-28">위치</TH>
-              <TH>바꾸기 전</TH>
-              <TH>바꾼 뒤</TH>
+              <TH>변경 전</TH>
+              <TH>변경 후</TH>
             </TR>
           </THead>
           <TBody>
@@ -103,8 +103,8 @@ export function AttachmentEditor({ file, onClose }: { file: AiAttachment; onClos
       key="form"
       open
       onClose={close}
-      title="AI로 고치기"
-      description={`「${file.name}」 파일을 지시대로 고쳐 새 파일로 만듭니다. 원본은 그대로 남습니다.`}
+      title="AI로 수정"
+      description={`「${file.name}」 파일을 지시대로 수정해 새 파일로 만듭니다. 원본은 그대로 남습니다.`}
       footer={
         <>
           <Button variant="secondary" size="sm" onClick={onClose} disabled={edit.isPending}>
@@ -116,7 +116,7 @@ export function AttachmentEditor({ file, onClose }: { file: AiAttachment; onClos
             ) : (
               <Wand2 className="size-4" />
             )}
-            {edit.isPending ? '고치는 중' : '고치기'}
+            {edit.isPending ? '수정 중' : '수정'}
           </Button>
         </>
       }
@@ -132,26 +132,26 @@ export function AttachmentEditor({ file, onClose }: { file: AiAttachment; onClos
         // 서버 상한(EditIn.instruction). 넘기면 422 인데 그 사유는 배열이라 화면에 일반 실패만 뜬다.
         maxLength={2000}
         autoFocus
-        aria-label="고칠 내용"
+        aria-label="수정할 내용"
         placeholder={
           xlsx ? '예: 3월 매출 열을 합계 수식으로 바꿔 줘' : '예: 2장의 날짜를 10월 20일로 고쳐 줘'
         }
       />
       <p className="text-subtle mt-2 text-xs">
         {xlsx
-          ? '칸 단위로 고칩니다. 차트·그림이 있는 엑셀은 고칠 수 없습니다.'
-          : '문단 단위로 고칩니다. 링크·그림이 있는 문단은 고치지 못합니다.'}
+          ? '칸 단위로 수정합니다. 차트·그림이 있는 엑셀은 수정할 수 없습니다.'
+          : '문단 단위로 수정합니다. 링크·그림이 있는 문단은 수정하지 못합니다.'}
       </p>
       {edit.isPending && (
         <p role="status" className="text-subtle mt-2 text-xs">
-          고치는 중입니다. 파일에 따라 2분까지 걸릴 수 있습니다.
+          수정하는 중입니다. 파일에 따라 2분까지 걸릴 수 있습니다.
         </p>
       )}
       {edit.isError && (
         <p role="alert" className="text-danger mt-2 text-sm">
           {edit.error instanceof ApiError && edit.error.message
             ? edit.error.message
-            : '고치지 못했습니다. 다시 시도해 주세요.'}
+            : '수정하지 못했습니다. 다시 시도해 주세요.'}
         </p>
       )}
     </Modal>

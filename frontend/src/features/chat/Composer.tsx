@@ -95,7 +95,7 @@ export function Composer({
           reader.readAsDataURL(file)
         }
       } catch (err) {
-        setError(err instanceof ApiError ? err.message : `${file.name} 을 올리지 못했습니다.`)
+        setError(err instanceof ApiError ? err.message : `${file.name} 을 업로드하지 못했습니다.`)
       } finally {
         setUploading((n) => n - 1)
       }

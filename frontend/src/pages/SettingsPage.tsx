@@ -41,7 +41,7 @@ function PasswordSection() {
         submitLabel="비밀번호 변경"
         // 서버가 이 세션만 남기고 나머지를 끊는다(backend/README §1 확장). 다른 기기에서 놀라지 않게 알린다.
         onChanged={() =>
-          toast.success('비밀번호를 바꿨습니다. 다른 기기의 로그인은 모두 해제됩니다.')
+          toast.success('비밀번호를 변경했습니다. 다른 기기의 로그인은 모두 해제됩니다.')
         }
         onError={toast.error}
       />
@@ -115,7 +115,7 @@ function AppLockSection() {
   const savePin = (pin: string) => {
     setAppLock(user.id, { pin, idleMinutes: lock?.idleMinutes ?? 10, locked: false })
     setEditing(false)
-    toast.success(lock ? '잠금 번호를 바꿨습니다.' : '잠금 모드를 켰습니다.')
+    toast.success(lock ? '잠금 번호를 변경했습니다.' : '잠금 모드를 켰습니다.')
   }
 
   return (
@@ -151,7 +151,7 @@ function AppLockSection() {
               지금 잠그기
             </Button>
             <Button variant="secondary" size="sm" onClick={() => setEditing(true)}>
-              번호 바꾸기
+              번호 변경
             </Button>
             <Button
               variant="secondary"

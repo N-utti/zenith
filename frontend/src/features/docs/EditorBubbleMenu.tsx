@@ -148,7 +148,7 @@ export function EditorBubbleMenu({ editor }: { editor: Editor }) {
           확인은 묻지 않는다. Ctrl+Z 한 번으로 돌아온다. */}
       <ToolButton
         icon={Trash2}
-        label="블록 지우기"
+        label="블록 삭제"
         onClick={() =>
           editor
             .chain()

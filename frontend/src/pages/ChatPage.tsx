@@ -132,7 +132,11 @@ export function ChatPage() {
                   비공개 · {channel.members.length}명 ·{' '}
                   {channel.members.map((m) => m.name).join(', ')}
                 </span>
-                <UserPlus role="img" aria-label="멤버 더하기·빼기" className="size-3.5 shrink-0" />
+                <UserPlus
+                  role="img"
+                  aria-label="멤버 추가·내보내기"
+                  className="size-3.5 shrink-0"
+                />
               </button>
             ) : (
               // 공개 채널은 모두가 보므로 인원수를 적지 않는다.

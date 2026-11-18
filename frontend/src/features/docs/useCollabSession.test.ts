@@ -136,7 +136,7 @@ test('잠긴 문서에 편집을 보내 닫히면(4423) 사본을 다 지운 뒤
     expect(cache.cleared).toContain('zenith.doc.e')
     expect(invalidated).toEqual([['tree'], ['documents', 'e']])
     // 친 글이 사라진 이유를 알린다.
-    expect(toastError).toHaveBeenCalledWith('문서가 잠겨 있어 이 기기에서 고친 내용은 저장되지 않았습니다.')
+    expect(toastError).toHaveBeenCalledWith('문서가 잠겨 있어 이 기기에서 수정한 내용은 저장되지 않았습니다.')
     // 지우기가 끝나기 전에 새 세션이 같은 사본을 열면 거절된 글을 도로 읽는다.
     expect(relay.opened).toBe(opened)
     await act(async () => release())

@@ -42,9 +42,9 @@ export function BoardPostPage() {
     setConfirming(false)
     deferDelete(toast, {
       ids: [postId],
-      message: '글을 지웠습니다.',
+      message: '글을 삭제했습니다.',
       commit: () => remove.mutateAsync(),
-      failMessage: '글을 지우지 못했습니다.',
+      failMessage: '글을 삭제하지 못했습니다.',
     })
     void navigate(`/board/${postBoardId}`, { replace: true })
   }
@@ -150,8 +150,8 @@ export function BoardPostPage() {
         onClose={() => {
           if (!remove.isPending) setConfirming(false)
         }}
-        title="글을 지울까요?"
-        description="지운 글은 되돌릴 수 없습니다."
+        title="글을 삭제할까요?"
+        description="삭제한 글은 되돌릴 수 없습니다."
         size="sm"
         footer={
           <>
@@ -170,7 +170,7 @@ export function BoardPostPage() {
               disabled={remove.isPending}
               data-autofocus
             >
-              {remove.isPending ? <Spinner className="border-t-white" /> : '지우기'}
+              {remove.isPending ? <Spinner className="border-t-white" /> : '삭제'}
             </Button>
           </>
         }

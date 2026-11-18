@@ -172,7 +172,7 @@ export function CrmOrgsPage() {
       )}
 
       {/* 머리줄에 두면 버튼이 다섯이 되어 한 줄에 안 들어간다. 드물게 쓰는 길이라 표 아래에 둔다.
-          화면 편의일 뿐이다. 지운 기관 목록의 실제 차단은 서버 403 이다. */}
+          화면 편의일 뿐이다. 삭제한 기관 목록의 실제 차단은 서버 403 이다. */}
       {me.role === 'exec' && (
         <div className="mt-3 text-right">
           <button
@@ -180,7 +180,7 @@ export function CrmOrgsPage() {
             className="text-subtle hover:text-fg cursor-pointer text-xs underline"
             onClick={() => setShowingDeleted(true)}
           >
-            지운 기관 보기
+            삭제한 기관 보기
           </button>
         </div>
       )}
@@ -192,8 +192,8 @@ export function CrmOrgsPage() {
 }
 
 /**
- * 지운 기관 목록. 임원만 연다. 기관 삭제는 목록에서만 빼는 것이라(15 §3) 되살리면 담당자·안건·
- * 활동 기록이 그대로 돌아온다. 잘못 지운 기관을 다시 등록해 이력을 잃는 일을 막는다.
+ * 삭제한 기관 목록. 임원만 연다. 기관 삭제는 목록에서만 빼는 것이라(15 §3) 복원하면 담당자·안건·
+ * 활동 기록이 그대로 돌아온다. 잘못 삭제한 기관을 다시 등록해 이력을 잃는 일을 막는다.
  */
 function DeletedOrgsModal({ onClose }: { onClose: () => void }) {
   const toast = useToast()
@@ -205,8 +205,8 @@ function DeletedOrgsModal({ onClose }: { onClose: () => void }) {
     <Modal
       open
       onClose={onClose}
-      title="지운 기관"
-      description="되살리면 담당자·안건·활동 기록이 그대로 돌아옵니다."
+      title="삭제한 기관"
+      description="복원하면 담당자·안건·활동 기록이 그대로 돌아옵니다."
       footer={
         <Button variant="secondary" size="sm" onClick={onClose}>
           닫기
@@ -215,10 +215,10 @@ function DeletedOrgsModal({ onClose }: { onClose: () => void }) {
     >
       {deleted.isPending && <SkeletonRows rows={2} />}
       {deleted.isError && !deleted.data && (
-        <p className="text-muted text-sm">지운 기관을 불러오지 못했습니다.</p>
+        <p className="text-muted text-sm">삭제한 기관을 불러오지 못했습니다.</p>
       )}
       {deleted.data && items.length === 0 && (
-        <p className="text-muted text-sm">지운 기관이 없습니다.</p>
+        <p className="text-muted text-sm">삭제한 기관이 없습니다.</p>
       )}
       {items.length > 0 && (
         <ul>
@@ -236,7 +236,7 @@ function DeletedOrgsModal({ onClose }: { onClose: () => void }) {
                   <time dateTime={org.deleted_at} title={formatDateTime(org.deleted_at)}>
                     {formatRelative(org.deleted_at)}
                   </time>{' '}
-                  지움{org.reason && ` · ${org.reason}`}
+                  삭제{org.reason && ` · ${org.reason}`}
                 </p>
                 {org.duplicate && (
                   <p className="text-muted mt-1 text-xs">
@@ -257,13 +257,13 @@ function DeletedOrgsModal({ onClose }: { onClose: () => void }) {
                 disabled={restore.isPending}
                 onClick={() =>
                   restore.mutate(org.id, {
-                    onSuccess: () => toast.success(`${org.name}을(를) 되살렸습니다.`),
+                    onSuccess: () => toast.success(`${org.name}을(를) 복원했습니다.`),
                     onError: (err) =>
-                      toast.error(err instanceof ApiError ? err.message : '되살리지 못했습니다.'),
+                      toast.error(err instanceof ApiError ? err.message : '복원하지 못했습니다.'),
                   })
                 }
               >
-                되살리기
+                복원
               </Button>
             </li>
           ))}

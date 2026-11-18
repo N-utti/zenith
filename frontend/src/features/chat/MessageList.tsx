@@ -96,8 +96,8 @@ function Attachments({ files }: { files: ChatAttachment[] | null }) {
               <DownloadLink
                 path={file.url}
                 name={file.name}
-                aria-label={`${file.name} 내려받기`}
-                title="내려받기"
+                aria-label={`${file.name} 다운로드`}
+                title="다운로드"
                 className="border-line bg-surface text-muted hover:text-fg pointer-events-none absolute top-1.5 right-1.5 grid size-7 place-items-center rounded-md border opacity-0 transition-opacity group-focus-within/image:pointer-events-auto group-focus-within/image:opacity-100 group-hover/image:pointer-events-auto group-hover/image:opacity-100 pointer-coarse:pointer-events-auto pointer-coarse:opacity-100"
               >
                 <Download className="size-3.5" />
@@ -294,7 +294,7 @@ export function MessageList({
   const edit = useCallback(
     (messageId: string, body: string) => {
       const sent = editMessage(channelId, messageId, body)
-      if (!sent) toast.error('연결이 끊겨 고치지 못했습니다. 연결되면 다시 시도하세요.')
+      if (!sent) toast.error('연결이 끊겨 수정하지 못했습니다. 연결되면 다시 시도하세요.')
       return sent
     },
     [editMessage, channelId, toast],
@@ -302,7 +302,7 @@ export function MessageList({
   const remove = useCallback(
     (messageId: string) => {
       const sent = deleteMessage(channelId, messageId)
-      if (!sent) toast.error('연결이 끊겨 지우지 못했습니다. 연결되면 다시 시도하세요.')
+      if (!sent) toast.error('연결이 끊겨 삭제하지 못했습니다. 연결되면 다시 시도하세요.')
       return sent
     },
     [deleteMessage, channelId, toast],
@@ -553,8 +553,8 @@ const MessageRow = memo(function MessageRow({
             {onEdit && (
               <button
                 type="button"
-                aria-label={`${formatTime(message.created_at)} 메시지 고치기`}
-                title="고치기"
+                aria-label={`${formatTime(message.created_at)} 메시지 수정`}
+                title="수정"
                 onClick={() => setDraft(message.body)}
                 className="text-subtle hover:text-fg grid size-7 cursor-pointer place-items-center rounded"
               >
@@ -564,10 +564,10 @@ const MessageRow = memo(function MessageRow({
             {onDelete && (
               <button
                 type="button"
-                aria-label={`${formatTime(message.created_at)} 메시지 지우기`}
-                title="지우기"
+                aria-label={`${formatTime(message.created_at)} 메시지 삭제`}
+                title="삭제"
                 onClick={() => {
-                  if (confirm('이 메시지를 지울까요? 되돌릴 수 없습니다.')) onDelete(message.id)
+                  if (confirm('이 메시지를 삭제할까요? 되돌릴 수 없습니다.')) onDelete(message.id)
                 }}
                 className="text-subtle hover:text-danger grid size-7 cursor-pointer place-items-center rounded"
               >
@@ -619,7 +619,7 @@ const MessageRow = memo(function MessageRow({
                 maxLength={MAX_BODY_CHARS}
                 // 줄바꿈 없이 길게 쓴 글도 한 줄에 갇히지 않게 글자 수로도 어림한다.
                 rows={Math.min(8, Math.max(draft.split('\n').length, Math.ceil(draft.length / 50)))}
-                aria-label="메시지 고치기"
+                aria-label="메시지 수정"
                 className="resize-none"
                 submitOnEnter
                 onSubmitEnter={save}

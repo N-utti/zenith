@@ -171,10 +171,10 @@ export function ApprovalDetailPage() {
                   className="hover:text-danger"
                   disabled={busy}
                   onClick={() => {
-                    if (!confirm('이 임시저장을 지울까요? 되돌릴 수 없습니다.')) return
+                    if (!confirm('이 임시저장을 삭제할까요? 되돌릴 수 없습니다.')) return
                     removeDraft.mutate(d.id, {
                       onSuccess: () => {
-                        toast.success('임시저장을 지웠습니다.')
+                        toast.success('임시저장을 삭제했습니다.')
                         void navigate('/approvals?box=draft')
                       },
                       onError,
@@ -268,13 +268,13 @@ export function ApprovalDetailPage() {
                 onClick={() => {
                   if (
                     !confirm(
-                      '이 문서를 지울까요? 결재선과 첨부도 같이 지워지고 되돌릴 수 없습니다.',
+                      '이 문서를 삭제할까요? 결재선과 첨부도 같이 삭제되고 되돌릴 수 없습니다.',
                     )
                   )
                     return
                   removeDone.mutate(d.id, {
                     onSuccess: () => {
-                      toast.success('문서를 지웠습니다.')
+                      toast.success('문서를 삭제했습니다.')
                       void navigate('/approvals?box=done')
                     },
                     onError: (err) => {

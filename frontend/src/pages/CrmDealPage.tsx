@@ -82,8 +82,12 @@ export function CrmDealPage() {
 
   const moveTo = (stage: string) => {
     if (stage === d.stage) return
-    if (stage === last && !confirm(`${stages.at(-1)?.label}(으)로 옮기면 성사로 끝납니다.`)) return
-    if (!open && !confirm('성사를 되돌려 진행 중으로 바꿉니다.')) return
+    if (
+      stage === last &&
+      !confirm(`단계를 ${stages.at(-1)?.label}(으)로 변경하면 성사로 끝납니다.`)
+    )
+      return
+    if (!open && !confirm('성사를 취소하고 진행 중으로 바꿉니다.')) return
     move.mutate(
       { id: d.id, version: d.version, stage },
       {
@@ -92,10 +96,10 @@ export function CrmDealPage() {
             stage === last
               ? '성사로 끝냈습니다.'
               : open
-                ? '단계를 옮겼습니다.'
-                : '성사를 되돌렸습니다.',
+                ? '단계를 변경했습니다.'
+                : '성사를 취소했습니다.',
           ),
-        onError: (err) => toast.error(errorText(err, '단계를 옮기지 못했습니다.')),
+        onError: (err) => toast.error(errorText(err, '단계를 변경하지 못했습니다.')),
       },
     )
   }
@@ -106,10 +110,10 @@ export function CrmDealPage() {
     if (!confirm(deleteDealMessage(d.name, me.role === 'exec'))) return
     remove.mutate(d.id, {
       onSuccess: () => {
-        toast.success('안건을 지웠습니다.')
+        toast.success('안건을 삭제했습니다.')
         void navigate(board, { replace: true })
       },
-      onError: (err) => toast.error(errorText(err, '안건을 지우지 못했습니다.')),
+      onError: (err) => toast.error(errorText(err, '안건을 삭제하지 못했습니다.')),
     })
   }
 

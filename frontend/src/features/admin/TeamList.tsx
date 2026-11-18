@@ -62,7 +62,7 @@ export function TeamList() {
     <>
       <div className="mb-3 flex items-center gap-2">
         <p className="text-subtle text-xs">
-          이름을 바꿔도 소속된 사람은 그대로입니다. 팀을 지우는 기능은 없습니다.
+          이름을 바꿔도 소속된 사람은 그대로입니다. 팀을 삭제하는 기능은 없습니다.
         </p>
         <Button size="sm" className="ml-auto" onClick={() => open('new')}>
           <Plus className="size-4" />새 팀

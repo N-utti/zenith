@@ -131,7 +131,7 @@ export function CompanyAttendanceSection() {
       </div>
       <AttendanceLegend className="mt-3 flex sm:hidden" />
       <p className="text-subtle mt-3 text-xs">
-        정상 근무로 잡힌 지난 날의 칸을 누르면 결근으로 처리합니다. 결근인 칸을 누르면 고치거나 취소합니다.
+        정상 근무로 잡힌 지난 날의 칸을 누르면 결근으로 처리합니다. 결근인 칸을 누르면 수정하거나 취소합니다.
       </p>
       {marking && <AbsenceModal {...marking} onClose={() => setMarking(null)} />}
     </Card>

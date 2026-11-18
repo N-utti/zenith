@@ -27,8 +27,8 @@ export function ProjectsPage() {
   const removeProject = (project: Project) => {
     if (!confirm(deleteProjectMessage(project))) return
     remove.mutate(project.id, {
-      onSuccess: () => toast.success('프로젝트를 지웠습니다.'),
-      onError: (err) => toast.error(err instanceof ApiError ? err.message : '지우지 못했습니다.'),
+      onSuccess: () => toast.success('프로젝트를 삭제했습니다.'),
+      onError: (err) => toast.error(err instanceof ApiError ? err.message : '삭제하지 못했습니다.'),
     })
   }
 
@@ -124,7 +124,7 @@ function ProjectCard({
               icon={Trash2}
               label="삭제"
               danger
-              disabledReason={deleting ? '지우는 중' : undefined}
+              disabledReason={deleting ? '삭제하는 중' : undefined}
               onSelect={onDelete}
             />
           )}

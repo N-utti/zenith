@@ -81,9 +81,9 @@ export function ChannelMenuLayer({
     close()
     deferDelete(toast, {
       ids: [channel.id],
-      message: `${channel.name} 채널을 지웠습니다.`,
+      message: `${channel.name} 채널을 삭제했습니다.`,
       commit: () => remove.mutateAsync(channel.id),
-      failMessage: '채널을 지우지 못했습니다.',
+      failMessage: '채널을 삭제하지 못했습니다.',
     })
     if (viewing) void navigate('/chat')
   }
@@ -118,7 +118,7 @@ export function ChannelMenuLayer({
             {channel.can_delete && (
               <ContextMenuItem
                 icon={Trash2}
-                label="채널 지우기"
+                label="채널 삭제"
                 danger
                 onSelect={() => setOpen({ kind: 'delete' })}
               />
@@ -161,7 +161,7 @@ export function ChannelMenuLayer({
     <Modal
       open
       onClose={() => !remove.isPending && close()}
-      title="채널을 지울까요?"
+      title="채널을 삭제할까요?"
       description="대화와 첨부 파일이 모든 멤버에게서 사라집니다. 되돌릴 수 없습니다."
       size="sm"
       footer={
@@ -176,7 +176,7 @@ export function ChannelMenuLayer({
             disabled={remove.isPending}
             data-autofocus
           >
-            {remove.isPending ? <Spinner className="border-t-white" /> : '지우기'}
+            {remove.isPending ? <Spinner className="border-t-white" /> : '삭제'}
           </Button>
         </>
       }

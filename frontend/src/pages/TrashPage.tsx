@@ -67,7 +67,7 @@ export function TrashPage() {
     <>
       <PageHeader
         title="휴지통"
-        description={`지운 문서는 ${TRASH_KEEP_DAYS}일 동안 여기 있다가 서버가 영구 삭제합니다.`}
+        description={`삭제한 문서는 ${TRASH_KEEP_DAYS}일 동안 여기 있다가 서버가 영구 삭제합니다.`}
         actions={
           <>
             {/* 영구 삭제와 같은 권한이다. 임원에게만 보이고, 비어 있으면 누를 것이 없다. */}
@@ -104,7 +104,7 @@ export function TrashPage() {
               {/* 서버는 "지운 사람"을 따로 안 준다. 여기 실린 건 `updated_by`, 즉 마지막으로
                   손댄 사람이다. 지운 사람과 같다고 보일 이름을 붙이지 않는다. */}
               <TH className="w-28">마지막 수정</TH>
-              <TH className="w-24">지운 때</TH>
+              <TH className="w-24">삭제일</TH>
               <TH className="w-28">영구 삭제까지</TH>
               {/* 이 열에는 되돌리기와 영구 삭제가 같이 있다. 한쪽 이름을 붙이면 스크린리더가
                   다른 버튼을 읽을 때도 그 이름을 같이 읽는다. */}
@@ -153,12 +153,12 @@ export function TrashPage() {
                     <Button
                       variant="secondary"
                       size="sm"
-                      aria-label={`${title} 되돌리기`}
+                      aria-label={`${title} 복원`}
                       disabled={busy}
                       onClick={() =>
                         untrash.mutate(doc.id, {
-                          onSuccess: () => toast.success(`${title} 문서를 되돌렸습니다.`),
-                          onError: fail('되돌리지 못했습니다.'),
+                          onSuccess: () => toast.success(`${title} 문서를 복원했습니다.`),
+                          onError: fail('복원하지 못했습니다.'),
                         })
                       }
                     >
@@ -167,7 +167,7 @@ export function TrashPage() {
                       ) : (
                         <RotateCcw className="size-3.5" />
                       )}
-                      되돌리기
+                      복원
                     </Button>
                     {canPurge(doc.folder_id) && (
                       <Button
@@ -279,7 +279,7 @@ export function TrashPage() {
                         skipped > 0 ? `그사이 휴지통에서 빠진 ${skipped}개는 두었습니다.` : ''
                       if (failed > 0)
                         toast.error(
-                          `문서 ${removed}개를 영구 삭제했고 ${failed}개는 지우지 못했습니다. ${note}`.trim(),
+                          `문서 ${removed}개를 영구 삭제했고 ${failed}개는 삭제하지 못했습니다. ${note}`.trim(),
                         )
                       else if (note) toast.info(note)
                       return kept

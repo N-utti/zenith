@@ -287,12 +287,12 @@ export function TaskFormModal({
           onClick={() => {
             if (!confirm(deleteTaskMessage(task))) return
             remove.mutate(task.id, {
-              onSuccess: done('업무를 지웠습니다.'),
-              onError: (err) => setError(errorText(err, '지우지 못했습니다.')),
+              onSuccess: done('업무를 삭제했습니다.'),
+              onError: (err) => setError(errorText(err, '삭제하지 못했습니다.')),
             })
           }}
         >
-          업무 지우기
+          업무 삭제
         </Button>
       )}
     </FormModal>

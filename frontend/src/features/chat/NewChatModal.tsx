@@ -88,7 +88,7 @@ export function NewChatModal({
           (channel.is_private !== true || channel.members.some((m) => !asked.has(m.id)))
         if (leaked) {
           toast.error(
-            `${channel.name} 채널이 고른 대로 만들어지지 않았습니다. 고르지 않은 사람도 볼 수 있습니다.`,
+            `${channel.name} 채널이 선택한 대로 만들어지지 않았습니다. 선택하지 않은 사람도 볼 수 있습니다.`,
             { durationMs: 60_000 },
           )
         } else {
@@ -118,7 +118,7 @@ export function NewChatModal({
 
   if (mode === 'dm') {
     return (
-      <Modal open onClose={close} title="대화 상대 고르기" size="sm">
+      <Modal open onClose={close} title="대화 상대 선택" size="sm">
         {error && (
           <p role="alert" className="text-danger mb-2 text-sm">
             {error}
@@ -185,7 +185,7 @@ export function NewChatModal({
       title="새 채널"
       description={
         priv
-          ? '비공개 채널입니다. 고른 사람만 들어옵니다.'
+          ? '비공개 채널입니다. 선택한 사람만 들어옵니다.'
           : '공개 채널입니다. 만들면 모두가 들어옵니다.'
       }
       size="sm"
@@ -227,7 +227,7 @@ export function NewChatModal({
         <Checkbox
           className="mt-4"
           label="비공개로 만들기"
-          description="사람은 만든 뒤에도 더하고 뺄 수 있습니다."
+          description="사람은 만든 뒤에도 추가하거나 내보낼 수 있습니다."
           checked={isPrivate}
           disabled={create.isPending}
           onChange={(e) => setIsPrivate(e.target.checked)}
@@ -249,7 +249,7 @@ export function NewChatModal({
             >
               {peoplePending && <Spinner />}
               {!peoplePending && !peopleError && people.length === 0 && (
-                <p className="text-subtle text-sm">고를 수 있는 사람이 없습니다.</p>
+                <p className="text-subtle text-sm">선택할 수 있는 사람이 없습니다.</p>
               )}
               {people.length > 0 && (
                 <PersonChips

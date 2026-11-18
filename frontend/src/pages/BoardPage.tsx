@@ -81,7 +81,7 @@ function PostTable({ boardId, badge }: { boardId: string; badge: string }) {
       </THead>
       <TBody>
         {data.items.length === 0 ? (
-          <TableEmpty colSpan={4}>아직 글이 없습니다. 첫 글을 올려 보세요.</TableEmpty>
+          <TableEmpty colSpan={4}>아직 글이 없습니다. 첫 글을 작성해 보세요.</TableEmpty>
         ) : (
           data.items.map((post) => (
             // 흐림은 행(TR muted) 한 번만. MaskedRow 도 55%를 걸어 겹치면 약 30%가 되므로

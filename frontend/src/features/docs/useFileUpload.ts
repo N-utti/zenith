@@ -66,7 +66,7 @@ export function useFileUpload(editor: Editor | null, docId: string) {
 
       const tooBig = files.find((file) => file.size > MAX_FILE_BYTES)
       if (tooBig) {
-        setError(`${tooBig.name}: 10MB 이하 파일만 올릴 수 있습니다.`)
+        setError(`${tooBig.name}: 10MB 이하 파일만 업로드할 수 있습니다.`)
         return
       }
 
@@ -78,7 +78,7 @@ export function useFileUpload(editor: Editor | null, docId: string) {
           insertUploaded(editor, await uploadFile(file, docId), file.name)
         }
       } catch (cause) {
-        setError(cause instanceof ApiError ? cause.message : '파일을 올리지 못했습니다.')
+        setError(cause instanceof ApiError ? cause.message : '파일을 업로드하지 못했습니다.')
       } finally {
         setUploading(false)
       }

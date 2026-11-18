@@ -121,7 +121,7 @@ export function DocCheckPanel({
                     </div>
                     {missing === claim.n && (
                       <p role="status" className="text-subtle mt-1.5 text-[11px]">
-                        본문에서 이 문장을 찾지 못했습니다. 검사 뒤에 고쳤다면 다시 검사하세요.
+                        본문에서 이 문장을 찾지 못했습니다. 검사 뒤에 수정했다면 다시 검사하세요.
                       </p>
                     )}
                     {claim.note && (

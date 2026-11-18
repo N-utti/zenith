@@ -66,7 +66,7 @@ export function ChannelMembersModal({
       open
       onClose={() => !busy && onClose()}
       title={`${channel.name} 멤버`}
-      description="멤버만 보는 채널입니다. 멤버가 더하고 뺍니다."
+      description="멤버만 보는 채널입니다. 멤버가 추가하거나 내보냅니다."
       size="sm"
     >
       {error && (
@@ -105,14 +105,14 @@ export function ChannelMembersModal({
                   variant="ghost"
                   size="sm"
                   disabled={busy}
-                  aria-label={mine ? '채널에서 나가기' : `${member.name} 빼기`}
+                  aria-label={mine ? '채널에서 나가기' : `${member.name} 내보내기`}
                   onClick={() => {
                     setError(null)
                     if (mine) setLeaving(true)
                     else remove.mutate(member.id, { onError: fail })
                   }}
                 >
-                  {mine ? '나가기' : '빼기'}
+                  {mine ? '나가기' : '내보내기'}
                 </Button>
               )}
             </li>
@@ -123,22 +123,22 @@ export function ChannelMembersModal({
         <p className="text-muted mt-1 text-xs">
           {channel.members.length === 1
             ? '마지막 멤버입니다. 나가면 이 채널과 대화를 아무도 볼 수 없습니다.'
-            : '나가면 이 채널이 안 보입니다. 다시 들어오려면 멤버가 더해 줘야 합니다.'}
+            : '나가면 이 채널이 안 보입니다. 다시 들어오려면 멤버가 추가해 줘야 합니다.'}
         </p>
       )}
 
-      <h3 className="text-fg mt-5 mb-1.5 text-sm font-medium">사람 더하기</h3>
+      <h3 className="text-fg mt-5 mb-1.5 text-sm font-medium">사람 추가</h3>
       {outsiders.length === 0 ? (
         <p className="text-subtle text-sm">
           {peoplePending
             ? '불러오는 중입니다.'
             : peopleError
               ? '사람 목록을 불러오지 못했습니다.'
-              : '더할 수 있는 사람이 없습니다.'}
+              : '추가할 수 있는 사람이 없습니다.'}
         </p>
       ) : (
         <>
-          <div role="group" aria-label="더할 사람">
+          <div role="group" aria-label="추가할 사람">
             <PersonChips
               people={outsiders}
               picked={picked}
@@ -158,7 +158,7 @@ export function ChannelMembersModal({
                 add.mutate(toAdd, { onSuccess: () => setPicked([]), onError: fail })
               }}
             >
-              {toAdd.length > 0 ? `${toAdd.length}명 더하기` : '더하기'}
+              {toAdd.length > 0 ? `${toAdd.length}명 추가` : '추가'}
             </Button>
           </div>
         </>

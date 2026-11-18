@@ -50,7 +50,7 @@ export function NotificationsPage() {
     if (ids.length === 0) return
     remove.mutate(ids, {
       onError: (err) =>
-        toast.error(err instanceof ApiError ? err.message : '알림을 지우지 못했습니다.'),
+        toast.error(err instanceof ApiError ? err.message : '알림을 삭제하지 못했습니다.'),
     })
   }
 
@@ -76,7 +76,7 @@ export function NotificationsPage() {
                 // 아래 「모두 읽음」과 같은 이유로, 목록을 다시 받는 동안에도 막는다.
                 disabled={remove.isPending || isFetching}
               >
-                읽은 알림 지우기
+                읽은 알림 삭제
               </Button>
             )}
             {unreadIds.length > 0 && (
@@ -146,8 +146,8 @@ export function NotificationsPage() {
                           숨어 있을 때는 눌리지도 않는다(할 일 카드·댓글 줄과 같은 규약). */}
                       <button
                         type="button"
-                        aria-label={`${row.view.summary} 알림 지우기`}
-                        title="알림 지우기"
+                        aria-label={`${row.view.summary} 알림 삭제`}
+                        title="알림 삭제"
                         disabled={remove.isPending}
                         onClick={() => removeIds([row.notification.id])}
                         className="text-subtle hover:text-danger pointer-events-none absolute top-3 right-3 grid size-6 cursor-pointer place-items-center rounded opacity-0 transition-opacity group-focus-within/notice:pointer-events-auto group-focus-within/notice:opacity-100 group-hover/notice:pointer-events-auto group-hover/notice:opacity-100 pointer-coarse:pointer-events-auto pointer-coarse:opacity-100"

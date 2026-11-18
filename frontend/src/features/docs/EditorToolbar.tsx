@@ -143,7 +143,7 @@ export function EditorToolbar({
 
       <ToolButton
         icon={uploading ? LoaderCircle : ImagePlus}
-        label={uploading ? '올리는 중…' : '사진'}
+        label={uploading ? '업로드 중…' : '사진'}
         disabled={uploading}
         spinning={uploading}
         onClick={run('image')}

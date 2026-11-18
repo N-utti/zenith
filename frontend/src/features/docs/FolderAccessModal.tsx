@@ -55,8 +55,8 @@ export function FolderAccessModal({ folder, onClose }: { folder: Folder; onClose
       () => {
         toast.success(
           isPrivate
-            ? `${folder.title} 폴더를 볼 사람을 바꿨습니다.`
-            : `${folder.title} 폴더의 열람 권한을 바꿨습니다.`,
+            ? `${folder.title} 폴더를 볼 사람을 변경했습니다.`
+            : `${folder.title} 폴더의 열람 권한을 변경했습니다.`,
         )
         onClose()
       },
@@ -135,7 +135,7 @@ export function FolderAccessModal({ folder, onClose }: { folder: Folder; onClose
 
         <p className="text-subtle text-xs leading-relaxed">
           {isPrivate
-            ? '나와 여기서 고른 사람만 봅니다. 임원도 고르지 않으면 볼 수 없습니다. 고른 사람은 안의 문서를 보고 고칠 수 있고, 폴더 이름과 볼 사람은 나만 바꿉니다. 아무도 고르지 않으면 나만 봅니다.'
+            ? '나와 여기서 선택한 사람만 봅니다. 임원도 선택하지 않으면 볼 수 없습니다. 선택한 사람은 안의 문서를 보고 수정할 수 있고, 폴더 이름과 볼 사람은 나만 바꿉니다. 아무도 고르지 않으면 나만 봅니다.'
             : '아래 폴더와 문서도 이 설정을 따릅니다. 위 폴더가 막혀 있으면 여기서 지정한 사람도 볼 수 없습니다. 제한이 걸린 폴더를 오가는 이동은 임원만 할 수 있습니다.'}
         </p>
 

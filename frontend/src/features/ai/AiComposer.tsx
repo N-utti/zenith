@@ -65,7 +65,7 @@ export function AiComposer({
     // 크기부터 거른다. 거절될 파일이 자리를 차지해 멀쩡한 파일이 빠지면 안 된다.
     const fits = files.filter((file) => {
       if (file.size <= ATTACH_MAX_BYTES) return true
-      toast.error(`${file.name}: 10MB 이하 파일만 올릴 수 있습니다.`)
+      toast.error(`${file.name}: 10MB 이하 파일만 업로드할 수 있습니다.`)
       return false
     })
     if (fits.length > room) toast.info(`첨부는 ${MAX_ATTACHMENTS}개까지입니다.`)
@@ -75,7 +75,7 @@ export function AiComposer({
         .then((uploaded) => setAttachments((list) => [...list, uploaded]))
         .catch((cause: unknown) =>
           toast.error(
-            `${file.name}: ${cause instanceof ApiError && cause.message ? cause.message : '올리지 못했습니다.'}`,
+            `${file.name}: ${cause instanceof ApiError && cause.message ? cause.message : '업로드하지 못했습니다.'}`,
           ),
         )
         .finally(() => setUploading((n) => n - 1))
@@ -127,7 +127,7 @@ export function AiComposer({
                   <button
                     type="button"
                     onClick={() => setPickedDocs(pickedDocs.filter((id) => id !== doc.id))}
-                    aria-label={`${doc.title} 빼기`}
+                    aria-label={`${doc.title} 제거`}
                     className="text-subtle hover:bg-surface-hover hover:text-fg grid size-5 shrink-0 cursor-pointer place-items-center rounded-full transition-colors"
                   >
                     <X className="size-3" />
@@ -152,8 +152,8 @@ export function AiComposer({
                     <button
                       type="button"
                       onClick={() => setEditing(file)}
-                      aria-label={`${file.name} AI로 고치기`}
-                      title="AI로 고치기"
+                      aria-label={`${file.name} AI로 수정`}
+                      title="AI로 수정"
                       className="text-subtle hover:bg-surface-hover hover:text-fg grid size-5 shrink-0 cursor-pointer place-items-center rounded-full transition-colors"
                     >
                       <Wand2 className="size-3" />
@@ -164,7 +164,7 @@ export function AiComposer({
                     onClick={() =>
                       setAttachments((list) => list.filter((each) => each.id !== file.id))
                     }
-                    aria-label={`${file.name} 빼기`}
+                    aria-label={`${file.name} 제거`}
                     className="text-subtle hover:bg-surface-hover hover:text-fg grid size-5 shrink-0 cursor-pointer place-items-center rounded-full transition-colors"
                   >
                     <X className="size-3" />
@@ -177,7 +177,7 @@ export function AiComposer({
                   className="border-line text-subtle flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs"
                 >
                   <Loader2 className="size-3.5 animate-spin" />
-                  올리는 중
+                  업로드 중
                 </li>
               )}
             </ul>
@@ -227,7 +227,7 @@ export function AiComposer({
               type="button"
               onClick={() => fileInput.current?.click()}
               disabled={room <= 0}
-              title="txt·md·csv·docx·xlsx·pdf·hwpx, 10MB 까지. 7일 뒤 지워집니다."
+              title="txt·md·csv·docx·xlsx·pdf·hwpx, 10MB 까지. 7일 뒤 삭제됩니다."
               className="border-line text-muted hover:border-line-strong hover:text-fg flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border px-2.5 text-[11.5px] transition-colors disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Paperclip className="size-3.5" />

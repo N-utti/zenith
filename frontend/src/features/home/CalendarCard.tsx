@@ -188,7 +188,7 @@ export function DayAgenda({
                   disabled={remove.isPending && remove.variables === item.event.id}
                   onClick={() =>
                     remove.mutate(item.event.id, {
-                      onError: () => toast.error('일정을 지우지 못했습니다.'),
+                      onError: () => toast.error('일정을 삭제하지 못했습니다.'),
                     })
                   }
                   className="text-subtle hover:text-danger rounded p-1 transition-colors disabled:opacity-50"

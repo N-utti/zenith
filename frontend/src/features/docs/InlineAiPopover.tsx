@@ -36,7 +36,7 @@ const QUICK_ACTIONS: { id: DocAction; label: string }[] = [
  */
 const GROUNDED_ACTIONS: { id: 'cite' | 'conform'; label: string }[] = [
   { id: 'cite', label: '근거 달기' },
-  { id: 'conform', label: '규정에 맞게 고치기' },
+  { id: 'conform', label: '규정에 맞게 수정' },
 ]
 const isGrounded = (action: DocAction): action is 'cite' | 'conform' =>
   action === 'cite' || action === 'conform'
@@ -379,7 +379,7 @@ export function InlineAiPopover({
             >
               {grounded.action === 'cite'
                 ? 'AI 판정입니다. 근거 카드를 직접 확인하세요. 본문은 바꾸지 않습니다.'
-                : 'AI 가 고친 문장입니다. 바꾸기 전에 근거 카드를 확인하세요. 서버는 마지막 저장본을 읽어 방금 고친 글은 반영되지 않았을 수 있습니다.'}
+                : 'AI 가 수정한 문장입니다. 바꾸기 전에 근거 카드를 확인하세요. 서버는 마지막 저장본을 읽어 방금 수정한 글은 반영되지 않았을 수 있습니다.'}
             </p>
             {grounded.items.length === 0 ? (
               <p className="text-subtle py-4 text-center text-xs">
@@ -420,8 +420,8 @@ export function InlineAiPopover({
                     {notice?.index === index && (
                       <p role="status" className="text-subtle mt-1.5 text-[11px]">
                         {notice.kind === 'missing'
-                          ? '본문에서 이 문장을 찾지 못했습니다. 두 문단에 걸쳤거나 그 사이에 고쳐졌을 수 있습니다.'
-                          : '같은 글이 여러 군데 있거나 파일 같은 것이 섞여 있어 자동으로 바꾸지 않았습니다. 문장을 눌러 그 자리에서 직접 고쳐 주세요.'}
+                          ? '본문에서 이 문장을 찾지 못했습니다. 두 문단에 걸쳤거나 그 사이에 수정되었을 수 있습니다.'
+                          : '같은 글이 여러 군데 있거나 파일 같은 것이 섞여 있어 자동으로 바꾸지 않았습니다. 문장을 눌러 그 자리에서 직접 수정해 주세요.'}
                       </p>
                     )}
                     {item.refs.length > 0 && (

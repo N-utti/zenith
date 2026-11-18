@@ -28,7 +28,7 @@ const pointer = (type: string, pointerType = 'mouse') => {
   return event
 }
 const wait = (ms: number) => act(() => new Promise((r) => setTimeout(r, ms)))
-const shown = () => !!document.querySelector('button[aria-label="블록 지우기"]')?.isConnected
+const shown = () => !!document.querySelector('button[aria-label="블록 삭제"]')?.isConnected
 
 function mount() {
   const host = document.createElement('div')
