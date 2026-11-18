@@ -45,6 +45,11 @@ export function AbsenceModal({
     toast.success(message)
     onClose()
   }
+  const save = () =>
+    set.mutate(
+      { user_id: user.id, work_date: date, note: note.trim() || null },
+      { onSuccess: done(absent ? '사유를 수정했습니다.' : '결근으로 처리했습니다.') },
+    )
 
   return (
     <Modal
@@ -81,12 +86,7 @@ export function AbsenceModal({
             variant={absent ? 'primary' : 'danger'}
             size="sm"
             disabled={pending}
-            onClick={() =>
-              set.mutate(
-                { user_id: user.id, work_date: date, note: note.trim() || null },
-                { onSuccess: done(absent ? '사유를 수정했습니다.' : '결근으로 처리했습니다.') },
-              )
-            }
+            onClick={save}
           >
             {pending ? (
               <Spinner className="border-t-on-accent" />
@@ -111,6 +111,13 @@ export function AbsenceModal({
               setNote(e.target.value)
               set.reset()
               clear.reset()
+            }}
+            // 엔터는 주 버튼과 같다. 한글 조합 확정 엔터는 거른다(FolderNameModal 과 같은 규약).
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.nativeEvent.isComposing && !pending) {
+                e.preventDefault()
+                save()
+              }
             }}
           />
         )}
