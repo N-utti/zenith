@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import { cn } from '@/lib/cn'
@@ -71,12 +71,13 @@ export function Modal({
 
   // 버튼 줄 위 구분선은 본문이 넘쳐 구를 때만 긋는다. 짧은 창에서는 칸을 나눌 뿐이고, 긴 창에서는
   // 구르는 글이 버튼 바로 위에서 잘려 보이지 않게 경계를 준다. 본문 상자는 최대 높이에 닿으면 더
-  // 안 자라므로 안쪽 내용도 같이 지켜본다.
+  // 안 자라므로 안쪽 내용도 같이 지켜본다. 그리기 전에 판정해야 긴 창의 버튼 줄이 첫 프레임에 튀지 않는다.
   const bodyRef = useRef<HTMLDivElement>(null)
   const [scrolls, setScrolls] = useState(false)
-  useEffect(() => {
+  const hasFooter = !!footer
+  useLayoutEffect(() => {
     const body = bodyRef.current
-    if (!open || !body?.firstElementChild) return
+    if (!open || !hasFooter || !body?.firstElementChild) return
     const check = () => setScrolls(body.scrollHeight - body.clientHeight > 1)
     check()
     if (typeof ResizeObserver === 'undefined') return // 테스트(jsdom)에는 없다
@@ -84,7 +85,7 @@ export function Modal({
     observer.observe(body)
     observer.observe(body.firstElementChild)
     return () => observer.disconnect()
-  }, [open])
+  }, [open, hasFooter])
 
   // 배경 스크롤 잠금. 모달 뒤 본문이 따라 굴러가지 않는다.
   useEffect(() => {
