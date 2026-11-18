@@ -59,5 +59,5 @@ test('내려받기 링크는 이동을 막고 앱이 받으며, 실패하면 알
   await act(async () => container.querySelector('a')!.dispatchEvent(click))
   expect(click.defaultPrevented).toBe(true)
   expect(downloadFromApi).toHaveBeenCalledWith('/api/x', 'a.txt')
-  expect(toast.error).toHaveBeenCalledWith('파일을 내려받지 못했습니다.')
+  expect(toast.error).toHaveBeenCalledWith('파일을 다운로드하지 못했습니다.')
 })

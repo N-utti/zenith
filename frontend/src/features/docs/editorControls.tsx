@@ -547,14 +547,14 @@ const TABLE_ACTIONS = [
   [
     { icon: ArrowUp, label: '위에 행 추가', command: 'addRowBefore' },
     { icon: ArrowDown, label: '아래에 행 추가', command: 'addRowAfter' },
-    { icon: X, label: '행 지우기', command: 'deleteRow' },
+    { icon: X, label: '행 삭제', command: 'deleteRow' },
   ],
   [
     { icon: ArrowLeft, label: '왼쪽에 열 추가', command: 'addColumnBefore' },
     { icon: ArrowRight, label: '오른쪽에 열 추가', command: 'addColumnAfter' },
-    { icon: X, label: '열 지우기', command: 'deleteColumn' },
+    { icon: X, label: '열 삭제', command: 'deleteColumn' },
   ],
-  [{ icon: Trash2, label: '표 지우기', command: 'deleteTable' }],
+  [{ icon: Trash2, label: '표 삭제', command: 'deleteTable' }],
 ] as const
 
 type TableCommand = (typeof TABLE_ACTIONS)[number][number]['command']

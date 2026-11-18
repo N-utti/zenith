@@ -225,7 +225,7 @@ export function auditView(event: AuditEvent): AuditView {
 
     case 'docs.purged':
       return {
-        summary: '휴지통 보관 기간이 지나 지웠습니다',
+        summary: '휴지통 보관 기간이 지나 삭제했습니다',
         detail: text(detail, 'title'),
         tone: 'neutral',
       }
@@ -233,7 +233,7 @@ export function auditView(event: AuditEvent): AuditView {
     case 'files.uploaded': {
       const size = typeof detail?.size === 'number' ? formatBytes(detail.size) : undefined
       return {
-        summary: '파일 올림',
+        summary: '파일 업로드',
         detail: [text(detail, 'type'), size].filter(Boolean).join(' · ') || undefined,
         tone: 'neutral',
       }
@@ -272,7 +272,7 @@ export function auditView(event: AuditEvent): AuditView {
       const count = (key: string, unit: string) =>
         typeof detail?.[key] === 'number' ? `${String(detail[key])}${unit}` : undefined
       return {
-        summary: 'CRM 가져오기 되돌리기',
+        summary: 'CRM 가져오기 취소',
         detail:
           [count('removed_orgs', '곳'), count('removed_contacts', '명')]
             .filter(Boolean)
@@ -294,7 +294,7 @@ export function auditView(event: AuditEvent): AuditView {
 
     case 'crm.org_restored':
       return {
-        summary: 'CRM 기관 되살리기',
+        summary: 'CRM 기관 복원',
         detail: text(detail, 'name') || undefined,
         tone: 'neutral',
       }

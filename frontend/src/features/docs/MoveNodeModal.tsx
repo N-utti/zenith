@@ -62,8 +62,8 @@ export function MoveNodeModal({
     <Modal
       open
       onClose={onClose}
-      title="다른 폴더로 옮기기"
-      description={`${title} ${item.kind === 'doc' ? '문서' : '폴더'}를 어디로 옮길까요?`}
+      title="다른 폴더로 이동"
+      description={`${title} ${item.kind === 'doc' ? '문서' : '폴더'}를 어디로 이동할까요?`}
       size="sm"
     >
       <ul>

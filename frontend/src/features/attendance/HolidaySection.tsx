@@ -39,11 +39,11 @@ export function HolidaySection() {
 
   const onRemove = (date: string, name: string) => {
     // 전 직원 근무 달력이 바뀌는 일이라 한 번 묻는다. 자기 신청 취소도 이렇게 한다(LeaveSection).
-    if (!confirm(`${formatISODate(date)} ${name} 을 휴일에서 뺄까요?`)) return
+    if (!confirm(`${formatISODate(date)} ${name} 을 휴일에서 삭제할까요?`)) return
     remove.mutate(date, {
-      onSuccess: () => toast.success(`회사 휴일에서 뺐습니다: ${formatISODate(date)} ${name}`),
+      onSuccess: () => toast.success(`회사 휴일에서 삭제했습니다: ${formatISODate(date)} ${name}`),
       onError: (err) =>
-        toast.error(err instanceof ApiError ? err.message : '휴일을 지우지 못했습니다.'),
+        toast.error(err instanceof ApiError ? err.message : '휴일을 삭제하지 못했습니다.'),
     })
   }
 
@@ -129,7 +129,7 @@ export function HolidaySection() {
                       setRenameError(null)
                       setRenaming({ date: h.date, name: h.name })
                     }}
-                    aria-label={`${formatISODate(h.date)} ${h.name} 이름 고치기`}
+                    aria-label={`${formatISODate(h.date)} ${h.name} 이름 바꾸기`}
                   >
                     <Pencil className="size-4" aria-hidden="true" />
                   </Button>
@@ -151,7 +151,7 @@ export function HolidaySection() {
 
       {renaming && (
         <FolderNameModal
-          title={`${formatISODate(renaming.date)} 휴일 이름 고치기`}
+          title={`${formatISODate(renaming.date)} 휴일 이름 바꾸기`}
           label="이름"
           placeholder="예: 창립기념일, 종무식"
           maxLength={100}
@@ -166,11 +166,11 @@ export function HolidaySection() {
               {
                 onSuccess: (item) => {
                   setRenaming(null)
-                  toast.success(`휴일 이름을 고쳤습니다: ${formatISODate(item.date)} ${item.name}`)
+                  toast.success(`휴일 이름을 바꿨습니다: ${formatISODate(item.date)} ${item.name}`)
                 },
                 onError: (err) =>
                   setRenameError(
-                    err instanceof ApiError ? err.message : '휴일 이름을 고치지 못했습니다.',
+                    err instanceof ApiError ? err.message : '휴일 이름을 바꾸지 못했습니다.',
                   ),
               },
             )

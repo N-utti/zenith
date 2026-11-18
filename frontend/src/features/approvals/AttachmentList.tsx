@@ -30,7 +30,7 @@ export function AttachmentList({
             <Paperclip className="size-3.5 shrink-0" />
             <span className="max-w-48 truncate">{file.name}</span>
             <span className="text-subtle">{formatBytes(file.size)}</span>
-            {!file.url && <span className="text-subtle">· 올리기 전</span>}
+            {!file.url && <span className="text-subtle">· 업로드 전</span>}
           </>
         )
         return (

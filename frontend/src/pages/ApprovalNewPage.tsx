@@ -205,7 +205,8 @@ export function ApprovalNewPage() {
       body: bodyValue,
       values: fieldValues,
     })
-    if (switched.overwrites && !confirm('쓰던 내용을 지우고 새 서식으로 바꿀까요?')) return
+    if (switched.overwrites && !confirm('작성 중인 내용이 사라집니다. 새 서식으로 바꿀까요?'))
+      return
     setTemplate(next)
     setTitle(switched.title)
     setBody('')
@@ -500,7 +501,7 @@ export function ApprovalNewPage() {
           )}
           <Field
             label="결재선"
-            hint={`고른 사람만, 누른 순서대로 결재합니다(${MAX_APPROVERS}명까지). 고르지 않으면 팀장, 그다음 임원 전원에게 올라갑니다.`}
+            hint={`선택한 사람만, 누른 순서대로 결재합니다(${MAX_APPROVERS}명까지). 선택하지 않으면 팀장, 그다음 임원 전원에게 올라갑니다.`}
             error={peopleError ? '사람 목록을 불러오지 못했습니다.' : null}
           >
             {(slot) => (
@@ -512,7 +513,7 @@ export function ApprovalNewPage() {
               >
                 {peoplePending && <Spinner />}
                 {!peoplePending && !peopleError && people.length === 0 && (
-                  <p className="text-subtle text-sm">고를 수 있는 사람이 없습니다.</p>
+                  <p className="text-subtle text-sm">선택할 수 있는 사람이 없습니다.</p>
                 )}
                 {people.length > 0 && (
                   <PersonChips people={people} picked={approverIds} onToggle={toggleApprover} />
@@ -533,7 +534,7 @@ export function ApprovalNewPage() {
                 {droppedApprovers.length > 0 && (
                   <p className="text-danger text-sm">
                     {droppedApprovers.map((p) => p.name).join(', ')} 님은 지금 결재할 수 없어
-                    결재선에서 뺐습니다.
+                    결재선에서 제외했습니다.
                   </p>
                 )}
               </div>
@@ -553,7 +554,7 @@ export function ApprovalNewPage() {
               >
                 {peoplePending && <Spinner />}
                 {!peoplePending && !peopleError && people.length === 0 && (
-                  <p className="text-subtle text-sm">고를 수 있는 사람이 없습니다.</p>
+                  <p className="text-subtle text-sm">선택할 수 있는 사람이 없습니다.</p>
                 )}
                 {people.length > 0 && (
                   <PersonChips

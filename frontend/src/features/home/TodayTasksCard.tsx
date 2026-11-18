@@ -53,7 +53,7 @@ export function TodayTasksCard() {
     if (!trimmed || trimmed === original) return
     edit.mutate(
       { id: editing.id, text: trimmed },
-      { onError: (err) => fail(err, '할 일을 고치지 못했습니다.') },
+      { onError: (err) => fail(err, '할 일을 수정하지 못했습니다.') },
     )
   }
 
@@ -93,7 +93,7 @@ export function TodayTasksCard() {
                       value={editing.text}
                       onChange={(e) => setEditing({ id: task.id, text: e.target.value })}
                       maxLength={TODO_TEXT_MAX}
-                      aria-label="할 일 고치기"
+                      aria-label="할 일 수정"
                       // -my-1.5: 줄 높이를 그대로 둔다. 칸이 닫힐 때 아래 줄이 밀리면 그 줄의 버튼을 누르던
                       // 클릭이 빗나간다.
                       className="-my-1.5 h-8 min-w-0 flex-1"
@@ -126,8 +126,8 @@ export function TodayTasksCard() {
                   {editing?.id !== task.id && (
                     <button
                       type="button"
-                      aria-label={`${task.text} 고치기`}
-                      title="고치기"
+                      aria-label={`${task.text} 수정`}
+                      title="수정"
                       onClick={() => {
                         editOpen.current = true
                         setEditing({ id: task.id, text: task.text })
@@ -140,10 +140,10 @@ export function TodayTasksCard() {
                   {/* 보이지만 않을 뿐 초점은 받는다. Tab 으로도 닿는다. */}
                   <button
                     type="button"
-                    aria-label={`${task.text} 지우기`}
+                    aria-label={`${task.text} 삭제`}
                     onClick={() => {
                       remove.mutate(task.id, {
-                        onError: (err) => fail(err, '할 일을 지우지 못했습니다.'),
+                        onError: (err) => fail(err, '할 일을 삭제하지 못했습니다.'),
                       })
                       // 낙관적 삭제라 이 줄이 곧 사라진다. 초점이 body 로 떨어지면 키보드
                       // 사용자는 Tab 을 처음부터 다시 눌러야 한다.

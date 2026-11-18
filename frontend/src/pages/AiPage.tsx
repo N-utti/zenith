@@ -102,7 +102,7 @@ export function AiPage() {
     } else if (drop === 'scope') {
       scope = null
       patchMessage(question.id, { scope })
-      toast.info('고른 폴더를 찾을 수 없어 전체에서 다시 찾습니다.')
+      toast.info('선택한 폴더를 찾을 수 없어 전체에서 다시 찾습니다.')
     } else if (drop === 'docs') {
       docs = []
       patchMessage(question.id, { docs })

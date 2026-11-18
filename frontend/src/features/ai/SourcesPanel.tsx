@@ -77,7 +77,7 @@ export function SourceCard({
           {file && (
             <>
               <Download className="size-3" aria-hidden />
-              <span className="sr-only">(내려받기)</span>
+              <span className="sr-only">(다운로드)</span>
             </>
           )}
         </p>
@@ -108,7 +108,7 @@ export function SourceCard({
       try {
         await downloadFromApi(file, source.title || '첨부')
       } catch (cause) {
-        toast.error(cause instanceof ApiError ? cause.message : '첨부를 내려받지 못했습니다.')
+        toast.error(cause instanceof ApiError ? cause.message : '첨부를 다운로드하지 못했습니다.')
       }
     }
     return (

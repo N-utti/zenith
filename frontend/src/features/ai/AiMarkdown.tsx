@@ -136,7 +136,7 @@ function FileLink({ path, name, children }: { path: string; name: string; childr
     try {
       await downloadFromApi(path, name)
     } catch (cause) {
-      toast?.error(cause instanceof ApiError ? cause.message : '파일을 내려받지 못했습니다.')
+      toast?.error(cause instanceof ApiError ? cause.message : '파일을 다운로드하지 못했습니다.')
     } finally {
       setBusy(false)
     }
@@ -146,7 +146,7 @@ function FileLink({ path, name, children }: { path: string; name: string; childr
       type="button"
       onClick={() => void download()}
       disabled={busy}
-      title={`${name} 내려받기`}
+      title={`${name} 다운로드`}
       className="text-accent cursor-pointer text-left underline underline-offset-2 [overflow-wrap:anywhere] disabled:cursor-wait disabled:opacity-60"
     >
       {children}

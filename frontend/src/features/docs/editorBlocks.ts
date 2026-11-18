@@ -138,7 +138,7 @@ export const EDITOR_BLOCKS: EditorBlock[] = [
   {
     key: 'image',
     label: '사진',
-    hint: '사진을 골라 문서에 넣습니다',
+    hint: '사진을 선택해 문서에 넣습니다',
     keywords: ['사진', '이미지', '그림', 'image', 'photo', 'picture', 'img'],
     icon: ImagePlus,
     run: (e) => {
@@ -150,7 +150,7 @@ export const EDITOR_BLOCKS: EditorBlock[] = [
   {
     key: 'file',
     label: '파일',
-    hint: '파일을 올려 내려받을 수 있게 붙입니다',
+    hint: '파일을 업로드해 문서에 첨부합니다',
     keywords: ['파일', '첨부', 'file', 'attach', 'upload', 'pdf'],
     icon: Paperclip,
     run: (e) => {

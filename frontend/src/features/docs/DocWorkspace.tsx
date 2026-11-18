@@ -789,7 +789,7 @@ function BlockDragHandle({
       </button>
       <button
         type="button"
-        title="드래그해서 옮기기 · 클릭해서 블록 선택"
+        title="드래그해서 이동 · 클릭해서 블록 선택"
         aria-label="블록 손잡이"
         className="text-subtle hover:bg-surface-hover hover:text-muted grid size-6 cursor-grab place-items-center rounded active:cursor-grabbing"
         onClick={() => {
@@ -1180,7 +1180,7 @@ function DocSurface({
     if (preview.content.title !== undefined) {
       doc.getMap<string>('meta').set('title', preview.content.title)
     }
-    saveVersion({ snapshot: takeSnapshot(doc), label: '되돌림' })
+    saveVersion({ snapshot: takeSnapshot(doc), label: '복원' })
     closePreview()
   }
 

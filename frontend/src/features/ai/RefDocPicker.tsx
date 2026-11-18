@@ -36,7 +36,7 @@ export function RefDocPicker({
       open
       onClose={onClose}
       title="참고 문서"
-      description={`고른 문서의 본문을 근거로 답합니다. ${MAX_REF_DOCS}개까지 고를 수 있고, 본문은 모두 합쳐 5만 자까지 앞 문서부터 들어갑니다.`}
+      description={`선택한 문서의 본문을 근거로 답합니다. ${MAX_REF_DOCS}개까지 선택할 수 있고, 본문은 모두 합쳐 5만 자까지 앞 문서부터 들어갑니다.`}
       footer={
         <Button size="sm" onClick={onClose}>
           완료

@@ -34,9 +34,9 @@ export function MonthClosingSection() {
       // 완료를 소리로도 알린다. 버튼이 disabled 되며 포커스가 body 로 떨어져 완료를 알 길이 없다.
       // 데스크톱 앱은 `downloadBytes` 가 저장 위치를 이미 알린다. 토스트가 둘 뜨지 않게 한다.
       onSuccess: () =>
-        isDesktopShell() || toast.success(`${formatMonth(month)} 리포트를 내려받았습니다.`),
+        isDesktopShell() || toast.success(`${formatMonth(month)} 리포트를 다운로드했습니다.`),
       onError: (err) =>
-        toast.error(err instanceof ApiError ? err.message : '리포트를 내려받지 못했습니다.'),
+        toast.error(err instanceof ApiError ? err.message : '리포트를 다운로드하지 못했습니다.'),
     })
   return (
     <div className="space-y-4">
@@ -110,7 +110,7 @@ export function MonthClosingSection() {
                       size="sm"
                       onClick={() => download(c.month)}
                       disabled={report.isPending && report.variables === c.month}
-                      aria-label={`${formatMonth(c.month)} 리포트 내려받기`}
+                      aria-label={`${formatMonth(c.month)} 리포트 다운로드`}
                       className="mr-1"
                     >
                       <Download className="size-4" aria-hidden="true" />

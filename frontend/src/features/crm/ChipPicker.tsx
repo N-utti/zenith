@@ -14,7 +14,7 @@ export function ChipPicker({
   options,
   value,
   onChange,
-  empty = '고를 사람이 없습니다.',
+  empty = '선택할 사람이 없습니다.',
 }: {
   slot: FieldSlotProps
   label: string

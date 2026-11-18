@@ -214,7 +214,7 @@ export function CrmOrgPage() {
                         onClick={() => {
                           if (
                             !confirm(
-                              `${c.name} 님의 이름·연락처·메모를 지웁니다. 활동 기록에는 삭제된 담당자로 남습니다. 되돌릴 수 없습니다.`,
+                              `${c.name} 님의 이름·연락처·메모를 삭제합니다. 활동 기록에는 삭제된 담당자로 남습니다. 되돌릴 수 없습니다.`,
                             )
                           )
                             return
@@ -232,22 +232,22 @@ export function CrmOrgPage() {
                     {c.can_delete && (
                       <button
                         type="button"
-                        aria-label={`${contactName(c)} 지우기`}
-                        title="목록에서 지우기"
+                        aria-label={`${contactName(c)} 삭제`}
+                        title="목록에서 삭제"
                         className={iconButton}
                         disabled={contactBusy}
                         onClick={() => {
                           // 지워도 활동 기록에는 이름이 남는다. 이름까지 지우는 길(개인정보 삭제)은
                           // 임원에게만 있어서 그 안내는 임원에게만 낸다.
                           const message = c.erased
-                            ? '개인정보를 지운 담당자를 목록에서 지웁니다. 활동 기록의 참석자 자리는 남습니다. 되돌릴 수 없습니다.'
-                            : `${c.name} 님을 담당자 목록에서 지웁니다. 되돌릴 수 없습니다.` +
+                            ? '개인정보를 삭제한 담당자를 목록에서 삭제합니다. 활동 기록의 참석자 자리는 남습니다. 되돌릴 수 없습니다.'
+                            : `${c.name} 님을 담당자 목록에서 삭제합니다. 되돌릴 수 없습니다.` +
                               (isExec
-                                ? ' 활동 기록에는 이름이 그대로 남습니다. 이름까지 지우려면 먼저 개인정보 삭제를 하세요.'
+                                ? ' 활동 기록에는 이름이 그대로 남습니다. 이름까지 삭제하려면 먼저 개인정보 삭제를 하세요.'
                                 : '')
                           if (!confirm(message)) return
                           removeContact.mutate(c.id, {
-                            onSuccess: () => toast.success('담당자를 지웠습니다.'),
+                            onSuccess: () => toast.success('담당자를 삭제했습니다.'),
                             onError,
                           })
                         }}
@@ -366,8 +366,8 @@ function DeleteOrgModal({
       title="기관 삭제"
       description={
         openDeals
-          ? `진행 중 안건 ${openDeals}건을 먼저 중단하거나 끝내야 ${name}을(를) 지울 수 있습니다.`
-          : `${name}을(를) 목록에서 뺍니다. 사유는 감사 기록에 남습니다.`
+          ? `진행 중 안건 ${openDeals}건을 먼저 중단하거나 끝내야 ${name}을(를) 삭제할 수 있습니다.`
+          : `${name}을(를) 목록에서 삭제합니다. 사유는 감사 기록에 남습니다.`
       }
       size="sm"
       footer={

@@ -162,10 +162,10 @@ describe('auditView', () => {
           detail: { removed_orgs: 2, removed_contacts: 5, kept_orgs: 0, kept_contacts: 1 },
         }),
       ),
-    ).toMatchObject({ summary: 'CRM 가져오기 되돌리기', detail: '2곳 · 5명' })
+    ).toMatchObject({ summary: 'CRM 가져오기 취소', detail: '2곳 · 5명' })
     expect(
       auditView(event({ kind: 'crm.org_restored', detail: { name: '한결연금공단' } })),
-    ).toMatchObject({ summary: 'CRM 기관 되살리기', detail: '한결연금공단' })
+    ).toMatchObject({ summary: 'CRM 기관 복원', detail: '한결연금공단' })
   })
 
   it('로그인 실패는 이유를 가른다', () => {

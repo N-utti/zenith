@@ -609,17 +609,17 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
 
     void moveNode.mutateAsync({ item, to }).then(
       () =>
-        toast.success(`${what}를 ${dest ? `${dest} 폴더로` : '최상위로'} 옮겼습니다.`, {
+        toast.success(`${what}를 ${dest ? `${dest} 폴더로` : '최상위로'} 이동했습니다.`, {
           durationMs: 10_000,
           action: {
-            label: '되돌리기',
+            label: '실행 취소',
             onClick: () =>
               void moveNode
                 .mutateAsync({ item, to: from })
-                .catch((err: unknown) => fail(err, '되돌리지 못했습니다.')),
+                .catch((err: unknown) => fail(err, '원래 자리로 이동하지 못했습니다.')),
           },
         }),
-      (err: unknown) => fail(err, '옮기지 못했습니다.'),
+      (err: unknown) => fail(err, '이동하지 못했습니다.'),
     )
   }
 
@@ -817,8 +817,8 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
     // 응답이 오기 전에 같은 폴더를 또 지우면 둘째 요청이 404 로 떨어져 성공 뒤에 실패가 뜬다.
     if (deleteFolder.isPending) return
     void deleteFolder.mutateAsync(id).then(
-      () => toast.success(`${title} 폴더를 지웠습니다.`),
-      (err: unknown) => fail(err, '폴더를 지우지 못했습니다.'),
+      () => toast.success(`${title} 폴더를 삭제했습니다.`),
+      (err: unknown) => fail(err, '폴더를 삭제하지 못했습니다.'),
     )
   }
 
@@ -966,7 +966,7 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
               />
               <ContextMenuItem
                 icon={FolderInput}
-                label="다른 폴더로 옮기기"
+                label="다른 폴더로 이동"
                 onSelect={() => setMoving(menu.item)}
               />
               {/* 개인 폴더는 주인이 「볼 사람」을 고른다(백엔드 README 74). 그 아래 폴더는 따라가서 메뉴가 없다.
@@ -985,7 +985,7 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
                   문서는 트리에 없어 여기서는 모른다. 그 경우는 서버가 거절하고 이유를 준다. */}
               <ContextMenuItem
                 icon={Trash2}
-                label="폴더 지우기"
+                label="폴더 삭제"
                 danger
                 disabledReason={
                   folderHasChildren(menu.item.id) ? '안에 문서나 폴더가 있습니다' : undefined
@@ -1057,7 +1057,7 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
                   />
                   <ContextMenuItem
                     icon={FolderInput}
-                    label="다른 폴더로 옮기기"
+                    label="다른 폴더로 이동"
                     onSelect={() => setMoving(menu.item)}
                   />
                   <hr className="border-line my-1" />
@@ -1090,7 +1090,7 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
       <Modal
         open={hiding !== null}
         onClose={() => setHiding(null)}
-        title="개인 폴더로 옮길까요?"
+        title="개인 폴더로 이동할까요?"
         size="sm"
         footer={
           <>
@@ -1107,7 +1107,7 @@ export function DocTree({ onNavigate }: { onNavigate?: () => void }) {
                 move(hiding.item, hiding.to, true)
               }}
             >
-              옮기기
+              이동
             </Button>
           </>
         }

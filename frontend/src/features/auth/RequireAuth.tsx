@@ -48,15 +48,15 @@ function ForcedPasswordChange() {
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
           <ZenithMark className="mx-auto mb-3 size-11" />
-          <h1 className="text-fg text-xl font-semibold tracking-tight">비밀번호를 바꿔 주세요</h1>
+          <h1 className="text-fg text-xl font-semibold tracking-tight">비밀번호를 변경해 주세요</h1>
           <p className="text-muted mt-1 text-sm">관리자가 정해 준 비밀번호로 로그인했습니다.</p>
         </div>
         <div className="border-line bg-surface rounded-xl border p-6 shadow-sm">
           <PasswordForm
             wide
-            submitLabel="비밀번호 바꾸기"
+            submitLabel="비밀번호 변경"
             onChanged={() => {
-              toast.success('비밀번호를 바꿨습니다.')
+              toast.success('비밀번호를 변경했습니다.')
               // 204 가 곧 서버가 표시를 지웠다는 뜻이다. 다시 받지 않고 지운다(다시 받다 실패하면
               // 프로필 쿼리가 오류가 돼 로그인 화면으로 떨어진다). 위의 갈림이 앱으로 넘어간다.
               qc.setQueryData<User | null>(

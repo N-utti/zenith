@@ -78,9 +78,9 @@ export function ActivityCard({
                       className={iconButton}
                       disabled={remove.isPending}
                       onClick={() => {
-                        if (!confirm('이 활동 기록을 지울까요?')) return
+                        if (!confirm('이 활동 기록을 삭제할까요?')) return
                         remove.mutate(a.id, {
-                          onSuccess: () => toast.success('지웠습니다.'),
+                          onSuccess: () => toast.success('삭제했습니다.'),
                           onError: (err) =>
                             toast.error(
                               err instanceof ApiError ? err.message : '처리하지 못했습니다.',

@@ -59,7 +59,7 @@ export function AuditLog() {
             onChange={(e) => setKind(e.target.value)}
           />
         </div>
-        <p className="text-subtle text-xs">최신순입니다. 기록은 고치거나 지울 수 없습니다.</p>
+        <p className="text-subtle text-xs">최신순입니다. 기록은 수정하거나 삭제할 수 없습니다.</p>
       </div>
 
       {isPending && <SkeletonRows />}

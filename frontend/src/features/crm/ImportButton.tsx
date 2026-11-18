@@ -87,7 +87,7 @@ export function ImportButton() {
     // 언제 것인지를 같이 적는다. 방금 올린 것인 줄 알고 어제 것을 되돌리지 않게.
     if (
       !confirm(
-        `마지막 가져오기(${formatRelative(target.created_at)})로 만든 기관 ${target.new_orgs}곳·담당자 ${target.new_contacts}명을 지웁니다. 가져온 뒤 손으로 고친 내용도 같이 사라집니다. 그사이 쓰이기 시작한 것(안건·활동 기록이 생긴 기관과 그 담당자)은 남깁니다.`,
+        `마지막 가져오기(${formatRelative(target.created_at)})로 만든 기관 ${target.new_orgs}곳·담당자 ${target.new_contacts}명을 삭제합니다. 가져온 뒤 직접 수정한 내용도 같이 사라집니다. 그사이 쓰이기 시작한 것(안건·활동 기록이 생긴 기관과 그 담당자)은 남깁니다.`,
       )
     )
       return
@@ -95,11 +95,12 @@ export function ImportButton() {
       onSuccess: (done) => {
         const kept = done.kept_orgs + done.kept_contacts
         toast.success(
-          `기관 ${done.removed_orgs}곳·담당자 ${done.removed_contacts}명을 되돌렸습니다.` +
+          `가져오기를 취소했습니다. 기관 ${done.removed_orgs}곳·담당자 ${done.removed_contacts}명을 삭제했습니다.` +
             (kept ? ` 그사이 쓰이기 시작한 ${kept}건은 남겼습니다.` : ''),
         )
       },
-      onError: (err) => toast.error(err instanceof ApiError ? err.message : '되돌리지 못했습니다.'),
+      onError: (err) =>
+        toast.error(err instanceof ApiError ? err.message : '가져오기를 취소하지 못했습니다.'),
     })
   }
 
@@ -161,7 +162,7 @@ export function ImportButton() {
             <p>
               첫 줄은 칸 이름입니다. <b className="text-fg">기관</b> 칸은 꼭 있어야 하고, 나머지는
               있는 것만 씁니다: 유형 · 이름 · 부서·직함 · 전화 · 이메일 · 메모. 내보내기 파일을
-              고쳐서 그대로 올려도 됩니다.
+              수정해서 그대로 업로드해도 됩니다.
             </p>
             <p>
               유형은 {ORG_TYPES.map((t) => ORG_TYPE_LABEL[t]).join(' · ')} 중 하나이고, 비우면
@@ -176,7 +177,7 @@ export function ImportButton() {
               onClick={() => input.current?.click()}
             >
               {importing.isPending ? <Spinner /> : <Upload className="size-4" />}
-              파일 고르기
+              파일 선택
             </Button>
             {/* 잘못된 파일을 올렸을 때의 길. 내가 한 마지막 가져오기만, 가져온 지 하루 안에만 보인다. */}
             {last.data?.import && (
@@ -199,7 +200,7 @@ export function ImportButton() {
                   onClick={undoLast}
                 >
                   {undo.isPending && <Spinner />}
-                  되돌리기
+                  가져오기 취소
                 </Button>
               </div>
             )}
@@ -211,7 +212,9 @@ export function ImportButton() {
               {count('skip') > 0 && <Badge tone="subtle">건너뜀 {count('skip')}행</Badge>}
               {count('error') > 0 && <Badge tone="danger">오류 {count('error')}행</Badge>}
               {count('error') > 0 && (
-                <span className="text-muted">오류 행은 빼고 반영합니다. 고쳐서 다시 올리세요.</span>
+                <span className="text-muted">
+                  오류 행은 제외하고 반영합니다. 수정해서 다시 업로드하세요.
+                </span>
               )}
               <Button
                 variant="ghost"

@@ -83,7 +83,7 @@ export function useCollabSession(docId: string): CollabSession | null {
         // 쓰다 예외를 낸다(사본 자체는 안 남는다). 사람이 바뀔 때 사본을 지우는 `localCache` 도 같다.
         provider.disconnect()
         if (event.code === 4423) {
-          toastApi.error('문서가 잠겨 있어 이 기기에서 고친 내용은 저장되지 않았습니다.')
+          toastApi.error('문서가 잠겨 있어 이 기기에서 수정한 내용은 저장되지 않았습니다.')
         }
         // 사본을 다 지운 뒤에 다시 연다. 지우기 전에 새 세션이 같은 사본을 열면 거절된 글을 도로 읽는다.
         // 잠김이 바뀌어 화면이 새로 만들어지는 경로(`DocPane` key)는 이걸 기다리지 않으므로, 지우는 동안은
@@ -205,8 +205,8 @@ export function setCollabTitle(docId: string, title: string): Promise<void> {
       finish(
         new Error(
           event.code === 4423
-            ? '잠긴 문서입니다. 임원이 잠금을 풀어야 고칠 수 있습니다.'
-            : '이 문서의 이름을 바꿀 수 없습니다. 지워졌거나, 볼 권한이 없거나, 로그인이 풀렸습니다.',
+            ? '잠긴 문서입니다. 임원이 잠금을 풀어야 수정할 수 있습니다.'
+            : '이 문서의 이름을 바꿀 수 없습니다. 삭제되었거나, 볼 권한이 없거나, 로그인이 풀렸습니다.',
         ),
       ),
     )

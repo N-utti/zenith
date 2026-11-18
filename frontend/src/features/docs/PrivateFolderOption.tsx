@@ -31,7 +31,7 @@ export function PrivateFolderOption({
         checked={value.on}
         onChange={(e) => onChange({ ...value, on: e.target.checked })}
         label="나만 보기"
-        description="나와 아래에서 고른 사람만 봅니다. 임원도 고르지 않으면 볼 수 없습니다."
+        description="나와 아래에서 선택한 사람만 봅니다. 임원도 선택하지 않으면 볼 수 없습니다."
       />
       {value.on && (
         <div role="group" aria-labelledby={peopleLabel}>
@@ -57,7 +57,7 @@ export function PrivateFolderOption({
             />
           )}
           <p className="text-subtle mt-2 text-xs leading-relaxed">
-            고른 사람은 안의 문서를 보고 고칠 수 있습니다. 폴더 이름과 볼 사람은 나만 바꿉니다.
+            선택한 사람은 안의 문서를 보고 수정할 수 있습니다. 폴더 이름과 볼 사람은 나만 바꿉니다.
             나중에 폴더 메뉴의 「볼 사람」에서 바꿀 수 있습니다.
           </p>
         </div>

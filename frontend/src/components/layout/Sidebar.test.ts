@@ -163,7 +163,7 @@ test('안 읽은 방은 우클릭 메뉴에 읽음으로 표시가 있고, 고�
   expect(items.map((item) => item.textContent)).toEqual([
     '읽음으로 표시',
     '이름 바꾸기',
-    '채널 지우기',
+    '채널 삭제',
   ])
   act(() => items[0].click())
   expect(sendRead).toHaveBeenCalledWith('c-3')
@@ -184,9 +184,9 @@ test('채널을 지우면 창이 닫히고 줄이 바로 빠지며, 되돌리기
   )
   const container = render()
   const items = rightClick(container, '/chat/c-3')
-  act(() => items.find((item) => item.textContent === '채널 지우기')!.click())
+  act(() => items.find((item) => item.textContent === '채널 삭제')!.click())
   const confirm = [...document.querySelectorAll('[role="dialog"] button')].find(
-    (b) => b.textContent === '지우기',
+    (b) => b.textContent === '삭제',
   ) as HTMLElement
   await act(async () => confirm.click())
   expect(document.querySelector('[role="dialog"]')).toBeNull()
@@ -194,7 +194,7 @@ test('채널을 지우면 창이 닫히고 줄이 바로 빠지며, 되돌리기
   expect(api).not.toHaveBeenCalledWith('/channels/c-3', { method: 'DELETE' })
 
   const [message, options] = toast.success.mock.lastCall as [string, ToastOptions]
-  expect(message).toBe('c-3 채널을 지웠습니다.')
+  expect(message).toBe('c-3 채널을 삭제했습니다.')
   await act(async () => options.onClose!())
   expect(api).toHaveBeenCalledWith('/channels/c-3', { method: 'DELETE' })
 })

@@ -77,5 +77,5 @@ test('이미 지우기를 기다리는 것은 또 받지 않는다', () => {
   run(['e1'], second)
 
   expect(toast.success).toHaveBeenCalledOnce()
-  expect(toast.info).toHaveBeenCalledWith('이미 지우는 중입니다.')
+  expect(toast.info).toHaveBeenCalledWith('이미 삭제하는 중입니다.')
 })

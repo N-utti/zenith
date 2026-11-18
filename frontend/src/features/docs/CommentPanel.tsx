@@ -188,7 +188,7 @@ export function CommentPanel({
                   </button>
                 ) : (
                   <p className="bg-sunken text-subtle mt-1 rounded-md px-2 py-1 text-xs">
-                    지워진 블록
+                    삭제된 블록
                   </p>
                 ))}
             </CommentRow>

@@ -101,10 +101,10 @@ export function ProjectBoardPage() {
     if (!confirm(deleteProjectMessage(data))) return
     remove.mutate(data.id, {
       onSuccess: () => {
-        toast.success('프로젝트를 지웠습니다.')
+        toast.success('프로젝트를 삭제했습니다.')
         void navigate('/projects')
       },
-      onError: (err) => toast.error(err instanceof ApiError ? err.message : '지우지 못했습니다.'),
+      onError: (err) => toast.error(err instanceof ApiError ? err.message : '삭제하지 못했습니다.'),
     })
   }
 
@@ -118,7 +118,7 @@ export function ProjectBoardPage() {
           <>
             {data.can_delete && (
               <Button variant="ghost" size="sm" disabled={remove.isPending} onClick={onDelete}>
-                지우기
+                삭제
               </Button>
             )}
             <Button variant="secondary" size="sm" onClick={() => setDialog({ kind: 'project' })}>
@@ -193,7 +193,7 @@ function Board({
   const toast = useToast()
   const tasks = useTasks(projectId)
   const move = useUpdateTask(projectId, (err) =>
-    toast.error(err instanceof ApiError ? err.message : '단계를 옮기지 못했습니다.'),
+    toast.error(err instanceof ApiError ? err.message : '단계를 변경하지 못했습니다.'),
   )
   const remove = useDeleteTask()
   /** 끌고 있는 카드 위에 떠 있는 열. 떨어뜨릴 자리를 칠해 보인다. */
@@ -204,8 +204,8 @@ function Board({
   const removeTask = (task: Task) => {
     if (!confirm(deleteTaskMessage(task))) return
     remove.mutate(task.id, {
-      onSuccess: () => toast.success('업무를 지웠습니다.'),
-      onError: (err) => toast.error(err instanceof ApiError ? err.message : '지우지 못했습니다.'),
+      onSuccess: () => toast.success('업무를 삭제했습니다.'),
+      onError: (err) => toast.error(err instanceof ApiError ? err.message : '삭제하지 못했습니다.'),
     })
   }
 
@@ -369,7 +369,7 @@ function TaskCard({
             icon={Trash2}
             label="삭제"
             danger
-            disabledReason={deleting ? '지우는 중' : undefined}
+            disabledReason={deleting ? '삭제하는 중' : undefined}
             onSelect={onDelete}
           />
         </ContextMenu>

@@ -50,7 +50,7 @@ export function AbsenceModal({
     <Modal
       open
       onClose={close}
-      title={absent ? '결근 처리 고치기' : '결근 처리'}
+      title={absent ? '결근 수정' : '결근 처리'}
       description={`${user.name} · ${formatISODate(date)}`}
       size="sm"
       footer={
@@ -80,7 +80,7 @@ export function AbsenceModal({
             onClick={() =>
               set.mutate(
                 { user_id: user.id, work_date: date, note: note.trim() || null },
-                { onSuccess: done(absent ? '메모를 고쳤습니다.' : '결근으로 처리했습니다.') },
+                { onSuccess: done(absent ? '메모를 수정했습니다.' : '결근으로 처리했습니다.') },
               )
             }
           >

@@ -53,7 +53,7 @@ async function render(mustChange: boolean) {
 
 test('비밀번호를 바꿔야 하는 사람에게는 앱 대신 변경 화면만 그린다', async () => {
   const text = await render(true)
-  expect(text).toContain('비밀번호를 바꿔 주세요')
+  expect(text).toContain('비밀번호를 변경해 주세요')
   expect(text).not.toContain('APP')
 })
 

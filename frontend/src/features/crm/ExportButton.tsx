@@ -20,11 +20,11 @@ export function ExportButton({ entity }: { entity: ExportEntity }) {
       size="sm"
       className="hidden sm:inline-flex"
       disabled={exporting.isPending}
-      title={`${LABEL[entity]} 목록 전체를 엑셀로 내려받습니다. 누가 내려받았는지 기록됩니다.`}
+      title={`${LABEL[entity]} 목록 전체를 엑셀로 다운로드합니다. 누가 다운로드했는지 기록됩니다.`}
       onClick={() =>
         exporting.mutate(entity, {
           onError: (err) =>
-            toast.error(err instanceof ApiError ? err.message : '내려받지 못했습니다.'),
+            toast.error(err instanceof ApiError ? err.message : '다운로드하지 못했습니다.'),
         })
       }
     >

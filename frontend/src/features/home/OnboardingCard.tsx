@@ -6,13 +6,13 @@ import { dismissOnboarding, useOnboarding, type OnboardingStep } from './onboard
 const STEPS: { step: OnboardingStep; label: string; description: string; to: string }[] = [
   {
     step: 'password',
-    label: '비밀번호 바꾸기',
+    label: '비밀번호 변경',
     description: '관리자가 정해 준 비밀번호를 나만 아는 것으로',
     to: '/settings',
   },
   {
     step: 'preferences',
-    label: '알림 고르기',
+    label: '알림 설정',
     description: '받을 알림과 로그인하면 처음 열 화면',
     to: '/settings',
   },

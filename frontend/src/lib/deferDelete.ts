@@ -61,7 +61,7 @@ export function deferDelete(
 ) {
   // 이미 기다리는 것을 또 지우면(남아 있던 다른 화면에서) 되돌리기가 둘이 되어, 하나를 되돌려도 다른
   // 쪽이 지운다. 받지 않는다.
-  if (ids.some((id) => pending.has(id))) return toast.info('이미 지우는 중입니다.')
+  if (ids.some((id) => pending.has(id))) return toast.info('이미 삭제하는 중입니다.')
   setPending(new Set([...pending, ...ids]))
   const release = (back: string[]) =>
     setPending(new Set([...pending].filter((id) => !back.includes(id))))
@@ -83,7 +83,7 @@ export function deferDelete(
       )
     },
     action: {
-      label: '되돌리기',
+      label: '실행 취소',
       onClick: () => {
         if (done) return
         done = true

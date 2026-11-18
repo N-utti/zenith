@@ -58,7 +58,7 @@ export function DownloadLink({
     try {
       await downloadFromApi(path, name || '파일')
     } catch (cause) {
-      toast.error(cause instanceof ApiError ? cause.message : '파일을 내려받지 못했습니다.')
+      toast.error(cause instanceof ApiError ? cause.message : '파일을 다운로드하지 못했습니다.')
     }
   }
   return <a {...rest} href={httpUrl(path)} download={name} onClick={download} />

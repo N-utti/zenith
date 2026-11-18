@@ -52,12 +52,12 @@ export function ArchivePage() {
 
   const download = async (file: ArchiveFile, name: string) => {
     const path = downloadPath(file.url)
-    if (!path) return toast.error('내려받을 수 없는 주소입니다.')
+    if (!path) return toast.error('다운로드할 수 없는 주소입니다.')
     setBusy(true)
     try {
       await downloadFromApi(path, name)
     } catch (cause) {
-      toast.error(cause instanceof ApiError ? cause.message : '파일을 내려받지 못했습니다.')
+      toast.error(cause instanceof ApiError ? cause.message : '파일을 다운로드하지 못했습니다.')
     } finally {
       setBusy(false)
     }
@@ -97,8 +97,8 @@ export function ArchivePage() {
                     <TH>이름</TH>
                     <TH className="hidden w-20 md:table-cell">크기</TH>
                     <TH className="w-28 sm:w-44">붙은 곳</TH>
-                    <TH className="hidden w-24 md:table-cell">올린 사람</TH>
-                    <TH className="hidden w-24 sm:table-cell">올린 때</TH>
+                    <TH className="hidden w-24 md:table-cell">업로드한 사람</TH>
+                    <TH className="hidden w-24 sm:table-cell">업로드일</TH>
                     <TH className="w-20">열람</TH>
                   </TR>
                 </THead>
@@ -123,7 +123,7 @@ export function ArchivePage() {
                           <button
                             type="button"
                             title={name}
-                            aria-label={`${name} 내려받기`}
+                            aria-label={`${name} 다운로드`}
                             disabled={busy}
                             onClick={() => void download(file, name)}
                             className="hover:text-accent flex max-w-full cursor-pointer items-center gap-2 py-1 text-left font-medium transition-colors disabled:cursor-default disabled:opacity-60"
@@ -153,7 +153,7 @@ export function ArchivePage() {
                            * 「올림」을 붙인다. 이름만 두면 그 문서의 주인으로 읽힌다.
                            */}
                           <span className="text-subtle block truncate text-xs md:hidden">
-                            {file.uploaded_by.name} 올림
+                            {file.uploaded_by.name} 업로드
                           </span>
                         </TD>
                         <TD className="text-muted hidden whitespace-nowrap md:table-cell">

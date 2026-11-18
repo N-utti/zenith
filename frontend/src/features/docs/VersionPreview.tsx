@@ -84,7 +84,7 @@ export function VersionPreview({
         </p>
         {onRestore && (
           <Button size="sm" onClick={onRestore} disabled={restoring}>
-            <RotateCcw className="size-4" />이 버전으로 되돌리기
+            <RotateCcw className="size-4" />이 버전으로 복원
           </Button>
         )}
         <Button variant="ghost" size="sm" onClick={onClose} aria-label="미리보기 닫기">

@@ -30,12 +30,12 @@ export function TrashedDoc({ meta, stay }: { meta: DocDetail; stay?: boolean }) 
     setRestoring(true)
     untrashDoc(meta.id)
       .then(() => {
-        toast.success('문서를 되돌렸습니다.')
+        toast.success('문서를 복원했습니다.')
         if (!stay) void navigate(`/docs/${meta.id}`, { replace: true })
       })
       .catch((err: unknown) => {
         setRestoring(false)
-        toast.error(err instanceof ApiError ? err.message : '되돌리지 못했습니다.')
+        toast.error(err instanceof ApiError ? err.message : '복원하지 못했습니다.')
       })
   }
 
@@ -48,7 +48,7 @@ export function TrashedDoc({ meta, stay }: { meta: DocDetail; stay?: boolean }) 
 
         <h1 className="text-fg mt-4 text-lg font-semibold">{meta.title || UNTITLED_DOC}</h1>
         <p className="text-muted mt-2 text-sm leading-relaxed">
-          휴지통에 있습니다. 되돌리기 전에는 고칠 수 없습니다.
+          휴지통에 있습니다. 복원하기 전에는 수정할 수 없습니다.
           {meta.deleted_at && (
             <>
               <br />
@@ -62,7 +62,7 @@ export function TrashedDoc({ meta, stay }: { meta: DocDetail; stay?: boolean }) 
 
         <div className="mt-5 flex items-center justify-center gap-2">
           <Button size="sm" onClick={restore} disabled={restoring}>
-            {restoring ? <Spinner className="border-t-on-accent" /> : '되돌리기'}
+            {restoring ? <Spinner className="border-t-on-accent" /> : '복원'}
           </Button>
           <Link
             to="/docs"

@@ -128,18 +128,18 @@ function Board({ kind }: { kind: DealKind }) {
     const last = stages.at(-1)?.key
     if (
       stage === last &&
-      !confirm(`"${deal.name}" 을(를) ${stages.at(-1)?.label}(으)로 옮기면 성사로 끝납니다.`)
+      !confirm(`"${deal.name}" 을(를) ${stages.at(-1)?.label}(으)로 이동하면 성사로 끝납니다.`)
     )
       return
     move.mutate(
       { id: deal.id, version: deal.version, stage },
       {
         onSuccess: () => {
-          toast.success(stage === last ? '성사로 끝냈습니다.' : '단계를 옮겼습니다.')
+          toast.success(stage === last ? '성사로 끝냈습니다.' : '단계를 변경했습니다.')
           if (fromKeyboard) refocus(deal.id, stage)
         },
         onError: (err) =>
-          toast.error(err instanceof ApiError ? err.message : '단계를 옮기지 못했습니다.'),
+          toast.error(err instanceof ApiError ? err.message : '단계를 변경하지 못했습니다.'),
       },
     )
   }
@@ -147,9 +147,9 @@ function Board({ kind }: { kind: DealKind }) {
   const removeDeal = (deal: Deal) => {
     if (!confirm(deleteDealMessage(deal.name, me.role === 'exec'))) return
     remove.mutate(deal.id, {
-      onSuccess: () => toast.success('안건을 지웠습니다.'),
+      onSuccess: () => toast.success('안건을 삭제했습니다.'),
       onError: (err) =>
-        toast.error(err instanceof ApiError ? err.message : '안건을 지우지 못했습니다.'),
+        toast.error(err instanceof ApiError ? err.message : '안건을 삭제하지 못했습니다.'),
     })
   }
 
@@ -336,7 +336,7 @@ function DealCardMenu({
           label="삭제"
           danger
           disabledReason={
-            detail.isPending ? '지울 수 있는지 확인하는 중' : deleting ? '지우는 중' : undefined
+            detail.isPending ? '삭제할 수 있는지 확인하는 중' : deleting ? '삭제하는 중' : undefined
           }
           onSelect={onDelete}
         />

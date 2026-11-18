@@ -172,7 +172,7 @@ export function MonthHeader({
               <input
                 type="month"
                 value={month}
-                aria-label="달 고르기"
+                aria-label="월 선택"
                 onKeyUp={() => setKeyboardFocus(true)}
                 onBlur={() => setKeyboardFocus(false)}
                 onClick={(e) => {

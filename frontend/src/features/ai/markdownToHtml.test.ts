@@ -61,7 +61,7 @@ describe('markdownToHtml', () => {
 
   it('굵게 감싼 파일 링크도 이름을 잃지 않는다', () => {
     const html = markdownToHtml('[**📎 매출 _요약_.xlsx**](/api/ai/attachments/x1)')
-    expect(html).toContain('title="매출 요약.xlsx 내려받기"')
+    expect(html).toContain('title="매출 요약.xlsx 다운로드"')
   })
 
   it('깊게 겹친 마크다운으로 파서가 터지면 원문 글자로 남는다', () => {
