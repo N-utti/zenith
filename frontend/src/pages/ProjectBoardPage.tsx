@@ -1,6 +1,7 @@
 import { useState, type DragEvent } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router'
 import { Pencil, Plus, Trash2 } from 'lucide-react'
+import { askConfirm } from '@/components/ui/confirm'
 import { BackLink } from '@/components/ui/BackLink'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -21,8 +22,8 @@ import { ProjectProgress } from '@/features/projects/ProjectProgress'
 import { ProjectTimeline } from '@/features/projects/ProjectTimeline'
 import { formatTaskDate, isOverdue } from '@/features/projects/timeline'
 import {
-  deleteProjectMessage,
-  deleteTaskMessage,
+  deleteProjectConfirm,
+  deleteTaskConfirm,
   personName,
   TASK_STAGES,
   type Task,
@@ -97,8 +98,8 @@ export function ProjectBoardPage() {
   }
   const data = project.data
 
-  const onDelete = () => {
-    if (!confirm(deleteProjectMessage(data))) return
+  const onDelete = async () => {
+    if (!(await askConfirm(deleteProjectConfirm(data)))) return
     remove.mutate(data.id, {
       onSuccess: () => {
         toast.success('프로젝트를 삭제했습니다.')
@@ -201,8 +202,8 @@ function Board({
   const items = tasks.data?.items ?? []
 
   // 업무 창의 지우기와 같은 확인. 보드에 두어야 카드가 빠진 뒤에도 알림이 뜬다.
-  const removeTask = (task: Task) => {
-    if (!confirm(deleteTaskMessage(task))) return
+  const removeTask = async (task: Task) => {
+    if (!(await askConfirm(deleteTaskConfirm(task)))) return
     remove.mutate(task.id, {
       onSuccess: () => toast.success('업무를 삭제했습니다.'),
       onError: (err) => toast.error(err instanceof ApiError ? err.message : '삭제하지 못했습니다.'),

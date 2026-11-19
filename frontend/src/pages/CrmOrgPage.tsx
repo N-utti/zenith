@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { Eraser, Pencil, Phone, Plus, Trash2 } from 'lucide-react'
+import { askConfirm } from '@/components/ui/confirm'
 import { BackLink } from '@/components/ui/BackLink'
 import { Button } from '@/components/ui/Button'
 import { Card, CardEmpty, CardHeader } from '@/components/ui/Card'
@@ -211,13 +212,15 @@ export function CrmOrgPage() {
                         title="개인정보 삭제"
                         className={iconButton}
                         disabled={contactBusy}
-                        onClick={() => {
-                          if (
-                            !confirm(
-                              `${c.name} 님의 이름·연락처·메모를 삭제합니다. 활동 기록에는 삭제된 담당자로 남습니다. 되돌릴 수 없습니다.`,
-                            )
-                          )
-                            return
+                        onClick={async () => {
+                          const ok = await askConfirm({
+                            title: `${c.name} 님의 개인정보를 삭제할까요?`,
+                            description:
+                              '이름·연락처·메모가 삭제됩니다. 활동 기록에는 삭제된 담당자로 남습니다. 되돌릴 수 없습니다.',
+                            confirmLabel: '삭제',
+                            danger: true,
+                          })
+                          if (!ok) return
                           erase.mutate(c.id, {
                             onSuccess: () => toast.success('개인정보를 삭제했습니다.'),
                             onError,
@@ -236,16 +239,23 @@ export function CrmOrgPage() {
                         title="목록에서 삭제"
                         className={iconButton}
                         disabled={contactBusy}
-                        onClick={() => {
+                        onClick={async () => {
                           // 지워도 활동 기록에는 이름이 남는다. 이름까지 지우는 길(개인정보 삭제)은
                           // 임원에게만 있어서 그 안내는 임원에게만 낸다.
-                          const message = c.erased
-                            ? '개인정보를 삭제한 담당자를 목록에서 삭제합니다. 활동 기록의 참석자 자리는 남습니다. 되돌릴 수 없습니다.'
-                            : `${c.name} 님을 담당자 목록에서 삭제합니다. 되돌릴 수 없습니다.` +
-                              (isExec
-                                ? ' 활동 기록에는 이름이 그대로 남습니다. 이름까지 삭제하려면 먼저 개인정보 삭제를 하세요.'
-                                : '')
-                          if (!confirm(message)) return
+                          const ok = await askConfirm({
+                            title: c.erased
+                              ? '이 담당자를 목록에서 삭제할까요?'
+                              : `${c.name} 님을 담당자 목록에서 삭제할까요?`,
+                            description: c.erased
+                              ? '개인정보를 삭제한 담당자입니다. 활동 기록의 참석자 자리는 남습니다. 되돌릴 수 없습니다.'
+                              : '되돌릴 수 없습니다.' +
+                                (isExec
+                                  ? ' 활동 기록에는 이름이 그대로 남습니다. 이름까지 삭제하려면 먼저 개인정보 삭제를 하세요.'
+                                  : ''),
+                            confirmLabel: '삭제',
+                            danger: true,
+                          })
+                          if (!ok) return
                           removeContact.mutate(c.id, {
                             onSuccess: () => toast.success('담당자를 삭제했습니다.'),
                             onError,

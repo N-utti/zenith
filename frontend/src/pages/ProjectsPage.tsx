@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { ArrowUpRight, Pencil, Plus, Trash2 } from 'lucide-react'
+import { askConfirm } from '@/components/ui/confirm'
 import { Button } from '@/components/ui/Button'
 import { Card, CardEmpty } from '@/components/ui/Card'
 import { ContextMenu, ContextMenuItem } from '@/components/ui/ContextMenu'
@@ -10,7 +11,7 @@ import { useToast } from '@/components/ui/ToastContext'
 import { useDeleteProject, useProjects } from '@/features/projects/api'
 import { ProjectFormModal } from '@/features/projects/ProjectForms'
 import { ProjectProgress } from '@/features/projects/ProjectProgress'
-import { deleteProjectMessage, personName, type Project } from '@/features/projects/types'
+import { deleteProjectConfirm, personName, type Project } from '@/features/projects/types'
 import { ApiError } from '@/lib/api'
 import { cn } from '@/lib/cn'
 import { useContextMenuAt } from '@/lib/useContextMenuAt'
@@ -24,8 +25,8 @@ export function ProjectsPage() {
   const [editing, setEditing] = useState<Project | null>(null)
   const items = projects.data?.items
 
-  const removeProject = (project: Project) => {
-    if (!confirm(deleteProjectMessage(project))) return
+  const removeProject = async (project: Project) => {
+    if (!(await askConfirm(deleteProjectConfirm(project)))) return
     remove.mutate(project.id, {
       onSuccess: () => toast.success('프로젝트를 삭제했습니다.'),
       onError: (err) => toast.error(err instanceof ApiError ? err.message : '삭제하지 못했습니다.'),

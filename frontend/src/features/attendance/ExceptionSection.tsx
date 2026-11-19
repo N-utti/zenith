@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router'
 import { Plus } from 'lucide-react'
+import { askConfirm } from '@/components/ui/confirm'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
@@ -129,8 +130,13 @@ export function ExceptionSection() {
     corrections.data?.items ?? [],
   )
 
-  const onCancel = (row: Row) => {
-    if (!confirm('이 신청을 취소할까요?')) return
+  const onCancel = async (row: Row) => {
+    const ok = await askConfirm({
+      title: '이 신청을 취소할까요?',
+      confirmLabel: '신청 취소',
+      cancelLabel: '닫기',
+    })
+    if (!ok) return
     cancel.mutate(
       { kind: row.kind, id: row.id },
       {

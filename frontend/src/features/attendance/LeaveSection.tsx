@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Plus } from 'lucide-react'
+import { askConfirm } from '@/components/ui/confirm'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card, CardEmpty, CardHeader } from '@/components/ui/Card'
@@ -30,8 +31,13 @@ export function LeaveSection() {
   const expiring = !!promotion?.urgent && promotion.stage !== 'first'
   const typeName = (code: string) => types.data?.items.find((t) => t.code === code)?.name ?? code
 
-  const onCancel = (id: string) => {
-    if (!confirm('이 휴가 신청을 취소할까요?')) return
+  const onCancel = async (id: string) => {
+    const ok = await askConfirm({
+      title: '이 휴가 신청을 취소할까요?',
+      confirmLabel: '신청 취소',
+      cancelLabel: '닫기',
+    })
+    if (!ok) return
     cancel.mutate(id, {
       onSuccess: () => toast.success('휴가 신청을 취소했습니다.'),
       onError: (err) => toast.error(err instanceof ApiError ? err.message : '취소하지 못했습니다.'),

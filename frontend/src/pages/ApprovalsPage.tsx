@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router'
 import { ArrowUpRight, ExternalLink, Link2, Plus, Trash2 } from 'lucide-react'
+import { askConfirm } from '@/components/ui/confirm'
 import { openTab } from '@/components/layout/desktopTabs'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -98,8 +99,14 @@ export function ApprovalsPage() {
     isExec &&
     item.type_code === 'general' &&
     ['approved', 'rejected', 'closed'].includes(item.status)
-  const deleteDone = (item: ApprovalListItem) => {
-    if (!confirm('이 문서를 삭제할까요? 결재선과 첨부도 같이 삭제되고 되돌릴 수 없습니다.')) return
+  const deleteDone = async (item: ApprovalListItem) => {
+    const ok = await askConfirm({
+      title: '이 문서를 삭제할까요?',
+      description: '결재선과 첨부도 같이 삭제되고 되돌릴 수 없습니다.',
+      confirmLabel: '삭제',
+      danger: true,
+    })
+    if (!ok) return
     removeDone.mutate(item.id, {
       onSuccess: () => toast.success('문서를 삭제했습니다.'),
       onError: (err) =>
@@ -107,8 +114,14 @@ export function ApprovalsPage() {
     })
   }
 
-  const deleteDraft = (item: ApprovalListItem) => {
-    if (!confirm('이 임시저장을 삭제할까요? 되돌릴 수 없습니다.')) return
+  const deleteDraft = async (item: ApprovalListItem) => {
+    const ok = await askConfirm({
+      title: '이 임시저장을 삭제할까요?',
+      description: '되돌릴 수 없습니다.',
+      confirmLabel: '삭제',
+      danger: true,
+    })
+    if (!ok) return
     removeDraft.mutate(item.id, {
       onSuccess: () => toast.success('임시저장을 삭제했습니다.'),
       onError: (err) =>

@@ -46,7 +46,7 @@ export function Modal({
    * 끌어 내리기는 없다. 닫기는 바깥 누름·X·Esc 로 같다. 손잡이 막대를 그리면 끌 수 있는 줄 안다.
    */
   sheet?: boolean
-  children: ReactNode
+  children?: ReactNode
 }) {
   const panelRef = useRef<HTMLDivElement>(null)
   const titleId = useId()
@@ -156,9 +156,12 @@ export function Modal({
           </button>
         </header>
 
-        <div ref={bodyRef} className="min-h-0 flex-1 overflow-y-auto px-5 pb-5">
-          <div>{children}</div>
-        </div>
+        {/* 제목·설명만으로 끝나는 창(확인 창)은 본문 칸을 두지 않는다. 비워 두면 그 아래 여백만 남아 벌어진다. */}
+        {children != null && (
+          <div ref={bodyRef} className="min-h-0 flex-1 overflow-y-auto px-5 pb-5">
+            <div>{children}</div>
+          </div>
+        )}
 
         {footer && (
           <footer
