@@ -67,7 +67,7 @@ export function CrmOrgsPage() {
     <>
       <PageHeader
         title="기관"
-        description="출자자·공동투자 상대·자문사를 한 주소록에 둡니다. 전 직원이 함께 봅니다."
+        description="출자자·공동투자 상대·자문사를 한 주소록에 둡니다."
         actions={
           <>
             <ImportButton />

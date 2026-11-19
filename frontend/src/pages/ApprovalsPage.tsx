@@ -48,7 +48,6 @@ export function ApprovalsPage() {
     <>
       <PageHeader
         title="결재"
-        description="근태 신청도 여기서 결재됩니다. 문서는 기안자 · 결재선에 오른 사람 · 임원만 봅니다."
         actions={
           <Button size="sm" onClick={() => void navigate('/approvals/new')}>
             <Plus className="size-4" />새 기안
