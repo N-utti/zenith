@@ -1,7 +1,10 @@
+import { useCallback, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router'
-import { Plus, Trash2 } from 'lucide-react'
+import { ArrowUpRight, ExternalLink, Link2, Plus, Trash2 } from 'lucide-react'
+import { openTab } from '@/components/layout/desktopTabs'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
+import { ContextMenu, ContextMenuItem } from '@/components/ui/ContextMenu'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { Select } from '@/components/ui/Select'
 import { SkeletonRows } from '@/components/ui/Skeleton'
@@ -15,11 +18,17 @@ import {
   statusLabel,
   statusTone,
   type ApprovalBox,
+  type ApprovalListItem,
   type DocumentStatus,
 } from '@/features/approvals/types'
 import { useCurrentUser } from '@/features/auth/AuthContext'
 import { ApiError } from '@/lib/api'
+import { cn } from '@/lib/cn'
+import { copyText } from '@/lib/clipboard'
 import { formatDateTime, formatRelative } from '@/lib/datetime'
+import { isDesktopShell } from '@/lib/desktop'
+import { serverOrigin } from '@/lib/serverOrigin'
+import { useLongPress } from '@/lib/useLongPress'
 
 const BOXES: ApprovalBox[] = ['inbox', 'sent', 'reference', 'draft']
 /**
@@ -77,6 +86,36 @@ export function ApprovalsPage() {
   // 임시저장 탭에만 지우기 칸이 붙는다. 다른 탭의 문서는 이력이라 지우지 않는다.
   const deletable = box === 'draft'
   const columns = deletable ? 6 : 5
+  // 임시저장은 읽을 것이 아니라 이어 쓸 것이다. 상세를 거치지 않고 바로 작성 화면을 연다.
+  const hrefOf = (id: string) =>
+    box === 'draft' ? `/approvals/new?draft=${id}` : `/approvals/${id}`
+
+  const deleteDraft = (item: ApprovalListItem) => {
+    if (!confirm('이 임시저장을 삭제할까요? 되돌릴 수 없습니다.')) return
+    removeDraft.mutate(item.id, {
+      onSuccess: () => toast.success('임시저장을 삭제했습니다.'),
+      onError: (err) =>
+        toast.error(err instanceof ApiError ? err.message : '임시저장을 삭제하지 못했습니다.'),
+    })
+  }
+
+  // 행 우클릭 메뉴. 마우스는 우클릭, 키보드는 Shift+F10·메뉴 키(초점이 제목 링크에 있다), 손가락 기기는 꾹 누르기.
+  const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null)
+  const closeMenu = useCallback(() => setMenu(null), [])
+  const openMenuAt = (target: Element, x: number, y: number) => {
+    const row = target.closest<HTMLElement>('tr[data-id]')
+    const item = items.find((i) => i.id === row?.dataset.id)
+    if (!row || !item) return false
+    // 키보드로 열면 포인터 좌표가 없다. 그 행 바로 아래에 띄운다.
+    const rect = row.getBoundingClientRect()
+    setMenu({ id: item.id, x: x || rect.left, y: y || rect.bottom })
+    return true
+  }
+  const longPress = useLongPress(openMenuAt)
+  // 그릴 때마다 지금 목록에서 다시 찾는다. 탭이 바뀌거나(뒤로 가기) 목록에서 빠진 문서의 메뉴는 저절로 사라진다.
+  const menuItem = menu ? items.find((i) => i.id === menu.id) : undefined
+  // 상태도 비운다. 남겨 두면 그 문서가 다시 보일 때(앞으로 가기) 메뉴가 되살아난다. 문서 트리와 같은 처리.
+  if (menu && !menuItem && list.data) setMenu(null)
 
   return (
     <>
@@ -174,16 +213,30 @@ export function ApprovalsPage() {
                     return (
                       // 행 어디를 눌러도 열린다. 제목 링크의 ::after 를 행 전체로 펼친다(relative 는 행에).
                       // 링크 하나 그대로라 키보드·가운데 클릭·새 탭 열기가 살아 있다.
-                      <TR key={item.id} className="relative">
+                      <TR
+                        key={item.id}
+                        data-id={item.id}
+                        data-long-press
+                        {...longPress}
+                        onContextMenu={(e) => {
+                          if (
+                            e.target instanceof Element &&
+                            openMenuAt(e.target, e.clientX, e.clientY)
+                          )
+                            e.preventDefault()
+                        }}
+                        className={cn(
+                          'relative',
+                          // 꾹 누를 때 아이폰의 링크 미리보기·글자 선택이 메뉴보다 먼저 뜨지 않게 한다.
+                          'pointer-coarse:select-none pointer-coarse:[-webkit-touch-callout:none]',
+                          // 어느 행의 메뉴인지 보이게 메뉴가 떠 있는 동안 행을 칠해 둔다.
+                          menu?.id === item.id && 'bg-surface-hover',
+                        )}
+                      >
                         <TD className="whitespace-nowrap">{APPROVAL_TYPE_LABEL[item.type_code]}</TD>
                         <TD>
-                          {/* 임시저장은 읽을 것이 아니라 이어 쓸 것이다. 상세를 거치지 않고 바로 작성 화면을 연다. */}
                           <Link
-                            to={
-                              box === 'draft'
-                                ? `/approvals/new?draft=${item.id}`
-                                : `/approvals/${item.id}`
-                            }
+                            to={hrefOf(item.id)}
                             className="text-fg font-medium after:absolute after:inset-0"
                           >
                             {item.title}
@@ -207,19 +260,7 @@ export function ApprovalsPage() {
                               aria-label={`${item.title} 임시저장 삭제`}
                               title="임시저장 삭제"
                               disabled={removeDraft.isPending}
-                              onClick={() => {
-                                if (!confirm('이 임시저장을 삭제할까요? 되돌릴 수 없습니다.'))
-                                  return
-                                removeDraft.mutate(item.id, {
-                                  onSuccess: () => toast.success('임시저장을 삭제했습니다.'),
-                                  onError: (err) =>
-                                    toast.error(
-                                      err instanceof ApiError
-                                        ? err.message
-                                        : '임시저장을 삭제하지 못했습니다.',
-                                    ),
-                                })
-                              }}
+                              onClick={() => deleteDraft(item)}
                               className="text-subtle hover:text-danger relative z-10 grid size-7 cursor-pointer place-items-center rounded disabled:cursor-default disabled:opacity-55"
                             >
                               <Trash2 className="size-3.5" />
@@ -235,6 +276,46 @@ export function ApprovalsPage() {
           </>
         )}
       </Tabs>
+      {menu && menuItem && (
+        <ContextMenu at={menu} label={`${menuItem.title} 메뉴`} onClose={closeMenu}>
+          <ContextMenuItem
+            icon={ArrowUpRight}
+            label="열기"
+            onSelect={() => void navigate(hrefOf(menuItem.id))}
+          />
+          <ContextMenuItem
+            icon={ExternalLink}
+            label="새 탭에서 열기"
+            onSelect={() =>
+              isDesktopShell()
+                ? openTab(hrefOf(menuItem.id))
+                : void window.open(hrefOf(menuItem.id), '_blank', 'noopener')
+            }
+          />
+          {/* 임시저장은 기안자만 연다. 남에게 보낼 링크가 아니다. */}
+          {box !== 'draft' && (
+            <ContextMenuItem
+              icon={Link2}
+              label="링크 복사"
+              onSelect={() =>
+                void copyText(`${serverOrigin() || location.origin}/approvals/${menuItem.id}`).then(
+                  () => toast.success('결재 문서 링크를 복사했습니다.'),
+                  () => toast.error('링크를 복사하지 못했습니다.'),
+                )
+              }
+            />
+          )}
+          {deletable && (
+            <ContextMenuItem
+              icon={Trash2}
+              label="삭제"
+              danger
+              disabledReason={removeDraft.isPending ? '삭제하는 중' : undefined}
+              onSelect={() => deleteDraft(menuItem)}
+            />
+          )}
+        </ContextMenu>
+      )}
     </>
   )
 }
