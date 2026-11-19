@@ -4,6 +4,7 @@ import { AppRoutes } from '@/app/routes'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { UpdateCard } from '@/components/layout/UpdateCard'
 import { DesktopTitleBar } from '@/components/layout/WindowControls'
+import { ConfirmHost } from '@/components/ui/ConfirmDialog'
 import { ToastProvider } from '@/components/ui/Toast'
 import { AuthProvider } from '@/features/auth/AuthProvider'
 import { isDesktopShell } from '@/lib/desktop'
@@ -23,6 +24,8 @@ export function App() {
               <AppRoutes />
             </AuthProvider>
           </ErrorBoundary>
+          {/* askConfirm 의 확인 창. 화면을 옮기면 취소로 닫아야 해서 라우터 안에 둔다. */}
+          <ConfirmHost />
         </BrowserRouter>
         {/* 데스크탑 앱의 새 버전 알림. 로그인 전 화면에서도, 본문이 터져도 떠야 해서 바깥에 둔다. */}
         <UpdateCard />

@@ -1,3 +1,5 @@
+import type { ConfirmOptions } from '@/components/ui/confirm'
+
 /**
  * CRM 주소록(15 CRM 모듈 설계서 §4·§9). 백엔드(#311·#318)보다 먼저 만들어 손수 맞춘 타입이다.
  * `/crm` 계열이 openapi 에 들어왔으니 `Schema<...>` 로 바꿀 차례다. 그때까지는 서버가 스키마를
@@ -262,8 +264,12 @@ export interface DealDetail extends Deal {
  * 안건을 지우기 전 확인 문구. 상세 화면과 보드 카드 메뉴가 같이 쓴다.
  * 활동 기록이 붙은 안건은 임원만 지운다. 그 안내는 임원에게만 뜻이 있다.
  */
-export const deleteDealMessage = (name: string, exec: boolean) =>
-  `${name} 안건을 삭제합니다. 보드와 목록에서 빠지고 되돌릴 수 없습니다.${exec ? ' 붙어 있던 활동 기록은 기관에 남습니다.' : ''}`
+export const deleteDealConfirm = (name: string, exec: boolean): ConfirmOptions => ({
+  title: `${name} 안건을 삭제할까요?`,
+  description: `보드와 목록에서 빠지고 되돌릴 수 없습니다.${exec ? ' 붙어 있던 활동 기록은 기관에 남습니다.' : ''}`,
+  confirmLabel: '삭제',
+  danger: true,
+})
 
 export interface DealInput {
   kind: DealKind

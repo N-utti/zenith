@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import { Upload } from 'lucide-react'
+import { askConfirm } from '@/components/ui/confirm'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
@@ -81,16 +82,18 @@ export function ImportButton() {
     )
   }
 
-  const undoLast = () => {
+  const undoLast = async () => {
     const target = last.data?.import
     if (!target) return
     // 언제 것인지를 같이 적는다. 방금 올린 것인 줄 알고 어제 것을 되돌리지 않게.
-    if (
-      !confirm(
-        `마지막 가져오기(${formatRelative(target.created_at)})로 만든 기관 ${target.new_orgs}곳·담당자 ${target.new_contacts}명을 삭제합니다. 가져온 뒤 직접 수정한 내용도 같이 사라집니다. 그사이 쓰이기 시작한 것(안건·활동 기록이 생긴 기관과 그 담당자)은 남깁니다.`,
-      )
-    )
-      return
+    const ok = await askConfirm({
+      title: `마지막 가져오기(${formatRelative(target.created_at)})를 취소할까요?`,
+      description: `그때 만든 기관 ${target.new_orgs}곳·담당자 ${target.new_contacts}명을 삭제합니다. 가져온 뒤 직접 수정한 내용도 같이 사라집니다. 그사이 쓰이기 시작한 것(안건·활동 기록이 생긴 기관과 그 담당자)은 남깁니다.`,
+      confirmLabel: '가져오기 취소',
+      cancelLabel: '닫기',
+      danger: true,
+    })
+    if (!ok) return
     undo.mutate(target.id, {
       onSuccess: (done) => {
         const kept = done.kept_orgs + done.kept_contacts

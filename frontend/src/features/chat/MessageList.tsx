@@ -9,6 +9,7 @@ import {
 } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router'
 import { ArrowDown, Download, FileText, Paperclip, Pencil, Sparkles, Trash2 } from 'lucide-react'
+import { askConfirm } from '@/components/ui/confirm'
 import { AuthImg, DownloadLink } from '@/components/ui/AuthMedia'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -566,8 +567,14 @@ const MessageRow = memo(function MessageRow({
                 type="button"
                 aria-label={`${formatTime(message.created_at)} 메시지 삭제`}
                 title="삭제"
-                onClick={() => {
-                  if (confirm('이 메시지를 삭제할까요? 되돌릴 수 없습니다.')) onDelete(message.id)
+                onClick={async () => {
+                  const ok = await askConfirm({
+                    title: '이 메시지를 삭제할까요?',
+                    description: '되돌릴 수 없습니다.',
+                    confirmLabel: '삭제',
+                    danger: true,
+                  })
+                  if (ok) onDelete(message.id)
                 }}
                 className="text-subtle hover:text-danger grid size-7 cursor-pointer place-items-center rounded"
               >

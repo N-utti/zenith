@@ -1,6 +1,7 @@
 import { useState, type DragEvent } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router'
 import { ArrowUpRight, Ban, Pencil, Plus, Trash2 } from 'lucide-react'
+import { askConfirm } from '@/components/ui/confirm'
 import { Button } from '@/components/ui/Button'
 import { ContextMenu, ContextMenuItem } from '@/components/ui/ContextMenu'
 import { PageHeader } from '@/components/ui/PageHeader'
@@ -17,7 +18,7 @@ import {
   DEAL_KIND_LABEL,
   DEAL_KINDS,
   DEAL_STAGES,
-  deleteDealMessage,
+  deleteDealConfirm,
   formatEok,
   type Deal,
   type DealKind,
@@ -122,13 +123,17 @@ function Board({ kind }: { kind: DealKind }) {
   const stages = DEAL_STAGES[kind]
   const items = deals.data?.items ?? []
 
-  const moveTo = (deal: Deal, stage: string, fromKeyboard = false) => {
+  const moveTo = async (deal: Deal, stage: string, fromKeyboard = false) => {
     // 앞 이동이 끝나기 전(새 version 이 오기 전)에 또 옮기면 내가 만든 409 가 난다.
     if (move.isPending || stage === deal.stage) return
     const last = stages.at(-1)?.key
     if (
       stage === last &&
-      !confirm(`"${deal.name}" 을(를) ${stages.at(-1)?.label}(으)로 옮기면 성사로 끝납니다.`)
+      !(await askConfirm({
+        title: `"${deal.name}" 을(를) ${stages.at(-1)?.label}(으)로 이동할까요?`,
+        description: '성사로 끝납니다.',
+        confirmLabel: '이동',
+      }))
     )
       return
     move.mutate(
@@ -144,8 +149,8 @@ function Board({ kind }: { kind: DealKind }) {
     )
   }
 
-  const removeDeal = (deal: Deal) => {
-    if (!confirm(deleteDealMessage(deal.name, me.role === 'exec'))) return
+  const removeDeal = async (deal: Deal) => {
+    if (!(await askConfirm(deleteDealConfirm(deal.name, me.role === 'exec')))) return
     remove.mutate(deal.id, {
       onSuccess: () => toast.success('안건을 삭제했습니다.'),
       onError: (err) =>

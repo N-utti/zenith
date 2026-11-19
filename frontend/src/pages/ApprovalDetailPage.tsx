@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
+import { askConfirm } from '@/components/ui/confirm'
 import { BackLink } from '@/components/ui/BackLink'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -170,8 +171,14 @@ export function ApprovalDetailPage() {
                   size="sm"
                   className="hover:text-danger"
                   disabled={busy}
-                  onClick={() => {
-                    if (!confirm('이 임시저장을 삭제할까요? 되돌릴 수 없습니다.')) return
+                  onClick={async () => {
+                    const ok = await askConfirm({
+                      title: '이 임시저장을 삭제할까요?',
+                      description: '되돌릴 수 없습니다.',
+                      confirmLabel: '삭제',
+                      danger: true,
+                    })
+                    if (!ok) return
                     removeDraft.mutate(d.id, {
                       onSuccess: () => {
                         toast.success('임시저장을 삭제했습니다.')
@@ -223,8 +230,13 @@ export function ApprovalDetailPage() {
                   variant="secondary"
                   size="sm"
                   disabled={busy}
-                  onClick={() => {
-                    if (!confirm('이 문서를 회수할까요? 결재자의 결재함에서 사라집니다.')) return
+                  onClick={async () => {
+                    const ok = await askConfirm({
+                      title: '이 문서를 회수할까요?',
+                      description: '결재자의 결재함에서 사라집니다.',
+                      confirmLabel: '회수',
+                    })
+                    if (!ok) return
                     cancel.mutate(d.id, {
                       onSuccess: () => toast.success('회수했습니다.'),
                       onError,
@@ -265,13 +277,14 @@ export function ApprovalDetailPage() {
                 size="sm"
                 className="hover:text-danger"
                 disabled={busy}
-                onClick={() => {
-                  if (
-                    !confirm(
-                      '이 문서를 삭제할까요? 결재선과 첨부도 같이 삭제되고 되돌릴 수 없습니다.',
-                    )
-                  )
-                    return
+                onClick={async () => {
+                  const ok = await askConfirm({
+                    title: '이 문서를 삭제할까요?',
+                    description: '결재선과 첨부도 같이 삭제되고 되돌릴 수 없습니다.',
+                    confirmLabel: '삭제',
+                    danger: true,
+                  })
+                  if (!ok) return
                   removeDone.mutate(d.id, {
                     onSuccess: () => {
                       toast.success('문서를 삭제했습니다.')

@@ -1,5 +1,6 @@
 import { Link } from 'react-router'
 import { Pencil, Trash2 } from 'lucide-react'
+import { askConfirm } from '@/components/ui/confirm'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card, CardEmpty, CardHeader } from '@/components/ui/Card'
@@ -77,8 +78,13 @@ export function ActivityCard({
                       aria-label={`${formatDateTime(a.occurred_at)} 활동 기록 삭제`}
                       className={iconButton}
                       disabled={remove.isPending}
-                      onClick={() => {
-                        if (!confirm('이 활동 기록을 삭제할까요?')) return
+                      onClick={async () => {
+                        const ok = await askConfirm({
+                          title: '이 활동 기록을 삭제할까요?',
+                          confirmLabel: '삭제',
+                          danger: true,
+                        })
+                        if (!ok) return
                         remove.mutate(a.id, {
                           onSuccess: () => toast.success('삭제했습니다.'),
                           onError: (err) =>

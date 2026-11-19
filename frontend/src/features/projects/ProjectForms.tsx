@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router'
+import { askConfirm } from '@/components/ui/confirm'
 import { Button } from '@/components/ui/Button'
 import { Field } from '@/components/ui/Field'
 import { Input } from '@/components/ui/Input'
@@ -21,7 +22,7 @@ import {
   personName,
   PROJECT_DESCRIPTION_MAX,
   PROJECT_NAME_MAX,
-  deleteTaskMessage,
+  deleteTaskConfirm,
   TASK_NOTE_MAX,
   TASK_PRIORITIES,
   TASK_STAGES,
@@ -284,8 +285,8 @@ export function TaskFormModal({
           variant="ghost"
           size="sm"
           className="text-danger"
-          onClick={() => {
-            if (!confirm(deleteTaskMessage(task))) return
+          onClick={async () => {
+            if (!(await askConfirm(deleteTaskConfirm(task)))) return
             remove.mutate(task.id, {
               onSuccess: done('업무를 삭제했습니다.'),
               onError: (err) => setError(errorText(err, '삭제하지 못했습니다.')),

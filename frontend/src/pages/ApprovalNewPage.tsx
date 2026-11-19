@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { ArrowUp, Paperclip, Sparkles } from 'lucide-react'
 import { Link, useNavigate, useSearchParams } from 'react-router'
+import { askConfirm } from '@/components/ui/confirm'
 import { BackLink } from '@/components/ui/BackLink'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
@@ -198,14 +199,21 @@ export function ApprovalNewPage() {
     values ??
     base?.subject.extra?.fields ??
     (trip ? { period: tripPeriod, purpose: trip.reason } : {})
-  const pickTemplate = (next: ApprovalTemplate) => {
+  const pickTemplate = async (next: ApprovalTemplate) => {
     const switched = switchTemplate(next, {
       // 제목 칸이 숨은 서식에서 나가면 그 전에 적어 둔, 화면에 없던 제목을 되살리지 않는다.
       title: form.autoTitle ? '' : titleValue,
       body: bodyValue,
       values: fieldValues,
     })
-    if (switched.overwrites && !confirm('작성 중인 내용이 사라집니다. 새 서식으로 바꿀까요?'))
+    if (
+      switched.overwrites &&
+      !(await askConfirm({
+        title: '새 서식으로 변경할까요?',
+        description: '작성 중인 내용이 사라집니다.',
+        confirmLabel: '변경',
+      }))
+    )
       return
     setTemplate(next)
     setTitle(switched.title)
@@ -249,7 +257,15 @@ export function ApprovalNewPage() {
       // 금액 없는 서식으로 바꾸면 숨은 금액이 남는다. 안 보이는 값으로 묻지 않는다.
       (!form.noAmount && amountValue.trim() !== '') ||
       switchTemplate(active, { title: '', body: bodyValue, values: fieldValues }).overwrites
-    if (written && !confirm('쓰던 내용을 AI 초안으로 바꿀까요?')) return
+    if (
+      written &&
+      !(await askConfirm({
+        title: 'AI 초안으로 변경할까요?',
+        description: '작성 중인 내용이 사라집니다.',
+        confirmLabel: '변경',
+      }))
+    )
+      return
     let next
     try {
       next = fromAiDraft(await aiDraft.mutateAsync(request))

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { Plus } from 'lucide-react'
+import { askConfirm } from '@/components/ui/confirm'
 import { BackLink } from '@/components/ui/BackLink'
 import { Button } from '@/components/ui/Button'
 import { Card, CardHeader } from '@/components/ui/Card'
@@ -16,7 +17,7 @@ import { DealStatusBadge, NextAction } from '@/features/crm/DealBits'
 import {
   DEAL_KIND_LABEL,
   DEAL_STAGES,
-  deleteDealMessage,
+  deleteDealConfirm,
   formatEok,
   stageLabel,
   type Activity,
@@ -80,14 +81,27 @@ export function CrmDealPage() {
   // 성사는 임원만 단계를 옮겨 되돌린다(15 §6). 화면 편의일 뿐, 실제 차단은 서버 409 다.
   const movable = open || (d.status === 'won' && me.role === 'exec')
 
-  const moveTo = (stage: string) => {
+  const moveTo = async (stage: string) => {
     if (stage === d.stage) return
     if (
       stage === last &&
-      !confirm(`단계를 ${stages.at(-1)?.label}(으)로 변경하면 성사로 끝납니다.`)
+      !(await askConfirm({
+        title: `단계를 ${stages.at(-1)?.label}(으)로 변경할까요?`,
+        description: '성사로 끝납니다.',
+        confirmLabel: '변경',
+      }))
     )
       return
-    if (!open && !confirm('성사를 취소하고 진행 중으로 바꿉니다.')) return
+    if (
+      !open &&
+      !(await askConfirm({
+        title: '성사를 취소할까요?',
+        description: '진행 중으로 바뀝니다.',
+        confirmLabel: '성사 취소',
+        cancelLabel: '닫기',
+      }))
+    )
+      return
     move.mutate(
       { id: d.id, version: d.version, stage },
       {
@@ -106,8 +120,8 @@ export function CrmDealPage() {
 
   const board = d.kind === 'fundraising' ? '/crm' : `/crm?kind=${d.kind}`
   // 잘못 만든 안건을 치우는 길이다. 진행하다 접는 안건은 중단한다(사유가 남는다).
-  const removeDeal = () => {
-    if (!confirm(deleteDealMessage(d.name, me.role === 'exec'))) return
+  const removeDeal = async () => {
+    if (!(await askConfirm(deleteDealConfirm(d.name, me.role === 'exec')))) return
     remove.mutate(d.id, {
       onSuccess: () => {
         toast.success('안건을 삭제했습니다.')

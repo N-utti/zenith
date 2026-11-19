@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Pencil, Trash2 } from 'lucide-react'
+import { askConfirm } from '@/components/ui/confirm'
 import { Button } from '@/components/ui/Button'
 import { YearHeader } from '@/components/ui/Calendar'
 import { Card } from '@/components/ui/Card'
@@ -37,9 +38,15 @@ export function HolidaySection() {
   // 법정 공휴일은 서버가 관리한다. 여기서는 회사 휴일만.
   const items = (holidays.data?.items ?? []).filter((h) => h.kind === 'company')
 
-  const onRemove = (date: string, name: string) => {
+  const onRemove = async (date: string, name: string) => {
     // 전 직원 근무 달력이 바뀌는 일이라 한 번 묻는다. 자기 신청 취소도 이렇게 한다(LeaveSection).
-    if (!confirm(`${formatISODate(date)} ${name} 을 휴일에서 삭제할까요?`)) return
+    const ok = await askConfirm({
+      title: `${formatISODate(date)} ${name} 을 휴일에서 삭제할까요?`,
+      description: '전 직원의 근무 달력이 바뀝니다.',
+      confirmLabel: '삭제',
+      danger: true,
+    })
+    if (!ok) return
     remove.mutate(date, {
       onSuccess: () => toast.success(`회사 휴일에서 삭제했습니다: ${formatISODate(date)} ${name}`),
       onError: (err) =>
@@ -51,11 +58,14 @@ export function HolidaySection() {
    * 근무 달력 다시 만들기. 휴일을 넣고 빼면 서버가 알아서 다시 만들므로 평소에는 쓸 일이 없다.
    * 새해 달력을 미리 깔거나 서버 밖에서 휴일이 바뀌었을 때를 위한 손잡이다.
    */
-  const onRebuild = () => {
+  const onRebuild = async () => {
     // 전 직원의 근무 달력을 새로 까는 일이라 한 번 묻는다.
-    if (!confirm(`${year}년 근무 달력을 다시 만들까요? 그 해 모든 직원의 달력이 새로 깔립니다.`)) {
-      return
-    }
+    const ok = await askConfirm({
+      title: `${year}년 근무 달력을 다시 만들까요?`,
+      description: '그 해 모든 직원의 달력이 새로 깔립니다.',
+      confirmLabel: '다시 만들기',
+    })
+    if (!ok) return
     rebuild.mutate(year, {
       onSuccess: (result) =>
         toast.success(

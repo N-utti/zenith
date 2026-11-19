@@ -1,5 +1,6 @@
 import { useRef, useState, type ReactNode } from 'react'
 import { Pencil, Trash2 } from 'lucide-react'
+import { askConfirm } from '@/components/ui/confirm'
 import { Avatar } from '@/components/ui/Avatar'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
@@ -136,8 +137,14 @@ export function CommentRow({
               aria-label={`${formatRelative(comment.created_at)} 댓글 삭제`}
               title="댓글 삭제"
               disabled={removing}
-              onClick={() => {
-                if (!confirm('이 댓글을 삭제할까요? 되돌릴 수 없습니다.')) return
+              onClick={async () => {
+                const ok = await askConfirm({
+                  title: '이 댓글을 삭제할까요?',
+                  description: '되돌릴 수 없습니다.',
+                  confirmLabel: '삭제',
+                  danger: true,
+                })
+                if (!ok) return
                 setRemoving(true)
                 // 이 줄이 사라져도(창 닫기, 탭 바꾸기) 약속에 붙인 처리는 돈다.
                 onRemove()
