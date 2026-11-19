@@ -3,6 +3,7 @@ import { Plus, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { PageHeader } from '@/components/ui/PageHeader'
+import { Select } from '@/components/ui/Select'
 import { SkeletonRows } from '@/components/ui/Skeleton'
 import { Table, TableEmpty, TBody, TD, TH, THead, TR } from '@/components/ui/Table'
 import { Tabs } from '@/components/ui/Tabs'
@@ -14,6 +15,7 @@ import {
   statusLabel,
   statusTone,
   type ApprovalBox,
+  type DocumentStatus,
 } from '@/features/approvals/types'
 import { useCurrentUser } from '@/features/auth/AuthContext'
 import { ApiError } from '@/lib/api'
@@ -26,6 +28,21 @@ const BOXES: ApprovalBox[] = ['inbox', 'sent', 'reference', 'draft']
  */
 const EXEC_BOXES: ApprovalBox[] = [...BOXES, 'done']
 
+const TYPE_OPTIONS = [
+  { value: '', label: '모든 유형' },
+  ...Object.entries(APPROVAL_TYPE_LABEL).map(([value, label]) => ({ value, label })),
+]
+
+/**
+ * 탭마다 들어올 수 있는 상태가 다르다. 받은 결재는 늘 결재 대기, 임시저장은 늘 임시저장이라
+ * 고를 것이 없어 칸을 숨긴다. 전체 문서는 서버가 승인·반려·강제 종결만 담는다.
+ */
+const BOX_STATUSES: Partial<Record<ApprovalBox, DocumentStatus[]>> = {
+  sent: ['pending', 'approved', 'rejected', 'canceled', 'closed'],
+  reference: ['pending', 'approved', 'rejected', 'canceled', 'closed'],
+  done: ['approved', 'rejected', 'closed'],
+}
+
 /** 결재함(13 SCR-APV-02). 받은 결재 · 보낸 결재 · 참조 · 임시저장. */
 export function ApprovalsPage() {
   const navigate = useNavigate()
@@ -35,8 +52,25 @@ export function ApprovalsPage() {
   const box: ApprovalBox = requested && boxes.includes(requested) ? requested : 'inbox'
   // 받은 결재와 전체 문서는 남이 올린 문서라 누가 올렸는지를 보인다. 나머지는 지금 누구 차례인지.
   const showDrafter = box === 'inbox' || box === 'done'
+  // 고른 값은 주소에 둔다. 문서를 열었다 뒤로 와도 그대로 남는다.
+  // 손으로 고친 주소의 엉뚱한 값은 고르지 않은 것으로 본다. 그대로 보내면 서버가 422 로 거절해 목록이 통째로 안 뜬다.
+  const requestedType = params.get('type') ?? ''
+  const type = Object.hasOwn(APPROVAL_TYPE_LABEL, requestedType) ? requestedType : ''
+  const statuses = BOX_STATUSES[box] ?? []
+  const requestedStatus = params.get('status') as DocumentStatus | null
+  const status = requestedStatus && statuses.includes(requestedStatus) ? requestedStatus : ''
+  const setFilter = (key: 'type' | 'status', value: string) =>
+    setParams(
+      (prev) => {
+        if (value) prev.set(key, value)
+        else prev.delete(key)
+        return prev
+      },
+      { replace: true },
+    )
+  const filtered = type !== '' || status !== ''
   const inbox = useApprovals('inbox')
-  const list = useApprovals(box)
+  const list = useApprovals(box, { type, status })
   const items = list.data?.items ?? []
   const removeDraft = useDeleteDraft()
   const toast = useToast()
@@ -67,108 +101,139 @@ export function ApprovalsPage() {
             (prev) => {
               if (key === 'inbox') prev.delete('box')
               else prev.set('box', key)
+              // 탭을 바꾸면 거르기를 비운다. 남겨 두면 탭 옆 숫자(거르지 않은 수)와 목록이 어긋난다.
+              prev.delete('type')
+              prev.delete('status')
               return prev
             },
             { replace: true },
           )
         }
       >
-        {() =>
-          list.isPending ? (
-            <SkeletonRows rows={5} />
-          ) : (
-            <Table
-              label={`${BOX_LABEL[box]} 목록`}
-              // 제목이 길다. 열이 짜부라지면 "9월 워크숍 장소 대관 지출" 이 375px 에서 한 글자씩
-              // 세로로 쏟아진다. 한 줄로 세운다.
-              wide
-            >
-              <THead>
-                <tr>
-                  <TH>유형</TH>
-                  <TH>제목</TH>
-                  <TH>{showDrafter ? '기안자' : '처리 중'}</TH>
-                  <TH>상태</TH>
-                  <TH>{box === 'draft' ? '작성' : '상신'}</TH>
-                  {deletable && <TH className="w-12 text-right">작업</TH>}
-                </tr>
-              </THead>
-              <TBody>
-                {list.isError && (
-                  <TableEmpty colSpan={columns}>결재함을 불러오지 못했습니다.</TableEmpty>
-                )}
-                {list.data && items.length === 0 && (
-                  <TableEmpty colSpan={columns}>
-                    {box === 'inbox'
-                      ? '처리할 결재가 없습니다.'
-                      : box === 'done'
-                        ? '끝난 문서가 없습니다.'
-                        : '문서가 없습니다.'}
-                  </TableEmpty>
-                )}
-                {items.map((item) => {
-                  const at = item.submitted_at ?? item.created_at
-                  return (
-                    // 행 어디를 눌러도 열린다. 제목 링크의 ::after 를 행 전체로 펼친다(relative 는 행에).
-                    // 링크 하나 그대로라 키보드·가운데 클릭·새 탭 열기가 살아 있다.
-                    <TR key={item.id} className="relative">
-                      <TD className="whitespace-nowrap">{APPROVAL_TYPE_LABEL[item.type_code]}</TD>
-                      <TD>
-                        {/* 임시저장은 읽을 것이 아니라 이어 쓸 것이다. 상세를 거치지 않고 바로 작성 화면을 연다. */}
-                        <Link
-                          to={
-                            box === 'draft'
-                              ? `/approvals/new?draft=${item.id}`
-                              : `/approvals/${item.id}`
-                          }
-                          className="text-fg font-medium after:absolute after:inset-0"
-                        >
-                          {item.title}
-                        </Link>
-                      </TD>
-                      <TD className="text-muted whitespace-nowrap">
-                        {showDrafter ? item.drafter.name : (item.waiting_on?.name ?? '-')}
-                      </TD>
-                      <TD>
-                        <Badge tone={statusTone(item.status)}>{statusLabel(item.status)}</Badge>
-                      </TD>
-                      <TD className="text-muted whitespace-nowrap">
-                        <time dateTime={at} title={formatDateTime(at)}>
-                          {formatRelative(at)}
-                        </time>
-                      </TD>
-                      {deletable && (
-                        <TD className="text-right">
-                          <button
-                            type="button"
-                            aria-label={`${item.title} 임시저장 삭제`}
-                            title="임시저장 삭제"
-                            disabled={removeDraft.isPending}
-                            onClick={() => {
-                              if (!confirm('이 임시저장을 삭제할까요? 되돌릴 수 없습니다.')) return
-                              removeDraft.mutate(item.id, {
-                                onSuccess: () => toast.success('임시저장을 삭제했습니다.'),
-                                onError: (err) =>
-                                  toast.error(
-                                    err instanceof ApiError
-                                      ? err.message
-                                      : '임시저장을 삭제하지 못했습니다.',
-                                  ),
-                              })
-                            }}
-                            className="text-subtle hover:text-danger relative z-10 grid size-7 cursor-pointer place-items-center rounded disabled:cursor-default disabled:opacity-55"
+        {() => (
+          <>
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <div className="w-36">
+                <Select
+                  aria-label="유형"
+                  options={TYPE_OPTIONS}
+                  value={type}
+                  onChange={(e) => setFilter('type', e.target.value)}
+                />
+              </div>
+              {statuses.length > 0 && (
+                <div className="w-36">
+                  <Select
+                    aria-label="상태"
+                    options={[
+                      { value: '', label: '모든 상태' },
+                      ...statuses.map((value) => ({ value, label: statusLabel(value) })),
+                    ]}
+                    value={status}
+                    onChange={(e) => setFilter('status', e.target.value)}
+                  />
+                </div>
+              )}
+            </div>
+            {list.isPending ? (
+              <SkeletonRows rows={5} />
+            ) : (
+              <Table
+                label={`${BOX_LABEL[box]} 목록`}
+                // 제목이 길다. 열이 짜부라지면 "9월 워크숍 장소 대관 지출" 이 375px 에서 한 글자씩
+                // 세로로 쏟아진다. 한 줄로 세운다.
+                wide
+              >
+                <THead>
+                  <tr>
+                    <TH>유형</TH>
+                    <TH>제목</TH>
+                    <TH>{showDrafter ? '기안자' : '처리 중'}</TH>
+                    <TH>상태</TH>
+                    <TH>{box === 'draft' ? '작성' : '상신'}</TH>
+                    {deletable && <TH className="w-12 text-right">작업</TH>}
+                  </tr>
+                </THead>
+                <TBody>
+                  {list.isError && (
+                    <TableEmpty colSpan={columns}>결재함을 불러오지 못했습니다.</TableEmpty>
+                  )}
+                  {list.data && items.length === 0 && (
+                    <TableEmpty colSpan={columns}>
+                      {filtered
+                        ? '조건에 맞는 문서가 없습니다.'
+                        : box === 'inbox'
+                          ? '처리할 결재가 없습니다.'
+                          : box === 'done'
+                            ? '끝난 문서가 없습니다.'
+                            : '문서가 없습니다.'}
+                    </TableEmpty>
+                  )}
+                  {items.map((item) => {
+                    const at = item.submitted_at ?? item.created_at
+                    return (
+                      // 행 어디를 눌러도 열린다. 제목 링크의 ::after 를 행 전체로 펼친다(relative 는 행에).
+                      // 링크 하나 그대로라 키보드·가운데 클릭·새 탭 열기가 살아 있다.
+                      <TR key={item.id} className="relative">
+                        <TD className="whitespace-nowrap">{APPROVAL_TYPE_LABEL[item.type_code]}</TD>
+                        <TD>
+                          {/* 임시저장은 읽을 것이 아니라 이어 쓸 것이다. 상세를 거치지 않고 바로 작성 화면을 연다. */}
+                          <Link
+                            to={
+                              box === 'draft'
+                                ? `/approvals/new?draft=${item.id}`
+                                : `/approvals/${item.id}`
+                            }
+                            className="text-fg font-medium after:absolute after:inset-0"
                           >
-                            <Trash2 className="size-3.5" />
-                          </button>
+                            {item.title}
+                          </Link>
                         </TD>
-                      )}
-                    </TR>
-                  )
-                })}
-              </TBody>
-            </Table>
-          )
-        }
+                        <TD className="text-muted whitespace-nowrap">
+                          {showDrafter ? item.drafter.name : (item.waiting_on?.name ?? '-')}
+                        </TD>
+                        <TD>
+                          <Badge tone={statusTone(item.status)}>{statusLabel(item.status)}</Badge>
+                        </TD>
+                        <TD className="text-muted whitespace-nowrap">
+                          <time dateTime={at} title={formatDateTime(at)}>
+                            {formatRelative(at)}
+                          </time>
+                        </TD>
+                        {deletable && (
+                          <TD className="text-right">
+                            <button
+                              type="button"
+                              aria-label={`${item.title} 임시저장 삭제`}
+                              title="임시저장 삭제"
+                              disabled={removeDraft.isPending}
+                              onClick={() => {
+                                if (!confirm('이 임시저장을 삭제할까요? 되돌릴 수 없습니다.'))
+                                  return
+                                removeDraft.mutate(item.id, {
+                                  onSuccess: () => toast.success('임시저장을 삭제했습니다.'),
+                                  onError: (err) =>
+                                    toast.error(
+                                      err instanceof ApiError
+                                        ? err.message
+                                        : '임시저장을 삭제하지 못했습니다.',
+                                    ),
+                                })
+                              }}
+                              className="text-subtle hover:text-danger relative z-10 grid size-7 cursor-pointer place-items-center rounded disabled:cursor-default disabled:opacity-55"
+                            >
+                              <Trash2 className="size-3.5" />
+                            </button>
+                          </TD>
+                        )}
+                      </TR>
+                    )
+                  })}
+                </TBody>
+              </Table>
+            )}
+          </>
+        )}
       </Tabs>
     </>
   )
