@@ -109,7 +109,9 @@ export function ApprovalsPage() {
                 {items.map((item) => {
                   const at = item.submitted_at ?? item.created_at
                   return (
-                    <TR key={item.id}>
+                    // 행 어디를 눌러도 열린다. 제목 링크의 ::after 를 행 전체로 펼친다(relative 는 행에).
+                    // 링크 하나 그대로라 키보드·가운데 클릭·새 탭 열기가 살아 있다.
+                    <TR key={item.id} className="relative">
                       <TD className="whitespace-nowrap">{APPROVAL_TYPE_LABEL[item.type_code]}</TD>
                       <TD>
                         {/* 임시저장은 읽을 것이 아니라 이어 쓸 것이다. 상세를 거치지 않고 바로 작성 화면을 연다. */}
@@ -119,7 +121,7 @@ export function ApprovalsPage() {
                               ? `/approvals/new?draft=${item.id}`
                               : `/approvals/${item.id}`
                           }
-                          className="text-fg hover:text-accent font-medium hover:underline"
+                          className="text-fg font-medium after:absolute after:inset-0"
                         >
                           {item.title}
                         </Link>
@@ -154,7 +156,7 @@ export function ApprovalsPage() {
                                   ),
                               })
                             }}
-                            className="text-subtle hover:text-danger grid size-7 cursor-pointer place-items-center rounded disabled:cursor-default disabled:opacity-55"
+                            className="text-subtle hover:text-danger relative z-10 grid size-7 cursor-pointer place-items-center rounded disabled:cursor-default disabled:opacity-55"
                           >
                             <Trash2 className="size-3.5" />
                           </button>
