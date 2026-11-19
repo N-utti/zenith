@@ -11,7 +11,7 @@ import { SkeletonRows } from '@/components/ui/Skeleton'
 import { Table, TableEmpty, TBody, TD, TH, THead, TR } from '@/components/ui/Table'
 import { Tabs } from '@/components/ui/Tabs'
 import { useToast } from '@/components/ui/ToastContext'
-import { useApprovals, useDeleteDraft } from '@/features/approvals/api'
+import { useApprovals, useDeleteApproval, useDeleteDraft } from '@/features/approvals/api'
 import {
   APPROVAL_TYPE_LABEL,
   BOX_LABEL,
@@ -56,7 +56,8 @@ const BOX_STATUSES: Partial<Record<ApprovalBox, DocumentStatus[]>> = {
 export function ApprovalsPage() {
   const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
-  const boxes = useCurrentUser().role === 'exec' ? EXEC_BOXES : BOXES
+  const isExec = useCurrentUser().role === 'exec'
+  const boxes = isExec ? EXEC_BOXES : BOXES
   const requested = params.get('box') as ApprovalBox | null
   const box: ApprovalBox = requested && boxes.includes(requested) ? requested : 'inbox'
   // 받은 결재와 전체 문서는 남이 올린 문서라 누가 올렸는지를 보인다. 나머지는 지금 누구 차례인지.
@@ -82,13 +83,29 @@ export function ApprovalsPage() {
   const list = useApprovals(box, { type, status })
   const items = list.data?.items ?? []
   const removeDraft = useDeleteDraft()
+  const removeDone = useDeleteApproval()
   const toast = useToast()
-  // 임시저장 탭에만 지우기 칸이 붙는다. 다른 탭의 문서는 이력이라 지우지 않는다.
+  // 삭제 칸은 임시저장 탭에만 붙는다. 끝난 문서 삭제는 임원 전용이라 칸 대신 우클릭 메뉴와 상세 화면에 둔다.
   const deletable = box === 'draft'
   const columns = deletable ? 6 : 5
   // 임시저장은 읽을 것이 아니라 이어 쓸 것이다. 상세를 거치지 않고 바로 작성 화면을 연다.
   const hrefOf = (id: string) =>
     box === 'draft' ? `/approvals/new?draft=${id}` : `/approvals/${id}`
+
+  // 임원은 끝난 일반 결재를 지울 수 있다(상세 화면과 같은 조건, 백엔드 README 78). 근태 신청 문서는
+  // 근태 기록이 가리켜 서버가 409 로 막는다. 탭과 상관없이 문서의 상태로 가른다.
+  const canDeleteDone = (item: ApprovalListItem) =>
+    isExec &&
+    item.type_code === 'general' &&
+    ['approved', 'rejected', 'closed'].includes(item.status)
+  const deleteDone = (item: ApprovalListItem) => {
+    if (!confirm('이 문서를 삭제할까요? 결재선과 첨부도 같이 삭제되고 되돌릴 수 없습니다.')) return
+    removeDone.mutate(item.id, {
+      onSuccess: () => toast.success('문서를 삭제했습니다.'),
+      onError: (err) =>
+        toast.error(err instanceof ApiError ? err.message : '문서를 삭제하지 못했습니다.'),
+    })
+  }
 
   const deleteDraft = (item: ApprovalListItem) => {
     if (!confirm('이 임시저장을 삭제할까요? 되돌릴 수 없습니다.')) return
@@ -305,13 +322,15 @@ export function ApprovalsPage() {
               }
             />
           )}
-          {deletable && (
+          {(deletable || canDeleteDone(menuItem)) && (
             <ContextMenuItem
               icon={Trash2}
               label="삭제"
               danger
-              disabledReason={removeDraft.isPending ? '삭제하는 중' : undefined}
-              onSelect={() => deleteDraft(menuItem)}
+              disabledReason={
+                removeDraft.isPending || removeDone.isPending ? '삭제하는 중' : undefined
+              }
+              onSelect={() => (deletable ? deleteDraft(menuItem) : deleteDone(menuItem))}
             />
           )}
         </ContextMenu>
