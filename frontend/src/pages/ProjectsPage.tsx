@@ -36,7 +36,7 @@ export function ProjectsPage() {
     <>
       <PageHeader
         title="협업 공간"
-        description="사내 프로젝트의 업무를 단계별로 나눠 봅니다. 거래 안건은 CRM 에 둡니다."
+        description="사내 프로젝트의 업무를 단계별로 나눠 봅니다."
         actions={
           <Button size="sm" onClick={() => setCreating(true)}>
             <Plus className="size-4" />새 프로젝트

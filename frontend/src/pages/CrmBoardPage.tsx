@@ -74,7 +74,7 @@ export function CrmBoardPage() {
     <>
       <PageHeader
         title="안건"
-        description="출자 유치·투자·매각 안건의 진행 단계입니다. 전 직원이 함께 봅니다."
+        description="출자 유치·투자·매각 안건의 진행 단계입니다."
         actions={
           <>
             <Button variant="secondary" size="sm" onClick={() => void navigate('/crm/orgs')}>

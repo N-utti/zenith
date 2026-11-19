@@ -67,7 +67,7 @@ export function ArchivePage() {
     <>
       <PageHeader
         title="자료실"
-        description="채팅과 문서에 붙인 파일을 한곳에서 찾습니다. 내가 볼 수 있는 파일만 보입니다."
+        description="채팅과 문서에 붙인 파일을 한곳에서 찾습니다."
       />
 
       <Input
