@@ -1028,7 +1028,14 @@ export const handlers = [
           { status: 422 },
         )
       }
-      return HttpResponse.json({ items: listApprovals(user, box as 'inbox'), next_cursor: null })
+      // 실서버처럼 유형·상태 거르기를 받는다.
+      const query = new URL(request.url).searchParams
+      const type = query.get('type')
+      const status = query.get('status')
+      const items = listApprovals(user, box as 'inbox').filter(
+        (item) => (!type || item.type_code === type) && (!status || item.status === status),
+      )
+      return HttpResponse.json({ items, next_cursor: null })
     }),
   ),
   // ── 결재 위임 (13 §9.3, §4.2.3) ───────────────────────────

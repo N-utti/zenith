@@ -24,13 +24,23 @@ export function useApprovalTypes() {
 }
 
 /** 결재함(13 §9.3). `inbox` 는 내 차례인 문서, `sent` 는 내가 기안한 문서. */
-export function useApprovals(box: ApprovalBox) {
+export function useApprovals(
+  box: ApprovalBox,
+  // 거르기는 서버에 맡긴다. 서버가 한 번에 최대 500건만 주므로 화면에서 거르면 오래된 문서가 빠진다.
+  filter: { type?: string; status?: string } = {},
+) {
+  const query = new URLSearchParams({ box })
+  if (filter.type) query.set('type', filter.type)
+  if (filter.status) query.set('status', filter.status)
   return useQuery({
-    queryKey: [...approvalsKey, 'box', box],
+    queryKey: [...approvalsKey, 'box', box, filter.type ?? '', filter.status ?? ''],
     queryFn: () =>
-      api<{ items: ApprovalListItem[]; next_cursor: string | null }>(`/approvals?box=${box}`),
+      api<{ items: ApprovalListItem[]; next_cursor: string | null }>(`/approvals?${query}`),
     // 근태 화면도 결의서 배지 때문에 읽는다. 화면을 오갈 때마다 다시 부르지 않게 잠깐 신선하게 둔다.
     staleTime: 30_000,
+    // 거르기를 바꾸는 동안은 이전 목록을 둔다. 탭이 바뀌면 열 구성이 달라 이전 목록을 쓰지 않는다.
+    placeholderData: (previous, previousQuery) =>
+      previousQuery?.queryKey[2] === box ? previous : undefined,
   })
 }
 
