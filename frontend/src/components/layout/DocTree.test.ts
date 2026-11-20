@@ -369,3 +369,19 @@ test('임원은 문서 메뉴에서 잠그고 풀 수 있다', async () => {
     auth.user!.role = 'member'
   }
 })
+
+test('폴더 이름을 누르면 펼쳐진 폴더가 접힌다(화살표가 아니어도)', () => {
+  const container = render()
+  const name = container.querySelector<HTMLAnchorElement>('a[data-drag="folder"]')!
+  const expanded = () =>
+    folderRow(container).querySelector('button[aria-expanded]')!.getAttribute('aria-expanded')
+  // 펼침 상태는 모듈 전역이라 앞 테스트가 접어 뒀을 수 있다. 펼친 데서 시작한다.
+  if (expanded() === 'false') act(() => name.click())
+  expect(expanded()).toBe('true')
+
+  act(() => name.click())
+
+  expect(expanded()).toBe('false')
+  // 접으면서도 폴더 목록 화면으로 가는 것은 그대로다.
+  expect(probe(container).path).toBe('/docs')
+})

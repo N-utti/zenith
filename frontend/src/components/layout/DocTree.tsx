@@ -310,7 +310,7 @@ function FolderRow({
           키보드 초점이 오면 화살표로 바뀐다. 터치 기기는 hover 가 없어 늘 화살표다.
           초점 조건은 `focus-within` 이 아니라 `has-focus-visible` 이다. 크롬 계열은 마우스로 누른
           버튼·링크에도 초점을 주는데, 그걸로 켜면 누른 줄의 화살표와 조작이 마우스를 치운 뒤에도 남는다.
-          폴더 이름이 이동 링크가 되어 펼치기는 이 버튼만 한다. 들여쓰기 여백도 이 버튼이 갖는다
+          이동 없이 펼치고 접기만 하는 자리는 이 버튼이다. 들여쓰기 여백도 이 버튼이 갖는다
           (`box-content` 라 20px 칸에 여백이 더해진다). 그 빈 칸을 눌러도 펼쳐진다.
         */}
         <button
@@ -332,13 +332,13 @@ function FolderRow({
           )}
         </button>
 
-        {/* 이름은 폴더 목록 화면으로 간다(노션과 같이). 펼치고 접기는 앞의 버튼이 맡는다. */}
+        {/* 이름은 폴더 목록 화면으로 가면서 앞의 버튼처럼 펼치고 접는다. 줄 어디를 눌러도 접힌다. */}
         <Link
           to={`/docs?folder=${id}`}
           onClick={(e) => {
             // 새 탭으로 여는 클릭이면 이 화면은 그대로 둔다.
             if (e.metaKey || e.ctrlKey || e.shiftKey) return
-            if (!expanded) toggle()
+            toggle()
             actions.onNavigate?.()
           }}
           aria-current={current ? 'page' : undefined}
