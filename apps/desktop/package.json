@@ -9,6 +9,7 @@
     "build": "tauri build",
     "build:demo": "tauri build --config src-tauri/tauri.demo.conf.json",
     "manifest": "node scripts/manifest.mjs",
+    "tag": "node scripts/tag.mjs",
     "icons": "tauri icon ./app-icon.png",
     "tauri": "tauri"
   },

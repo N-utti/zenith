@@ -119,12 +119,19 @@ $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = ""
 npm run build
 # 3) 매니페스트
 npm run manifest -- https://192.168.219.8
+# 4) 서버에 올린 뒤 버전 기록을 남긴다 (version 을 올린 PR 이 머지된 main 에서. 늦게 돌려도 같은 커밋에 달린다)
+npm run tag
 ```
 
 `src-tauri/target/release/bundle/msi/` 의 `.msi` 와 `latest.json` 을 서버의 `infra/desktop/` 폴더에 놓는다
 (Caddy 가 `/desktop/` 으로 내준다, `infra/README.md` "데스크톱 앱 업데이트"). 재시작은 필요 없다.
 매니페스트의 `.msi` 주소는 만들 때 준 서버 주소로 박힌다. 서버를 옮기면 매니페스트를 다시 만든다.
 개인키 없이 `npm run build` 하면 서명 단계에서 실패한다. 배포본은 전부 서명돼야 하므로 의도한 것이다.
+
+`npm run tag` 는 `version` 을 올린 커밋에 `desktop-v0.1.6` 꼴 태그를 달고, 앞 버전 태그 뒤로 들어온 프론트·앱 변경(PR 제목) 목록을
+GitHub 릴리스에 적는다(`gh` 로그인 필요). 브랜치가 `main` 하나라 어느 버전에 무엇이 들어갔는지는 이 태그와 릴리스가 기록한다.
+무엇이 적힐지만 먼저 보려면 `npm run tag -- --dry`. 두 버전 사이를 터미널에서 보려면
+`git log --oneline desktop-v0.1.5..desktop-v0.1.6 -- frontend apps`.
 
 ### 사외 시연판
 
@@ -145,6 +152,7 @@ npm run build:demo   # → src-tauri/target/release/bundle/msi/Zenith Demo_0.1.0
 apps/desktop/
 ├─ package.json          Tauri CLI · dev/build 스크립트
 ├─ scripts/manifest.mjs  업데이트 매니페스트(latest.json) 생성
+├─ scripts/tag.mjs       버전 태그와 GitHub 릴리스(그 버전에 든 변경 목록) 생성
 ├─ app-icon.png          아이콘 원본 1024² (바꾸면 npm run icons)
 └─ src-tauri/
    ├─ tauri.conf.json    창 크기 · CSP · 번들(.msi) 설정

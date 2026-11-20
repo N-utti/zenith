@@ -22,7 +22,7 @@
 - **`main` 직접 push 금지.** `.claude/settings.json` 훅(`.claude/hooks/block-main-push.mjs`)이 도구 실행 전에 차단한다. 우회하지 말고 PR 로.
 - 인간 상호 코드리뷰는 안 한다(서로 도메인을 모름). 각자 Claude 로 리뷰하고 self-merge. PR 승인 요구 0.
 - CI(`.github/workflows/ci.yml`)는 path 필터로 백엔드·프론트 잡을 분리하고 게이트 `ci-ok` 하나만 required. 백엔드 PR 은 프론트 빌드를, 프론트 PR 은 백엔드 테스트를 기다리지 않는다.
-- 배포 브랜치(`prod`)는 파일럿 배포 시점에 만든다. 그때까지 버전은 `0.1.0` 고정, 태그 없음. 예외: 데스크톱 앱은 업데이트를 내보낼 때마다 `apps/desktop/src-tauri/tauri.conf.json` 의 `version` 을 올린다(같은 버전이면 업데이트가 안 간다, 2026-11-16 실사용 시작).
+- 배포 브랜치(`prod`)는 파일럿 배포 시점에 만든다. 그때까지 버전은 `0.1.0` 고정, 태그 없음. 예외: 데스크톱 앱은 업데이트를 내보낼 때마다 `apps/desktop/src-tauri/tauri.conf.json` 의 `version` 을 올린다(같은 버전이면 업데이트가 안 간다, 2026-11-16 실사용 시작). 올린 버전마다 `desktop-v0.1.6` 꼴 태그와 GitHub 릴리스를 남긴다(`apps/desktop` 에서 `npm run tag`). 그 버전에 든 프론트·앱 변경 목록이 버전 기록이다.
 
 ## FE↔BE 계약
 
