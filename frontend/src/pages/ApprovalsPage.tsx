@@ -105,7 +105,8 @@ export function ApprovalsPage() {
   const deleteDone = async (item: ApprovalListItem) => {
     const ok = await askConfirm({
       title: '이 문서를 삭제할까요?',
-      description: '결재선과 첨부도 같이 삭제되고 되돌릴 수 없습니다.',
+      // 「되돌릴 수 없습니다」는 적지 않는다. 바로 뒤 토스트에 실행 취소가 붙는다(사용자 결정).
+      description: '결재선과 첨부도 같이 삭제됩니다.',
       confirmLabel: '삭제',
       danger: true,
     })
@@ -123,7 +124,6 @@ export function ApprovalsPage() {
   const deleteDraft = async (item: ApprovalListItem) => {
     const ok = await askConfirm({
       title: '이 임시저장을 삭제할까요?',
-      description: '되돌릴 수 없습니다.',
       confirmLabel: '삭제',
       danger: true,
     })

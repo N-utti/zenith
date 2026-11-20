@@ -178,7 +178,6 @@ export function ApprovalDetailPage() {
                   onClick={async () => {
                     const ok = await askConfirm({
                       title: '이 임시저장을 삭제할까요?',
-                      description: '되돌릴 수 없습니다.',
                       confirmLabel: '삭제',
                       danger: true,
                     })
@@ -286,7 +285,7 @@ export function ApprovalDetailPage() {
                 onClick={async () => {
                   const ok = await askConfirm({
                     title: '이 문서를 삭제할까요?',
-                    description: '결재선과 첨부도 같이 삭제되고 되돌릴 수 없습니다.',
+                    description: '결재선과 첨부도 같이 삭제됩니다.',
                     confirmLabel: '삭제',
                     danger: true,
                   })
