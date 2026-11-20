@@ -23,10 +23,10 @@ import {
   type DocumentStatus,
 } from '@/features/approvals/types'
 import { useCurrentUser } from '@/features/auth/AuthContext'
-import { ApiError } from '@/lib/api'
 import { cn } from '@/lib/cn'
 import { copyText } from '@/lib/clipboard'
 import { formatDateTime, formatRelative } from '@/lib/datetime'
+import { deferDelete } from '@/lib/deferDelete'
 import { isDesktopShell } from '@/lib/desktop'
 import { serverOrigin } from '@/lib/serverOrigin'
 import { useLongPress } from '@/lib/useLongPress'
@@ -105,30 +105,34 @@ export function ApprovalsPage() {
   const deleteDone = async (item: ApprovalListItem) => {
     const ok = await askConfirm({
       title: '이 문서를 삭제할까요?',
-      description: '결재선과 첨부도 같이 삭제되고 되돌릴 수 없습니다.',
+      // 「되돌릴 수 없습니다」는 적지 않는다. 바로 뒤 토스트에 실행 취소가 붙는다(사용자 결정).
+      description: '결재선과 첨부도 같이 삭제됩니다.',
       confirmLabel: '삭제',
       danger: true,
     })
     if (!ok) return
-    removeDone.mutate(item.id, {
-      onSuccess: () => toast.success('문서를 삭제했습니다.'),
-      onError: (err) =>
-        toast.error(err instanceof ApiError ? err.message : '문서를 삭제하지 못했습니다.'),
+    // 서버에 복원하는 길이 없어 실행 취소 시간 뒤에 보낸다(`deferDelete`). 목록에서는 바로 빠지고,
+    // 토스트의 실행 취소를 누르면 다시 나타난다. 임시저장 삭제도 같다.
+    deferDelete(toast, {
+      ids: [item.id],
+      message: '문서를 삭제했습니다.',
+      commit: () => removeDone.mutateAsync(item.id),
+      failMessage: '문서를 삭제하지 못했습니다.',
     })
   }
 
   const deleteDraft = async (item: ApprovalListItem) => {
     const ok = await askConfirm({
       title: '이 임시저장을 삭제할까요?',
-      description: '되돌릴 수 없습니다.',
       confirmLabel: '삭제',
       danger: true,
     })
     if (!ok) return
-    removeDraft.mutate(item.id, {
-      onSuccess: () => toast.success('임시저장을 삭제했습니다.'),
-      onError: (err) =>
-        toast.error(err instanceof ApiError ? err.message : '임시저장을 삭제하지 못했습니다.'),
+    deferDelete(toast, {
+      ids: [item.id],
+      message: '임시저장을 삭제했습니다.',
+      commit: () => removeDraft.mutateAsync(item.id),
+      failMessage: '임시저장을 삭제하지 못했습니다.',
     })
   }
 

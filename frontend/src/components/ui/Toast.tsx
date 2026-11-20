@@ -55,6 +55,14 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           classNames: {
             toast: 'w-fit! inset-x-0 mx-auto px-4! py-3! text-sm!',
             title: 'break-keep',
+            // 실행 취소 같은 토스트 안 동작. sonner 기본은 흰 알약 버튼(12px)이라 문구보다 먼저 눈에
+            // 들어온다. 바탕 없이 강조색 글자만 두고 올리면 한 단계 밝아진다(밑줄 없음, 사용자 결정).
+            // 줄 높이는 문구(sonner 제목, 1.5)와 같게 둔다. 다르면 가운데 맞춤이 반 픽셀 어긋나 1배
+            // 화면에서 글자가 문구보다 1px 내려앉는다. 오른쪽 안쪽 여백은 음수 여백으로 상쇄해 글자
+            // 끝이 왼쪽 아이콘과 같은 거리에 선다(여백 자체는 초점 테두리 자리로 남긴다).
+            // sonner 가 초점 테두리를 지우고 어두운 그림자만 남기는데 어두운 토스트에서는 안 보여 다시 그린다.
+            actionButton:
+              '-mr-1! ml-2! h-auto! rounded-sm! bg-transparent! px-1! text-sm! leading-[1.5]! font-medium! text-accent! hover:text-accent-hover! focus-visible:outline-2! focus-visible:outline-offset-2! focus-visible:outline-accent!',
           },
         }}
         icons={{

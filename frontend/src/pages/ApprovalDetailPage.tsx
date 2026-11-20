@@ -33,6 +33,7 @@ import {
 import { useCurrentUser } from '@/features/auth/AuthContext'
 import { ApiError } from '@/lib/api'
 import { formatDateTime } from '@/lib/datetime'
+import { deferDelete } from '@/lib/deferDelete'
 import { ROLE_RANK } from '@/types'
 
 const won = new Intl.NumberFormat('ko-KR')
@@ -177,18 +178,19 @@ export function ApprovalDetailPage() {
                   onClick={async () => {
                     const ok = await askConfirm({
                       title: '이 임시저장을 삭제할까요?',
-                      description: '되돌릴 수 없습니다.',
                       confirmLabel: '삭제',
                       danger: true,
                     })
                     if (!ok) return
-                    removeDraft.mutate(d.id, {
-                      onSuccess: () => {
-                        toast.success('임시저장을 삭제했습니다.')
-                        void navigate('/approvals?box=draft')
-                      },
-                      onError,
+                    // 서버에 복원하는 길이 없어 실행 취소 시간 뒤에 보낸다(`deferDelete`). 요청은 이
+                    // 화면을 떠난 뒤에 나간다. 뒤로 가기로 삭제 중인 문서에 돌아오지 않게 바꿔 끼운다.
+                    deferDelete(toast, {
+                      ids: [d.id],
+                      message: '임시저장을 삭제했습니다.',
+                      commit: () => removeDraft.mutateAsync(d.id),
+                      failMessage: '임시저장을 삭제하지 못했습니다.',
                     })
+                    void navigate('/approvals?box=draft', { replace: true })
                   }}
                 >
                   삭제
@@ -283,24 +285,20 @@ export function ApprovalDetailPage() {
                 onClick={async () => {
                   const ok = await askConfirm({
                     title: '이 문서를 삭제할까요?',
-                    description: '결재선과 첨부도 같이 삭제되고 되돌릴 수 없습니다.',
+                    description: '결재선과 첨부도 같이 삭제됩니다.',
                     confirmLabel: '삭제',
                     danger: true,
                   })
                   if (!ok) return
-                  removeDone.mutate(d.id, {
-                    onSuccess: () => {
-                      toast.success('문서를 삭제했습니다.')
-                      void navigate('/approvals?box=done')
-                    },
-                    onError: (err) => {
-                      onError(err)
-                      // 다른 임원이 먼저 지웠다. 없는 문서 화면에 머물지 않게 목록으로 보낸다.
-                      if (err instanceof ApiError && err.status === 404) {
-                        void navigate('/approvals?box=done')
-                      }
-                    },
+                  // 임시저장 삭제와 같이 실행 취소 시간 뒤에 보낸다. 전체 문서 탭으로 가 있으니
+                  // 실행 취소를 누르면 그 목록에 줄이 다시 나타난다.
+                  deferDelete(toast, {
+                    ids: [d.id],
+                    message: '문서를 삭제했습니다.',
+                    commit: () => removeDone.mutateAsync(d.id),
+                    failMessage: '문서를 삭제하지 못했습니다.',
                   })
+                  void navigate('/approvals?box=done', { replace: true })
                 }}
               >
                 삭제
