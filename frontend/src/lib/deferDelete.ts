@@ -40,6 +40,10 @@ export function useWithoutPending<T extends { id: string }>() {
  *
  * 토스트는 화면을 떠나도 남는다. 그 사이 창을 닫거나 새로고침하면 보내지 못하고 남는다(지워지지
  * 않는 쪽으로 실패한다, 사용자 결정). 다른 사람 화면에는 그동안 그대로 보인다.
+ *
+ * ponytail: 거르는 것은 목록뿐이다. 기다리는 동안 그 주소로 다시 들어가면(뒤로 가기, 다른 탭) 아직
+ * 살아 있는 것으로 열리고, 거기서 고치던 것은 토스트가 닫힐 때 같이 지워진다. 거슬리면 기다리는
+ * id 를 읽는 훅을 내보내 그 화면이 막게 한다.
  */
 export function deferDelete(
   toast: ToastApi,

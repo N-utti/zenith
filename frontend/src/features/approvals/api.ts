@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { notificationKeys } from '@/features/notifications/api'
 import { api } from '@/lib/api'
+import { useWithoutPending } from '@/lib/deferDelete'
 import { draftForms, type AiDraft } from './templates'
 import type {
   ApprovalAttachment,
@@ -32,10 +33,13 @@ export function useApprovals(
   const query = new URLSearchParams({ box })
   if (filter.type) query.set('type', filter.type)
   if (filter.status) query.set('status', filter.status)
+  // 삭제는 실행 취소 시간 동안 늦게 보낸다(`deferDelete`). 그동안 그 문서는 빼고 그린다.
+  const select = useWithoutPending<ApprovalListItem>()
   return useQuery({
     queryKey: [...approvalsKey, 'box', box, filter.type ?? '', filter.status ?? ''],
     queryFn: () =>
       api<{ items: ApprovalListItem[]; next_cursor: string | null }>(`/approvals?${query}`),
+    select,
     // 근태 화면도 결의서 배지 때문에 읽는다. 화면을 오갈 때마다 다시 부르지 않게 잠깐 신선하게 둔다.
     staleTime: 30_000,
     // 거르기를 바꾸는 동안은 이전 목록을 둔다. 탭이 바뀌면 열 구성이 달라 이전 목록을 쓰지 않는다.
@@ -85,16 +89,16 @@ export function useDeleteDraft() {
   return useMutation({
     mutationFn: (id: string) => api<void>(`/approvals/drafts/${id}`, { method: 'DELETE' }),
     // 실패해도 다시 읽는다. 다른 탭에서 이미 상신했거나 지운 문서면 이 목록이 옛것이다.
-    // 결재함만 다시 읽고, 다 읽을 때까지 기다린다(약속을 돌려준다). 안 기다리면 줄이 사라지기
-    // 전에 버튼이 되살아나 한 번 더 눌리고 404 가 뜬다. 문서 상세까지 다시 읽으면 상세에서 지울
-    // 때 방금 지운 문서를 한 번 더 청해 화면이 오류로 바뀐다.
+    // 결재함만 다시 읽고, 다 읽을 때까지 기다린다(약속을 돌려준다). 실패하면 `deferDelete` 가
+    // 숨겨 둔 줄을 다시 보이는데, 그때 목록이 새것이어야 이미 없는 문서가 되살아나 보이지 않는다.
     onSettled: () => qc.invalidateQueries({ queryKey: [...approvalsKey, 'box'] }),
   })
 }
 
 /**
  * 끝난 문서 지우기(백엔드 README 78). 임원만, 승인·반려·강제 종결된 일반 결재만 지운다.
- * 근태 신청 문서는 서버가 409 로 막는다. 되돌릴 수 없다.
+ * 근태 신청 문서는 서버가 409 로 막는다. 서버에 복원하는 길이 없어 화면은 실행 취소 시간 뒤에
+ * 부른다(`deferDelete`, 임시저장 삭제도 같다).
  */
 export function useDeleteApproval() {
   const qc = useQueryClient()
