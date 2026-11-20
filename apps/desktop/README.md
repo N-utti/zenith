@@ -112,6 +112,7 @@ Tailscale 을 깔지 않은 PC 에서는 서버에 닿지 못해 로그인 화�
 
 ```powershell
 # 1) tauri.conf.json 의 version 을 올린다. 같은 버전이면 업데이트가 안 간다
+#    그 PR 을 머지하고 main 을 당겨 온 자리에서 바로 2) 로 간다 (아래 "버전 기록")
 # 2) 서명해서 빌드
 # tauri build 는 _PATH 가 붙은 변수를 읽지 않는다. 이 변수에 키 파일 경로나 키 내용을 넣는다
 $env:TAURI_SIGNING_PRIVATE_KEY = "$HOME\.tauri\zenith-updater.key"
@@ -128,10 +129,13 @@ npm run tag
 매니페스트의 `.msi` 주소는 만들 때 준 서버 주소로 박힌다. 서버를 옮기면 매니페스트를 다시 만든다.
 개인키 없이 `npm run build` 하면 서명 단계에서 실패한다. 배포본은 전부 서명돼야 하므로 의도한 것이다.
 
-`npm run tag` 는 `version` 을 올린 커밋에 `desktop-v0.1.6` 꼴 태그를 달고, 앞 버전 태그 뒤로 들어온 프론트·앱 변경(PR 제목) 목록을
-GitHub 릴리스에 적는다(`gh` 로그인 필요). 브랜치가 `main` 하나라 어느 버전에 무엇이 들어갔는지는 이 태그와 릴리스가 기록한다.
-무엇이 적힐지만 먼저 보려면 `npm run tag -- --dry`. 두 버전 사이를 터미널에서 보려면
-`git log --oneline desktop-v0.1.5..desktop-v0.1.6 -- frontend apps`.
+**버전 기록.** `npm run tag` 는 `version` 을 올린 커밋에 `desktop-v0.1.6` 꼴 태그를 달고, 앞 버전 태그 뒤로 들어온
+웹앱·셸 변경(PR 제목) 목록을 GitHub 릴리스에 적는다(`gh` 로그인 필요). 브랜치가 `main` 하나라 어느 버전에 무엇이 들어갔는지는
+이 태그와 릴리스가 기록한다. 무엇이 적힐지만 먼저 보려면 `npm run tag -- --dry`. 두 버전 사이를 터미널에서 보려면
+`git log --oneline desktop-v0.1.5..desktop-v0.1.6 -- :/frontend :/apps/desktop`.
+
+목록은 `version` 을 올린 커밋까지다. 그 커밋 뒤, 빌드 전에 main 에 들어온 변경은 설치본에는 실리지만 목록에는 다음 버전으로 적힌다.
+그래서 `version` PR 은 빌드 직전에 머지한다. 목록에 적힌 것은 그 버전에 반드시 들어 있다(거꾸로는 아닐 수 있다).
 
 ### 사외 시연판
 
