@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router'
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router'
 import { ArrowUpRight, ExternalLink, Link2, Plus, Trash2 } from 'lucide-react'
 import { askConfirm } from '@/components/ui/confirm'
 import { openTab } from '@/components/layout/desktopTabs'
@@ -57,6 +57,7 @@ const BOX_STATUSES: Partial<Record<ApprovalBox, DocumentStatus[]>> = {
 export function ApprovalsPage() {
   const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
+  const { search } = useLocation()
   const isExec = useCurrentUser().role === 'exec'
   const boxes = isExec ? EXEC_BOXES : BOXES
   const requested = params.get('box') as ApprovalBox | null
@@ -90,8 +91,10 @@ export function ApprovalsPage() {
   const deletable = box === 'draft'
   const columns = deletable ? 6 : 5
   // 임시저장은 읽을 것이 아니라 이어 쓸 것이다. 상세를 거치지 않고 바로 작성 화면을 연다.
+  // 문서 주소에는 지금 탭·필터를 그대로 달아 보낸다. 상세 화면의 「결재함」 링크가 그 값으로 돌아온다.
+  // 주소에 두는 것은 데스크톱 탭이 주소만 기억해서다. 새 탭에서 열거나 탭을 오갔다 와도 남는다.
   const hrefOf = (id: string) =>
-    box === 'draft' ? `/approvals/new?draft=${id}` : `/approvals/${id}`
+    box === 'draft' ? `/approvals/new?draft=${id}` : `/approvals/${id}${search}`
 
   // 임원은 끝난 일반 결재를 지울 수 있다(상세 화면과 같은 조건, 백엔드 README 78). 근태 신청 문서는
   // 근태 기록이 가리켜 서버가 409 로 막는다. 탭과 상관없이 문서의 상태로 가른다.

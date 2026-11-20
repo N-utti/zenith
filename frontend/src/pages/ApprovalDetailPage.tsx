@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router'
+import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import { askConfirm } from '@/components/ui/confirm'
 import { BackLink } from '@/components/ui/BackLink'
 import { Badge } from '@/components/ui/Badge'
@@ -61,6 +61,9 @@ export function ApprovalDetailPage() {
   const { approvalId = '' } = useParams()
   const user = useCurrentUser()
   const navigate = useNavigate()
+  // 목록이 문서 주소에 달아 보낸 탭·필터(`?box=done`)로 돌아간다. 알림이나 복사한 링크로 들어오면
+  // 달린 것이 없어 받은 결재로 간다.
+  const listHref = `/approvals${useLocation().search}`
   const doc = useApproval(approvalId)
   const toast = useToast()
   const submit = useSubmitApproval()
@@ -86,7 +89,7 @@ export function ApprovalDetailPage() {
     return (
       <div className="py-16 text-center">
         <p className="text-muted text-sm">{message}</p>
-        <Link to="/approvals" className="text-accent mt-4 inline-block text-sm hover:underline">
+        <Link to={listHref} className="text-accent mt-4 inline-block text-sm hover:underline">
           결재함으로
         </Link>
       </div>
@@ -157,7 +160,7 @@ export function ApprovalDetailPage() {
 
   return (
     <>
-      <BackLink to="/approvals">결재함</BackLink>
+      <BackLink to={listHref}>결재함</BackLink>
       <PageHeader
         title={d.title}
         description={`${APPROVAL_TYPE_LABEL[d.type_code]} · ${d.drafter.name} 기안 · ${formatDateTime(d.submitted_at ?? d.created_at)}`}
