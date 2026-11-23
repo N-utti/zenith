@@ -172,7 +172,7 @@ test('상세에서 삭제하면 바로 전체 문서로 옮기고, 화면을 떠
   await act(async () => answerConfirm(true))
 
   // 서버 응답을 기다리지 않고 옮긴다. 서버에는 아직 있는 문서지만 목록에서는 빠져 있다.
-  await vi.waitFor(() => expect(container.textContent).toContain('끝난 문서가 없습니다.'))
+  await vi.waitFor(() => expect(container.textContent).toContain('문서가 없습니다.'))
   expect(container.querySelector('[role=tab][aria-selected=true]')?.textContent).toContain(
     '전체 문서',
   )
