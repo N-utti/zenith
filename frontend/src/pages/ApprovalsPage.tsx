@@ -240,9 +240,7 @@ export function ApprovalsPage() {
                         ? '조건에 맞는 문서가 없습니다.'
                         : box === 'inbox'
                           ? '처리할 결재가 없습니다.'
-                          : box === 'done'
-                            ? '끝난 문서가 없습니다.'
-                            : '문서가 없습니다.'}
+                          : '문서가 없습니다.'}
                     </TableEmpty>
                   )}
                   {items.map((item) => {
