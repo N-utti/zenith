@@ -11,24 +11,40 @@ function startOfDay(date: Date): number {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
 }
 
+/**
+ * 날짜 뒤에 요일을 괄호로 붙인다. "8월 25일 (화)".
+ *
+ * `toLocaleDateString` 에 맡기면 ICU 판과 날짜 조합에 따라 괄호가 있다가 없다(ICU 78 은 연·월·일에서
+ * "2026년 11월 23일 월").
+ * 요일만 따로 꺼내 직접 감싸, 판이 달라도 같은 글자가 나오게 한다.
+ */
+function withWeekday(date: Date, options: Intl.DateTimeFormatOptions): string {
+  // formatToParts 는 잘못된 날짜에 예외를 던진다. 전처럼 "Invalid Date" 글자로 두어 화면이 깨지지 않게 한다.
+  if (Number.isNaN(date.getTime())) return String(date)
+  const parts = new Intl.DateTimeFormat('ko-KR', { ...options, weekday: 'short' }).formatToParts(
+    date,
+  )
+  const weekday = parts.find((part) => part.type === 'weekday')?.value
+  const rest = parts
+    .filter((part) => part.type !== 'weekday')
+    .map((part) => part.value)
+    .join('')
+    .replace(/[\s()]+$/, '')
+  return `${rest} (${weekday})`
+}
+
 /** "오늘" · "어제" · "8월 25일 (화)" */
 export function formatDay(iso: string): string {
   const date = new Date(iso)
   const diffDays = Math.round((startOfDay(new Date()) - startOfDay(date)) / 86_400_000)
   if (diffDays === 0) return '오늘'
   if (diffDays === 1) return '어제'
-  return date.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'short' })
+  return withWeekday(date, { month: 'long', day: 'numeric' })
 }
 
 /** "2026년 9월 8일 (화) 13:42". 상대 시각("1시간 전")의 툴팁처럼 정확한 시점이 필요한 자리. */
 export function formatDateTime(iso: string): string {
-  const date = new Date(iso)
-  const day = date.toLocaleDateString('ko-KR', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    weekday: 'short',
-  })
+  const day = withWeekday(new Date(iso), { year: 'numeric', month: 'long', day: 'numeric' })
   return `${day} ${formatTime(iso)}`
 }
 
@@ -71,11 +87,7 @@ export function toDateTimeLocal(date: Date): string {
 /** `2026-09-08` → "9월 8일 (화)". `new Date(iso)` 는 UTC 로 읽혀 KST 서쪽에서 하루 밀리므로 숫자로 만든다. */
 export function formatISODate(iso: string): string {
   const [year, month, day] = iso.split('-').map(Number)
-  return new Date(year, month - 1, day).toLocaleDateString('ko-KR', {
-    month: 'long',
-    day: 'numeric',
-    weekday: 'short',
-  })
+  return withWeekday(new Date(year, month - 1, day), { month: 'long', day: 'numeric' })
 }
 
 /**
