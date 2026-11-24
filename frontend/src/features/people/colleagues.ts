@@ -16,13 +16,16 @@ export function pickable(people: Colleague[], meId: string): Colleague[] {
   return people.filter((person) => person.active && person.id !== meId)
 }
 
-/**
- * 임원과 사원으로 가른다. 등급은 사원·임원 두 단이라 `lead` 도 사원 쪽이다.
- */
+/** 등급 라벨. 등급은 사원·임원 두 단이라 `lead` 도 사원이다. */
+export function tierLabel(person: Pick<Colleague, 'role'>): '임원' | '사원' {
+  return person.role === 'exec' ? '임원' : '사원'
+}
+
+/** 임원과 사원으로 가른다. */
 export function byTier(people: Colleague[]): { label: '임원' | '사원'; people: Colleague[] }[] {
   return [
-    { label: '임원' as const, people: people.filter((person) => person.role === 'exec') },
-    { label: '사원' as const, people: people.filter((person) => person.role !== 'exec') },
+    { label: '임원' as const, people: people.filter((person) => tierLabel(person) === '임원') },
+    { label: '사원' as const, people: people.filter((person) => tierLabel(person) === '사원') },
   ].filter((group) => group.people.length > 0)
 }
 
@@ -37,12 +40,22 @@ export function byTier(people: Colleague[]): { label: '임원' | '사원'; peopl
  */
 export function useColleagues(): { people: Colleague[]; isPending: boolean; isError: boolean } {
   const me = useCurrentUser()
-  const { data, isPending, isError } = useQuery({
+  const { data, isPending, isError } = usePeople()
+
+  return { people: pickable(data?.items ?? [], me.id), isPending, isError }
+}
+
+function usePeople() {
+  return useQuery({
     queryKey: ['people'],
     queryFn: () => api<{ items: Colleague[] }>('/people'),
   })
+}
 
-  return { people: pickable(data?.items ?? [], me.id), isPending, isError }
+/** id 로 한 사람(나·비활성 포함). 이름만 주는 응답에 등급·팀을 붙일 때 쓴다. 팀은 지금 소속이다. */
+export function usePerson(id: string): Colleague | undefined {
+  const { data } = usePeople()
+  return data?.items.find((person) => person.id === id)
 }
 
 /** 멘션 배지를 칠할 이름: 활성 동료 전체 + 나(명단은 나를 빼고 준다. 남이 나를 부른 글). */
