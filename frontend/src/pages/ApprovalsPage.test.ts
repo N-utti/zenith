@@ -64,10 +64,27 @@ afterEach(() => {
   document.body.replaceChildren()
 })
 
+/** 동료 명단(`/people`). 결재 응답의 기안자는 이름뿐이라 상세가 등급·팀을 여기서 붙인다. */
+let people: {
+  id: string
+  name: string
+  active: boolean
+  role: string
+  team: { id: string; name: string } | null
+}[] = [
+  { id: 'u-2', name: '이지원', active: true, role: 'member', team: { id: 't-1', name: '개발팀' } },
+]
+
 /** 목록 요청(`/approvals?box=...`)에는 그 문서 하나, 문서 요청(`/approvals/:id`)에는 그 문서. */
 function render(at: string, item: object = doc) {
   api.mockImplementation((path: string) =>
-    Promise.resolve(path.startsWith('/approvals?') ? { items: [item], next_cursor: null } : item),
+    Promise.resolve(
+      path === '/people'
+        ? { items: people }
+        : path.startsWith('/approvals?')
+          ? { items: [item], next_cursor: null }
+          : item,
+    ),
   )
   const container = document.createElement('div')
   document.body.append(container)
@@ -120,6 +137,33 @@ test('전체 문서에서 연 문서의 결재함 링크는 고른 필터째 전
       '전체 문서',
     ),
   )
+})
+
+test('상세 머리에 유형·기안자·기안일을 라벨과 함께 보이고, 기안자에 등급·팀을 붙인다', async () => {
+  const container = render('/approvals/a-1')
+  const meta = () => container.querySelector('header dl')?.textContent
+  await vi.waitFor(() => expect(meta()).toContain('기안자이지원 / 사원 / 개발팀'))
+  expect(meta()).toContain('유형일반 기안')
+  expect(meta()).toContain('기안일')
+})
+
+test('기안자를 명단에서 못 찾으면 이름만, 팀장 등급은 사원으로 보인다', async () => {
+  const saved = people
+  people = [{ ...saved[0], role: 'lead', team: null }]
+  try {
+    const container = render('/approvals/a-1')
+    const drafter = () => container.querySelectorAll('header dd')[1]?.textContent
+    await vi.waitFor(() => expect(drafter()).toBe('이지원 / 사원'))
+
+    people = []
+    act(() => root?.unmount())
+    const again = render('/approvals/a-1')
+    await vi.waitFor(() =>
+      expect(again.querySelectorAll('header dd')[1]?.textContent).toBe('이지원'),
+    )
+  } finally {
+    people = saved
+  }
 })
 
 /** 임시저장 탭에서 그 줄의 삭제 버튼을 누르고 확인 창에서 삭제를 고른다. */

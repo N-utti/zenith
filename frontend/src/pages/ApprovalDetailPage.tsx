@@ -31,6 +31,7 @@ import {
   type StepStatus,
 } from '@/features/approvals/types'
 import { useCurrentUser } from '@/features/auth/AuthContext'
+import { tierLabel, usePerson } from '@/features/people/colleagues'
 import { ApiError } from '@/lib/api'
 import { formatDateTime } from '@/lib/datetime'
 import { deferDelete } from '@/lib/deferDelete'
@@ -66,6 +67,8 @@ export function ApprovalDetailPage() {
   // 달린 것이 없어 받은 결재로 간다.
   const listHref = `/approvals${useLocation().search}`
   const doc = useApproval(approvalId)
+  // 결재 응답의 기안자는 이름뿐이라 등급·팀은 동료 명단에서 붙인다. 못 찾으면 이름만 보인다.
+  const drafter = usePerson(doc.data?.drafter.id ?? '')
   const toast = useToast()
   const submit = useSubmitApproval()
   const cancel = useCancelApproval()
@@ -164,7 +167,20 @@ export function ApprovalDetailPage() {
       <BackLink to={listHref}>결재함</BackLink>
       <PageHeader
         title={d.title}
-        description={`${APPROVAL_TYPE_LABEL[d.type_code]} · ${d.drafter.name} 기안 · ${formatDateTime(d.submitted_at ?? d.created_at)}`}
+        description={
+          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-0.5">
+            <dt>유형</dt>
+            <dd className="text-fg">{APPROVAL_TYPE_LABEL[d.type_code]}</dd>
+            <dt>기안자</dt>
+            <dd className="text-fg">
+              {[d.drafter.name, drafter && tierLabel(drafter), drafter?.team?.name]
+                .filter(Boolean)
+                .join(' / ')}
+            </dd>
+            <dt>기안일</dt>
+            <dd className="text-fg">{formatDateTime(d.submitted_at ?? d.created_at)}</dd>
+          </dl>
+        }
         actions={
           <>
             <Badge tone={statusTone(d.status)}>{statusLabel(d.status)}</Badge>
