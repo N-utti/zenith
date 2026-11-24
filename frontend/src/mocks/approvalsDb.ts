@@ -10,6 +10,7 @@ import type {
   DraftInput,
   Person,
 } from '@/features/approvals/types'
+import { composeBody } from '@/features/approvals/templates'
 import { toISODate } from '@/lib/datetime'
 import type { User } from '@/types'
 import { DEMO_ACCOUNTS } from './accounts'
@@ -238,6 +239,29 @@ function seed() {
   submit(pending, daysAgo(1))
   approveStep(pending.steps[0], null, daysAgo(0.5))
   currentOf(pending)
+
+  // 서식(품의서)으로 쓴 문서. 서버에는 일반 기안으로 들어가고 서식은 `extra` 에만 남는다.
+  const fields = {
+    reason: '신규 입사자 2명 합류로 회의실 예약이 자주 겹친다.',
+    content: '소회의실 화상회의 장비(카메라·스피커폰) 1세트 도입.',
+  }
+  const proposal = create(
+    member,
+    {
+      type_code: 'general',
+      title: '[품의] 소회의실 화상회의 장비 도입',
+      subject: {
+        body: composeBody('proposal', fields),
+        amount: 1_280_000,
+        related: null,
+        extra: { form: 'proposal', fields },
+      },
+    },
+    daysAgo(2),
+  )
+  submit(proposal, daysAgo(2))
+  approveStep(proposal.steps[0], null, daysAgo(1.5))
+  currentOf(proposal)
 }
 
 export function listApprovals(user: User, box: ApprovalBox): ApprovalListItem[] {
