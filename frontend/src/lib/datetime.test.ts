@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { daysUntil, toDateTimeLocal } from './datetime'
+import { afterEach, beforeEach, describe, expect, it, test, vi } from 'vitest'
+import { daysUntil, formatDateTime, formatDay, formatISODate, toDateTimeLocal } from './datetime'
 
 /**
  * `daysUntil` 은 시각이 아니라 **날짜** 차이를 센다. 자정을 넘기면 24시간이 안 돼도 하루가 준다.
@@ -42,4 +42,16 @@ describe('toDateTimeLocal', () => {
     expect(toDateTimeLocal(local(2026, 9, 28, 14))).toBe('2026-09-28T14:00')
     expect(toDateTimeLocal(local(2026, 1, 5, 0))).toBe('2026-01-05T00:00')
   })
+})
+
+test('요일은 ICU 판과 상관없이 괄호 안에 넣는다', () => {
+  // 2026-11-23 은 월요일. 시각은 현지 시각으로 만들어 시간대와 무관하게 한다.
+  const iso = new Date(2026, 10, 23, 10, 16).toISOString()
+  expect(formatDateTime(iso)).toBe('2026년 11월 23일 (월) 10:16')
+  expect(formatISODate('2026-11-23')).toBe('11월 23일 (월)')
+  expect(formatDay(new Date(2026, 0, 5, 9).toISOString())).toBe('1월 5일 (월)')
+})
+
+test('잘못된 날짜는 예외 대신 Invalid Date 글자로 둔다', () => {
+  expect(formatISODate('2026-09-08T00:00:00')).toBe('Invalid Date')
 })
