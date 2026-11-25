@@ -3,6 +3,7 @@ import {
   type ArrangementOnCalendar,
   type LeaveOnCalendar,
 } from '@/features/attendance/types'
+import type { Task } from '@/features/projects/types'
 import { toISODate } from '@/lib/datetime'
 import type { CalendarEvent } from './types'
 
@@ -23,6 +24,7 @@ export type CalendarGroup = 'personal' | 'colleague'
 export type CalendarItem = (
   | { kind: 'event'; group: CalendarGroup; id: string; label: string; event: CalendarEvent }
   | { kind: 'absence'; group: CalendarGroup; id: string; label: string }
+  | { kind: 'task'; group: CalendarGroup; id: string; label: string; projectId: string }
 ) & {
   /**
    * 폰 칸처럼 좁은 자리의 짧은 이름. 내 일정은 시각 뺀 제목, 동료 일정은 이름과 제목, 내 부재는 종류(「출장」, 내 이름은 군더더기),
@@ -49,6 +51,7 @@ export function itemsByDay(
   range: { from: string; to: string },
   arrangements: ArrangementOnCalendar[] = [],
   meId?: string,
+  tasks: Task[] = [],
 ): Map<string, CalendarItem[]> {
   const days = new Map<string, CalendarItem[]>()
   const push = (iso: string, item: CalendarItem) => {
@@ -70,6 +73,20 @@ export function itemsByDay(
       label: event.time ? `${event.time} ${title}` : title,
       short: title,
       event,
+    })
+  }
+
+  // 협업 공간의 업무는 내가 맡았고 아직 안 끝난 것만 마감일에 놓는다. 남의 업무까지 깔면 칸이 넘친다.
+  for (const task of tasks) {
+    if (!task.due_date || task.stage === 'done' || !meId || task.assignee?.id !== meId) continue
+    if (task.due_date < range.from || task.due_date > range.to) continue
+    push(task.due_date, {
+      kind: 'task',
+      group: 'personal',
+      id: `tk:${task.id}`,
+      label: `${task.title} 마감`,
+      short: task.title,
+      projectId: task.project_id,
     })
   }
 

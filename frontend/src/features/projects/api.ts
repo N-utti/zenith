@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import type { Project, ProjectInput, Task, TaskInput } from './types'
 
@@ -28,6 +28,26 @@ export function useTasks(projectId: string) {
     queryKey: tasksKey(projectId),
     queryFn: () => api<{ items: Task[] }>(`/projects/${projectId}/tasks`),
     enabled: projectId.length > 0,
+  })
+}
+
+// 바깥에 두어야 TanStack 이 결과를 기억해 같은 배열을 돌려준다.
+const flatTasks = (results: { data?: { items: Task[] } }[]) =>
+  results.flatMap((r) => r.data?.items ?? [])
+
+/**
+ * 모든 프로젝트의 업무. 캘린더가 내 업무 마감을 놓을 때 쓴다. 보드와 같은 키라 보드를 열면 다시 받지 않는다.
+ */
+// ponytail: 프로젝트마다 한 번씩 묻는다(15명 규모라 프로젝트가 수십 개를 넘지 않는다). 늘어나면
+// 서버에 「내가 맡은 업무」 목록 API 하나를 받아 이걸 그 한 번으로 바꾼다.
+export function useAllTasks(): Task[] {
+  const projects = useProjects()
+  return useQueries({
+    queries: (projects.data?.items ?? []).map((p) => ({
+      queryKey: tasksKey(p.id),
+      queryFn: () => api<{ items: Task[] }>(`/projects/${p.id}/tasks`),
+    })),
+    combine: flatTasks,
   })
 }
 

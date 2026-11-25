@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { LeaveOnCalendar } from '@/features/attendance/types'
+import type { Task } from '@/features/projects/types'
 import { itemsByDay, onlyShown } from './calendarItems'
 
 const ME = { id: 'u-9', name: '하지민' }
@@ -181,6 +182,41 @@ describe('홈 캘린더 부재 묶음', () => {
     expect(shown.get('2026-09-08')?.map((i) => i.label)).toEqual([
       '김다인 고객사 미팅',
       '김다인 연차',
+    ])
+  })
+
+  it('내가 맡은 안 끝난 업무만 마감일에 놓는다', () => {
+    const task = (over: Partial<Task>): Task => ({
+      id: 't-1',
+      project_id: 'p-1',
+      title: '견적서',
+      stage: 'doing',
+      assignee: ME,
+      start_date: null,
+      due_date: '2026-09-10',
+      priority: 'normal',
+      note: '',
+      created_at: '',
+      ...over,
+    })
+    const days = itemsByDay(
+      [],
+      [],
+      () => '연차',
+      { from: '2026-09-01', to: '2026-09-30' },
+      [],
+      ME.id,
+      [
+        task({}),
+        task({ id: 't-2', stage: 'done' }),
+        task({ id: 't-3', assignee: { id: 'u-6', name: '김다인' } }),
+        task({ id: 't-4', due_date: null }),
+        task({ id: 't-5', due_date: '2026-10-02' }),
+      ],
+    )
+    expect([...days.keys()]).toEqual(['2026-09-10'])
+    expect(days.get('2026-09-10')).toMatchObject([
+      { kind: 'task', group: 'personal', label: '견적서 마감', short: '견적서', projectId: 'p-1' },
     ])
   })
 })
