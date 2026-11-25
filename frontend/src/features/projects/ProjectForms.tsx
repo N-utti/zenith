@@ -15,6 +15,7 @@ import {
   useCreateProject,
   useCreateTask,
   useDeleteTask,
+  useProjects,
   useUpdateProject,
   useUpdateTask,
 } from './api'
@@ -115,18 +116,27 @@ export function ProjectFormModal({ project, onClose }: { project?: Project; onCl
 /**
  * 업무를 등록하거나(`task` 없음) 고친다. 단계 선택이 늘 있어, 카드를 끌지 못하는 손가락 기기와
  * 키보드 사용자는 여기서 단계를 옮긴다(WCAG 2.5.7 의 끌기 대안).
+ *
+ * `projectId` 가 없으면 채팅 메시지에서 연 것이다. 프로젝트를 고르는 칸이 맨 위에 서고, 등록 뒤
+ * 토스트의 보기로 그 보드에 간다.
  */
 export function TaskFormModal({
-  projectId,
+  projectId: fixedProject,
   task,
   stage: presetStage = 'todo',
+  draft,
   onClose,
 }: {
-  projectId: string
+  projectId?: string
   task?: Task
   stage?: TaskStage
+  /** 새 업무의 제목·메모를 미리 채운다. */
+  draft?: { title: string; note: string }
   onClose: () => void
 }) {
+  const navigate = useNavigate()
+  const projects = useProjects()
+  const [projectId, setProjectId] = useState(fixedProject ?? '')
   const toast = useToast()
   const me = useCurrentUser()
   const { people } = useColleagues()
@@ -134,13 +144,13 @@ export function TaskFormModal({
   const create = useCreateTask(projectId)
   const update = useUpdateTask(projectId)
   const remove = useDeleteTask()
-  const [title, setTitle] = useState(task?.title ?? '')
+  const [title, setTitle] = useState(task?.title ?? draft?.title ?? '')
   const [stage, setStage] = useState<TaskStage>(task?.stage ?? presetStage)
   const [assignee, setAssignee] = useState(task?.assignee?.id ?? '')
   const [start, setStart] = useState(task?.start_date ?? '')
   const [due, setDue] = useState(task?.due_date ?? '')
   const [priority, setPriority] = useState<TaskPriority>(task?.priority ?? 'normal')
-  const [note, setNote] = useState(task?.note ?? '')
+  const [note, setNote] = useState(task?.note ?? draft?.note ?? '')
   const [error, setError] = useState<string | null>(null)
 
   const assigneeOptions = [
@@ -171,7 +181,18 @@ export function TaskFormModal({
     }
     if (start && due && start > due) return setError('시작일이 마감일보다 늦습니다.')
     if (!task) {
-      create.mutate(fields, { onSuccess: done('업무를 등록했습니다.'), onError })
+      const picked = projectId
+      create.mutate(fields, {
+        onSuccess: fixedProject
+          ? done('업무를 등록했습니다.')
+          : () => {
+              toast.success('업무를 등록했습니다.', {
+                action: { label: '보기', onClick: () => void navigate(`/projects/${picked}`) },
+              })
+              onClose()
+            },
+        onError,
+      })
       return
     }
     // 바뀐 칸만 보낸다. 전부 보내면 담당자가 그사이 비활성 계정이 된 업무는 제목만 고쳐도
@@ -198,17 +219,43 @@ export function TaskFormModal({
       busy={create.isPending || update.isPending || remove.isPending}
       error={error}
       submitLabel={task ? '저장' : '등록'}
-      canSubmit={title.trim().length > 0}
+      canSubmit={title.trim().length > 0 && projectId.length > 0}
       onClose={onClose}
       onSubmit={submit}
     >
+      {!fixedProject && (
+        <Field label="프로젝트" required>
+          {(slot) => (
+            <Select
+              {...slot}
+              value={projectId}
+              autoFocus
+              options={[
+                {
+                  value: '',
+                  label: projects.isPending
+                    ? '불러오는 중'
+                    : projects.isError
+                      ? '프로젝트를 불러오지 못했습니다'
+                      : projects.data?.items.length
+                        ? '프로젝트 선택'
+                        : '협업 공간에 프로젝트가 없습니다',
+                },
+                ...(projects.data?.items ?? []).map((p) => ({ value: p.id, label: p.name })),
+              ]}
+              onChange={(e) => setProjectId(e.target.value)}
+            />
+          )}
+        </Field>
+      )}
       <Field label="제목" required>
         {(slot) => (
           <Input
             {...slot}
             value={title}
             maxLength={TASK_TITLE_MAX}
-            autoFocus
+            // 채팅에서 열면 제목은 채워져 있고 먼저 할 일은 프로젝트 고르기다.
+            autoFocus={!!fixedProject}
             onChange={(e) => setTitle(e.target.value)}
           />
         )}
