@@ -8,7 +8,16 @@ import {
   type ReactNode,
 } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router'
-import { ArrowDown, Download, FileText, Paperclip, Pencil, Sparkles, Trash2 } from 'lucide-react'
+import {
+  ArrowDown,
+  Download,
+  FileText,
+  ListTodo,
+  Paperclip,
+  Pencil,
+  Sparkles,
+  Trash2,
+} from 'lucide-react'
 import { askConfirm } from '@/components/ui/confirm'
 import { AuthImg, DownloadLink } from '@/components/ui/AuthMedia'
 import { Badge } from '@/components/ui/Badge'
@@ -25,12 +34,14 @@ import { useCurrentUser } from '@/features/auth/AuthContext'
 import { UNTITLED_DOC, useDoc } from '@/features/docs/api'
 import { MentionText } from '@/features/people/MentionText'
 import { AiMarkdown } from '@/features/ai/AiMarkdown'
+import { TaskFormModal } from '@/features/projects/ProjectForms'
 import { isAiCommand, linkPaths } from './aiCommand'
 import { isImage } from './attachments'
 import { MAX_BODY_CHARS, REACTIONS, useMessages, useOlderMessages } from './api'
 import { useChatSocketContext } from './ChatSocketContext'
 import { countAfter } from './newMessages'
 import { ProfileAvatar } from './ProfileMenu'
+import { taskDraftFrom } from './toTask'
 import type { ChatAttachment, ChatMessage } from './types'
 
 /** 같은 사람이 5분 안에 이어서 보낸 메시지는 아바타·이름을 반복하지 않는다. */
@@ -182,6 +193,8 @@ export function MessageList({
   // 같은 결과를 두 번 고르면 주소가 글자 그대로 같아 `focusId` 가 안 바뀐다. 그 사이 손으로
   // 스크롤해 놓친 줄을 다시 찾아 준다. 라우터는 같은 주소로 밀어도 위치마다 새 열쇠를 준다.
   const { key: visitKey } = useLocation()
+  /** 업무로 등록하는 중인 메시지. */
+  const [taskFrom, setTaskFrom] = useState<ChatMessage | null>(null)
 
   // 새 메시지가 오면 아래로 붙인다. 남의 메시지는 위를 읽고 있는 중이면 방해하지 않는다.
   // 채널을 처음 그릴 때와 내가 보낸 메시지는 조건 없이 내린다(이슈 #207). 첫 그림은 맨 위에서
@@ -415,6 +428,7 @@ export function MessageList({
                 mentionNames={mentionNames}
                 me={me}
                 onReact={react}
+                onToTask={setTaskFrom}
                 // 쓴 사람만 고치고 지운다(백엔드 #284). 버튼을 감추는 것은 화면 편의이고 남의 메시지를
                 // 건드리는 요청의 차단은 서버의 `error` 이벤트(FORBIDDEN)다.
                 onEdit={message.author.id === me ? edit : undefined}
@@ -429,6 +443,9 @@ export function MessageList({
           })}
         </div>
       </div>
+      {taskFrom && (
+        <TaskFormModal draft={taskDraftFrom(taskFrom)} onClose={() => setTaskFrom(null)} />
+      )}
     </div>
   )
 }
@@ -456,6 +473,7 @@ const MessageRow = memo(function MessageRow({
   mentionNames,
   me,
   onReact,
+  onToTask,
   onEdit,
   onDelete,
   children,
@@ -472,6 +490,8 @@ const MessageRow = memo(function MessageRow({
   me: string
   /** 공감을 켜거나 끈다. 누구 글에나 온다. 그릴 때마다 같은 함수여야 한다. */
   onReact: (messageId: string, emoji: string, on: boolean) => void
+  /** 이 메시지로 협업 공간 업무를 만드는 창을 연다. 그릴 때마다 같은 함수여야 한다. */
+  onToTask: (message: ChatMessage) => void
   /**
    * 내 메시지일 때만 온다. 보냈으면 `true`, 소켓이 닫혀 못 보냈으면 `false`. 줄을 건너뛰게
    * 하려면 그릴 때마다 같은 함수여야 한다(`MessageList` 가 붙잡는다).
@@ -550,7 +570,18 @@ const MessageRow = memo(function MessageRow({
                 </button>
               )
             })}
-            {(onEdit || onDelete) && <span aria-hidden className="bg-line mx-0.5 my-1.5 w-px" />}
+            <span aria-hidden className="bg-line mx-0.5 my-1.5 w-px" />
+            <button
+              type="button"
+              aria-label={`${formatTime(message.created_at)} 메시지를 업무로 등록`}
+              title="업무로 등록"
+              // 공감 버튼처럼 줄마다 하나라 Tab 순서에서 뺀다(300줄이면 300번 멈춘다).
+              tabIndex={-1}
+              onClick={() => onToTask(message)}
+              className="text-subtle hover:text-fg grid size-7 cursor-pointer place-items-center rounded"
+            >
+              <ListTodo className="size-3.5" />
+            </button>
             {onEdit && (
               <button
                 type="button"
