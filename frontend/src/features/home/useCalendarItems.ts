@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useAllArrangements, useAllLeaves, useLeaveTypes } from '@/features/attendance/api'
 import { useCurrentUser } from '@/features/auth/AuthContext'
+import { useAllTasks } from '@/features/projects/api'
 import { monthMatrix, toISODate } from '@/lib/datetime'
 import { useEvents } from './api'
 import { itemsByDay, onlyShown, type CalendarGroup } from './calendarItems'
@@ -69,7 +70,7 @@ export function useCalendarShow() {
 }
 
 /**
- * 한 달 격자에 그릴 항목. 전 직원의 승인된 휴가·재택·외근·출장 + 전 직원의 일정에서 `show` 로 켠 묶음만.
+ * 한 달 격자에 그릴 항목. 전 직원의 승인된 휴가·재택·외근·출장 + 전 직원의 일정 + 내 업무 마감에서 `show` 로 켠 묶음만.
  */
 export function useCalendarDays(month: string, show: Record<CalendarGroup, boolean>) {
   const me = useCurrentUser()
@@ -83,6 +84,8 @@ export function useCalendarDays(month: string, show: Record<CalendarGroup, boole
   const leaves = useAllLeaves(range.from, range.to)
   const arrangements = useAllArrangements(range.from, range.to)
   const events = useEvents(range.from, range.to)
+  // 업무 마감은 곁들이는 것이라 못 불러와도 캘린더를 실패로 돌리지 않는다.
+  const tasks = useAllTasks()
   const types = useLeaveTypes()
   // 남의 휴가는 종류를 가려 `leave` 로 온다(병가·경조사는 알릴 일이 아니다, 백엔드 #316). 목록에 없는
   // 종류는 그냥 휴가로 보인다.
@@ -99,6 +102,7 @@ export function useCalendarDays(month: string, show: Record<CalendarGroup, boole
     range,
     arrangements.data?.items ?? [],
     me.id,
+    tasks,
   )
   const days = onlyShown(all, show)
   return { days, isError, isPending, retry }

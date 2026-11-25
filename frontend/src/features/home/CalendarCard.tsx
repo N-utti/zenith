@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Check, Clock, Plus, Trash2 } from 'lucide-react'
+import { Link } from 'react-router'
 import { Button } from '@/components/ui/Button'
 import { Calendar, CalendarDayNumber } from '@/components/ui/Calendar'
 import { Card, CardEmpty } from '@/components/ui/Card'
@@ -179,7 +180,16 @@ export function DayAgenda({
           {items.map((item) => (
             <li key={item.id} className="flex items-center gap-2 text-sm">
               <span className={cn('size-2.5 shrink-0 rounded-sm', DOT[item.group])} />
-              <span className="text-fg min-w-0 flex-1 truncate">{item.label}</span>
+              {item.kind === 'task' ? (
+                <Link
+                  to={`/projects/${item.projectId}`}
+                  className="text-fg hover:text-accent min-w-0 flex-1 truncate"
+                >
+                  {item.label}
+                </Link>
+              ) : (
+                <span className="text-fg min-w-0 flex-1 truncate">{item.label}</span>
+              )}
               {/* 지우기는 내 일정만. 남의 일정은 서버가 404 로 막는다(백엔드 README 73). */}
               {item.kind === 'event' && item.group === 'personal' && (
                 <button
