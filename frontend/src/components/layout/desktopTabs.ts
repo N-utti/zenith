@@ -58,12 +58,51 @@ function commit(next: State) {
 const indexOf = (id: string) => state.tabs.findIndex((t) => t.id === id)
 export const activeTab = () => state.tabs[indexOf(state.active)]!
 
-/** 지금 탭의 주소·오른쪽 문서를 바꾼다(화면을 옮기면 부른다). 같으면 건드리지 않는다. */
-export function updateActiveTab(patch: Partial<Omit<DesktopTab, 'id'>>) {
+/**
+ * 탭마다 따로 쌓는 뒤로·앞으로 기록. 브라우저 기록은 탭들이 하나를 같이 써서 쓰지 않는다(새 탭에서
+ * 뒤로 가면 앞 탭에서 보던 화면이 나온다).
+ * ponytail: 저장소에 안 남겨 앱을 다시 켜면 비어 있다. 남겨야 하면 DesktopTab 에 옮긴다.
+ */
+const histories = new Map<string, { back: string[]; forward: string[] }>()
+const historyOf = (id: string) => {
+  let h = histories.get(id)
+  if (!h) histories.set(id, (h = { back: [], forward: [] }))
+  return h
+}
+
+/**
+ * 지금 탭의 주소·오른쪽 문서를 바꾼다(화면을 옮기면 부른다). 같으면 건드리지 않는다.
+ * `record` 면 옮기기 전 주소를 뒤로 기록에 쌓는다(새로 들어간 화면. 바꿔 끼우기는 쌓지 않는다).
+ */
+export function updateActiveTab(patch: Partial<Omit<DesktopTab, 'id'>>, record = false) {
   const current = activeTab()
   const next = { ...current, ...patch }
   if (next.path === current.path && next.split === current.split) return
+  if (record && next.path !== current.path) {
+    const h = historyOf(current.id)
+    // 하루 종일 켜 두어도 끝없이 쌓이지 않게 오래된 것부터 버린다.
+    if (h.back.push(current.path) > 50) h.back.shift()
+    h.forward = []
+  }
   commit({ ...state, tabs: state.tabs.map((t) => (t.id === current.id ? next : t)) })
+}
+
+export function canGo(delta: -1 | 1): boolean {
+  const h = histories.get(state.active)
+  return ((delta < 0 ? h?.back : h?.forward)?.length ?? 0) > 0
+}
+
+/** 지금 탭의 기록에서 뒤(-1)·앞(+1) 한 칸으로. 옮겨 갈 주소를 돌려준다(주소 이동은 부른 쪽이). */
+export function goHistory(delta: -1 | 1): string | null {
+  const current = activeTab()
+  const h = historyOf(current.id)
+  const [from, to] = delta < 0 ? [h.back, h.forward] : [h.forward, h.back]
+  const path = from.pop()
+  if (path === undefined) return null
+  to.push(current.path)
+  // 주소가 그려지기 전에 또 눌러도 맞게 탭 주소를 먼저 적는다.
+  updateActiveTab({ path })
+  return path
 }
 
 /** 지금 탭 바로 오른쪽에 연다. `activate` 면 그 탭으로 옮기고 그 탭을 돌려준다(주소 이동은 부른 쪽이). */
@@ -97,6 +136,7 @@ export function closeTab(id: string): DesktopTab | null {
   const i = indexOf(id)
   if (i < 0 || state.tabs.length === 1) return null
   const tabs = state.tabs.filter((t) => t.id !== id)
+  histories.delete(id)
   if (id !== state.active) {
     commit({ ...state, tabs })
     return null
@@ -112,6 +152,7 @@ export function closeTab(id: string): DesktopTab | null {
  */
 export function claimTabs(userId: string) {
   if (!isDesktopShell() || state.owner === userId) return
+  histories.clear()
   commit({ ...single('/'), owner: userId })
 }
 
@@ -136,5 +177,6 @@ export function useDesktopTabs(): State {
 
 /** 테스트용: 저장소를 다시 읽는다. */
 export function resetDesktopTabs() {
+  histories.clear()
   state = load()
 }
