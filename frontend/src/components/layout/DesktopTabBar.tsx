@@ -1,6 +1,15 @@
 import { useEffect, useRef, type KeyboardEvent as ReactKeyboardEvent } from 'react'
-import { useLocation, useNavigate, type NavigateFunction } from 'react-router'
-import { FileText, Globe, MessagesSquare, Plus, X, type LucideIcon } from 'lucide-react'
+import { useLocation, useNavigate, useNavigationType, type NavigateFunction } from 'react-router'
+import {
+  ArrowLeft,
+  ArrowRight,
+  FileText,
+  Globe,
+  MessagesSquare,
+  Plus,
+  X,
+  type LucideIcon,
+} from 'lucide-react'
 import { ALL_NAV } from '@/app/navigation'
 import { useChannels } from '@/features/chat/api'
 import { UNTITLED_DOC, useTree } from '@/features/docs/api'
@@ -9,8 +18,10 @@ import { cn } from '@/lib/cn'
 import {
   activateTab,
   activeTab,
+  canGo,
   closeTab,
   cycleTab,
+  goHistory,
   inAppTarget,
   openTab,
   updateActiveTab,
@@ -109,11 +120,13 @@ function Tab({
  */
 let pendingSplit: { path: string; split: string | null } | null = null
 
-/**
- * 그 탭의 화면으로 옮긴다. 탭을 옮기는 일은 기록에 쌓지 않고 바꿔 끼운다.
- * ponytail: 기록은 탭들이 하나를 같이 쓴다. 새 탭에서 뒤로 가기를 누르면 앞 탭에서 보던 화면이 이 탭에
- * 적힌다(앞으로 가기로 돌아온다). 거슬리면 탭마다 기록을 따로 둔다.
- */
+/** 지금 탭의 기록에서 뒤(-1)·앞(+1)으로. 탭 기록이 따로 있어 브라우저 기록에는 쌓지 않는다. */
+function goTab(delta: -1 | 1, navigate: NavigateFunction) {
+  const path = goHistory(delta)
+  if (path) navigate(path, { replace: true })
+}
+
+/** 그 탭의 화면으로 옮긴다. 탭을 옮기는 일은 기록에 쌓지 않고 바꿔 끼운다. */
 function showTab(tab: DesktopTab | null, navigate: NavigateFunction) {
   if (!tab) return
   // 라우터가 아니라 브라우저 주소를 본다. 앞 이동이 아직 그려지기 전에 또 누르면 라우터 값은 낡았다.
@@ -137,22 +150,27 @@ export function DesktopTabBar() {
   const { tabs, active } = useDesktopTabs()
   const location = useLocation()
   const navigate = useNavigate()
+  const navigationType = useNavigationType()
   const split = useSplitDoc()
   const path = location.pathname + location.search
 
-  // 화면을 옮기면 지금 탭의 주소로 적는다.
+  // 화면을 옮기면 지금 탭의 주소로 적는다. 새로 들어간 화면(PUSH)이면 그 탭 기록에 쌓는다.
   // 켤 때는 지난번 탭으로 돌아간다. 로그인 화면을 거쳐 왔으면 그 화면(설정의 시작 화면)을 지금 탭에 둔다.
   useEffect(() => {
     if (!restored) {
       restored = true
       if (location.key === 'default') return showTab(activeTab(), navigate)
     }
+    // 브라우저 주소보다 늦게 그려진 화면은 버린다(연달아 누를 때 낡은 주소가 탭을 덮지 않게).
+    if (path !== window.location.pathname + window.location.search) return
+    // 셸이 탭들이 같이 쓰는 브라우저 기록으로 되돌아갔으면(POP) 탭 주소로 되돌려 놓는다.
+    if (navigationType === 'POP') return showTab(activeTab(), navigate)
     if (pendingSplit?.path === path) {
       setSplitDoc(pendingSplit.split)
       pendingSplit = null
     }
-    updateActiveTab({ path })
-  }, [path, location.key, navigate])
+    updateActiveTab({ path }, navigationType === 'PUSH')
+  }, [path, location.key, navigate, navigationType])
 
   useEffect(() => {
     if (restored && !pendingSplit) updateActiveTab({ split })
@@ -171,8 +189,23 @@ export function DesktopTabBar() {
       openTab(target)
     }
 
+    // 마우스 옆 단추(뒤로·앞으로)도 탭 기록으로. 그냥 두면 셸이 탭들이 같이 쓰는 브라우저 기록을 탄다.
+    // 화면이 먼저 쓸 일이 없어 잡는 단계에서 받는다(중간에서 전파를 끊어도 놓치지 않게).
+    const onMouseUp = (e: MouseEvent) => {
+      if (e.button !== 3 && e.button !== 4) return
+      e.preventDefault()
+      goTab(e.button === 3 ? -1 : 1, navigate)
+    }
+
     // 한글 조합 중에는 받지 않는다. 자판 배열과 상관없게 글쇠 자리(code)로 본다.
     const onKeyDown = (e: KeyboardEvent) => {
+      // Alt+좌우 화살표는 뒤로·앞으로. 화면이 먼저 쓴 경우(채팅 첨부 순서 바꾸기)는 둔다.
+      const arrow = e.code === 'ArrowLeft' ? -1 : e.code === 'ArrowRight' ? 1 : 0
+      const plainAlt = e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey
+      if (arrow && plainAlt && !e.isComposing && !e.defaultPrevented) {
+        e.preventDefault()
+        return goTab(arrow, navigate)
+      }
       if (!(e.ctrlKey || e.metaKey) || e.altKey || e.isComposing) return
       // 누르고 있으면 탭이 줄줄이 열리고 닫힌다. 옮기기(Tab)만 되풀이를 받는다.
       if (e.repeat && e.code !== 'Tab') return
@@ -185,19 +218,21 @@ export function DesktopTabBar() {
 
     document.addEventListener('click', onClick)
     document.addEventListener('auxclick', onClick)
+    window.addEventListener('mouseup', onMouseUp, true)
     window.addEventListener('keydown', onKeyDown)
     return () => {
       document.removeEventListener('click', onClick)
       document.removeEventListener('auxclick', onClick)
+      window.removeEventListener('mouseup', onMouseUp, true)
       window.removeEventListener('keydown', onKeyDown)
     }
   }, [navigate])
 
   const show = (tab: DesktopTab | null) => showTab(tab, navigate)
 
-  // 좌우 화살표로 탭 사이 초점을 옮긴다(고르기는 Enter·Space).
+  // 좌우 화살표로 탭 사이 초점을 옮긴다(고르기는 Enter·Space). Alt 를 같이 누르면 뒤로·앞으로라 넘긴다.
   const moveFocus = (e: ReactKeyboardEvent<HTMLDivElement>) => {
-    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
+    if (e.altKey || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return
     const all = [...e.currentTarget.querySelectorAll<HTMLElement>('[data-tab]')]
     const i = all.indexOf(document.activeElement as HTMLElement)
     if (i < 0) return
@@ -217,6 +252,25 @@ export function DesktopTabBar() {
         'bg-sunken relative z-1 flex h-9 shrink-0 items-end gap-1 pl-2 shadow-[inset_0_-1px_0_var(--tab-line)] [--tab-line:color-mix(in_oklch,var(--color-line)_70%,var(--color-sunken))]',
       )}
     >
+      {(
+        [
+          [-1, '뒤로 (Alt+←)', ArrowLeft],
+          [1, '앞으로 (Alt+→)', ArrowRight],
+        ] as const
+      ).map(([delta, label, Icon]) => (
+        <button
+          key={delta}
+          type="button"
+          aria-label={label}
+          title={label}
+          disabled={!canGo(delta)}
+          onClick={() => goTab(delta, navigate)}
+          // 못 누를 때는 포인터를 줄에 넘겨 그 자리로도 창이 끌린다.
+          className="text-muted hover:bg-surface-hover mb-1 grid size-7 shrink-0 cursor-pointer place-items-center rounded-md disabled:pointer-events-none disabled:opacity-40"
+        >
+          <Icon className="size-4" />
+        </button>
+      ))}
       <div
         // 탭 위 빈 띠와 탭 사이 틈으로도 끌린다. 탭은 단추라 그대로 눌린다.
         data-tauri-drag-region

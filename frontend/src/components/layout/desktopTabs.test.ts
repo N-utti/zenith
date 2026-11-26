@@ -5,6 +5,8 @@ import {
   claimTabs,
   closeTab,
   cycleTab,
+  goHistory,
+  canGo,
   openTab,
   resetDesktopTabs,
   updateActiveTab,
@@ -91,4 +93,31 @@ test('보안 연결이 아니어서 randomUUID 가 없어도 탭을 만든다(�
 test('웹(셸 아님)에서는 탭 주인을 적지 않는다', () => {
   claimTabs('a')
   expect(JSON.parse(localStorage.getItem('zenith.desktopTabs')!).owner).toBeUndefined()
+})
+
+test('뒤로·앞으로는 탭마다 따로 쌓이고, 바꿔 끼운 화면은 쌓지 않는다', () => {
+  updateActiveTab({ path: '/b' }, true)
+  updateActiveTab({ path: '/b?q=1' })
+  updateActiveTab({ path: '/c' }, true)
+  // 새 탭은 기록이 비어 있다. 앞 탭에서 보던 화면으로 돌아가지 않는다.
+  const first = activeTab().id
+  openTab('/x', true)
+  expect(canGo(-1)).toBe(false)
+  expect(goHistory(-1)).toBeNull()
+
+  activateTab(first)
+  expect(goHistory(-1)).toBe('/b?q=1')
+  expect(activeTab().path).toBe('/b?q=1')
+  expect(goHistory(-1)).toBe('/a')
+  expect(canGo(-1)).toBe(false)
+  expect(goHistory(1)).toBe('/b?q=1')
+  // 새 화면으로 들어가면 앞으로 기록은 버린다.
+  updateActiveTab({ path: '/d' }, true)
+  expect(canGo(1)).toBe(false)
+  expect(goHistory(-1)).toBe('/b?q=1')
+
+  // 다른 사람이 들어오면 앞사람 기록은 남지 않는다.
+  window.__TAURI__ = { core: { invoke: vi.fn() } }
+  claimTabs('a')
+  expect(canGo(-1)).toBe(false)
 })
