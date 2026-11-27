@@ -372,7 +372,7 @@ export function ApprovalNewPage() {
           {/* ponytail: 빈 폼에서만. 임시저장·다시 작성·출장비 결의서는 서식이 정해져 있어 칸만 채우는 길이 따로 필요하다. */}
           {/* 폼의 한 칸이 아니라 폼을 채우는 도구라, 그라데이션 테두리 알약으로 다른 입력과 가른다. */}
           {templatable && (
-            <Field label="AI 로 초안" error={aiError}>
+            <Field label="AI로 초안" error={aiError}>
               {(slot) => (
                 // 테두리 그라데이션은 1px 바깥 틀의 배경이다. border 에는 그라데이션을 못 칠한다.
                 <div className="from-accent to-ai focus-within:ring-accent/25 rounded-full bg-linear-to-r p-px focus-within:ring-3">
