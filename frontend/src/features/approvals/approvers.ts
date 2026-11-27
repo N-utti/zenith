@@ -3,6 +3,43 @@ import type { ApprovalStep } from './types'
 /** 서버 `DraftIn.approvers` 의 `maxItems`. */
 export const MAX_APPROVERS = 10
 
+const keyOf = (userId: string) => `zenith.approvalLine.${userId}`
+
+/**
+ * 서식 → 지난번 그 서식으로 상신할 때 고른 결재선. 새 기안이 이 사람들을 고른 채로 시작한다.
+ *
+ * ponytail: 이 브라우저에만 둔다(다른 기기에서는 서식마다 처음 한 번은 직접 고른다). 같은 브라우저를
+ * 다른 사람이 쓸 수 있어 키에 사용자 id 를 넣는다. 서식별 결재자를 회사가 정하면(이슈 #158) 서버가
+ * 기본 결재선을 내려 주는 쪽으로 옮긴다.
+ */
+export function readLastApprovers(userId: string): Record<string, string[]> {
+  try {
+    const saved: unknown = JSON.parse(localStorage.getItem(keyOf(userId)) ?? 'null')
+    if (saved && typeof saved === 'object') {
+      return Object.fromEntries(
+        Object.entries(saved).filter(
+          ([, ids]) => Array.isArray(ids) && ids.every((id) => typeof id === 'string'),
+        ),
+      )
+    }
+  } catch {
+    // 깨진 값이나 막힌 저장소는 기억이 없는 것으로 친다.
+  }
+  return {}
+}
+
+/** 상신한 결재선을 그 서식의 지난 결재선으로 남긴다. 빈 결재선도 남긴다(고르지 않고 올린 것도 선택이다). */
+export function rememberApprovers(userId: string, template: string, ids: string[]) {
+  try {
+    localStorage.setItem(
+      keyOf(userId),
+      JSON.stringify({ ...readLastApprovers(userId), [template]: ids }),
+    )
+  } catch {
+    // 저장 못 해도 상신은 끝났다. 다음 기안이 빈 결재선으로 시작할 뿐이다.
+  }
+}
+
 /**
  * 임시저장에 고른 결재자를 지금 고를 수 있는 사람(`pickable`)과 그렇지 않은 사람으로 가른다. 단계 번호가 결재 순서다.
  *

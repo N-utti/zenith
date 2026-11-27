@@ -22,7 +22,12 @@ import {
   useUpdateDraft,
 } from '@/features/approvals/api'
 import { AttachmentList } from '@/features/approvals/AttachmentList'
-import { MAX_APPROVERS, splitSavedApprovers } from '@/features/approvals/approvers'
+import {
+  MAX_APPROVERS,
+  readLastApprovers,
+  rememberApprovers,
+  splitSavedApprovers,
+} from '@/features/approvals/approvers'
 import {
   APPROVAL_TEMPLATES,
   filledFields,
@@ -56,6 +61,7 @@ import { ApiError } from '@/lib/api'
  * 첨부(영수증, FR-APV-05)는 문서에 딸려 올라가서 문서 id 가 있어야 한다. 고른 파일은 들고 있다가
  * 저장할 때 올린다. 새 기안이면 먼저 임시저장을 만들고, 올린 뒤 첨부 목록을 한 번 더 저장한다.
  * 결재선은 기안자가 고른다. 고르지 않으면 서버가 상신할 때 만들고, 그 결재선은 상신 뒤 상세에서 본다.
+ * 새 기안은 그 서식으로 지난번 상신할 때 고른 결재선이 선택된 채로 시작한다(`readLastApprovers`).
  */
 export function ApprovalNewPage() {
   const [params] = useSearchParams()
@@ -96,6 +102,8 @@ export function ApprovalNewPage() {
   const [references, setReferences] = useState<string[] | null>(null)
   /** 고른 결재자, 누른 순서대로. `null` 은 아직 안 건드림이라 임시저장에 있던 것이 시작점이다. */
   const [approvers, setApprovers] = useState<string[] | null>(null)
+  /** 서식 → 지난번 상신할 때 고른 결재선. 새 기안의 결재선이 여기서 시작한다. */
+  const [lastApprovers] = useState(() => readLastApprovers(user.id))
   const { people, isPending: peoplePending, isError: peopleError } = useColleagues()
   // 상신이 실패해도 방금 만든 임시저장을 잃지 않는다. 다음 시도는 새로 만들지 않고 이것을 고친다.
   const [createdId, setCreatedId] = useState<string | null>(null)
@@ -169,10 +177,20 @@ export function ApprovalNewPage() {
     seed?.steps ?? [],
     peoplePending || peopleError ? null : people.map((p) => p.id),
   )
-  const approverIds = approvers ?? savedApprovers
+  // 임시저장·다시 작성·출장비 결의서는 이미 서식이 정해져 있다. 서식은 빈 폼에서만 고른다.
+  const templatable = !base && !trip
+  // 임시저장과 다시 작성은 쓰던 서식의 칸으로 이어 쓴다. 출장에서 열면 출장비 결의서다.
+  const active =
+    template ?? (base ? templateOf(base.subject.extra?.form) : trip ? 'trip' : 'general')
+  // 새 기안은 그 서식의 지난 결재선에서 시작한다. 손대기 전에 서식을 바꾸면 그 서식의 것으로 따라 바뀐다.
+  // 지금 고를 수 있는 사람만 남긴다. 사람 목록이 오기 전에는 비어 있다.
+  const startApprovers = seed
+    ? savedApprovers
+    : (lastApprovers[active] ?? []).filter((id) => people.some((p) => p.id === id))
+  const approverIds = approvers ?? startApprovers
   const toggleApprover = (id: string) =>
     setApprovers((prev) => {
-      const current = prev ?? savedApprovers
+      const current = prev ?? startApprovers
       if (current.includes(id)) return current.filter((each) => each !== id)
       // 서버 상한. 넘기면 422 문구가 배열로 와서 일반 실패로만 보인다.
       if (current.length >= MAX_APPROVERS) return current
@@ -188,11 +206,6 @@ export function ApprovalNewPage() {
 
   const attached = attachments ?? seed?.subject.attachments ?? []
 
-  // 임시저장·다시 작성·출장비 결의서는 이미 서식이 정해져 있다. 서식은 빈 폼에서만 고른다.
-  const templatable = !base && !trip
-  // 임시저장과 다시 작성은 쓰던 서식의 칸으로 이어 쓴다. 출장에서 열면 출장비 결의서다.
-  const active =
-    template ?? (base ? templateOf(base.subject.extra?.form) : trip ? 'trip' : 'general')
   const form = APPROVAL_TEMPLATES[active]
   const structured = form.fields.length > 0
   const fieldValues =
@@ -286,7 +299,9 @@ export function ApprovalNewPage() {
   const canSave = filled.title && !amountError && !busy
   // 임시저장은 덜 채워도 된다. 상신은 그 서식의 필수 칸과 금액까지 본다.
   // 금액 필수 서식은 0원도 안 쓴 것으로 친다.
-  const canSubmit = canSave && filled.body && !(form.amountRequired && !amountNumber)
+  // 사람 목록이 오기 전에는 지난 결재선이 아직 안 깔렸다. 그때 올리면 빈 결재선으로 나간다.
+  const canSubmit =
+    canSave && filled.body && !(form.amountRequired && !amountNumber) && !peoplePending
 
   const input = {
     type_code: 'general' as const,
@@ -340,6 +355,8 @@ export function ApprovalNewPage() {
       }
       if (thenSubmit) {
         await submit.mutateAsync(id)
+        // 사람 목록을 못 받은 채 올렸으면 안 고른 게 아니라 못 고른 것이다. 지난 결재선을 빈 것으로 덮지 않는다.
+        if (!peoplePending && !peopleError) rememberApprovers(user.id, active, approverIds)
         toast.success('상신했습니다. 결재가 끝나면 알려 드립니다.')
       } else {
         toast.success('임시저장했습니다.')
