@@ -45,7 +45,8 @@ const PAYMENT: TemplateField = {
 }
 
 export const APPROVAL_TEMPLATES: Record<ApprovalTemplate, Template> = {
-  general: { label: '기안서', prefix: '', fields: [] },
+  // 돈이 나가는 건은 지출결의서·구매요청서·품의서로 올린다.
+  general: { label: '기안서', prefix: '', noAmount: true, fields: [] },
   expense: {
     label: '지출결의서',
     prefix: '[지출결의] ',

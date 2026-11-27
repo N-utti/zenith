@@ -139,10 +139,11 @@ it('AI 초안은 서식에 맞는 값만 폼에 들어간다', () => {
     body: '',
     values: { items: '거래처 오찬 2인' },
   })
-  // 모르는 서식은 기안서. 머리말이 없으면 붙이지 않고 본문을 쓴다.
+  // 모르는 서식은 기안서. 머리말이 없으면 붙이지 않고 본문을 쓴다. 기안서는 금액을 안 받는다.
   expect(fromAiDraft({ ...draft, form: 'leave', title: '연차' })).toMatchObject({
     template: 'general',
     title: '연차',
+    amount: '',
     body: '본문',
     values: {},
   })
